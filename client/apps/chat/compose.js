@@ -35,15 +35,12 @@
         laterBtn = C.btn( "clock", "chat.scheduledList", openLaterList, "later-btn" );
         laterBtn.hidden = true;
         // (the ids: the chat's "?" help finds them)
-        var emojiBtn  = C.btn( "smile", "chat.emoji", function () { togglePanel( "emoji" ); } );
-        var attachBtn = C.btn( "clip", "chat.attach", function () { togglePanel( "attach" ); } );
-        var camBtn    = C.btn( "camera", "chat.camera", function () { C.pickFiles( "camera" ); } );
-        emojiBtn.id  = "emojiBtn";
+        // The clip sits outside the box, before it.
+        var attachBtn = C.btn( "clip", "chat.attach", function () { togglePanel( "attach" ); }, "attach-btn" );
         attachBtn.id = "attachBtn";
-        camBtn.id    = "cameraBtn";
-        var row1 = h( "div", { class: "row1" }, emojiBtn, ta, laterBtn, attachBtn, camBtn );
+        var row1 = h( "div", { class: "row1" }, ta, laterBtn );
         cbox = h( "div", { class: "cbox" }, quoteSlot, row1 );
-        sendBtn = h( "button", { class: "send", attrs: { type: "button", title: T( "chat.sendMsg" ), "aria-label": T( "chat.sendMsg" ) },
+        sendBtn = h( "button", { class: "send", attrs: { type: "button", "data-tip": T( "chat.sendMsg" ), "aria-label": T( "chat.sendMsg" ) },
                                  on: { click: function () { send(); } } } );
         sendBtn.appendChild( C.ic( "send" ) );
         fmtBar = buildFmtBar();
@@ -51,7 +48,11 @@
         // tap brings it up (and the focus to the box).
         fmtBtn = C.btn( "textfmt", "chat.fmtName", function () { fmtBar.classList.add( "on" ); ta.focus(); }, "fmt-open" );
         fmtBtn.id = "fmtBtn";
-        composer = h( "div", { class: "composer", attrs: { id: "composer" } }, fmtBtn, fmtBar, cbox, sendBtn );
+        // The emoji: a faint circle beside the "T", in a desktop window only
+        // (a phone's or a tablet's keyboard has its own).
+        var emojiBtn = NayiveUI.windowed ? C.btn( "smile", "chat.emoji", function () { togglePanel( "emoji" ); }, "fmt-open emoji-open" ) : null;
+        if( emojiBtn ) emojiBtn.id = "emojiBtn";
+        composer = h( "div", { class: "composer", attrs: { id: "composer" } }, fmtBtn, emojiBtn, fmtBar, attachBtn, cbox, sendBtn );
         wireSendHold();
 
         ta.addEventListener( "input", function ( e ) { if( ! marking ) smiley( e ); grow(); typing(); C.keepDraft(); } );
@@ -80,7 +81,7 @@
         } );
         document.addEventListener( "click", function ( e )
         {
-            if( panel && ! panel.contains( e.target ) && ! e.target.closest( ".cbox .icon-btn" ) ) closePanel();
+            if( panel && ! panel.contains( e.target ) && ! e.target.closest( ".cbox .btn, #emojiBtn, #attachBtn" ) ) closePanel();
         } );
         return composer;
     };
@@ -573,7 +574,7 @@
         var start = new Date( Date.now() + 60 * 60 * 1000 );
         var input = h( "input", { attrs: { type: "datetime-local", id: "laterAt", step: "60", min: localValue( new Date() ) },
                                   value: localValue( start ) } );
-        var ok = h( "button", { attrs: { type: "button", "data-act": "primary", title: T( "chat.schedule" ) } } );
+        var ok = NayiveUI.sheetButton( "primary", T( "chat.schedule" ) );
         var sh = C.sheet( T( "chat.schedule" ), h( "div", {},
             h( "div", { class: "field" }, h( "label", { attrs: { for: "laterAt" }, text: T( "chat.scheduleWhen" ) } ), input ),
             h( "p", { class: "hint", text: T( "chat.scheduleHint" ) } ) ), ok, null, "later-sheet" );
@@ -581,7 +582,7 @@
         {
             var at = input.value ? new Date( input.value ).getTime() : NaN;   // no zone: local time
             if( ! ( at > Date.now() ) ) { C.toast( "chat.whenPast", 3000 ); input.focus(); return; }
-            ok.disabled = true;
+            Ayni.setBusy( ok, T( "ui.wait" ) );
             try
             {
                 var l = await C.api( "POST", "conv/" + conv + "/later", { text: text, at: at, replyTo: reply, cid: cid } );
@@ -596,7 +597,7 @@
                     C.renderLater();
                 }
             }
-            catch( e ) { ok.disabled = false; C.fail( e ); }
+            catch( e ) { Ayni.setBusy( ok, false ); C.fail( e ); }
         } );
         input.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); ok.click(); } } );
     }
@@ -1057,16 +1058,19 @@
 
     function attachPanel()
     {
-        // No camera here: it sits beside the clip already (his call,
-        // 2026-09-19). A document from this device, or (the owner, who has
-        // their files) one already in Nayive - two buttons, no chooser.
+        // A document from this device, or (the owner, who has their files)
+        // one already in Nayive - two buttons, no chooser.
+        // Audio and video: files of this device, sent as files.
         return NayiveUI.attachPanel( [
-            [ "file", "chat.localDoc", 4, function () { C.pickFiles( "file" ); } ],
-            C.canUseNayive() ? [ "folder", "chat.nayiveDoc", 3, function () { C.pickFromNayive(); } ] : null,
-            [ "image", "chat.gallery", 1, function () { C.pickFiles( "gallery" ); } ],
+            [ "file", "chat.localDoc", 1, function () { C.pickFiles( "file" ); } ],
+            C.canUseNayive() ? [ "nayive", "chat.nayiveDoc", 0, function () { C.pickFromNayive(); } ] : null,
+            [ "image", "chat.gallery", 6, function () { C.pickFiles( "gallery" ); } ],
+            [ "camera", "chat.camera", 3, function () { C.pickFiles( "camera" ); } ],
+            [ "music", "chat.audio", 4, function () { C.pickFiles( "audio" ); } ],
+            [ "video", "chat.video", 7, function () { C.pickFiles( "video" ); } ],
             [ "pin-map", "chat.location", 5, function () { C.openLocationPicker(); } ],
-            [ "user", "chat.contact", 2, function () { C.openCardSheet(); } ],
-            [ "poll", "chat.poll", 0, function () { C.openPollSheet(); } ]
+            [ "user", "chat.contact", 8, function () { C.openCardSheet(); } ],
+            [ "poll", "chat.poll", 2, function () { C.openPollSheet(); } ]
         ].filter( Boolean ).map( function ( a )
         {
             return { icon: C.ic( a[ 0 ] ), label: T( a[ 1 ] ), color: a[ 2 ], act: a[ 3 ] };
@@ -1080,7 +1084,7 @@
 
     C.wireBubble = function ( el, m )
     {
-        var caret = h( "button", { class: "caret", attrs: { type: "button", title: T( "chat.menu" ), "aria-label": T( "chat.menu" ) },
+        var caret = h( "button", { class: "caret", attrs: { type: "button", "data-tip": T( "chat.menu" ), "aria-label": T( "chat.menu" ) },
                                    on: { click: function ( e ) { e.stopPropagation(); C.openCtx( m ); } } } );
         caret.appendChild( C.ic( "chev-down" ) );
         el.appendChild( caret );
@@ -1184,7 +1188,7 @@
             reacts.appendChild( h( "button", { class: e === mineReact ? "on" : "", attrs: { type: "button" }, text: e,
                                                on: { click: function () { done(); C.react( m, e === mineReact ? "" : e ); } } } ) );
         } );
-        var moreB = h( "button", { class: "more", attrs: { type: "button", title: T( "chat.moreEmoji" ) },
+        var moreB = h( "button", { class: "more", attrs: { type: "button", "data-tip": T( "chat.moreEmoji" ) },
                                    on: { click: function ( ev )
                                    {
                                        ev.stopPropagation();
@@ -1229,6 +1233,8 @@
             // A photo has two: its caption, and (the owner) the picture itself.
             if( m.kind === "photo" && mine ) item( "edit", "chat.editMsg", function () { C.editMsg( m ); } );
             if( m.kind === "photo" && m.id > 0 && C.canEditPhotos() ) item( "image", "chat.editPhoto", function () { C.editPhoto( m ); } );
+            // Kept in the owner's files: the folder it is in, in Drive.
+            if( m.kind === "photo" && m.kept && C.canEditPhotos() ) item( "folder", "ui.showInDrive", function () { C.showInDrive( m ); } );
             // Where it was taken: the server reads it from the photo's GPS.
             if( m.kind === "photo" && m.file && m.file.pos ) item( "pin-map", "photos.seeOnMap", function () { C.openMap( m.file.pos ); }, false, true );
             if( mine ) item( "info", "chat.info", function () { C.msgInfo( m ); } );
@@ -1313,7 +1319,7 @@
     // the page: a sheet or a full-screen layer opened from it goes first.
     C.sheet = function ( title, body, actions, onClose, cls )
     {
-        var close = h( "button", { attrs: { type: "button", "data-act": "close", title: T( "ui.close" ) } } );
+        var close = NayiveUI.sheetButton( "close", T( "ui.close" ) );
         var row = h( "div", { class: "sheet-actions" }, close, actions || null );
         var d = NayiveUI.modal( { cls: cls, title: title, escape: done, top: function () { return document.body.lastElementChild === d.back; } } );
         d.sheet.appendChild( body );
@@ -1323,7 +1329,7 @@
         {
             if( d.close() && onClose ) onClose();
         }
-        d.back.querySelectorAll( ".sheet-close, .btn-secondary" ).forEach( function ( b ) { b.addEventListener( "click", done ); } );
+        d.back.querySelectorAll( "[data-close]" ).forEach( function ( b ) { b.addEventListener( "click", done ); } );
         return { el: d.back, close: done };
     };
 
@@ -1337,7 +1343,7 @@
                         h( "span", { class: "em", text: m.reacts[ p ] } ) );
             if( p === C.me() )
             {
-                li.appendChild( h( "button", { class: "text-btn ghost", attrs: { type: "button" }, text: T( "chat.remove" ),
+                li.appendChild( h( "button", { class: "btn text bordered", attrs: { type: "button" }, text: T( "chat.remove" ),
                                                on: { click: function () { sh.close(); C.react( m, "" ); } } } ) );
             }
             list.appendChild( li );

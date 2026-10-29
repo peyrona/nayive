@@ -51,7 +51,7 @@ async function openZipDialog( node )
     note.textContent = '';
     list.textContent = '';
     list.hidden      = true;
-    btn.disabled     = true;
+    btn.ariaDisabled = true;
     setBackdrop( 'zipBackdrop', true );
 
     let r;
@@ -106,7 +106,7 @@ async function openZipDialog( node )
     else if( ! r.into )                  why = TF( 'drive.zipReadOnly',    { name: name } );
 
     note.textContent = why || TF( 'drive.zipInto', { folder: r.into } );
-    btn.disabled     = !! why;
+    btn.ariaDisabled     = !! why;
 }
 
 function extractFromDialog()

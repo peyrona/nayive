@@ -105,7 +105,7 @@ try
                 if( p.every( x => x === "own" ) ) continue;
                 const k = ( p.includes( "miss" ) ? "SMALL   " : "crowded " ) + sig( el );
                 const g = groups.get( k ) || { sig: k, n: 0, w: Math.round( r.width ), h: Math.round( r.height ),
-                                               label: ( el.getAttribute( "aria-label" ) || el.title || el.textContent || "" ).trim().slice( 0, 30 ) };
+                                               label: ( el.getAttribute( "aria-label" ) || el.dataset.tip || el.title || el.textContent || "" ).trim().slice( 0, 30 ) };
                 g.n++;
                 groups.set( k, g );
             }

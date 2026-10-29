@@ -159,7 +159,6 @@ function applyPhoneChrome()
         menus     : function() { return CHROME.on(); },
         tools     : 'writeTools',
         helpBefore: null,
-        fileClass : function( btn, phone ) { btn.classList.toggle( 'has-popup', ! phone ); },
         close     : function() { return [ fileMenu, helpMenu ].concat( groups ); },
         fold      : function() { return fold; }
     } );
@@ -184,7 +183,7 @@ const session = NayiveOffice.session( {
     appDir     : DOC_DIR,
     openRoot   : OPEN_ROOT,
     // Read when "Guardar como" opens: at module load the language is not in yet.
-    get defaultName() { return NayiveUI.t( 'write.defaultFile' ); },
+    get defaultName() { return Ayni.t( 'write.defaultFile' ); },
     nameKey    : 'write.defaultFile',
     encode     : function() { return exportBytes(); },
     load       : loadBody,
@@ -230,7 +229,7 @@ function defaultProofLangs()
 //----------------------------------------------------------------------------//
 // INITIALIZATION
 
-NayiveI18n.ready.then( function()
+Ayni.i18n.ready.then( function()
 {
     wireStaticUI();
 
@@ -445,8 +444,8 @@ function initEditor( who )
         // out on the engine's estimate until the connection is back.
         fonts    : packagedFonts(),
 
-        locale   : NayiveUI.locale(),
-        author   : ( who && ( who.user || who.name ) ) || NayiveUI.t( 'write.meAuthor' ),
+        locale   : Ayni.i18n.lang(),
+        author   : ( who && ( who.user || who.name ) ) || Ayni.t( 'write.meAuthor' ),
         mode     : 'edit',
         zoomMode : fitMode()
     } );
@@ -482,7 +481,7 @@ function whenOpen()
 
             if( Date.now() - t0 > OPEN_SLOW_MS )
             {
-                NayiveUI.toast( NayiveUI.t( 'write.editorSlow' ) );
+                NayiveUI.toast( Ayni.t( 'write.editorSlow' ) );
                 resolve();
                 return;
             }
@@ -596,7 +595,7 @@ function setDocMode( mode )
 // the same list; on a phone, under the File button whose menu holds the gear.
 function openSettings()
 {
-    if( ! ready ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
 
     if( menusOn() )
     {
@@ -667,7 +666,7 @@ function toggleProofLang( code )
 
 function toggleHeaderFooter( kind )
 {
-    if( ! ready || ! editor ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready || ! editor ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
 
     const cmd = hfEditing() === kind ? { type: 'exitHeaderFooter' }
                                      : { type: 'editHeaderFooter', position: kind };
@@ -686,9 +685,9 @@ function paintOwnButtons()
     const editable = !! snap && snap.editable !== false;
 
     for( const id of [ 'paraBtn', 'linkBtn', 'imageBtn', 'symbolsBtn', 'headerBtn', 'footerBtn' ] )
-        document.getElementById( id ).disabled = ! editable;
+        document.getElementById( id ).ariaDisabled = ! editable;
 
-    document.getElementById( 'tableBordersBtn' ).disabled = ! editable || ! ( snap && snap.table );
+    document.getElementById( 'tableBordersBtn' ).ariaDisabled = ! editable || ! ( snap && snap.table );
 
     paintHeaderFooter();
 }
@@ -710,10 +709,9 @@ function paintHeaderFooter()
     {
         const b  = document.getElementById( kind + 'Btn' );
         const on = now === kind;
-        b.classList.toggle( 'is-active', on );
-        b.setAttribute( 'aria-pressed', String( on ) );
+        b.setAttribute( 'aria-pressed', on );
     }
-    document.getElementById( 'pageNumBtn' ).disabled = slotState( 'insert.pageNumber' ).enabled !== true;
+    document.getElementById( 'pageNumBtn' ).ariaDisabled = slotState( 'insert.pageNumber' ).enabled !== true;
 }
 
 //----------------------------------------------------------------------------//
@@ -749,7 +747,7 @@ async function addPersonalWord( word )
     if( ! word ) return;
 
     if( ! dictRead ) await loadPersonalWords();       // it failed at start-up: once more
-    if( ! dictRead ) { NayiveUI.toast( NayiveUI.tf( 'write.dictUnread', { word: word } ) ); return; }
+    if( ! dictRead ) { NayiveUI.toast( Ayni.tf( 'write.dictUnread', { word: word } ) ); return; }
 
     if( isPersonalWord( word ) ) return;
 
@@ -760,8 +758,8 @@ async function addPersonalWord( word )
 
     if( spell ) spell.forget( word );        // its red lines go at once
 
-    if( ! saved ) { NayiveUI.toast( NayiveUI.t( 'write.dictSaveFailed' ) ); return; }
-    session.offerUndo( NayiveUI.tf( 'write.wordAdded', { word: word } ), function() { removePersonalWord( word ); } );
+    if( ! saved ) { NayiveUI.toast( Ayni.t( 'write.dictSaveFailed' ) ); return; }
+    session.offerUndo( Ayni.tf( 'write.wordAdded', { word: word } ), function() { removePersonalWord( word ); } );
 }
 
 // The Undo of "Add to dictionary": out of the list again, and red again. A full
@@ -777,7 +775,7 @@ async function removePersonalWord( word )
     if( spell ) spell.reset();
 
     if( ! await changeDict( function( words ) { const j = words.indexOf( word ); if( j !== -1 ) words.splice( j, 1 ); } ) )
-        NayiveUI.toast( NayiveUI.t( 'write.dictSaveFailed' ) );
+        NayiveUI.toast( Ayni.t( 'write.dictSaveFailed' ) );
 }
 
 // One word in or out of the list ON THE SERVER, read again right before: two
@@ -949,18 +947,18 @@ const writeCfg = NayiveOffice.appConfig( 'data/write/config.json', 'ui.prefsUnre
 
 async function openTemplates()
 {
-    if( ! ready ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
 
     let cfg;
     try { cfg = await writeCfg.read(); }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'ui.prefsUnread' ) ); return; }   // where the templates are is not known
+    catch( _ ) { NayiveUI.toast( Ayni.t( 'ui.prefsUnread' ) ); return; }   // where the templates are is not known
 
     let dir = cfg.templatesDir;
 
     if( ! dir )
     {
-        dir = await NayiveUI.pickFolder( { title: NayiveUI.t( 'write.pickTemplatesDir' ),
-                                           note : NayiveUI.t( 'write.pickTemplatesNote' ),
+        dir = await NayiveUI.pickFolder( { title: Ayni.t( 'write.pickTemplatesDir' ),
+                                           note : Ayni.t( 'write.pickTemplatesNote' ),
                                            allowRoot: true } );
         if( ! dir ) return;
         await writeCfg.write( { templatesDir: dir } );
@@ -980,7 +978,7 @@ async function renderTemplates( dir )
 
     let nodes = [];
     try { nodes = ( ( await GumApi.listDir( dir ) ) || {} ).nodes || []; }
-    catch( _ ) { list.innerHTML = ''; NayiveUI.toast( NayiveUI.t( 'ui.openFailed' ) ); return; }
+    catch( _ ) { list.innerHTML = ''; NayiveUI.toast( Ayni.t( 'ui.openFailed' ) ); return; }
 
     const docs = nodes.filter( function( n ) { return n.nodes === null && /\.docx$/i.test( n.path || '' ); } )
                       .sort( NayiveOffice.byBaseName );
@@ -1016,8 +1014,8 @@ async function useTemplate( path )
     // Edits to someone else's document: kept in their draft, and said so (as New does).
     const aside    = session.dirty() && !! session.path() && session.readOnly();
     let   kept     = dropping || aside ? await session.keepUntitled() : null;
-    if( dropping && ! kept && ! await NayiveUI.confirm( { title: NayiveUI.t( 'write.newDoc' ), body: NayiveUI.t( 'write.newDropsDraft' ),
-                                                          confirm: NayiveUI.t( 'write.newDoc' ) } ) ) return;
+    if( dropping && ! kept && ! await NayiveUI.confirm( { title: Ayni.t( 'write.newDoc' ), body: Ayni.t( 'write.newDropsDraft' ),
+                                                          confirm: Ayni.t( 'write.newDoc' ) } ) ) return;
 
     setBackdrop( 'tplBackdrop', false );
 
@@ -1035,18 +1033,18 @@ async function useTemplate( path )
         await loadIntoEditor( bytes );
 
         if( dropping ) await session.dropDraft();     // or a reload would bring it back over the template
-        session.untitled( docxName( NayiveUI.tf( 'write.templateCopy', { name: NayiveOffice.baseName( path ).replace( /\.docx$/i, '' ) } ) ),
+        session.untitled( docxName( Ayni.tf( 'write.templateCopy', { name: NayiveOffice.baseName( path ).replace( /\.docx$/i, '' ) } ) ),
                           { dirty: true } );
         if( kept )       session.offerBack( kept, aside );
-        else if( aside ) NayiveUI.toast( NayiveUI.t( 'write.draftSetAside' ) );
+        else if( aside ) NayiveUI.toast( Ayni.t( 'write.draftSetAside' ) );
     }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.openDocFailed' ) ); }
+    catch( _ ) { NayiveUI.toast( Ayni.t( 'write.openDocFailed' ) ); }
 }
 
 async function changeTemplatesDir()
 {
-    const dir = await NayiveUI.pickFolder( { title: NayiveUI.t( 'write.pickTemplatesDir' ),
-                                             note : NayiveUI.t( 'write.pickTemplatesNote' ),
+    const dir = await NayiveUI.pickFolder( { title: Ayni.t( 'write.pickTemplatesDir' ),
+                                             note : Ayni.t( 'write.pickTemplatesNote' ),
                                              allowRoot: true } );
     if( ! dir ) return;
 
@@ -1074,7 +1072,7 @@ let symTab = 0;
 
 function openSymbols()
 {
-    if( ! ready ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
 
     if( document.getElementById( 'symPopup' ).classList.contains( 'open' ) ) { symPopup.close(); return; }
 
@@ -1095,7 +1093,7 @@ function renderSymbols()
         const b = document.createElement( 'button' );
         b.type        = 'button';
         b.className   = 'pill sym-tab' + ( i === symTab ? ' is-active' : '' );
-        b.textContent = NayiveUI.t( 'write.sym.' + set.key );
+        b.textContent = Ayni.t( 'write.sym.' + set.key );
         b.addEventListener( 'click', function() { symTab = i; renderSymbols(); } );
         tabs.appendChild( b );
     } );
@@ -1106,7 +1104,7 @@ function renderSymbols()
         b.type        = 'button';
         b.className   = 'sym-cell';
         b.textContent = ch;
-        b.title       = ch;
+        Ayni.setTip( b, ch );
         // mousedown would move focus out of the editor before the click lands.
         b.addEventListener( 'mousedown', function( e ) { e.preventDefault(); } );
         b.addEventListener( 'click', function() { insertSymbol( ch ); } );
@@ -1145,12 +1143,12 @@ let paraList    = null;     // { paraId, numId, ilvl, formats } when the caret i
 
 // "1,5" in Spanish, "1.5" in English - the dialogs' own numbers (this one's
 // and the page setup's).
-function fmtNum( v ) { return ( Math.round( v * 100 ) / 100 ).toLocaleString( NayiveUI.locale(), { maximumFractionDigits: 2 } ); }
+function fmtNum( v ) { return ( Math.round( v * 100 ) / 100 ).toLocaleString( Ayni.i18n.lang(), { maximumFractionDigits: 2 } ); }
 function parseNum( raw ) { const n = parseFloat( String( raw ).replace( ',', '.' ) ); return Number.isFinite( n ) ? n : null; }
 
 function openParagraph()
 {
-    if( ! ready || ! editor ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready || ! editor ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
 
     let f = null;
     try { f = editor.snapshot().formatting; } catch( _ ) {}
@@ -1360,7 +1358,7 @@ async function confirmParagraph()
 // Level n of the caret's list numbered the chosen way (docx-patch.js).
 async function applyListFormat()
 {
-    if( ! paraList ) { NayiveUI.toast( NayiveUI.t( 'write.notInList' ) ); return; }
+    if( ! paraList ) { NayiveUI.toast( Ayni.t( 'write.notInList' ) ); return; }
 
     const ilvl = parseInt( document.getElementById( 'paListLevel' ).value, 10 ) - 1;
     const fmt  = document.getElementById( 'paListFormat' ).value;
@@ -1387,7 +1385,7 @@ async function reloadPatched( patch, paraId, what )
         await session.flush();
 
         const bytes = patch( new Uint8Array( await editor.save() ) );
-        if( ! bytes ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); return; }
+        if( ! bytes ) { NayiveUI.toast( Ayni.t( 'write.actionFailed' ) ); return; }
 
         await loadIntoEditor( bytes );
 
@@ -1399,7 +1397,7 @@ async function reloadPatched( patch, paraId, what )
     catch( e )
     {
         console.error( 'Write: ' + what + ' -', e );
-        NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) );
+        NayiveUI.toast( Ayni.t( 'write.actionFailed' ) );
     }
 }
 
@@ -1465,7 +1463,7 @@ function readStyleField( id )
 
 async function openStyles()
 {
-    if( ! ready || ! editor ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready || ! editor ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
 
     let list = [], bytes = null;
     try
@@ -1473,14 +1471,14 @@ async function openStyles()
         list  = editor.getDocumentStyles();
         bytes = lastGood || new Uint8Array( await editor.save() );   // the styles never change without a load
     }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); return; }
+    catch( _ ) { NayiveUI.toast( Ayni.t( 'write.actionFailed' ) ); return; }
 
     // The colour list: Automatic, then the menu's own colours (labelled now,
     // so they follow the language).
     const col = document.getElementById( 'stColor' );
     col.length = 0;
-    col.add( new Option( NayiveUI.t( 'write.stAuto' ), 'auto' ) );
-    for( const c of NayiveMenus.COLORS ) col.add( new Option( NayiveUI.t( 'ui.color.' + c[1] ), c[0].slice( 1 ) ) );
+    col.add( new Option( Ayni.t( 'write.stAuto' ), 'auto' ) );
+    for( const c of NayiveMenus.COLORS ) col.add( new Option( Ayni.t( 'ui.color.' + c[1] ), c[0].slice( 1 ) ) );
 
     stVals = {}; stTouched = {};
     for( const key of ST_KEYS )
@@ -1585,11 +1583,11 @@ async function confirmStyles()
 
 async function openStats()
 {
-    if( ! ready || ! editor ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready || ! editor ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
 
     let paras;
     try { paras = editor.query( { type: 'paragraphs' } ) || []; }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); return; }
+    catch( _ ) { NayiveUI.toast( Ayni.t( 'write.actionFailed' ) ); return; }
 
     let words = 0, chars = 0, noSpaces = 0, count = 0;
 
@@ -1608,12 +1606,12 @@ async function openStats()
     }
 
     NayiveOffice.showStats( [
-        { text: NayiveUI.t( 'write.statWords'      ), value: words    },
-        { text: NayiveUI.t( 'write.statChars'      ), value: chars    },
-        { text: NayiveUI.t( 'write.statCharsNoSp'  ), value: noSpaces },
-        { text: NayiveUI.t( 'write.statParagraphs' ), value: count    },
-        { text: NayiveUI.t( 'write.statPages'      ), value: editor.getTotalPages() }
-    ], NayiveUI.t( 'write.statNote' ) );
+        { text: Ayni.t( 'write.statWords'      ), value: words    },
+        { text: Ayni.t( 'write.statChars'      ), value: chars    },
+        { text: Ayni.t( 'write.statCharsNoSp'  ), value: noSpaces },
+        { text: Ayni.t( 'write.statParagraphs' ), value: count    },
+        { text: Ayni.t( 'write.statPages'      ), value: editor.getTotalPages() }
+    ], Ayni.t( 'write.statNote' ) );
 }
 
 //----------------------------------------------------------------------------//
@@ -1630,9 +1628,9 @@ async function openStats()
 
 const IS_MAC = NayiveUI.isMac;
 
-function kMod()   { return IS_MAC ? '⌘' : NayiveUI.t( 'ui.keyCtrl'  ); }
-function kAlt()   { return IS_MAC ? '⌥' : NayiveUI.t( 'ui.keyAlt'   ); }
-function kShift() { return IS_MAC ? '⇧' : NayiveUI.t( 'ui.keyShift' ); }
+function kMod()   { return IS_MAC ? '⌘' : Ayni.t( 'ui.keyCtrl'  ); }
+function kAlt()   { return IS_MAC ? '⌥' : Ayni.t( 'ui.keyAlt'   ); }
+function kShift() { return IS_MAC ? '⇧' : Ayni.t( 'ui.keyShift' ); }
 function combo( parts ) { return parts.join( IS_MAC ? '' : '+' ); }
 
 function modOnly( e )
@@ -1784,7 +1782,7 @@ function replaceMatch( match, text )
     if( ! ready || ! editor ) return;
 
     const sel = match ? editor.selectMatch( match ) : null;
-    if( ! sel || sel.ok === false ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); return; }
+    if( ! sel || sel.ok === false ) { NayiveUI.toast( Ayni.t( 'write.actionFailed' ) ); return; }
 
     runExec( { type: 'insertText', text: text } );
 }
@@ -1807,7 +1805,7 @@ function engineRun( label, fn, failKey )
     if( r && r.ok === false )
     {
         console.error( 'Write: ' + label + ' -', r.reason );
-        NayiveUI.toast( NayiveUI.t( failKey || 'write.actionFailed' ) );
+        NayiveUI.toast( Ayni.t( failKey || 'write.actionFailed' ) );
         return false;
     }
     return true;
@@ -1922,7 +1920,7 @@ function onShortcutKey( e )
     if( s.run ) { s.run(); return; }
 
     const btn = s.el && document.getElementById( s.el );
-    if( btn && ! btn.disabled ) btn.click();
+    if( btn && ! btn.disabled && btn.ariaDisabled !== 'true' ) btn.click();
 }
 
 // Shortcut hints on the tooltips (NayiveUI.keyHints); i18n rewrites these
@@ -1932,7 +1930,7 @@ function applyKeyHints() { NayiveUI.keyHints( SHORTCUTS, PHONE.matches ); }
 // The help sheet: the same table, rendered (the sheet is Calc's too).
 function openShortcuts()
 {
-    NayiveOffice.showShortcuts( SHORTCUTS.map( function( s ) { return { text: NayiveUI.t( s.key ), keys: s.label() }; } ) );
+    NayiveOffice.showShortcuts( SHORTCUTS.map( function( s ) { return { text: Ayni.t( s.key ), keys: s.label() }; } ) );
 }
 
 //----------------------------------------------------------------------------//
@@ -1970,11 +1968,11 @@ function applyPrintPageSize()
 
 function printDocument( pdfHint )
 {
-    if( ! ready || ! editor ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready || ! editor ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
 
     applyPrintPageSize();
 
-    if( pdfHint ) NayiveUI.toast( NayiveUI.t( 'write.pdfHint' ), { ms: 5000 } );
+    if( pdfHint ) NayiveUI.toast( Ayni.t( 'write.pdfHint' ), { ms: 5000 } );
 
     // A tick, so the toast paints before the modal print dialog freezes the page.
     setTimeout( function() { window.print(); }, pdfHint ? 350 : 0 );
@@ -2035,7 +2033,7 @@ function printDocument( pdfHint )
 //   { swatch:'#c00' }         a colour chip before the label
 //   { iconOf: '#x svg' }      the glyph before the label, cloned from the
 //                             toolbar (an `el` entry gets its button's by itself)
-//   { icon:'cut' }            ... or a NayiveUI.icon() name, for no-button entries
+//   { icon:'cut' }            ... or a Ayni.icon() name, for no-button entries
 
 const MENU_FONTS  = [ 'Arial', 'Calibri', 'Cambria', 'Courier New', 'Georgia',
                       'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana' ];
@@ -2149,7 +2147,7 @@ function styleItems()
 function setStyle( want )
 {
     const id = styleIdFor( want );
-    if( ! id ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); return; }
+    if( ! id ) { NayiveUI.toast( Ayni.t( 'write.actionFailed' ) ); return; }
     runSlot( 'styles.style', id );
 }
 
@@ -2166,7 +2164,7 @@ function lineItems()
 {
     return MENU_LINES.map( function( n )
     {
-        return { text: n.toLocaleString( NayiveUI.locale() ), slot: 'list.lineSpacing', value: n };
+        return { text: n.toLocaleString( Ayni.i18n.lang() ), slot: 'list.lineSpacing', value: n };
     } );
 }
 
@@ -2541,7 +2539,7 @@ async function clipPaste( plain )
     if( ! ready || ! editor ) return;
 
     const dt = await NayiveOffice.clip.read();
-    if( ! dt ) { NayiveUI.toast( NayiveUI.t( 'ui.clipboardBlocked' ) ); return; }
+    if( ! dt ) { NayiveUI.toast( Ayni.t( 'ui.clipboardBlocked' ) ); return; }
 
     const text = dt.getData( 'text/plain' ) || '';
     const html = plain ? '' : dt.getData( 'text/html' ) || '';
@@ -2628,7 +2626,7 @@ let find = null;     // made in wireStaticUI
 
 function openFind( replace )
 {
-    if( ! ready || ! editor ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready || ! editor ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
     if( find ) find.open( replace );
 }
 
@@ -2652,7 +2650,7 @@ let linkEditing = null;     // the link the sheet was opened on, or null for a n
 
 function openLinkDialog()
 {
-    if( ! ready || ! editor ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready || ! editor ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
     if( document.getElementById( 'linkBackdrop' ).classList.contains( 'open' ) ) return;   // Ctrl+K: engine and table both ask
 
     const L = links();
@@ -2662,7 +2660,7 @@ function openLinkDialog()
     let collapsed = true;
     try { collapsed = editor.snapshot().selectionCollapsed; } catch( _ ) {}
 
-    if( ! at && collapsed ) { NayiveUI.toast( NayiveUI.t( 'write.selectTextFirst' ) ); return; }
+    if( ! at && collapsed ) { NayiveUI.toast( Ayni.t( 'write.selectTextFirst' ) ); return; }
 
     linkEditing = at;
     document.getElementById( 'linkHref' ).value = at ? at.authored || at.href || '' : '';
@@ -2686,7 +2684,7 @@ function confirmLink()
     }
     catch( e ) { console.error( 'Write: link -', e ); ok = false; }
 
-    if( ! ok ) NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) );
+    if( ! ok ) NayiveUI.toast( Ayni.t( 'write.actionFailed' ) );
     focusEditor();
 }
 
@@ -2715,7 +2713,7 @@ function showLinkMenu( act )
                       const L = links();
                       let ok = false;
                       try { ok = !! L && L.removeHyperlink( link.id ); } catch( _ ) {}
-                      if( ! ok ) NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) );
+                      if( ! ok ) NayiveUI.toast( Ayni.t( 'write.actionFailed' ) );
                       focusEditor();
                   } } );
 
@@ -2739,7 +2737,7 @@ const IMAGE_MIMES = [ 'image/png', 'image/jpeg', 'image/gif', 'image/bmp', 'imag
 
 function pickImage()
 {
-    if( ! ready || ! editor ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready || ! editor ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
     document.getElementById( 'imgInput' ).click();
 }
 
@@ -2754,7 +2752,7 @@ async function insertPickedImage( file )
         if( IMAGE_MIMES.indexOf( mime ) < 0 )
         {
             try { blob = await NayivePhoto.shrinkToJpeg( blob, { maxW: IMAGE_MAX_EDGE, maxH: IMAGE_MAX_EDGE } ); mime = 'image/jpeg'; }
-            catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.formatUnsupported' ) ); return; }
+            catch( _ ) { NayiveUI.toast( Ayni.t( 'write.formatUnsupported' ) ); return; }
         }
 
         const size = await imagePoints( blob );
@@ -2766,7 +2764,7 @@ async function insertPickedImage( file )
     catch( e )
     {
         console.error( 'Write: image -', e );
-        NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) );
+        NayiveUI.toast( Ayni.t( 'write.actionFailed' ) );
     }
 }
 
@@ -2845,10 +2843,10 @@ function applyTableBorderPreset( which )
 
     let snap = null;
     try { snap = editor.snapshot(); } catch( _ ) {}
-    if( ! snap || ! snap.table ) { NayiveUI.toast( NayiveUI.t( 'write.cursorInTable' ) ); return; }
+    if( ! snap || ! snap.table ) { NayiveUI.toast( Ayni.t( 'write.cursorInTable' ) ); return; }
 
     const one = ! snap.selection || snap.selection.from.paraId === snap.selection.to.paraId;
-    if( which === 'inside' && one ) { NayiveUI.toast( NayiveUI.t( 'write.selectCells' ) ); return; }
+    if( which === 'inside' && one ) { NayiveUI.toast( Ayni.t( 'write.selectCells' ) ); return; }
 
     const b   = tbSpec();
     const cmd = which === 'none'
@@ -2961,7 +2959,7 @@ function wireTableBorders()
     document.getElementById( 'tbApplyBtn' ).addEventListener( 'click', function()
     {
         const which = tbDraft.preset;
-        if( ! which ) { NayiveUI.toast( NayiveUI.t( 'write.pickBorder' ) ); return; }
+        if( ! which ) { NayiveUI.toast( Ayni.t( 'write.pickBorder' ) ); return; }
 
         tbState.lineStyle    = tbDraft.lineStyle;
         tbState.lineWeightPt = tbDraft.lineWeightPt;
@@ -3014,7 +3012,7 @@ function inToTw( i )    { return Math.round( ( i || 0 ) * TWIPS_PER_IN ); }
 
 function openPageSetup()
 {
-    if( ! ready ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
 
     // Fill from the DOCUMENT, not from Nayive's defaults. If the read fails,
     // fall back to the defaults rather than showing nothing.
@@ -3111,7 +3109,7 @@ function confirmPageSetup()
     if( r && r.ok === false )
     {
         console.error( 'Write: page setup -', r.reason );
-        NayiveUI.toast( NayiveUI.t( 'write.pageSetupFailed' ) );
+        NayiveUI.toast( Ayni.t( 'write.pageSetupFailed' ) );
         return;
     }
     focusEditor();          // the change event marks it dirty

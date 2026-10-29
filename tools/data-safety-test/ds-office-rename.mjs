@@ -30,7 +30,7 @@ const value = () => c.evaluate( `${CM}.getValue()` );
 const type  = text => c.evaluate( `${CM}.replaceRange( ${JSON.stringify( text )}, { line: 0, ch: 0 } ), true` );
 // Ctrl+S, the way CodeMirror hands it to the app (saveNow: no 7 s wait).
 const save  = () => c.evaluate( `${CM}.triggerOnKeyDown( { type: 'keydown', keyCode: 83, ctrlKey: true, preventDefault: function () {}, stopPropagation: function () {} } ), true` );
-const TOLD  = key => `( window.__toasts || [] ).some( function ( t ) { return t.indexOf( NayiveUI.t( '${key}' ) ) !== -1; } )`;
+const TOLD  = key => `( window.__toasts || [] ).some( function ( t ) { return t.indexOf( Ayni.t( '${key}' ) ) !== -1; } )`;
 const label = () => c.evaluate( "document.getElementById('fileLabel').textContent" );
 const disk  = ( rel, u ) => onDisk( s, rel, u || "ana" );
 async function untilDisk( rel, want, ms = 15000, u )
@@ -167,7 +167,7 @@ section( "D6 · SAVE AS ONTO A NAME THE PAGE COULD NOT CHECK (THE LISTING FAILED
     await c.evaluate( "document.getElementById('saveName').value = 'd6.txt'; document.getElementById('saveAsConfirmBtn').click(); true" );
     ok( await c.until( "window.__asks.length >= 1", 10000 ), "the name is taken on the server: asked", await c.evaluate( "window.__puts" ) );
     const q = await c.evaluate( "window.__asks[ 0 ] && window.__asks[ 0 ].body" );
-    ok( q === await c.evaluate( "NayiveUI.tf( 'ui.saveAsAppeared', { name: 'd6.txt' } )" ), "...Replace, or keep both", q );
+    ok( q === await c.evaluate( "Ayni.tf( 'ui.saveAsAppeared', { name: 'd6.txt' } )" ), "...Replace, or keep both", q );
     ok( disk( "files/d6.txt" ) === "PRECIOUS\n", "the file that was there is untouched", disk( "files/d6.txt" ) );
     ok( disk( "files/.bak/d6.txt" ) === null, "...and so is its .bak (none was written over it)", disk( "files/.bak/d6.txt" ) );
     ok( await c.evaluate( "window.__puts.some( function ( p ) { return p.p === 'files/d6.txt' && p.inm === '*' && p.st === 412; } )" ),
@@ -214,12 +214,12 @@ section( "K2 · A SAVE KEPT ONLY IN THIS PAGE IS SAID, NEVER \"SAVED\"" );
         window.__fail[ 'files/k2.txt' ] = 503; return true; } )()` );
     await type( "only here\n" );
     await save();
-    ok( await c.until( "document.getElementById('savedAt').title.indexOf( NayiveUI.t( 'write.pageOnlyAt' ) ) === 0", 10000 ),
+    ok( await c.until( "document.getElementById('savedAt').title.indexOf( Ayni.t( 'write.pageOnlyAt' ) ) === 0", 10000 ),
         "the screen says it is only in this page", await c.evaluate( "document.getElementById('savedAt').title" ) );
     ok( await c.evaluate( "document.getElementById('savedAt').dataset.state === 'unsaved'" ), "...not \"Saved\" (red floppy)" );
     await c.evaluate( "IDBDatabase.prototype.transaction = window.__realTx; window.__fail = {}; window.dispatchEvent( new Event( 'online' ) ); true" );
     ok( await untilDisk( "files/k2.txt", "only here\nbase\n" ), "storage and network back: it goes up" );
-    ok( await c.until( "document.getElementById('savedAt').title.indexOf( NayiveUI.t( 'write.pageOnlyAt' ) ) !== 0" ), "...and the screen stops saying \"only in this page\"" );
+    ok( await c.until( "document.getElementById('savedAt').title.indexOf( Ayni.t( 'write.pageOnlyAt' ) ) !== 0" ), "...and the screen stops saying \"only in this page\"" );
 }
 
 //----------------------------------------------------------------------------//

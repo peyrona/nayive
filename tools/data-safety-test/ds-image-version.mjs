@@ -32,18 +32,19 @@ async function imagePage( rel )
 {
     await c.open( "/nayive/image/?file=" + rel, "/nayive/image/" );
     await c.evaluate( PW + "( window )" );
-    return c.until( "document.querySelector('.tie-btn-flip') && ! document.getElementById('editorSaveBtn').disabled", 30000 );
+    return c.until( "document.querySelector('[data-ie=rotate]:not([aria-disabled=true])') && document.getElementById('editorSaveBtn').ariaDisabled !== 'true'", 30000 );
 }
 async function flip()
 {
-    await c.evaluate( "document.querySelector('.tie-btn-flip').click(), true" );
-    await c.until( "document.querySelector('.tie-flip-button .tui-image-editor-button.flipX')" );
-    await c.evaluate( "document.querySelector('.tie-flip-button .tui-image-editor-button.flipX').click(), true" );
+    if( ! await c.evaluate( "!! document.querySelector('[data-ie=flipH]')" ) )
+        await c.evaluate( "document.querySelector('[data-ie=rotate]').click(), true" );
+    await c.until( "document.querySelector('[data-ie=flipH]')" );
+    await c.evaluate( "document.querySelector('[data-ie=flipH]').click(), true" );
 }
 const check = () => c.evaluate( "document.getElementById('editorSaveBtn').click(), true" );
-const CONFLICT = "window.__sheet().indexOf( NayiveUI.t('ui.conflictTitle') ) !== -1";
+const CONFLICT = "window.__sheet().indexOf( Ayni.t('ui.conflictTitle') ) !== -1";
 // Once the ✓ is over (saving or not), the editor's buttons are on again.
-const settled = () => c.until( "! document.getElementById('editorSaveBtn').disabled" );
+const settled = () => c.until( "document.getElementById('editorSaveBtn').ariaDisabled !== 'true'" );
 async function untilBytes( rel, want, ms = 10000 )
 {
     const end = Date.now() + ms;
@@ -100,7 +101,7 @@ section( "C4 · OPENED FROM THE OFFLINE COPY: ✓ NEVER WRITES OVER IT" );
     await c.evaluate( "window.__toasts = []; true" );
     await flip();
     await check();
-    ok( await c.until( "( window.__toasts || [] ).some( t => t.indexOf( NayiveUI.t( 'image.offlineCopy' ) ) !== -1 )", 15000 ), "✓ says why it does not save", await c.toasts() );
+    ok( await c.until( "( window.__toasts || [] ).some( t => t.indexOf( Ayni.t( 'image.offlineCopy' ) ) !== -1 )", 15000 ), "✓ says why it does not save", await c.toasts() );
     await settled();
     const o = bytesOnDisk( s, "files/o.png" );
     ok( o && o.equals( GREY ), "o.png is untouched" );
@@ -118,8 +119,8 @@ section( "C4 · OPENED FROM THE OFFLINE COPY: ✓ NEVER WRITES OVER IT" );
     await c.evaluate( "window.__toasts = []; true" );
     await flip();
     await check();
-    ok( await c.until( "( window.__toasts || [] ).some( t => t.indexOf( NayiveUI.t( 'drive.imageSaved' ) ) !== -1 )", 15000 ), "✓ on the copy saves it", await c.toasts() );
-    const offlineWords = await c.evaluate( "NayiveUI.t( 'image.offlineCopy' )" );
+    ok( await c.until( "( window.__toasts || [] ).some( t => t.indexOf( Ayni.t( 'drive.imageSaved' ) ) !== -1 )", 15000 ), "✓ on the copy saves it", await c.toasts() );
+    const offlineWords = await c.evaluate( "Ayni.t( 'image.offlineCopy' )" );
     ok( ! ( await c.toasts() ).some( t => t.indexOf( offlineWords ) !== -1 ), "...with no word of the offline copy" );
 }
 
@@ -134,7 +135,7 @@ section( "A NOTE-ONLY ✓ WHOSE NOTE CANNOT BE SAVED SAYS SO" );
         return f.apply( this, arguments ); }; window.__toasts = []; return true; } )()` );
     await c.evaluate( "document.getElementById('editorComment').value = 'a note'; document.getElementById('editorComment').dispatchEvent( new Event( 'input' ) ); true" );
     await check();
-    ok( await c.until( "( window.__toasts || [] ).some( t => t.indexOf( NayiveUI.t( 'photos.commentSaveFailed' ) ) !== -1 )", 15000 ), "it says the note was not saved", await c.toasts() );
+    ok( await c.until( "( window.__toasts || [] ).some( t => t.indexOf( Ayni.t( 'photos.commentSaveFailed' ) ) !== -1 )", 15000 ), "it says the note was not saved", await c.toasts() );
     ok( ! ( await c.toasts() ).some( t => t.indexOf( "Image saved" ) !== -1 ), "...and never \"saved\"", await c.toasts() );
 }
 

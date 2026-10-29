@@ -51,7 +51,7 @@
         var sub = await r.pushManager.getSubscription();
         if( sub && ! sameKey( sub, S.vapid ) ) { try { await sub.unsubscribe(); } catch( _ ) {} sub = null; }
         if( ! sub ) sub = await r.pushManager.subscribe( { userVisibleOnly: true, applicationServerKey: b64ToU8( S.vapid ) } );
-        await C.api( "POST", "push", { subscription: sub.toJSON(), lang: NayiveUI.lang() } );
+        await C.api( "POST", "push", { subscription: sub.toJSON(), lang: Ayni.i18n.lang() } );
         return true;
     }
 
@@ -142,7 +142,7 @@
     function askScreen( done, android )
     {
         var el;
-        var go = h( "button", { class: "text-btn", attrs: { type: "button" }, text: T( "chat.enablePush" ),
+        var go = h( "button", { class: "btn text primary", attrs: { type: "button" }, text: T( "chat.enablePush" ),
             on: { click: async function () { var ok = await enable(); if( ok ) { el.remove(); done(); } } } } );
         var kids = android
             ? [ C.avatar( "o", S.owner, "xl" ), h( "h3", { text: C.TF( "chat.invites", { name: S.owner } ) } ),

@@ -19,6 +19,7 @@
     ===========================================================================
     -->
     <script src="/nayive/shared/i18n.js"></script>
+    <script src="/nayive/shared/ayni/ayni-i18n.js" data-dict="/nayive/shared/i18n/" data-langs="es en pt fr de"></script>
     <title>{{OWNER}}</title>
     <meta name="apple-mobile-web-app-title" content="{{OWNER}}">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -27,10 +28,14 @@
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" type="image/png" href="/nayive/chat/icons/icon-192.png">
     <link rel="apple-touch-icon" href="/nayive/chat/icons/icon-192.png">
+    <link rel="stylesheet" href="/nayive/shared/ayni/ayni-base.css">
+    <link rel="stylesheet" href="/nayive/shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="/nayive/shared/theme.css">
     <link rel="stylesheet" href="/nayive/shared/app.css">
-    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
-    <script src="/nayive/shared/theme.js" defer></script>
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script src="/nayive/shared/ayni/ayni-icons.js" defer></script>
+    <script src="/nayive/shared/ayni/ayni-base.js" defer></script>
+    <script src="/nayive/shared/ayni/ayni-buttons.js" defer></script>
     <link rel="stylesheet" href="/nayive/trips/lib/leaflet_v1.9.4/leaflet.css">
     <link rel="stylesheet" href="/nayive/chat/chat.css">
 </head>
@@ -59,7 +64,7 @@
         {
             // /c/<token>/ - the token is base64url, already safe inside a URL path.
             var m = location.pathname.match( /^\/c\/([A-Za-z0-9_-]+)\/?$/ );
-            NayiveI18n.ready.then( function ()
+            Ayni.i18n.ready.then( function ()
             {
                 if( ! m ) { NayiveChat.showGone(); return; }
                 NayiveChat.start( { mode: 'guest', api: '/api/c/' + m[ 1 ], token: m[ 1 ] } );

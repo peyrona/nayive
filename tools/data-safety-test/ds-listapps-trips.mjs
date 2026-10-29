@@ -172,5 +172,38 @@ section( "D2 · TWO STAGES' \"ticket.pdf\", AND A FILE ALREADY IN THE FOLDER" );
     ok( await disk( () => bytes() === "KYOTO,KYOTO-BOARDING", 5000 ), "...holding Kyoto's own bytes", { docs: kyoto(), bytes: bytes() } );
 }
 
+//------------------------------------------------------------------------//
+section( "PHOTO FOLDER OUTSIDE PHOTOS: <Photos>/<Trips>/<trip> IS MADE, NOTHING ELSE TOUCHED" );
+{
+    const DIR = "data/trips/peru-2026";
+    await seed( DIR + "/trip.json", trip( 9000, "peru-2026", "Peru" ) );
+    await seed( "data/photos/config.json", JSON.stringify( { folder: "files/Pics" } ) );
+    await seed( "files/Other/x.jpg", "OTHER" );
+    await reopen( "/nayive/trips/" );
+    ok( await c.until( "typeof trips !== 'undefined' && trips.some( t => t.id === 9000 )" ), "the trip is listed" );
+    const SUB = await c.evaluate( "T( 'trips.tripsFolder' )" );
+    await seed( "files/Pics/" + SUB + "/old.jpg", "OLD" );    // the Trips folder is already there, with a photo
+    const isDir = rel => { try { return fs.statSync( path.join( s.home(), rel ) ).isDirectory(); } catch { return false; } };
+    const dirOf = () => ( json( DIR + "/trip.json" ) || {} ).photosDir;
+    const pick  = ( answer ) => c.evaluate( `( () => { NayiveUI.pickFolder = () => Promise.resolve( 'files/Other' );
+        NayiveUI.confirm = () => Promise.resolve( ${JSON.stringify( answer )} ); goToDetail( 9000 );
+        return pickTripPhotoFolder( findTrip( 9000 ) ).then( () => true ); } )()` );
+
+    await pick( false );
+    await new Promise( r => setTimeout( r, 1500 ) );
+    ok( dirOf() === undefined && ! isDir( "files/Pics/" + SUB + "/peru-2026" ), "Cancel: no folder set, none made", dirOf() );
+
+    await pick( "other" );
+    ok( await disk( () => dirOf() === "files/Other" ), "Keep my folder: the pick is saved as is", dirOf() );
+    ok( ! isDir( "files/Pics/" + SUB + "/peru-2026" ), "...and nothing is made" );
+
+    await pick( true );
+    const want = "files/Pics/" + SUB + "/peru-2026";
+    ok( await disk( () => dirOf() === want && isDir( want ) ), "Use Trips: the trip's folder is made and saved", dirOf() );
+    await pick( true );
+    ok( await disk( () => dirOf() === want ), "...asked again, the folder already there is just used", dirOf() );
+    ok( onDisk( s, "files/Pics/" + SUB + "/old.jpg" ) === "OLD" && onDisk( s, "files/Other/x.jpg" ) === "OTHER", "the photos already there are untouched" );
+}
+
 fs.rmSync( TMP, { recursive: true, force: true } );
 await done( c, s );

@@ -650,7 +650,7 @@
         el.appendChild( h( "audio", { attrs: { autoplay: "" } } ) );
         el.appendChild( h( "div", { class: "call-top" } ) );
         el.appendChild( pip() );
-        el.appendChild( h( "button", { class: "text-btn call-hear", attrs: { type: "button", hidden: true }, text: T( "chat.tapToHear" ),
+        el.appendChild( h( "button", { class: "btn text primary call-hear", attrs: { type: "button", hidden: true }, text: T( "chat.tapToHear" ),
                                        on: { click: function () { this.hidden = true; attachRemote(); } } } ) );
         el.appendChild( h( "div", { class: "call-btns" } ) );
         document.body.appendChild( el );
@@ -681,7 +681,7 @@
             el.removeAttribute( "data-win-drag" );
             el.setAttribute( "role", "button" );
             el.setAttribute( "tabindex", "0" );
-            el.setAttribute( "title", T( "chat.openCall" ) );
+            el.setAttribute( "data-tip", T( "chat.openCall" ) );
             el.setAttribute( "aria-label", T( "chat.openCall" ) );
             el.removeAttribute( "aria-modal" );
             C.popNav( "call", guard );
@@ -779,7 +779,7 @@
         box.appendChild( h( "video", { class: "call-self", attrs: { playsinline: "", autoplay: "", muted: "" } } ) );
         Object.keys( CORNERS ).forEach( function ( c )
         {
-            box.appendChild( h( "button", { class: "call-corner " + c, attrs: { type: "button", title: T( CORNERS[ c ] ), "aria-label": T( CORNERS[ c ] ) },
+            box.appendChild( h( "button", { class: "call-corner " + c, attrs: { type: "button", "data-tip": T( CORNERS[ c ] ), "aria-label": T( CORNERS[ c ] ) },
                                             on: { click: function () { box.className = "call-pip at-" + c; try { localStorage.setItem( PIP_KEY, c ); } catch( _ ) {} } } } ) );
         } );
         return box;
@@ -831,13 +831,15 @@
             btns.appendChild( C.btn( "phone-off", "chat.hangUp", function () { hangUp(); }, "solid-danger" ) );
             return;
         }
-        var mic = C.btn( call.mic ? "mic" : "mic-off", call.mic ? "chat.muteMic" : "chat.unmuteMic", toggleMic, "lg" + ( call.mic ? "" : " is-active" ) );
-        mic.disabled = ! call.local;
+        var mic = C.btn( call.mic ? "mic" : "mic-off", call.mic ? "chat.muteMic" : "chat.unmuteMic", toggleMic, "lg" );
+        mic.setAttribute( "aria-pressed", ! call.mic );
+        mic.ariaDisabled = ! call.local;
         btns.appendChild( mic );
         if( call.video )
         {
-            var cam = C.btn( call.cam ? "video" : "video-off", call.cam ? "chat.cameraOff" : "chat.cameraOn", toggleCam, "lg" + ( call.cam ? "" : " is-active" ) );
-            cam.disabled = ! call.local || ! call.local.getVideoTracks().length;
+            var cam = C.btn( call.cam ? "video" : "video-off", call.cam ? "chat.cameraOff" : "chat.cameraOn", toggleCam, "lg" );
+            cam.setAttribute( "aria-pressed", ! call.cam );
+            cam.ariaDisabled = ! call.local || ! call.local.getVideoTracks().length;
             btns.appendChild( cam );
             if( call.cams > 1 ) btns.appendChild( C.btn( "refresh", "chat.flipCamera", flip, "lg" ) );
         }

@@ -23,7 +23,7 @@ const set = ( v, a, b ) => c.evaluate( `( () => { const t = ${TA}; t.focus(); t.
 const sel = () => c.evaluate( `[ ${TA}.selectionStart, ${TA}.selectionEnd ]` );
 const barOn = () => c.evaluate( "document.querySelector( '.fmt-bar' ).classList.contains( 'on' )" );
 const focused = () => c.evaluate( `document.activeElement === ${TA}` );
-const btn = n => `.fmt-bar .icon-btn:nth-child(${n + 1})`;     // the 1st is the "←"
+const btn = n => `.fmt-bar .btn:nth-child(${n + 1})`;     // the 1st is the "←"
 const shiftEnter = async () =>
 {
     for( const type of [ "rawKeyDown", "char", "keyUp" ] )

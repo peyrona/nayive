@@ -63,7 +63,7 @@ export async function signIn( page, base )
         localStorage.setItem( "balata-coach-seen", "1" );
         localStorage.setItem( "nayive-install-snooze", "never" );
         localStorage.setItem( "balata-intro-dismiss:launcher", "1" );
-        localStorage.setItem( "balata-lang", "en" );
+        localStorage.setItem( "ayni-lang", "en" );
         return fetch( "/api/login", { method: "POST", headers: { "Content-Type": "application/json" },
                                       body: JSON.stringify( { user: "test", password: "test" } ) } ).then( r => r.status );
     } );

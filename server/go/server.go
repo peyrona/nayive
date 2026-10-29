@@ -273,7 +273,8 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("/api/chat/{rest...}", s.apiChatOwner)
 	mux.HandleFunc("/api/chat/via/{owner}", s.apiChatVia) // another user's home, where I am a contact
 	mux.HandleFunc("/api/chat/via/{owner}/{rest...}", s.apiChatVia)
-	mux.HandleFunc("/api/mail/{rest...}", s.apiMail) // the eMail app (api_mail.go)
+	mux.HandleFunc("/api/mail/{rest...}", s.apiMail)      // the eMail app (api_mail.go)
+	mux.HandleFunc("/api/calendar/{what}", s.apiCalendar) // the launcher's Planner count (api_calendar.go)
 	mux.HandleFunc("/api/c/{token}", s.apiChatGuest)
 	mux.HandleFunc("/api/c/{token}/{rest...}", s.apiChatGuest)
 	mux.HandleFunc("/c/{token}", s.chatGuestRedirect)
@@ -286,6 +287,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("/api/zip", s.apiZip)                    // what is in a .zip, "Extract here"
 	mux.HandleFunc("/api/download", s.apiDownload)          // Drive's "Download": a file, or a zip made on the fly
 	mux.HandleFunc("/api/bookmarks/{what}", s.apiBookmarks) // a site's icon, a page's title
+	mux.HandleFunc("/api/translate/{what}", s.apiTranslate) // Language: Mozilla's model files (api_translate.go)
 
 	// Anything else under /api/ is a 404 in JSON, never an HTML error page: the
 	// browser apps parse every /api/ answer as JSON.

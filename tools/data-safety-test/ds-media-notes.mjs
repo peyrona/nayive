@@ -189,7 +189,7 @@ ok( ( await phone.del( "/api/files?paths=" + encodeURIComponent( "files/H/old.pn
 const I = await c.tab();
 ok( await I.open( "/nayive/image/?file=files/H/src.png", "/nayive/image/" ), "Image opens src.png" );
 await I.evaluate( PW + "( window )" );
-ok( await I.until( "document.querySelector('.tie-btn-flip') && ! document.getElementById('editorSaveBtn').disabled && document.getElementById('editorComment').value === 'note src'", 30000 ),
+ok( await I.until( "document.querySelector('[data-ie=rotate]:not([aria-disabled=true])') && document.getElementById('editorSaveBtn').ariaDisabled !== 'true' && document.getElementById('editorComment').value === 'note src'", 30000 ),
     "the editor is up, with src.png's note" );
 async function saveCopy( name )
 {
@@ -199,7 +199,7 @@ async function saveCopy( name )
 }
 
 await saveCopy( "dst.png" );
-ok( await I.until( "window.__sheet().indexOf( NayiveUI.t('drive.nameExistsTitle') ) !== -1" ), "it asks before replacing dst.png" );
+ok( await I.until( "window.__sheet().indexOf( Ayni.t('drive.nameExistsTitle') ) !== -1" ), "it asks before replacing dst.png" );
 await I.evaluate( "window.__pressConfirm()" );
 ok( await disk( () => { const b = bytesOnDisk( s, "files/H/dst.png" ); return b && ! b.equals( BLUE ) && notes()[ "files/H/dst.png" ] === "note src"; } ),
     "the copy is written over dst.png, with the copy's note" );

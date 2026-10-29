@@ -3,7 +3,7 @@
  * context menu, the sheet tabs, sort, pointing at cells while a formula is
  * typed, and the formula editor. Imported by calc.js.
  *
- * Its top level runs BEFORE calc.js's `await NayiveI18n.ready`: nothing out
+ * Its top level runs BEFORE calc.js's `await Ayni.i18n.ready`: nothing out
  * here may call T() or read another file's names - keep that inside functions.
  */
 
@@ -51,12 +51,12 @@ let table          = null;  // Handsontable instance
 // will have nothing new to wire up.
 
 // A new sheet's name in the interface language ("Hoja1", "Sheet1"). The
-// shared NayiveUI.t, not T: the first newDoc() below runs at load, before
+// shared Ayni.t, not T: the first newDoc() below runs at load, before
 // calc.js exists and before the dictionary is in - when t() answers with the
 // key itself.
 function defaultSheetName()
 {
-    const name = NayiveUI.t( 'calc.defaultSheet' );
+    const name = Ayni.t( 'calc.defaultSheet' );
     return ( name && name !== 'calc.defaultSheet' ) ? name : 'Sheet1';
 }
 
@@ -702,7 +702,7 @@ function sortByColumn( descending )
         if( aNum && bNum )      cmp = na - nb;
         else if( aNum )         cmp = -1;                       // numbers before text
         else if( bNum )         cmp = 1;
-        else                    cmp = String( a ).localeCompare( String( b ), NayiveI18n.locale() );
+        else                    cmp = String( a ).localeCompare( String( b ), Ayni.i18n.lang() );
 
         return descending ? -cmp : cmp;
     } );
@@ -1166,7 +1166,7 @@ try { calcPrefs = cleanPrefs( JSON.parse( localStorage.getItem( PREFS_KEY ) || '
 // The locale numbers are written in: the language's, unless a mark was picked.
 function numberLocale()
 {
-    return calcPrefs.dec === ',' ? 'de-DE' : calcPrefs.dec === '.' ? 'en-US' : NayiveI18n.locale();
+    return calcPrefs.dec === ',' ? 'de-DE' : calcPrefs.dec === '.' ? 'en-US' : Ayni.i18n.lang();
 }
 
 let marksFor = null;     // the locale numberMarks() last looked at
@@ -1240,7 +1240,7 @@ function shortDate()
 {
     if( calcPrefs.date ) return calcPrefs.date;      // picked in Settings
 
-    const loc = NayiveI18n.locale();
+    const loc = Ayni.i18n.lang();
     if( loc === shortFor ) return shortCode;
 
     let code = '';
@@ -2683,7 +2683,7 @@ function wireFormulaPanel()
         {
             const b = document.createElement( 'button' );
             b.type        = 'button';
-            b.className   = 'pop-btn fe-key';
+            b.className   = 'btn pop-btn fe-key';
             b.dataset.ins = k[ 1 ];
             b.textContent = k[ 0 ];
             line.appendChild( b );

@@ -109,11 +109,11 @@ function renderTrashBar()
     }
 
     const empty = document.createElement( 'button' );
-    empty.className   = 'icon-btn danger';
-    empty.title       = T( 'drive.emptyTrash' );
+    empty.className   = 'btn danger';
+    Ayni.setTip( empty, T( 'drive.emptyTrash' ) );
     empty.setAttribute( 'aria-label', T( 'drive.emptyTrash' ) );
     empty.innerHTML   = SVG_TRASH;
-    empty.disabled    = ! trashItems.length;
+    empty.ariaDisabled    = ! trashItems.length;
     empty.addEventListener( 'click', emptyTrash );
     bar.appendChild( empty );
 
@@ -146,7 +146,7 @@ function renderTrashListing()
 
         const meta = document.createElement( 'span' );
         meta.className = 'row-meta';
-        const where = fsRel( NayiveMedia.dirOf( item.orig ) ) || 'Drive';
+        const where = fsRel( NayiveMedia.dirOf( item.orig ) ) || homeName();
         const bits = [ where, fmtDate( item.deleted ) ];
         if( ! item.dir ) bits.push( fmtSize( item.size ) );
         meta.textContent = bits.join( ' · ' );
@@ -156,15 +156,15 @@ function renderTrashListing()
         actions.className = 'row-trash-actions';
 
         const restoreBtn = document.createElement( 'button' );
-        restoreBtn.className = 'icon-btn sm';
-        restoreBtn.title     = T( 'drive.restore' );
+        restoreBtn.className = 'btn sm';
+        Ayni.setTip( restoreBtn, T( 'drive.restore' ) );
         restoreBtn.setAttribute( 'aria-label', T( 'drive.restore' ) );
         restoreBtn.innerHTML = SVG_RESTORE;
         restoreBtn.addEventListener( 'click', function() { restoreTrash( [ item.id ] ); } );
 
         const delBtn = document.createElement( 'button' );
-        delBtn.className   = 'icon-btn sm danger';
-        delBtn.title       = T( 'drive.deleteForever' );
+        delBtn.className   = 'btn sm danger';
+        Ayni.setTip( delBtn, T( 'drive.deleteForever' ) );
         delBtn.setAttribute( 'aria-label', T( 'drive.deleteForever' ) );
         delBtn.innerHTML   = SVG_TRASH;
         delBtn.addEventListener( 'click', function() { purgeTrash( [ item.id ], item.name ); } );

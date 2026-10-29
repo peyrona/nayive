@@ -14,53 +14,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- The interface language. First of all: it hides the page until the
-         dictionary is in, and every inline script below may call it. -->
+    <!-- Nayive's first script (old settings, whose page, error reports), then
+         Ayni's language layer: it hides the page until the texts are in, and
+         every inline script below may call Ayni.t(). -->
     <script src="../shared/i18n.js"></script>
+    <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
     <title>Planner</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300d1b2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'%3E%3C/circle%3E%3Cpolyline points='12 6 12 12 16 14'%3E%3C/polyline%3E%3C/svg%3E">
 
     <!-- Shared colour scheme (light default, opt-in dark). Toggle lives in Drive / the launcher; this page just follows the saved choice. -->
     <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
-    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
-    <script src="../shared/theme.js" defer></script>
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script src="../shared/ayni/ayni-icons.js" defer></script>
+    <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Shared header behaviour + the "?" help dialog. Planner keeps no data of
          its own, so this is the only shared script it needs. -->
     <script src="../shared/ui.js" defer></script>
     <script>
-    NayiveI18n.ready.then( function () {
+    Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
         var phone = window.matchMedia( '(max-width: 640px)' ).matches;
         NayiveUI.firstRun( {
             app:   'planner',
             title: 'Planner',
             lead:  phone
-                 ? NayiveUI.t( 'planner.introLeadPhone' )
-                 : NayiveUI.t( 'planner.introLead' ),
+                 ? Ayni.t( 'planner.introLeadPhone' )
+                 : Ayni.t( 'planner.introLead' ),
             buttons: ( phone
                 ? [
-                    { sel: '[data-pane="calendarPane"]', text: NayiveUI.t( 'planner.introCal' ) },
-                    { sel: '[data-pane="tasksPane"]',    text: NayiveUI.t( 'planner.introTasks' ) },
-                    { sel: '[data-pane="habitsPane"]',   text: NayiveUI.t( 'planner.introHabits' ) }
+                    { sel: '[data-pane="calendarPane"]', text: Ayni.t( 'planner.introCal' ) },
+                    { sel: '[data-pane="tasksPane"]',    text: Ayni.t( 'planner.introTasks' ) },
+                    { sel: '[data-pane="habitsPane"]',   text: Ayni.t( 'planner.introHabits' ) }
                   ]
                 : [
-                    { sel: '#habitsRestore', text: NayiveUI.t( 'planner.introRestore' ), tour: { ghost: '#habitsPane' } }
+                    { sel: '#habitsRestore', text: Ayni.t( 'planner.introRestore' ), tour: { ghost: '#habitsPane' } }
                   ] ).concat( [
-                    { icon: 'help', name: NayiveUI.t( 'planner.introHelpName' ), text: NayiveUI.t( 'planner.introHelp' ), tour: { sel: '#panes' } }
+                    { icon: 'help', name: Ayni.t( 'planner.introHelpName' ), text: Ayni.t( 'planner.introHelp' ), tour: { sel: '#panes' } }
                   ] ),
-            tip: NayiveUI.t( 'planner.introTip' ),
+            tip: Ayni.t( 'planner.introTip' ),
             // The guided tour ("Ver el tour" in the card): on a big screen the three
             // panes and the bars between them first, then the card's rows.
             tour: function () {
                 return ( phone ? [] : [
-                    { sel: '#calendarPane', title: 'Calendar', text: NayiveUI.t( 'planner.introCal' ) },
-                    { sel: '#tasksPane',    title: 'Tasks',    text: NayiveUI.t( 'planner.introTasks' ) },
-                    { sel: '#habitsPane',   title: 'Habits',   text: NayiveUI.t( 'planner.introHabits' ), optional: true },
-                    { sel: '#splitter', text: NayiveUI.t( 'planner.tourBars' ) }
+                    { sel: '#calendarPane', title: 'Calendar', text: Ayni.t( 'planner.introCal' ) },
+                    { sel: '#tasksPane',    title: 'Tasks',    text: Ayni.t( 'planner.introTasks' ) },
+                    { sel: '#habitsPane',   title: 'Habits',   text: Ayni.t( 'planner.introHabits' ), optional: true },
+                    { sel: '#splitter', text: Ayni.t( 'planner.tourBars' ) }
                 ] ).concat( 'buttons' );
             }
         } );
@@ -171,26 +177,26 @@
                 <h1>Planner</h1>
             </a>
             <!-- The phone's pane switch: a view switch, so on the left (app.css HEADER). -->
-            <div class="pane-tabs" role="tablist" data-i18n-attr="aria-label:planner.view">
-                <button type="button" class="icon-btn is-active" data-pane="calendarPane" role="tab" aria-selected="true" title="Calendar" aria-label="Calendar">
+            <div class="tb-modes pane-tabs" role="tablist" data-i18n-attr="aria-label:planner.view">
+                <button type="button" class="btn" data-pane="calendarPane" role="tab" aria-selected="true" data-tip="Calendar" aria-label="Calendar">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                 </button>
-                <button type="button" class="icon-btn" data-pane="tasksPane" role="tab" aria-selected="false" title="Tasks" aria-label="Tasks">
+                <button type="button" class="btn" data-pane="tasksPane" role="tab" aria-selected="false" data-tip="Tasks" aria-label="Tasks">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"></rect><path d="M8 4V3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1"></path><polyline points="8 13 11 16 16 10.5"></polyline></svg>
                 </button>
-                <button type="button" class="icon-btn" data-pane="habitsPane" role="tab" aria-selected="false" title="Habits" aria-label="Habits">
+                <button type="button" class="btn" data-pane="habitsPane" role="tab" aria-selected="false" data-tip="Habits" aria-label="Habits">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V10"></path><path d="M12 12C12 8.5 9.2 5.5 5.5 5.5c0 3.5 2.8 6.5 6.5 6.5z"></path><path d="M12 14c0-3.2 2.6-5.8 6-5.8 0 3.2-2.6 5.8-6 5.8z"></path></svg>
                 </button>
             </div>
             <div class="topbar-actions">
                 <div class="tb-group tb-sys">
-                    <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                    <button class="btn" data-intro-open type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                     </button>
                 </div>
                 <!-- ONE sync dot for all panes: mirrors the worst of the three (script below), and
                      clicking it refreshes all three. Always the last child of the header. -->
-                <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.synced"></button>
+                <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="data-tip:ui.synced"></button>
             </div>
         </div>
         <div class="panes" id="panes">
@@ -200,7 +206,7 @@
                 <iframe id="tasksPane" data-src="../tasks/index.html" title="Tasks"></iframe>
                 <div class="hsplitter" id="hsplitter" data-i18n-attr="title:ui.dragResize"></div>
                 <iframe id="habitsPane" data-src="../habits/index.html" title="Habits"></iframe>
-                <button class="pane-restore" id="habitsRestore" type="button" data-i18n-attr="title:planner.showHabits, aria-label:planner.showHabits">
+                <button class="pane-restore" id="habitsRestore" type="button" data-i18n-attr="data-tip:planner.showHabits, aria-label:planner.showHabits">
                     <svg class="sprout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V10"></path><path d="M12 12C12 8.5 9.2 5.5 5.5 5.5c0 3.5 2.8 6.5 6.5 6.5z"></path><path d="M12 14c0-3.2 2.6-5.8 6-5.8 0 3.2-2.6 5.8-6 5.8z"></path></svg>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
                 </button>
@@ -232,7 +238,7 @@
             // own, but a reload inside an iframe reloads only that pane and
             // would leave this frame - and the other panes - in the old
             // language. Adopting here, the panes open already agreeing.
-            if( window.NayiveI18n && NayiveI18n.adopt && NayiveI18n.adopt( me.lang ) ) return;
+            if( window.Ayni && Ayni.i18n.setLang( me.lang ) ) return;
 
             showFrames();
         } ).catch( showFrames );
@@ -454,7 +460,7 @@
                 {
                     dot.classList.toggle( cls, worst.classList.contains( cls ) );
                 } );
-                dot.title = worst.title || '';
+                Ayni.setTip( dot, worst.dataset.tip || '' );
             }
 
             // The dot is also the refresh button for every pane. Each framed app exposes
@@ -514,7 +520,6 @@
                 tabs.querySelectorAll( 'button[data-pane]' ).forEach( function( b )
                 {
                     var on = b.dataset.pane === id;
-                    b.classList.toggle( 'is-active', on );
                     b.setAttribute( 'aria-selected', String( on ) );
                 } );
                 try { localStorage.setItem( TABKEY, id ); } catch( e ) {}

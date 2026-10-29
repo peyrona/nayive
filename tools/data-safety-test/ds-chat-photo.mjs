@@ -53,27 +53,28 @@ const sent = await json( phone.post( "/api/chat/conv/" + CA + "/messages", JSON.
                                      { "Content-Type": "application/json" } ) );
 ok( sent.id > 0 && sent.kept, "sent to Carmen from the library (linked)", sent );
 
-// The editor on screen has the photo in (its canvas holds the photo's own
-// 64x48): before that its ✓ / "save a copy" would export an empty canvas,
-// and a flip made then is wiped by the editor's own end of loading.
-const LOADED = "( cv => !! cv && cv.width === 64 && cv.height === 48 )( document.querySelector( '.photo-editor canvas.lower-canvas' ) )";
+// The editor on screen has the photo in (its tools are on once it is):
+// before that its ✓ / "save a copy" would export nothing.
+const LOADED = "!! document.querySelector( '.photo-editor [data-ie=rotate]:not([aria-disabled=true])' )";
 // Something to undo: the editor's undo button lights up on the very event
 // that makes Chat's editor "dirty" - ✓ with nothing changed only closes.
-const CHANGED = "!! document.querySelector( '.photo-editor .tie-btn-undo.enabled' )";
+const CHANGED = "!! document.querySelector( '.photo-editor [data-ie=undo]:not([aria-disabled=true])' )";
+// Chat's own ✓: the first of its bar's buttons that is not the editor's.
+const SAVE = "document.querySelector( '.photo-editor .editor-actions .btn.on-media:not([data-ie])' )";
 ok( await load() && await openChat( CA ) && await c.until( `NayiveChat.S.msgs.get( ${sent.id} )` ), "Carmen's chat shows it" );
 await c.evaluate( `NayiveChat.editPhoto( NayiveChat.S.msgs.get( ${sent.id} ) ); true` );
-ok( await c.until( "document.querySelector( '.photo-editor .tie-btn-flip' )", 30000 ) && await c.until( LOADED, 30000 ), "Editar opens the editor on it" );
-await c.evaluate( "document.querySelector( '.photo-editor .tie-btn-flip' ).click(), true" );
-await c.until( "document.querySelector( '.photo-editor .tie-flip-button .tui-image-editor-button.flipX' )" );
+ok( await c.until( "document.querySelector( '.photo-editor [data-ie=rotate]' )", 30000 ) && await c.until( LOADED, 30000 ), "Editar opens the editor on it" );
+await c.evaluate( "document.querySelector( '.photo-editor [data-ie=rotate]' ).click(), true" );
+await c.until( "document.querySelector( '.photo-editor [data-ie=flipH]' )" );
 // The flip, until the editor has it (a loaded machine: a click may come
 // before the editor is ready for it) - then ✓, only while it is there.
 let saved = false;
 for( const end = Date.now() + 60000; ! saved && Date.now() < end; )
 {
     if( ! await c.evaluate( CHANGED ) )
-        await c.evaluate( "document.querySelector( '.photo-editor .tie-flip-button .tui-image-editor-button.flipX' ).click(), true" );
+        await c.evaluate( "document.querySelector( '.photo-editor [data-ie=flipH]' ).click(), true" );
     await c.until( CHANGED, 5000 );
-    saved = await c.evaluate( `${CHANGED} && ( document.querySelector( '.photo-editor .editor-actions .editor-btn' ).click(), true )` );   // ✓
+    saved = await c.evaluate( `${CHANGED} && ( ${SAVE}.click(), true )` );   // ✓
 }
 const EDIT = await untilDisk( "files/Fotos/IMG_7-editado.jpg", 60000 );
 ok( !! EDIT, "✓ saved the edit as a new file beside it: IMG_7-editado.jpg" );
@@ -93,8 +94,8 @@ section( "J1 - SAVE A COPY: NEVER OVER A NAME THAT IS TAKEN" );
 const taken = await phone.put( "files/Fotos/IMG_7-editado-editado.jpg", "otra foto" );
 ok( taken.status === 200, "a file already has the copy's name", taken.status );
 await c.evaluate( `NayiveChat.editPhoto( NayiveChat.S.msgs.get( ${sent.id} ) ); true` );
-ok( await c.until( "document.querySelector( '.photo-editor .tie-btn-flip' )", 30000 ) && await c.until( LOADED, 30000 ), "Editar again (now on the edit)" );
-await c.evaluate( "document.querySelectorAll( '.photo-editor .editor-actions .editor-btn' )[ 1 ].click(), true" );   // save a copy
+ok( await c.until( "document.querySelector( '.photo-editor [data-ie=rotate]' )", 30000 ) && await c.until( LOADED, 30000 ), "Editar again (now on the edit)" );
+await c.evaluate( "document.querySelectorAll( '.photo-editor .editor-actions .btn.on-media:not([data-ie])' )[ 1 ].click(), true" );   // save a copy
 ok( !! await untilDisk( "files/Fotos/IMG_7-editado-editado (2).jpg", 60000 ), "the copy took the next free name" );
 ok( String( disk( "files/Fotos/IMG_7-editado-editado.jpg" ) ) === "otra foto", "the file that had the name is untouched" );
 ok( disk( "files/Fotos/IMG_7.jpg" )?.equals( ORIG ), "the library original still keeps its bytes" );
@@ -111,9 +112,9 @@ ok( await c.until( "/ningún mensaje/.test( document.querySelector( '.days-count
     "1000 days: none", await c.evaluate( "document.querySelector( '.days-count' )?.textContent" ) );
 await c.evaluate( `( () => { const i = document.getElementById( 'autoDelDays' ); i.value = '1'; i.dispatchEvent( new InputEvent( 'input' ) ); return true; } )()` );
 await c.until( "/3 mensajes/.test( document.querySelector( '.days-count' )?.textContent || '' )" );
-const SAVE = "document.getElementById( 'autoDelDays' )?.closest( '.sheet' )?.querySelector( '.sheet-close' )";
-ok( await c.until( SAVE ), "its × (close keeps)" );
-await c.evaluate( SAVE + ".click(), true" );
+const CLOSE = "document.getElementById( 'autoDelDays' )?.closest( '.sheet' )?.querySelector( '.sheet-close' )";
+ok( await c.until( CLOSE ), "its × (close keeps)" );
+await c.evaluate( CLOSE + ".click(), true" );
 ok( await c.until( "/3 ahora/.test( document.getElementById( 'toast' ).textContent )" ),
     "×: the toast says it too", await c.evaluate( "document.getElementById( 'toast' ).textContent" ) );
 await c.evaluate( "document.querySelector( '#toast .toast-undo' ).click(), true" );

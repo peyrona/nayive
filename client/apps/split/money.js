@@ -72,7 +72,7 @@
     function locale()
     {
         if( _locale ) return _locale;
-        try { if( window.NayiveI18n ) return NayiveI18n.locale(); } catch ( e ) {}
+        try { if( window.Ayni ) return Ayni.i18n.lang(); } catch ( e ) {}
         if( typeof navigator !== "undefined" && navigator.language ) return navigator.language;
         return "en";
     }

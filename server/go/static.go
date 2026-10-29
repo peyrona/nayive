@@ -64,10 +64,24 @@ var publicStatic = map[string]bool{
 	"sw.js":            true,
 	"shared/theme.css": true,
 	"shared/app.css":   true,
-	"shared/theme.js":  true,
 	"shared/ui.js":     true,
-	// The interface language: the sign-in screen is translated too, so the
-	// engine and every dictionary must be reachable with no session.
+	// Ayni (shared/ayni/): the base - colours, light / dark, icons and its own
+	// texts every page paints with, the sign-in screen too. Library code and
+	// a time-zone table - nothing private.
+	"shared/ayni/ayni-i18n.js":     true,
+	"shared/ayni/ayni-base.css":    true,
+	"shared/ayni/ayni-base.js":     true,
+	"shared/ayni/ayni-buttons.css": true,
+	"shared/ayni/ayni-buttons.js":  true,
+	"shared/ayni/ayni-icons.js":    true,
+	"shared/ayni/tz-geo.json":      true,
+	"shared/ayni/i18n/es.json":     true,
+	"shared/ayni/i18n/en.json":     true,
+	"shared/ayni/i18n/pt.json":     true,
+	"shared/ayni/i18n/fr.json":     true,
+	"shared/ayni/i18n/de.json":     true,
+	// The interface language: the sign-in screen is translated too, so
+	// Nayive's first script and every dictionary must be reachable with no session.
 	"shared/i18n.js":      true,
 	"shared/i18n/es.json": true,
 	"shared/i18n/en.json": true,

@@ -17,17 +17,17 @@
 
 // Nothing is drawn from JS before the dictionary is in: without an
 // in-source fallback, an early render would paint the bare keys.
-await NayiveI18n.ready;
+await Ayni.i18n.ready;
 
-const T  = function( k )    { return NayiveUI.t( k ); };
-const TF = function( k, o ) { return NayiveUI.tf( k, o ); };
+const T  = function( k )    { return Ayni.t( k ); };
+const TF = function( k, o ) { return Ayni.tf( k, o ); };
 const $  = function( id )   { return document.getElementById( id ); };
 
 // The formats the editor can load AND re-encode (canvas.toDataURL); Drive
 // opens these here (shared/photo.js).
 const EDIT_EXT = NayivePhoto.EDIT_EXT;
 
-let imageEditor = null;    // the live tui.ImageEditor, or null
+let imageEditor = null;    // the live editor (shared/image-editor.js), or null
 let editorPath  = '';      // the file being edited - the copy, after "Save a copy"
 let editorDirty = false;   // an image edit not yet on disk
 let savedOnce   = false;   // after a save the undo stack still holds what was saved
@@ -141,17 +141,33 @@ async function start()
     editorPath = file;
     loadNote( file );
 
-    const host = $( 'tuiEditor' );
+    const host = $( 'editorHost' );
     host.innerHTML = '';
-    imageEditor = NayivePhoto.newEditor( host, src, nameOf( file ) );
+    imageEditor = NayivePhoto.newEditor( host, src, nameOf( file ), { tools: $( 'editorTools' ), head: $( 'editorHead' ) } );
     imageEditor.on( 'undoStackChanged', function( len ) { editorDirty = savedOnce || len > 0; } );
+    rankHeader();
     setBusy( false );
+}
+
+// The header keeps to one row (a phone): what does not fit goes into the ⋮
+// (NayiveUI.fitBar) - the tools first, Save last. The editor makes its tool
+// buttons (data-ie), so they are ranked once they are there.
+const HEAD_RANKS = { editorSaveBtn: 1, undo: 2, redo: 3, crop: 4, rotate: 5, editorSaveAsBtn: 6, adjust: 7, resize: 8, reset: 9 };
+
+function rankHeader()
+{
+    document.querySelectorAll( '.topbar-actions button' ).forEach( function( b )
+    {
+        const r = HEAD_RANKS[ b.id ] || HEAD_RANKS[ b.dataset.ie ];
+        if( r ) b.dataset.rank = r;
+    } );
+    NayiveUI.fitBar( document.querySelector( '.topbar' ) );
 }
 
 function setBusy( on )
 {
-    $( 'editorSaveBtn'   ).disabled = on;
-    $( 'editorSaveAsBtn' ).disabled = on;
+    $( 'editorSaveBtn'   ).ariaDisabled = on;
+    $( 'editorSaveAsBtn' ).ariaDisabled = on;
 }
 
 //------------------------------------------------------------------------//
@@ -461,9 +477,9 @@ window.addEventListener( 'beforeunload', function( e )
 //------------------------------------------------------------------------//
 // WIRING
 
-$( 'backBtn'         ).innerHTML = NayiveUI.icon( 'back'   );
-$( 'editorSaveBtn'   ).innerHTML = NayiveUI.icon( 'check'  );
-$( 'editorSaveAsBtn' ).innerHTML = NayiveUI.icon( 'saveas' );
+$( 'backBtn'         ).innerHTML = Ayni.icon( 'back'   );
+$( 'editorSaveBtn'   ).innerHTML = Ayni.icon( 'check'  );
+$( 'editorSaveAsBtn' ).innerHTML = Ayni.icon( 'save-as' );
 
 $( 'editorSaveBtn'   ).addEventListener( 'click', save );
 $( 'editorSaveAsBtn' ).addEventListener( 'click', openSaveCopy );

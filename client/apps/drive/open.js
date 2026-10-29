@@ -11,6 +11,11 @@
 // returns true; the flag is kept for callers that still test it.
 function openNode( node )
 {
+    // A shortcut opens what it leads to, as if opened where it lives: a
+    // folder is gone into, a file goes to its app (its saves land in the
+    // original). A broken one offers to go to the bin.
+    if( isLink( node ) ) { openShortcut( node ); return true; }
+
     // Something shared with us that belongs to an app: hand it straight to
     // that app instead of browsing its folder. Both open it read-only —
     // the server roots a "shared/..." path with writable=false.
@@ -56,6 +61,25 @@ function openNode( node )
     // No app claims this extension: ask which one should have it.
     openWithDialog( node.path, OPEN_WITH_ALL, 'drive.openWithAny' );
     return true;
+}
+
+async function openShortcut( node )
+{
+    if( linkBroken( node ) )
+    {
+        if( await NayiveUI.confirm( {
+                title: T( 'drive.brokenTitle' ),
+                body: TF( 'drive.brokenBody', { name: displayName( node ) } ),
+                confirm: T( 'ui.delete' ), danger: true } ) )
+        {
+            deleteTargets = [ node.path ];      // to the bin, with its Undo (actions.js)
+            confirmDelete();
+        }
+        return;
+    }
+    const to = linkTarget( node );
+    if( isDir( to ) ) navigateTo( to.path );
+    else              openNode( to );
 }
 
 //------------------------------------------------------------------------//

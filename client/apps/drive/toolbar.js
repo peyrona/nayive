@@ -14,8 +14,8 @@ function updateToolbarState()
     // ONE thing an "add" share opens up: a folder somebody shared with us,
     // having ticked "pueden añadir archivos" (canAddHere).
     const roHere = readOnlyHere();
-    document.getElementById( 'newFolderBtn' ).disabled = roHere;
-    document.getElementById( 'uploadBtn'    ).disabled = roHere && ! canAddHere;
+    document.getElementById( 'newFolderBtn' ).ariaDisabled = roHere;
+    document.getElementById( 'uploadBtn'    ).ariaDisabled = roHere && ! canAddHere;
 
     if( browse ) browse.redraw();
 
@@ -100,7 +100,7 @@ function setSyncStatus( ok )
     const el = document.getElementById( 'syncIndicator' );
     el.classList.toggle( 'synced', ok !== false );
     // The plug IS the "re-read this folder" button now (it replaced #refreshBtn).
-    el.title = T( ok === false ? 'drive.connError' : 'ui.sync.synced' ) + T( 'ui.sync.tapHint' );
+    Ayni.setTip( el, T( ok === false ? 'drive.connError' : 'ui.sync.synced' ) + T( 'ui.sync.tapHint' ) );
 }
 
 // Any request in flight (list, upload, rename, delete, download) turns the dot
@@ -130,7 +130,6 @@ async function reload()
     {
         dirTreeRoot = scopeTree( await withBusy( GumApi.dirTree() ) );
         computeFsRoot();
-        expandedFolders.add( FS_ROOT );
 
         if( ! findNode( currentFolder ) )
             currentFolder = FS_ROOT;
@@ -202,7 +201,7 @@ async function applyNews()
 
         const path = currentFolder;
         const seq  = ++listingSeq;
-        const r    = await GumApi.listDir( path );
+        const r    = await GumApi.listDir( path, true );      // shortcuts too, as navigate.js
         if( seq !== listingSeq || path !== currentFolder || trashMode ) return;
 
         curListing = { path: path, nodes: pruneNodes( r.nodes || [] ) };

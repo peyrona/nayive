@@ -219,14 +219,15 @@
         var input = h( "input", { attrs: { type: "file", hidden: true } } );
         if( how === "camera" ) { input.accept = "image/*"; input.setAttribute( "capture", "environment" ); }
         else if( how === "gallery" ) { input.accept = "image/*"; input.multiple = true; }
+        else if( how === "audio" || how === "video" ) { input.accept = how + "/*"; input.multiple = true; }
         else input.multiple = true;
         input.addEventListener( "change", function ()
         {
             var files = Array.prototype.slice.call( input.files || [] );
             input.remove();
             if( ! files.length ) return;
-            if( how === "file" ) sendFiles( files );
-            else previewPhotos( files );
+            if( how === "camera" || how === "gallery" ) previewPhotos( files );
+            else sendFiles( files );
         } );
         document.body.appendChild( input );
         input.click();
@@ -283,12 +284,12 @@
         var sh = null, chosen = null;
         function choice( icon, label, act )
         {
-            var b = h( "button", { class: "text-btn ghost", attrs: { type: "button" } }, C.ic( icon ), label );
+            var b = h( "button", { class: "btn text bordered", attrs: { type: "button" } }, C.ic( icon ), label );
             b.addEventListener( "click", function () { chosen = act; sh.close(); act(); } );
             body.appendChild( h( "div", { class: "pick-opt" }, b ) );
         }
         choice( "phone2", T( "chat.fromDevice" ), device );
-        choice( "folder", T( "chat.fromNayive" ), nayive );
+        choice( "nayive", T( "chat.fromNayive" ), nayive );
         sh = C.sheet( title, body, null, function () { if( ! chosen && none ) none(); } );
     };
 
@@ -401,11 +402,38 @@
 
     // WhatsApp's step before sending photos: see them, add a line, send.
     // sendOne( caption, replyTo, previewUrl, silent ): sends a single photo another way.
+    // One photo: Recortar and Girar under it, before it goes.
     function previewPhotos( files, sendOne )
     {
         var body = h( "div" );
+        files = files.slice();
         var urls = files.map( function ( f ) { return URL.createObjectURL( f ); } );
-        if( files.length === 1 ) body.appendChild( h( "img", { class: "prev-one", attrs: { src: urls[ 0 ], alt: "" } } ) );
+        var edited = false, busy = false;
+        if( files.length === 1 )
+        {
+            var one = h( "img", { class: "prev-one", attrs: { src: urls[ 0 ], alt: "" } } );
+            // The edit replaces the photo here; it is what goes.
+            var take = function ( f )
+            {
+                busy = false;
+                if( ! f ) return;
+                files[ 0 ] = f;
+                edited = true;
+                URL.revokeObjectURL( urls[ 0 ] );
+                urls[ 0 ] = URL.createObjectURL( f );
+                one.src = urls[ 0 ];
+            };
+            var failed = function () { busy = false; C.toast( "chat.failed", 3000 ); };
+            body.appendChild( one );
+            body.appendChild( h( "div", { class: "prev-tools" },
+                C.btn( "crop", "imgEd.crop", function () { if( ! busy ) cropPhoto( files[ 0 ], take ); } ),
+                C.btn( "rotate-cw", "imgEd.rotate", function ()
+                {
+                    if( busy ) return;
+                    busy = true;
+                    loadImg( files[ 0 ] ).then( function ( img ) { return redrawPhoto( files[ 0 ], img, null, true ); } ).then( take, failed );
+                } ) ) );
+        }
         else
         {
             var grid = h( "div", { class: "prev-grid" } );
@@ -414,19 +442,21 @@
         }
         var cap = h( "input", { attrs: { type: "text", placeholder: T( "chat.addCaption" ), "aria-label": T( "chat.addCaption" ) } } );
         body.appendChild( h( "div", { class: "field" }, cap ) );
-        var go = h( "button", { attrs: { type: "button", "data-act": "primary:send", title: T( "chat.sendMsg" ) } } );
+        var go = NayiveUI.sheetButton( "primary", T( "chat.sendMsg" ), "send" );
         var sh = C.sheet( files.length === 1 ? T( "chat.photo" ) : C.TF( "chat.nPhotos", { n: files.length } ), body, go );
         function send()
         {
             // The message box's limit (compose.js send): over it the server refuses
             // the photo's caption. The sheet stays open, the caption in its box.
             if( Array.from( cap.value.trim() ).length > 4000 ) { C.toast( "chat.tooLong", 4000 ); return; }
+            if( busy ) return;                                  // a turn still being drawn
             sh.close();
             var reply = S.replyTo ? S.replyTo.id : 0, caption = cap.value.trim();
             C.resetComposer();
             C.nightGate( S.open, function ( silent )
             {
-                if( sendOne ) { sendOne( caption, reply, urls[ 0 ], silent ); return; }
+                // Edited here: sent as a new file - sendOne's file is the unedited one.
+                if( sendOne && ! edited ) { sendOne( caption, reply, urls[ 0 ], silent ); return; }
                 files.forEach( function ( f, i ) { upload( f, "photo", i === 0 ? caption : "", i === 0 ? reply : 0, urls[ i ], silent ); } );
             } );
         }
@@ -510,12 +540,127 @@
     }
 
     // ---------------------------------------------------------------------
+    // Recortar / Girar a photo before it goes
+    // ---------------------------------------------------------------------
+
+    var EDIT_MAX = 4096;                  // longest side of an edit: upload() shrinks it later; an iPhone canvas stops near 16.7 MP
+
+    // A picture, drawn the way it is seen (the browser applies its Exif turn).
+    function loadImg( blob )
+    {
+        return new Promise( function ( ok, no )
+        {
+            var img = new Image();
+            var u = URL.createObjectURL( blob );
+            img.onload  = function () { URL.revokeObjectURL( u ); ok( img ); };
+            img.onerror = function () { URL.revokeObjectURL( u ); no( new Error( "load" ) ); };
+            img.src = u;
+        } );
+    }
+
+    // The part `box` of `img` (all of it when null), a quarter turn right when
+    // `turn`, as a new JPEG File - with `file`'s Exif (its date, its place).
+    async function redrawPhoto( file, img, box, turn )
+    {
+        box = box || { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
+        var k = Math.min( 1, EDIT_MAX / Math.max( box.w, box.h ) );
+        var w = Math.max( 1, Math.round( box.w * k ) ), ht = Math.max( 1, Math.round( box.h * k ) );
+        var c = document.createElement( "canvas" );
+        c.width  = turn ? ht : w;
+        c.height = turn ? w : ht;
+        var g = c.getContext( "2d" );
+        if( turn ) { g.translate( ht, 0 ); g.rotate( Math.PI / 2 ); }
+        g.drawImage( img, box.x, box.y, box.w, box.h, 0, 0, w, ht );
+        var blob = await new Promise( function ( ok ) { c.toBlob( ok, "image/jpeg", 0.92 ); } );
+        if( ! blob ) throw new Error( "render" );
+        if( NayivePhoto.isJpeg( file ) ) blob = await NayivePhoto.copyExif( file, blob, c.width, c.height );
+        return new File( [ blob ], NayivePhoto.jpegName( file.name || "foto" ), { type: "image/jpeg" } );
+    }
+
+    // Recortar: the photo full screen, a box over it - a corner sizes it,
+    // inside it moves it. ✓ keeps what is in the box: done( file ); × leaves
+    // the photo as it was.
+    function cropPhoto( file, done )
+    {
+        var okB = h( "button", { class: "btn on-media", attrs: { type: "button", "data-tip": T( "imgEd.crop" ), "aria-label": T( "imgEd.crop" ) } }, C.ic( "check" ) );
+        var f = fullLayer( T( "imgEd.crop" ), okB );
+        f.layer.classList.add( "cropper" );
+        var url = URL.createObjectURL( file );
+        var img = h( "img", { attrs: { src: url, alt: "", draggable: "false" } } );
+        var box = h( "div", { class: "crop-box" }, [ "nw", "ne", "sw", "se" ].map( function ( c ) { return h( "span", { class: c, attrs: { "data-c": c } } ); } ) );
+        box.hidden = true;
+        f.canvas.appendChild( img );
+        f.canvas.appendChild( box );
+
+        var r = { x: 0, y: 0, w: 1, h: 1 };        // the box, as parts of the picture
+        var MIN = 48;                               // px on screen: the box never smaller
+        function place()
+        {
+            var ib = img.getBoundingClientRect(), cb = f.canvas.getBoundingClientRect();
+            if( ! ib.width ) return;
+            box.style.left   = ( ib.left - cb.left + r.x * ib.width ) + "px";
+            box.style.top    = ( ib.top - cb.top + r.y * ib.height ) + "px";
+            box.style.width  = ( r.w * ib.width ) + "px";
+            box.style.height = ( r.h * ib.height ) + "px";
+            box.hidden = false;
+        }
+        img.onload  = place;
+        img.onerror = function () { f.close(); C.toast( "chat.failed", 3000 ); };
+        window.addEventListener( "resize", place );
+        f.layer._onClose = function () { window.removeEventListener( "resize", place ); URL.revokeObjectURL( url ); };
+
+        function clamp( v, lo, hi ) { return Math.max( lo, Math.min( hi, v ) ); }
+        var drag = null;
+        box.addEventListener( "pointerdown", function ( e )
+        {
+            if( e.button > 0 || drag ) return;
+            e.preventDefault();
+            drag = { id: e.pointerId, c: e.target.getAttribute( "data-c" ) || "", x0: e.clientX, y0: e.clientY,
+                     r: { x: r.x, y: r.y, w: r.w, h: r.h }, ib: img.getBoundingClientRect() };
+            box.setPointerCapture( e.pointerId );
+        } );
+        box.addEventListener( "pointermove", function ( e )
+        {
+            if( ! drag || e.pointerId !== drag.id ) return;
+            var o = drag.r;
+            var dx = ( e.clientX - drag.x0 ) / drag.ib.width, dy = ( e.clientY - drag.y0 ) / drag.ib.height;
+            var mw = Math.min( 1, MIN / drag.ib.width ), mh = Math.min( 1, MIN / drag.ib.height );
+            if( ! drag.c ) r = { x: clamp( o.x + dx, 0, 1 - o.w ), y: clamp( o.y + dy, 0, 1 - o.h ), w: o.w, h: o.h };
+            else
+            {
+                var x1 = o.x, y1 = o.y, x2 = o.x + o.w, y2 = o.y + o.h;
+                if( drag.c.indexOf( "w" ) >= 0 ) x1 = clamp( x1 + dx, 0, x2 - mw ); else x2 = clamp( x2 + dx, x1 + mw, 1 );
+                if( drag.c.indexOf( "n" ) >= 0 ) y1 = clamp( y1 + dy, 0, y2 - mh ); else y2 = clamp( y2 + dy, y1 + mh, 1 );
+                r = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+            }
+            place();
+        } );
+        function end( e ) { if( drag && e.pointerId === drag.id ) drag = null; }
+        box.addEventListener( "pointerup", end );
+        box.addEventListener( "pointercancel", end );
+
+        var busy = false;
+        okB.addEventListener( "click", function ()
+        {
+            if( busy || ! img.naturalWidth ) return;
+            if( ! r.x && ! r.y && r.w === 1 && r.h === 1 ) { f.close(); return; }     // the box not moved: nothing to cut
+            busy = true;
+            var W = img.naturalWidth, H = img.naturalHeight;
+            var cut = { x: Math.round( r.x * W ), y: Math.round( r.y * H ) };
+            cut.w = Math.max( 1, Math.min( W - cut.x, Math.round( r.w * W ) ) );
+            cut.h = Math.max( 1, Math.min( H - cut.y, Math.round( r.h * H ) ) );
+            redrawPhoto( file, img, cut, false ).then( function ( out ) { f.close(); done( out ); },
+                                                       function () { busy = false; C.toast( "chat.failed", 3000 ); } );
+        } );
+    }
+
+    // ---------------------------------------------------------------------
     // full screen: photos (with prev/next), a map
     // ---------------------------------------------------------------------
 
     function fullLayer( title, extra )
     {
-        var closeB = h( "button", { class: "editor-btn", attrs: { type: "button", title: T( "ui.close" ), "aria-label": T( "ui.close" ) } } );
+        var closeB = h( "button", { class: "btn on-media", attrs: { type: "button", "data-tip": T( "ui.close" ), "aria-label": T( "ui.close" ) } } );
         closeB.appendChild( C.ic( "x" ) );
         var actions = h( "div", { class: "editor-actions" }, extra || null, closeB );
         var titleEl = h( "div", { class: "editor-title", text: title } );
@@ -574,9 +719,9 @@
     C.openCamera = function ()
     {
         var conv = S.open;
-        var flip = h( "button", { class: "editor-btn", attrs: { type: "button", title: T( "chat.switchCamera" ), "aria-label": T( "chat.switchCamera" ), hidden: true } },
+        var flip = h( "button", { class: "btn on-media", attrs: { type: "button", "data-tip": T( "chat.switchCamera" ), "aria-label": T( "chat.switchCamera" ), hidden: true } },
                       C.ic( "refresh" ) );
-        var shutter = h( "button", { class: "icon-btn lg solid-ok", attrs: { type: "button", title: T( "chat.takePhoto" ), "aria-label": T( "chat.takePhoto" ) } },
+        var shutter = h( "button", { class: "btn lg solid-ok", attrs: { type: "button", "data-tip": T( "chat.takePhoto" ), "aria-label": T( "chat.takePhoto" ) } },
                          C.ic( "camera" ) );
         var f = fullLayer( T( "chat.camera" ), flip );
         f.layer.classList.add( "camera" );
@@ -592,7 +737,7 @@
         async function start( deviceId )
         {
             stop();
-            shutter.disabled = true;
+            shutter.ariaDisabled = true;
             try
             {
                 stream = await navigator.mediaDevices.getUserMedia( { audio: false,
@@ -601,7 +746,7 @@
             catch( _ ) { if( f.layer.isConnected ) f.close(); C.toast( "chat.noCamera", 3500 ); return; }
             if( ! f.layer.isConnected ) { stop(); return; }                 // closed while it asked
             video.srcObject = stream;
-            shutter.disabled = false;
+            shutter.ariaDisabled = false;
             // With the permission given, every camera is listed: more than one = a switch.
             try { cams = ( await navigator.mediaDevices.enumerateDevices() ).filter( function ( d ) { return d.kind === "videoinput"; } ); }
             catch( _ ) { cams = []; }
@@ -618,7 +763,7 @@
             c.width = video.videoWidth;
             c.height = video.videoHeight;
             c.getContext( "2d" ).drawImage( video, 0, 0 );
-            shutter.disabled = true;
+            shutter.ariaDisabled = true;
             c.toBlob( function ( b )
             {
                 f.close();
@@ -635,25 +780,25 @@
         var photos = S.order.filter( function ( x ) { var m = S.msgs.get( x ); return x > 0 && m.kind === "photo" && ! m.deleted; } );
         var at = photos.indexOf( id );
         if( at < 0 ) return;
-        var dl = h( "a", { class: "editor-btn", attrs: { title: T( "chat.download" ), "aria-label": T( "chat.download" ) } } );
+        var dl = h( "a", { class: "btn on-media", attrs: { "data-tip": T( "chat.download" ), "aria-label": T( "chat.download" ) } } );
         dl.appendChild( C.ic( "download" ) );
         // The owner: Copiar (into their Photos folder) and Editar.
         var keepB = null, openB = null, editB = null;
         if( C.canEditPhotos() )
         {
-            keepB = h( "button", { class: "editor-btn", attrs: { type: "button", title: T( "chat.keepPhoto" ), "aria-label": T( "chat.keepPhoto" ) },
+            keepB = h( "button", { class: "btn on-media", attrs: { type: "button", "data-tip": T( "chat.keepPhoto" ), "aria-label": T( "chat.keepPhoto" ) },
                                    on: { click: function () { C.keepPhoto( S.msgs.get( photos[ at ] ) ).then( show ); } } }, C.ic( "copy" ) );
             // Once kept, Copiar becomes "Abrir en Fotos".
-            openB = h( "button", { class: "editor-btn", attrs: { type: "button", title: T( "chat.openInPhotos" ), "aria-label": T( "chat.openInPhotos" ) },
+            openB = h( "button", { class: "btn on-media", attrs: { type: "button", "data-tip": T( "chat.openInPhotos" ), "aria-label": T( "chat.openInPhotos" ) },
                                    on: { click: function () { C.openInPhotos( S.msgs.get( photos[ at ] ) ); } } }, C.ic( "external" ) );
-            editB = h( "button", { class: "editor-btn", attrs: { type: "button", title: T( "chat.editPhoto" ), "aria-label": T( "chat.editPhoto" ) },
+            editB = h( "button", { class: "btn on-media", attrs: { type: "button", "data-tip": T( "chat.editPhoto" ), "aria-label": T( "chat.editPhoto" ) },
                                    on: { click: function () { C.editPhoto( S.msgs.get( photos[ at ] ), show ); } } }, C.ic( "edit" ) );
         }
         var f = fullLayer( "", [ keepB, openB, editB, dl ] );
         var img = h( "img", { attrs: { alt: "" } } );
         var cap = h( "div", { class: "caption" } );
-        var prev = h( "button", { class: "editor-btn over-media nav prev", attrs: { type: "button", title: T( "ui.prev" ) } } );
-        var next = h( "button", { class: "editor-btn over-media nav next", attrs: { type: "button", title: T( "ui.next" ) } } );
+        var prev = h( "button", { class: "btn on-media nav prev", attrs: { type: "button", "data-tip": T( "ui.prev" ) } } );
+        var next = h( "button", { class: "btn on-media nav next", attrs: { type: "button", "data-tip": T( "ui.next" ) } } );
         prev.appendChild( C.ic( "chev-l" ) );
         next.appendChild( C.ic( "chev" ) );
         f.canvas.appendChild( img );
@@ -745,7 +890,24 @@
 
     // "Abrir en Fotos": the Photos app at that photo's folder, the photo open
     // (?photo=), in a tab of its own - the chat stays where it was.
-    C.openInPhotos = async function ( m )
+    C.openInPhotos = function ( m )
+    {
+        openKept( m, function ( path )
+        {
+            return "../photos/index.html?dir=" + encodeURIComponent( path.slice( 0, path.lastIndexOf( "/" ) ) ) +
+                   "&photo=" + encodeURIComponent( path );
+        } );
+    };
+
+    // "Mostrar en Drive": Drive at the folder that holds the kept photo, the
+    // photo picked (?sel=), in a tab of its own.
+    C.showInDrive = function ( m )
+    {
+        openKept( m, function ( path ) { return "../drive/index.html?sel=" + encodeURIComponent( path ); } );
+    };
+
+    // A kept photo's page (urlOf(its path now)) in a new tab.
+    async function openKept( m, urlOf )
     {
         if( ! m || ! m.kept ) return;
         // The tab opens NOW, while the tap still counts (a browser blocks a
@@ -753,11 +915,10 @@
         var tab = window.open( "about:blank", "_blank" );
         var path = await C.keepPhoto( m, true );                            // kept: just says where
         if( ! path ) { if( tab ) tab.close(); return; }
-        var url = "../photos/index.html?dir=" + encodeURIComponent( path.slice( 0, path.lastIndexOf( "/" ) ) ) +
-                  "&photo=" + encodeURIComponent( path );
+        var url = urlOf( path );
         if( tab ) tab.location.href = new URL( url, location.href ).href;
         else location.href = url;
-    };
+    }
 
     function shortPath( p ) { return String( p || "" ).replace( /^files\/?/, "" ) || T( "ui.filesRoot" ); }
 
@@ -778,8 +939,8 @@
         catch( e ) { if( e.status === 412 ) throw new Error( T( "chat.failed" ) ); throw e; }
     }
 
-    // Editar foto (TOAST UI Image Editor, as Drive and Photos: shared/photo.js
-    // loads and builds it). The photo is kept first, so it is safe in the
+    // Editar foto (the editor Image uses, shared/image-editor.js: shared/photo.js
+    // loads and builds it; its undo / redo go in this bar). The photo is kept first, so it is safe in the
     // owner's files. The edit NEVER goes over it (it may be the camera
     // original of their library): both saves write a new file beside it. The
     // bar: save (the chat shows the edit, to everybody), save a copy (the
@@ -792,14 +953,15 @@
         var path = await C.keepPhoto( m, true );
         if( ! path || S.open !== conv ) return;
 
-        var saveB  = h( "button", { class: "editor-btn", attrs: { type: "button", title: T( "ui.save" ), "aria-label": T( "ui.save" ) } }, C.ic( "check" ) );
-        var copyB  = h( "button", { class: "editor-btn", attrs: { type: "button", title: T( "chat.saveCopy" ), "aria-label": T( "chat.saveCopy" ) },
-                                    html: NayiveUI.icon( "saveas" ) } );
-        var closeB = h( "button", { class: "editor-btn", attrs: { type: "button", title: T( "ui.close" ), "aria-label": T( "ui.close" ) } }, C.ic( "x" ) );
+        var saveB  = h( "button", { class: "btn on-media", attrs: { type: "button", "data-tip": T( "ui.save" ), "aria-label": T( "ui.save" ) } }, C.ic( "check" ) );
+        var copyB  = h( "button", { class: "btn on-media", attrs: { type: "button", "data-tip": T( "chat.saveCopy" ), "aria-label": T( "chat.saveCopy" ) },
+                                    html: Ayni.icon( "save-as" ) } );
+        var closeB = h( "button", { class: "btn on-media", attrs: { type: "button", "data-tip": T( "ui.close" ), "aria-label": T( "ui.close" ) } }, C.ic( "x" ) );
         var host   = h( "div", { class: "editor-canvas" } );
+        var edHead = h( "span", { class: "editor-actions" } );     // the editor's undo / redo
         var layer  = h( "div", { class: "editor-backdrop open photo-editor", attrs: { role: "dialog", "aria-modal": "true", "aria-label": T( "chat.editPhoto" ) } },
             h( "div", { class: "editor-bar" }, h( "span", { class: "editor-title", text: shortPath( path ) } ),
-                h( "span", { class: "editor-actions" }, saveB, copyB, closeB ) ),
+                h( "span", { class: "editor-actions" }, edHead, saveB, copyB, closeB ) ),
             host );
         document.body.appendChild( layer );
 
@@ -838,7 +1000,8 @@
         catch( _ ) { C.popNav( "photo-editor" ); shut(); C.toast( "chat.editorFailed", 3500 ); return; }
         if( ! layer.isConnected ) return;          // closed while the library loaded
 
-        editor = NayivePhoto.newEditor( host, GumApi.fileUrl( path ) + "&v=" + Date.now(), path.split( "/" ).pop() );
+        editor = NayivePhoto.newEditor( host, GumApi.fileUrl( path ) + "&v=" + Date.now(), path.split( "/" ).pop(),
+                                        { head: edHead, btnClass: "btn on-media" } );
         editor.on( "undoStackChanged", function ( n ) { dirty = n > 0; } );
 
         function pixels()
@@ -938,8 +1101,8 @@
     C.openMap = function ( l )
     {
         if( ! window.L ) { location.href = mapsUrl( l ); return; }
-        var open = h( "a", { class: "editor-btn", attrs: { href: mapsUrl( l ), target: "_blank", rel: "noopener noreferrer",
-                                                           title: T( "chat.openMaps" ), "aria-label": T( "chat.openMaps" ) } } );
+        var open = h( "a", { class: "btn on-media", attrs: { href: mapsUrl( l ), target: "_blank", rel: "noopener noreferrer",
+                                                           "data-tip": T( "chat.openMaps" ), "aria-label": T( "chat.openMaps" ) } } );
         open.appendChild( C.ic( "external" ) );
         var f = fullLayer( l.place || T( "chat.location" ), open );
         var host = h( "div", { class: "map-host" } );
@@ -966,7 +1129,7 @@
             h( "div", { class: "body" }, h( "span", { class: "name", text: T( "chat.liveLoc" ) } ),
                 h( "span", { class: "state", text: T( "chat.later" ) } ) ) );
         var host = h( "div", { class: "map-host" } );
-        var meBtn = h( "button", { class: "me-btn", attrs: { type: "button", title: T( "chat.myPlace" ), "aria-label": T( "chat.myPlace" ) } } );
+        var meBtn = h( "button", { class: "me-btn", attrs: { type: "button", "data-tip": T( "chat.myPlace" ), "aria-label": T( "chat.myPlace" ) } } );
         meBtn.appendChild( C.ic( "nav" ) );
         var layer = h( "div", { class: "picker" },
             h( "div", { class: "bar" }, C.btn( "back", "chat.back", function () { C.back(); } ),
@@ -1099,7 +1262,7 @@
         var body = h( "div", {},
             h( "div", { class: "field" }, h( "label", { attrs: { for: "ccName" }, text: T( "chat.name" ) } ), name ),
             h( "div", { class: "field" }, h( "label", { attrs: { for: "ccTel" }, text: T( "chat.phone" ) } ), tel ) );
-        var go = h( "button", { attrs: { type: "button", "data-act": "primary:send", title: T( "chat.sendMsg" ) } } );
+        var go = NayiveUI.sheetButton( "primary", T( "chat.sendMsg" ), "send" );
         var sh = null;
 
         function send( card )
@@ -1142,7 +1305,7 @@
         }
         else if( navigator.contacts && navigator.contacts.select )
         {
-            var pick = h( "button", { class: "text-btn ghost wide", attrs: { type: "button" }, text: T( "chat.fromPhone" ),
+            var pick = h( "button", { class: "btn text bordered wide", attrs: { type: "button" }, text: T( "chat.fromPhone" ),
                 on: { click: async function ()
                 {
                     try
@@ -1168,7 +1331,7 @@
         var conv = S.open;
         var q = h( "input", { attrs: { type: "text", id: "pollQ", maxlength: "300" } } );
         var opts = h( "div" );
-        var multi = h( "input", { attrs: { type: "checkbox", id: "pollMulti" } } );
+        var multi = h( "input", { attrs: { type: "checkbox", role: "switch", id: "pollMulti" } } );
         multi.checked = true;
         function addOpt( focus )
         {
@@ -1184,10 +1347,10 @@
             h( "div", { class: "field" }, h( "label", { attrs: { for: "pollQ" }, text: T( "chat.question" ) } ), q ),
             h( "div", { class: "section-label", text: T( "chat.options" ) } ),
             opts,
-            h( "button", { class: "text-btn dashed", attrs: { type: "button" }, text: T( "chat.addOption" ), on: { click: function () { addOpt( true ); } } } ),
+            h( "button", { class: "btn text dashed", attrs: { type: "button" }, text: T( "chat.addOption" ), on: { click: function () { addOpt( true ); } } } ),
             h( "label", { class: "scm-check", style: "display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:14px;cursor:pointer" },
-               T( "chat.pollMultiLabel" ), h( "span", { class: "switch sm" }, multi, h( "span", { class: "track" } ) ) ) );
-        var go = h( "button", { attrs: { type: "button", "data-act": "primary:send", title: T( "chat.sendMsg" ) } } );
+               T( "chat.pollMultiLabel" ), h( "span", { class: "switch" }, multi ) ) );
+        var go = NayiveUI.sheetButton( "primary", T( "chat.sendMsg" ), "send" );
         var sh = C.sheet( T( "chat.newPoll" ), body, go );
         go.addEventListener( "click", function ()
         {

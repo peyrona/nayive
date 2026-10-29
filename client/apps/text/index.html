@@ -5,18 +5,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- The interface language. First of all: it hides the page until the
-         dictionary is in, and every inline script below may call it. -->
+    <!-- Nayive's first script (old settings, whose page, error reports), then
+         Ayni's language layer: it hides the page until the texts are in, and
+         every inline script below may call Ayni.t(). -->
     <script src="../shared/i18n.js"></script>
+    <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
     <title>Text</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='16 18 22 12 16 6'%3E%3C/polyline%3E%3Cpolyline points='8 6 2 12 8 18'%3E%3C/polyline%3E%3Cline x1='14' y1='4' x2='10' y2='20'%3E%3C/line%3E%3C/svg%3E">
 
     <!-- Shared colour scheme (light default, opt-in dark). The toggle lives in the launcher; this page just follows the saved choice. -->
     <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
-    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
-    <script src="../shared/theme.js" defer></script>
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script src="../shared/ayni/ayni-icons.js" defer></script>
+    <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Vendored libs (all pinned, no build step). Order matters: CodeMirror core first,
@@ -73,37 +79,37 @@
     <!-- Offline-capable persistence: local cache + write outbox (see STATE). -->
     <script src="../shared/store.js" defer></script>
     <script>
-    NayiveI18n.ready.then( function () {
+    Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
         NayiveUI.firstRun( {
             app:   'text',
             title: 'Text',
-            lead:  NayiveUI.t( 'text.introLead' ),
+            lead:  Ayni.t( 'text.introLead' ),
             buttons: [
-                { sel: '#moreBtn',      text: NayiveUI.t( 'text.introFileMenu' ) },
+                { sel: '#moreBtn',      text: Ayni.t( 'text.introFileMenu' ) },
                 // tour: the File menu rows are lit inside the open menu
-                { sel: '#newBtn',       text: NayiveUI.t( 'write.introNew' ),     tour: { open: '#moreBtn' } },
-                { sel: '#openBtn',      text: NayiveUI.t( 'text.introOpen' ),     tour: { open: '#moreBtn' } },
-                { sel: '#importBtn',    text: NayiveUI.t( 'text.introImport' ),   tour: { open: '#moreBtn' } },
-                { sel: '#saveAsBtn',    text: NayiveUI.t( 'text.introSaveAs' ),   tour: { open: '#moreBtn' } },
-                { sel: '#restoreBtn',   text: NayiveUI.t( 'write.introRestore' ), tour: { open: '#moreBtn' } },
-                { sel: '#printBtn',     text: NayiveUI.t( 'write.introPrint' ),   tour: { open: '#moreBtn' } },
-                { sel: '#langSelect',   text: NayiveUI.t( 'text.introLang' ) },
-                { sel: '#previewBtn',   text: NayiveUI.t( 'text.introPreview' ) },
-                { sel: '#wrapBtn',      text: NayiveUI.t( 'text.introWrap' ) },
-                { sel: '#indentSelect', text: NayiveUI.t( 'text.introIndent' ) },
-                { sel: '#marginInput',  text: NayiveUI.t( 'text.introMargin' ) },
-                { sel: '#zoomOutBtn',   text: NayiveUI.t( 'text.introZoomOut' ) },
-                { sel: '#zoomInBtn',    text: NayiveUI.t( 'text.introZoomIn' ) }
+                { sel: '#newBtn',       text: Ayni.t( 'write.introNew' ),     tour: { open: '#moreBtn' } },
+                { sel: '#openBtn',      text: Ayni.t( 'text.introOpen' ),     tour: { open: '#moreBtn' } },
+                { sel: '#importBtn',    text: Ayni.t( 'text.introImport' ),   tour: { open: '#moreBtn' } },
+                { sel: '#saveAsBtn',    text: Ayni.t( 'text.introSaveAs' ),   tour: { open: '#moreBtn' } },
+                { sel: '#restoreBtn',   text: Ayni.t( 'write.introRestore' ), tour: { open: '#moreBtn' } },
+                { sel: '#printBtn',     text: Ayni.t( 'write.introPrint' ),   tour: { open: '#moreBtn' } },
+                { sel: '#langSelect',   text: Ayni.t( 'text.introLang' ) },
+                { sel: '#previewBtn',   text: Ayni.t( 'text.introPreview' ) },
+                { sel: '#wrapBtn',      text: Ayni.t( 'text.introWrap' ) },
+                { sel: '#indentSelect', text: Ayni.t( 'text.introIndent' ) },
+                { sel: '#marginInput',  text: Ayni.t( 'text.introMargin' ) },
+                { sel: '#zoomOutBtn',   text: Ayni.t( 'text.introZoomOut' ) },
+                { sel: '#zoomInBtn',    text: Ayni.t( 'text.introZoomIn' ) }
             ],
             // The guided tour (Ayuda ▸ Ver el tour): the page, then the card's rows.
-            tour: [ { sel: '#panes', text: NayiveUI.t( 'text.introLead' ) }, 'buttons' ]
+            tour: [ { sel: '#panes', text: Ayni.t( 'text.introLead' ) }, 'buttons' ]
         } );
     } );
     </script>
 
     <style>
-        /* Base reset, .app shell, .topbar, .icon-btn, .sheet, .field and the
+        /* Base reset, .app shell, .topbar, .btn, .sheet, .field and the
            input look all come from ../shared/app.css. Text overrides the page
            scroll and adds the editor chrome + its own toolbar. */
         html, body { height: 100%; overflow: hidden; }
@@ -121,17 +127,8 @@
         /* Action toolbar (CodeMirror's free build ships no chrome of its own) */
         #toolbar { display: flex; align-items: center; gap: 2px; padding: 4px 10px; border-bottom: 1px solid var(--line); flex: 0 0 auto; overflow-x: auto; }
         #toolbar .tb-sep { width: 1px; align-self: stretch; margin: 4px 6px; background: var(--line); flex: 0 0 auto; }
-        /* Toolbar buttons: 30px circles; hover = GROWING WASH in app.css. */
-        .tb-btn
-        {
-            display: flex; align-items: center; justify-content: center;
-            width: 30px; height: 30px; flex: 0 0 auto;
-            border-radius: 50%; border: none; color: var(--text-dim);
-            cursor: pointer; padding: 0;
-        }
-        .tb-btn.active,
-        .tb-btn.is-active { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
-        .tb-btn:disabled  { opacity: 0.4; cursor: default; background: transparent; }
+        /* Toolbar buttons: Ayni's .btn at 30 px; a toggle is aria-pressed. */
+        .btn.tb-btn { --btn: 30px; }
         /* .tb-select and the right-margin spinner .tb-num are shared - see TOOLBAR
            SELECT in app.css. Nothing local. */
 
@@ -227,7 +224,7 @@
         {
             #toolbar { flex-wrap: wrap; overflow-x: visible; row-gap: 2px; padding: 4px 6px; }
             #toolbar .tb-sep { margin: 4px 2px; }
-            .tb-btn    { width: 36px; height: 36px; }
+            .btn.tb-btn { --btn: 36px; }
         }
 
         .CodeMirror
@@ -297,7 +294,7 @@
         <div id="toolbar">
             <!-- FILE, first as in Write and Calc: the menu (#topMenu) is built from
                  the hidden #fileTools buttons below (shared/office.js, fileMenu). -->
-            <button id="moreBtn" class="tb-btn has-popup" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.menu.file, aria-label:ui.menu.file">
+            <button id="moreBtn" class="btn tb-btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.menu.file, aria-label:ui.menu.file">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="13" y2="17"></line></svg>
             </button>
 
@@ -321,7 +318,7 @@
 
             <!-- Markdown only (disabled for every other language, see syncPreview):
                  the document as it reads, in a pane beside the text. -->
-            <button id="previewBtn" class="tb-btn" type="button" disabled data-i18n-attr="title:text.preview, aria-label:text.preview">
+            <button id="previewBtn" class="btn tb-btn" type="button" aria-disabled="true" data-i18n-attr="data-tip:text.preview, aria-label:text.preview">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="12" y1="4" x2="12" y2="20"></line><line x1="6" y1="9" x2="9" y2="9"></line><line x1="6" y1="13" x2="9" y2="13"></line><line x1="15" y1="9" x2="18" y2="9"></line><line x1="15" y1="13" x2="18" y2="13"></line></svg>
             </button>
 
@@ -329,15 +326,15 @@
 
             <!-- Cut / copy / paste. The keys already do this (CodeMirror's own);
                  these are the same three for a phone or a tablet, where there is
-                 no Ctrl to hold. Glyphs are the shared ones (NayiveUI.icon), so
+                 no Ctrl to hold. Glyphs are the shared ones (Ayni.icon), so
                  they match the entries Write and Calc carry in their Edicion menu. -->
-            <button id="cutBtn"   class="tb-btn" data-i18n-attr="title:ui.cut"></button>
-            <button id="copyBtn"  class="tb-btn" data-i18n-attr="title:ui.copy"></button>
-            <button id="pasteBtn" class="tb-btn" data-i18n-attr="title:ui.paste"></button>
+            <button id="cutBtn"   class="btn tb-btn" data-i18n-attr="data-tip:ui.cut"></button>
+            <button id="copyBtn"  class="btn tb-btn" data-i18n-attr="data-tip:ui.copy"></button>
+            <button id="pasteBtn" class="btn tb-btn" data-i18n-attr="data-tip:ui.paste"></button>
 
             <div class="tb-sep"></div>
 
-            <button id="wrapBtn" class="tb-btn" data-i18n-attr="title:text.wrap">
+            <button id="wrapBtn" class="btn tb-btn" data-i18n-attr="data-tip:text.wrap">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="15" y2="12"></line><polyline points="18 9 21 12 18 15"></polyline><line x1="3" y1="18" x2="12" y2="18"></line></svg>
             </button>
             <select id="indentSelect" class="tb-select" data-i18n-attr="title:text.indent">
@@ -350,10 +347,10 @@
 
             <div class="tb-sep"></div>
 
-            <button id="zoomOutBtn" class="tb-btn" data-i18n-attr="title:text.zoomOut">
+            <button id="zoomOutBtn" class="btn tb-btn" data-i18n-attr="data-tip:text.zoomOut">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
             </button>
-            <button id="zoomInBtn" class="tb-btn" data-i18n-attr="title:text.zoomIn">
+            <button id="zoomInBtn" class="btn tb-btn" data-i18n-attr="data-tip:text.zoomIn">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
             </button>
 
@@ -361,7 +358,7 @@
 
             <!-- Ayuda. Opens the three-entry menu below (#helpMenu), not the
                  guide card: the card is one of the three entries. -->
-            <button id="helpBtn" class="tb-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+            <button id="helpBtn" class="btn tb-btn" data-intro-open type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
             </button>
 
@@ -370,32 +367,32 @@
                  FROM these buttons (glyph and title cloned) and an entry clicks the
                  one it came from, so there is one set of handlers. -->
             <div id="fileTools" hidden>
-                <button id="newBtn" class="tb-btn" data-i18n-attr="title:write.newDoc">
+                <button id="newBtn" class="btn tb-btn" data-i18n-attr="data-tip:write.newDoc">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="12" x2="12" y2="18"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
                 </button>
-                <button id="openBtn" class="tb-btn" data-i18n-attr="title:ui.openDoc">
+                <button id="openBtn" class="btn tb-btn" data-i18n-attr="data-tip:ui.openDoc">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
                 </button>
-                <button id="importBtn" class="tb-btn" data-i18n-attr="title:ui.importDevice">
+                <button id="importBtn" class="btn tb-btn" data-i18n-attr="data-tip:ui.importDevice">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                 </button>
                 <input id="importInput" type="file" style="display:none">
-                <button id="saveAsBtn" class="tb-btn" data-i18n-attr="title:ui.saveAs">
+                <button id="saveAsBtn" class="btn tb-btn" data-i18n-attr="data-tip:ui.saveAs">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 14 10 18 17 9" stroke-width="2.5"></polyline><line x1="12" y1="1" x2="12" y2="7" stroke-width="2.4"></line><line x1="9" y1="4" x2="15" y2="4" stroke-width="2.4"></line></svg>
                 </button>
-                <button id="restoreBtn" class="tb-btn" data-i18n-attr="title:write.restore">
+                <button id="restoreBtn" class="btn tb-btn" data-i18n-attr="data-tip:write.restore">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"></path><polyline points="3 4 3 9 8 9"></polyline><polyline points="12 8 12 12 15 14"></polyline></svg>
                 </button>
                 <!-- Print and "Save as PDF": the document as the preview shows it (see PRINT). -->
-                <button id="printBtn" class="tb-btn" type="button" data-i18n-attr="title:write.print, aria-label:write.print">
+                <button id="printBtn" class="btn tb-btn" type="button" data-i18n-attr="data-tip:write.print, aria-label:write.print">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
                 </button>
-                <button id="pdfBtn" class="tb-btn" type="button" data-i18n-attr="title:write.savePdf, aria-label:write.savePdf">
+                <button id="pdfBtn" class="btn tb-btn" type="button" data-i18n-attr="data-tip:write.savePdf, aria-label:write.savePdf">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><text x="12" y="19" font-size="7" font-family="sans-serif" text-anchor="middle" fill="currentColor" stroke="none">PDF</text></svg>
                 </button>
                 <!-- Text has no password of its own (Write and Calc only): the key shows
                      just while an old locked file is open, so its lock can come off. -->
-                <button id="lockBtn" class="tb-btn" data-only-locked hidden data-i18n-attr="title:lock.title">
+                <button id="lockBtn" class="btn tb-btn" data-only-locked hidden data-i18n-attr="data-tip:lock.title">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="M10.7 12.3 21 2"></path><path d="m15.5 7.5 3 3"></path><path d="m18 5 2.5 2.5"></path></svg>
                 </button>
             </div>
@@ -405,13 +402,13 @@
                  is built FROM these buttons (glyph and title cloned) and an entry
                  clicks the one it came from, so there is one set of handlers. -->
             <div id="helpTools" hidden>
-                <button id="statsBtn" class="tb-btn" type="button" data-i18n-attr="title:write.stats, aria-label:write.stats">
+                <button id="statsBtn" class="btn tb-btn" type="button" data-i18n-attr="data-tip:write.stats, aria-label:write.stats">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"></line><line x1="10" y1="20" x2="10" y2="4"></line><line x1="16" y1="20" x2="16" y2="9"></line><line x1="21" y1="20" x2="3" y2="20"></line></svg>
                 </button>
-                <button id="scBtn" class="tb-btn" type="button" data-i18n-attr="title:write.shortcuts, aria-label:write.shortcuts">
+                <button id="scBtn" class="btn tb-btn" type="button" data-i18n-attr="data-tip:write.shortcuts, aria-label:write.shortcuts">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6" y2="10"></line><line x1="10" y1="10" x2="10" y2="10"></line><line x1="14" y1="10" x2="14" y2="10"></line><line x1="18" y1="10" x2="18" y2="10"></line><line x1="7" y1="14" x2="17" y2="14"></line></svg>
                 </button>
-                <button id="guideBtn" class="tb-btn" type="button" data-i18n-attr="title:ui.toolbarButtons, aria-label:ui.toolbarButtons">
+                <button id="guideBtn" class="btn tb-btn" type="button" data-i18n-attr="data-tip:ui.toolbarButtons, aria-label:ui.toolbarButtons">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="8" rx="2"></rect><line x1="6" y1="9" x2="6" y2="9"></line><line x1="10" y1="9" x2="10" y2="9"></line><line x1="14" y1="9" x2="14" y2="9"></line><line x1="18" y1="9" x2="18" y2="9"></line><line x1="7" y1="18" x2="17" y2="18"></line><line x1="7" y1="21" x2="13" y2="21"></line></svg>
                 </button>
             </div>
@@ -445,7 +442,7 @@
     <script type="module">
         // Nothing is drawn from JS before the dictionary is in: without an
         // in-source fallback, an early render would paint the bare keys.
-        await NayiveI18n.ready;
+        await Ayni.i18n.ready;
 
         //------------------------------------------------------------------------//
         // STATE
@@ -506,8 +503,8 @@
         // when there is one and from the last-known-good local copy when there is
         // not - a failed GET is never mistaken for "the file is empty".
         // Interface strings: every one of them lives in shared/i18n/*.json.
-        const T  = k           => NayiveUI.t( k );
-        const TF = ( k, vars ) => NayiveUI.tf( k, vars );
+        const T  = k           => Ayni.t( k );
+        const TF = ( k, vars ) => Ayni.tf( k, vars );
 
         // conflicts: a save over a file changed on another device since it was
         // opened is refused (shared/store.js, CONFLICTS).
@@ -590,7 +587,7 @@
                 if( tooBig ) { store.block( p ); return; }   // the copy is just as big: read-only too
                 if( editor && ! store.isBlocked( p ) ) editor.setOption( 'readOnly', false );   // a UTF-8 copy is ours to edit (WHAT IS IN THE FILE)
             },
-            sameNameRefused: function( name ) { return tooBig ? tooBigText( name ) : NayiveUI.tf( 'text.notUtf8', { name: name } ); },   // "Guardar como" onto the blocked file itself
+            sameNameRefused: function( name ) { return tooBig ? tooBigText( name ) : Ayni.tf( 'text.notUtf8', { name: name } ); },   // "Guardar como" onto the blocked file itself
             onChange   : function() { if( editor ) autoDetectLanguage(); },   // the name says the language
             focus      : function() { if( editor ) editor.focus(); }
         } );
@@ -647,7 +644,7 @@
             document.getElementById( 'indentSelect' ).addEventListener( 'change', function( e ) { setIndent( e.target.value ); textCfg.write( { indent: e.target.value } ); editor.focus(); } );
             document.getElementById( 'wrapBtn'      ).addEventListener( 'click', toggleWrap );
             wireClipboard();
-            document.getElementById( 'wrapBtn'      ).classList.toggle( 'active', lineWrap );   // reflect the remembered choice
+            document.getElementById( 'wrapBtn'      ).setAttribute( 'aria-pressed', lineWrap );   // reflect the remembered choice
             document.getElementById( 'indentSelect' ).value = indentPref;                        // ditto (overrides the option's `selected`)
             document.getElementById( 'zoomOutBtn'   ).addEventListener( 'click', function() { bumpFontSize( -1 ); } );
             document.getElementById( 'zoomInBtn'    ).addEventListener( 'click', function() { bumpFontSize(  1 ); } );
@@ -805,7 +802,7 @@
             for( const [ id, ic, run ] of btns )
             {
                 const b = document.getElementById( id );
-                b.innerHTML = NayiveUI.icon( ic );
+                b.innerHTML = Ayni.icon( ic );
                 b.querySelector( 'svg' ).setAttribute( 'width',  '17' );
                 b.querySelector( 'svg' ).setAttribute( 'height', '17' );
                 b.addEventListener( 'click', run );
@@ -872,6 +869,8 @@
                 mode              : null,
                 lineNumbers       : true,
                 lineWrapping      : lineWrap,
+                inputStyle        : 'contenteditable',   // the browser's spell check needs it (autoDetectLanguage)
+                spellcheck        : true,                // an untitled document is a .txt
                 indentUnit        : 4,
                 tabSize            : 4,
                 indentWithTabs    : false,
@@ -1047,6 +1046,11 @@
         function autoDetectLanguage()
         {
             setLanguage( detectMime( session.path() || session.name() || '' ) );
+
+            // The browser's own spell check, for prose only: .txt and .md (an
+            // untitled document is a .txt). Code would be all red lines.
+            const ext = O.extOf( session.path() || session.name() || T( 'text.defaultFile' ) );
+            editor.setOption( 'spellcheck', ext === 'txt' || ext === 'md' );
         }
 
         function setIndent( value )
@@ -1074,7 +1078,7 @@
         {
             lineWrap = on;
             editor.setOption( 'lineWrapping', lineWrap );
-            document.getElementById( 'wrapBtn' ).classList.toggle( 'active', lineWrap );
+            document.getElementById( 'wrapBtn' ).setAttribute( 'aria-pressed', lineWrap );
 
             try { localStorage.setItem( WRAP_KEY, lineWrap ? '1' : '0' ); } catch( _ ) {}
         }
@@ -1108,8 +1112,8 @@
             const md = isMarkdown(), on = previewOn();
             const btn = document.getElementById( 'previewBtn' );
 
-            btn.disabled = ! md;
-            btn.classList.toggle( 'active', on );
+            btn.ariaDisabled = ! md;
+            btn.setAttribute( 'aria-pressed', on );
             document.getElementById( 'preview'   ).hidden = ! on;
             document.getElementById( 'mdResizer' ).hidden = ! on;
 

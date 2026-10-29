@@ -53,7 +53,7 @@
     </plurals>
 
     <string name="update_title">Hay una versión nueva de Nayive</string>
-    <string name="update_text">Toca para descargarla.</string>
+    <string name="update_text">Toca para instalarla.</string>
 
     <string name="media_done">Fotos subidas a Nayive</string>
     <plurals name="media_photos">

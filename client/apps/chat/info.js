@@ -68,23 +68,30 @@
                 : ct ? C.personState( ct )[ 1 ] + ( ct.opened ? " · " + C.TF( "chat.openedOn", { day: C.dayKey( ct.opened * 1000 ) } ) : "" )
                 : c.via ? T( "chat.nayiveUser" )
                 : "";
-        // The owner changes a person's or a group's picture by tapping the
-        // circle, and the name by tapping the name. (Search and mute live on
-        // the chat's own bar - no second copy here.)
+        // The owner changes a person's or a group's picture with the camera
+        // on the circle's corner, and the name by tapping the name. A tap on
+        // a person's circle shows them in Contacts (one action, one knob).
+        // (Search and mute live on the chat's own bar - no second copy here.)
         // Another Nayive user (in my home or theirs): the picture is my own
         // for that account, so I change it from either side.
         var editable = owner && ( ct || c.kind === "g" );
         var acct = S.mode === "owner" && c.kind === "d" ? ( ct ? ct.user : c.via ) || "" : "";
         var face = C.ringIfOnline( C.avatar( c.id, c.name, "xl" ), c.id );
         var name = h( "b", { text: c.name } );
+        if( S.mode === "owner" && c.kind === "d" )
+        {
+            C.ownerBook();     // read now: the tap opens Contacts at once (a pop-up needs the tap)
+            face = h( "button", { class: "face", attrs: { type: "button", "data-tip": T( "chat.openInContacts" ), "aria-label": T( "chat.openInContacts" ) },
+                                  on: { click: function () { openInContacts( c, ct ); } } }, face );
+        }
         if( editable || acct )
         {
-            var cam = h( "span", { class: "cam" }, C.ic( "camera" ) );
-            face = h( "button", { class: "face", attrs: { type: "button", title: T( "chat.changePhoto" ), "aria-label": T( "chat.changePhoto" ) },
-                                  on: { click: function () { pickPhoto( c, ct, acct ); } } }, face, cam );
+            var cam = h( "button", { class: "cam", attrs: { type: "button", "data-tip": T( "chat.changePhoto" ), "aria-label": T( "chat.changePhoto" ) },
+                                     on: { click: function () { pickPhoto( c, ct, acct ); } } }, C.ic( "camera" ) );
+            face = h( "div", { class: "face" }, face, cam );
         }
         if( editable )
-            name = h( "button", { class: "name-btn", attrs: { type: "button", title: T( "chat.rename" ) },
+            name = h( "button", { class: "name-btn", attrs: { type: "button", "data-tip": T( "chat.rename" ) },
                                   on: { click: function () { rename( c ); } } }, c.name );
         wallEl.appendChild( h( "div", { class: "info-top" }, face, name, sub ? h( "small", { text: sub } ) : null ) );
 
@@ -103,7 +110,7 @@
         kinds.forEach( function ( k )
         {
             var n = k.items.length;
-            var b = h( "button", { class: "kind", attrs: { type: "button", disabled: ! n, title: T( k.key ), "aria-pressed": "false" },
+            var b = h( "button", { class: "kind", attrs: { type: "button", disabled: ! n, "data-tip": T( k.key ), "aria-pressed": "false" },
                                    data: { k: k.key },
                                    on: { click: function () { openKind = openKind === k.key ? null : k.key; showKind( grid, shown, kinds ); } } },
                 h( "span", { class: "ki" }, C.ic( k.icon ), h( "b", { text: String( n ) } ) ),
@@ -242,7 +249,7 @@
         var sh = null;
         function choice( label, what, act )
         {
-            var b = h( "button", { class: "text-btn ghost danger", attrs: { type: "button" } }, C.ic( "trash" ), label );
+            var b = h( "button", { class: "btn text bordered danger", attrs: { type: "button" } }, C.ic( "trash" ), label );
             b.addEventListener( "click", function () { sh.close(); act(); } );
             body.appendChild( h( "div", { class: "del-opt" }, b, h( "p", { class: "hint", text: what } ) ) );
         }
@@ -440,6 +447,27 @@
         catch( e ) { C.fail( e ); }
     }
 
+    // A person's card in Contacts: the one picked for them, else the one
+    // with their name. None: asked first, then Contacts' "New contact"
+    // opens with the name typed in (saved there, by its own form).
+    async function openInContacts( c, ct )
+    {
+        var book = await C.ownerBook();
+        var low = ( c.name || "" ).trim().toLowerCase();
+        var card = ( ct && ct.card && book.find( function ( k ) { return k.uid === ct.card; } ) ) ||
+                   book.find( function ( k ) { return low && k.name.trim().toLowerCase() === low; } );
+        var q = card ? "uid=" + encodeURIComponent( card.uid ) + "&name=" + encodeURIComponent( card.name ) : null;
+        if( ! card )
+        {
+            var ok = await NayiveUI.confirm( { title: T( "chat.notInContactsTitle" ), body: C.TF( "chat.notInContacts", { name: c.name } ),
+                                               confirm: T( "chat.addToContacts" ) } );
+            if( ! ok ) return;
+            q = "new=" + encodeURIComponent( c.name || "" );
+        }
+        var url = "../contact/index.html?" + q;
+        if( ! window.open( url, "_blank" ) ) location.href = url;     // the pop-up was blocked
+    }
+
     async function rename( c )
     {
         var name = await C.askText( { title: T( "chat.rename" ), label: T( "chat.name" ), value: c.name,
@@ -500,11 +528,10 @@
         {
             rows.push( { sel: "#convMenu .menu-item:nth-child(" + ( i + 1 ) + ")", name: "⋮ → " + b.textContent, text: T( b._help ), tour: { open: "#convMoreBtn" } } );
         } );
-        rows.push( { sel: "#emojiBtn", text: T( "chat.helpEmoji" ) } );
         rows.push( { sel: "#fmtBtn", text: T( "chat.helpFmt" ) } );
-        rows.push( { sel: "#composer .later-btn:not([hidden])", text: T( "chat.helpLater" ) } );
+        if( C.$( "#emojiBtn" ) ) rows.push( { sel: "#emojiBtn", text: T( "chat.helpEmoji" ) } );
         rows.push( { sel: "#attachBtn", text: T( "chat.helpAttach" ) } );
-        rows.push( { sel: "#cameraBtn", text: T( "chat.helpCamera" ) } );
+        rows.push( { sel: "#composer .later-btn:not([hidden])", text: T( "chat.helpLater" ) } );
         rows.push( { sel: "#composer .send", name: T( "chat.sendMsg" ), text: T( "chat.helpSend" ) } );
         // tour: the messages themselves, or the empty wall as a ghost
         rows.push( { icon: "forward", name: T( "chat.holdName" ), text: T( "chat.helpHold" ), tour: { sel: "#wall .msg", ghost: "#wall" } } );

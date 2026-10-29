@@ -81,8 +81,8 @@
     // words
     // ---------------------------------------------------------------------
 
-    C.T  = function ( k )    { return NayiveUI.t( k ); };
-    C.TF = function ( k, v ) { return NayiveUI.tf( k, v ); };
+    C.T  = function ( k )    { return Ayni.t( k ); };
+    C.TF = function ( k, v ) { return Ayni.tf( k, v ); };
 
     // ---------------------------------------------------------------------
     // DOM
@@ -144,6 +144,8 @@
         live:        '<circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M7.76 16.24a6 6 0 0 1 0-8.49"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 19.07a10 10 0 0 1 0-14.14"/>',
         poll:        '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
         "arrow-right":'<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
+        crop:        '<path d="M6.13 1L6 16a2 2 0 0 0 2 2h15"/><path d="M1 6.13L16 6a2 2 0 0 1 2 2v15"/>',
+        "rotate-cw": '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
         refresh:     '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
         book:        '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
         tabs:        '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M4 16V5a1 1 0 0 1 1-1h11"/>',
@@ -175,6 +177,7 @@
 
     C.icon = function ( name, cls )
     {
+        if( name === "nayive" ) return Ayni.icon( name );
         return '<svg class="ic' + ( cls ? " " + cls : "" ) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
                'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ( ICONS[ name ] || "" ) + '</svg>';
     };
@@ -187,11 +190,11 @@
         return t.content.firstChild;
     };
 
-    // A round .icon-btn with a glyph and a translated title.
+    // A round .btn with a glyph and a translated tooltip.
     C.btn = function ( iconName, titleKey, onClick, extra )
     {
-        var b = C.h( "button", { class: "icon-btn" + ( extra ? " " + extra : "" ), attrs: { type: "button",
-                     title: C.T( titleKey ), "aria-label": C.T( titleKey ) }, on: { click: onClick } } );
+        var b = C.h( "button", { class: "btn" + ( extra ? " " + extra : "" ), attrs: { type: "button",
+                     "data-tip": C.T( titleKey ), "aria-label": C.T( titleKey ) }, on: { click: onClick } } );
         b.appendChild( C.ic( iconName ) );
         return b;
     };

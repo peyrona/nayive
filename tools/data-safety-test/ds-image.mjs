@@ -3,6 +3,8 @@
 // bin, with an Undo) instead of re-encoding it in place with no way back.
 // D12 (office #13): "Save a copy" onto an existing name puts that file back
 // when the copy is not written.
+// Resize (the editor's tool, 2026-10-15): ✓ writes the size asked, the
+// original kept in the bin as for any edit.
 import { server, browser, ok, section, done } from "./lib.mjs";
 import { put, png, bytesOnDisk, PW } from "./office-lib.mjs";
 
@@ -11,6 +13,8 @@ const RED = png( 200, 0, 0 ), BLUE = png( 0, 0, 200 ), GREEN = png( 0, 160, 0 );
 put( s, "files/q.png", RED );
 put( s, "files/p.png", GREEN );
 put( s, "files/p-copy.png", BLUE );
+const YELLOW = png( 200, 200, 0 );
+put( s, "files/r.png", YELLOW );
 const c = await browser( s, { width: 1280, height: 900 } );
 const phone = await s.client();
 const binList = async () => JSON.parse( ( await phone.call( "GET", "/api/files?trash=list" ) ).text ).items || [];
@@ -19,7 +23,7 @@ async function imagePage( rel )
 {
     await c.open( "/nayive/image/?file=" + rel, "/nayive/image/" );
     await c.evaluate( PW + "( window )" );
-    return c.until( "document.querySelector('.tie-btn-flip') && ! document.getElementById('editorSaveBtn').disabled", 30000 );
+    return c.until( "document.querySelector('[data-ie=rotate]:not([aria-disabled=true])') && document.getElementById('editorSaveBtn').ariaDisabled !== 'true'", 30000 );
 }
 
 async function untilBytes( rel, want, ms = 10000 )
@@ -34,10 +38,10 @@ async function untilBytes( rel, want, ms = 10000 )
 section( "C4 · THE FIRST ✓ KEEPS THE ORIGINAL" );
 
 ok( await imagePage( "files/q.png" ), "q.png is open in the editor" );
-// An edit: Flip X, from the editor's own menu.
-await c.evaluate( "document.querySelector('.tie-btn-flip').click(), true" );
-await c.until( "document.querySelector('.tie-flip-button .tui-image-editor-button.flipX')" );
-await c.evaluate( "document.querySelector('.tie-flip-button .tui-image-editor-button.flipX').click(), true" );
+// An edit: Flip horizontally, from the editor's Rotate tool.
+await c.evaluate( "document.querySelector('[data-ie=rotate]').click(), true" );
+await c.until( "document.querySelector('[data-ie=flipH]')" );
+await c.evaluate( "document.querySelector('[data-ie=flipH]').click(), true" );
 await c.evaluate( "document.getElementById('editorSaveBtn').click(), true" );
 
 const q = await untilBytes( "files/q.png", b => ! b.equals( RED ) );
@@ -66,7 +70,7 @@ await c.evaluate( `( function () {
 await c.evaluate( "document.getElementById('editorSaveAsBtn').click(), true" );
 ok( await c.until( "document.getElementById('saveCopyBackdrop').classList.contains('open')" ), "the copy's name is asked" );
 await c.evaluate( "document.getElementById('saveCopyName').value = 'p-copy.png', document.getElementById('saveCopyConfirmBtn').click(), true" );
-ok( await c.until( "window.__sheet().indexOf( NayiveUI.t('drive.nameExistsTitle') ) !== -1" ), "it asks before replacing p-copy.png" );
+ok( await c.until( "window.__sheet().indexOf( Ayni.t('drive.nameExistsTitle') ) !== -1" ), "it asks before replacing p-copy.png" );
 await c.evaluate( "window.__pressConfirm()" );
 
 ok( await c.until( "( window.__toasts || [] ).some( function ( t ) { return t.indexOf( 'p-copy.png' ) !== -1; } )", 15000 ),
@@ -75,5 +79,22 @@ const pc = bytesOnDisk( s, "files/p-copy.png" );
 ok( pc && pc.equals( BLUE ), "p-copy.png is back as it was", pc ? pc.length : null );
 bin = await binList();
 ok( ! bin.some( it => it.orig === "files/p-copy.png" ), "and not left in the bin", bin );
+
+//----------------------------------------------------------------------------//
+section( "RESIZE · ✓ WRITES THE SIZE ASKED" );
+
+const pngWH = b => b.readUInt32BE( 16 ) + "x" + b.readUInt32BE( 20 );
+ok( await imagePage( "files/r.png" ), "r.png (2x2) is open in the editor" );
+await c.evaluate( "document.querySelector('[data-ie=resize]').click(), true" );
+ok( await c.until( "document.querySelector('[data-ie=size-pct]')" ), "Resize shows width, height and %" );
+await c.evaluate( `( function () { var i = document.querySelector('[data-ie=size-pct]'); i.value = '200';
+    i.dispatchEvent( new Event( 'input' ) ); i.dispatchEvent( new Event( 'change' ) ); return true; } )()` );
+ok( await c.evaluate( "document.querySelector('[data-ie=size-w]').value + 'x' + document.querySelector('[data-ie=size-h]').value" ) === "4x4",
+    "200 % reads 4 x 4, aspect kept" );
+await c.evaluate( "document.getElementById('editorSaveBtn').click(), true" );
+const r = await untilBytes( "files/r.png", b => ! b.equals( YELLOW ) );
+ok( r && pngWH( r ) === "4x4", "✓ wrote a 4 x 4 picture", r && pngWH( r ) );
+bin = await binList();
+ok( bin.some( it => it.orig === "files/r.png" ), "the original went to the bin first", bin );
 
 await done( c, s );

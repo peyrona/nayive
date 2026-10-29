@@ -26,7 +26,7 @@
         head   = h( "div", { class: "bar", attrs: { id: "convBar" } } );
         wallIn = h( "div", { class: "wall-in" } );
         wall   = h( "div", { class: "wall", attrs: { id: "wall" } }, wallIn );
-        downBtn = h( "button", { class: "down", attrs: { type: "button", hidden: true, title: T( "chat.toBottom" ),
+        downBtn = h( "button", { class: "down", attrs: { type: "button", hidden: true, "data-tip": T( "chat.toBottom" ),
                                   "aria-label": T( "chat.toBottom" ) }, on: { click: function () { C.toBottom( true ); } } },
                      C.ic( "chev-down" ) );
         // In a desktop window as narrow as a phone the list's header is gone
@@ -197,7 +197,7 @@
         head.appendChild( av );
         // (Auto-delete - one number for every chat - sits on the list's
         // filters row; Info says it in words.)
-        head.appendChild( h( "button", { class: "who", attrs: { type: "button", title: T( "chat.chatOptions" ) },
+        head.appendChild( h( "button", { class: "who", attrs: { type: "button", "data-tip": T( "chat.chatOptions" ) },
                                          on: { click: function () { C.openInfo(); } } },
             h( "span", { class: "who-top" }, h( "b", { text: c.name } ) ),
             sub[ 1 ] ? h( "small", { class: sub[ 0 ], text: sub[ 1 ] } ) : null ) );
@@ -507,7 +507,7 @@
         wallIn.textContent = "";
         S.els = new Map();
         if( S.more )
-            wallIn.appendChild( h( "button", { class: "text-btn ghost older", attrs: { type: "button" }, text: T( "chat.older" ),
+            wallIn.appendChild( h( "button", { class: "btn text bordered older", attrs: { type: "button" }, text: T( "chat.older" ),
                                                on: { click: loadOlder } } ) );
         // The "N unread" band: before the first unread one from someone else -
         // the one it was set at may have been deleted since (AA5).
@@ -818,7 +818,8 @@
             el.classList.add( "has-reac" );
             el.appendChild( h( "span", { class: "reac", attrs: { role: "button", tabindex: "0" },
                                          on: { click: function ( ev ) { ev.stopPropagation(); C.showReactions( m ); } } },
-                               order.slice( 0, 3 ).join( "" ) + ( total > 1 ? " " + total : "" ) ) );
+                               h( "span", { class: "re", text: order.slice( 0, 3 ).join( "" ) } ),
+                               total > 1 ? " " + total : "" ) );
         }
 
         if( m.id < 0 ) C.wireUnsent( el, m );     // not on the server yet (compose.js)

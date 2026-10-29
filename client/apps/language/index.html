@@ -1,0 +1,173 @@
+<!-- index.html - Language: a translator and a dictionary. Spanish <-> French,
+     Chinese, German and Portuguese, on this device first (Chrome's built-in
+     translator, Bergamot) and over the internet only when Local mode is off
+     (MyMemory). Text from photos (tesseract.js) and reading aloud (the
+     browser's voices). The engines and dictionaries are the admin's
+     (/api/translate/config); the rest lives in this browser (settings.js).
+     Design: docs/language-app.md. -->
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Only our own scripts and WebAssembly; any https for the engines and
+         dictionaries (a user-added server too); pictures from anywhere https
+         (the screen locker). Third-party text is only ever shown as text. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' https:; img-src 'self' data: blob: https:; media-src 'self' blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'none'">
+    <!-- The interface language. First of all: it hides the page until the
+         dictionary is in, and every script below may call it. -->
+    <script src="../shared/i18n.js"></script>
+    <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
+    <title>Language</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='9' r='6.5'/%3E%3Cellipse cx='9' cy='9' rx='2.8' ry='6.5'/%3E%3Cpath d='M2.5 9h13'/%3E%3Cpath d='M15 14h5.5a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3l-2.5 2.2v-2.2a1.5 1.5 0 0 1-1.5-1.5v-3a1.5 1.5 0 0 1 1.5-1.5z'/%3E%3C/svg%3E">
+
+    <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
+    <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/app.css">
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script src="../shared/ayni/ayni-icons.js" defer></script>
+    <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-buttons.js" defer></script>
+    <script src="../shared/locker.js"></script>
+
+    <!-- Installable / offline-capable. Only takes effect over HTTPS. -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <script>
+        if( 'serviceWorker' in navigator )
+            window.addEventListener( 'load', function () { navigator.serviceWorker.register( '../sw.js' ).catch( function () {} ); } );
+    </script>
+
+    <script src="../shared/gum-api.js" defer></script>
+    <script src="../shared/ui.js" defer></script>
+    <script src="page.js" type="module"></script>
+
+    <link rel="stylesheet" href="language.css">
+</head>
+<body>
+    <noscript><h2 data-i18n="ui.needJs"></h2></noscript>
+
+    <div id="app" class="app" style="display: none;">
+
+        <div class="topbar">
+            <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="6.5"></circle><ellipse cx="9" cy="9" rx="2.8" ry="6.5"></ellipse><path d="M2.5 9h13"></path><path d="M15 14h5.5a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3l-2.5 2.2v-2.2a1.5 1.5 0 0 1-1.5-1.5v-3a1.5 1.5 0 0 1 1.5-1.5z"></path></svg>
+            <h1>Language</h1>
+
+            <!-- The view switch: translator or dictionary. -->
+            <div class="tb-modes">
+                <button id="tabTr" class="btn view-btn" type="button" data-view="v-tr" data-i18n-attr="data-tip:language.translator, aria-label:language.translator">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h8"></path><path d="M8 3v2"></path><path d="M5.5 5c.8 3 3 5.5 6 7"></path><path d="M10.5 5c-.8 3.2-3 6-6.5 7.5"></path><path d="M13 21l4-9 4 9"></path><path d="M14.5 18h5"></path></svg>
+                </button>
+                <button id="tabDic" class="btn view-btn" type="button" data-view="v-dic" data-i18n-attr="data-tip:language.dictionary, aria-label:language.dictionary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6.5A2.5 2.5 0 0 0 4 21.5"></path><path d="M19 19v3H6.5"></path><path d="M9 8h6"></path><path d="M9 12h4"></path></svg>
+                </button>
+            </div>
+
+            <div class="topbar-actions">
+                <div class="tb-group">
+                    <div class="local-row">
+                        <label for="local" data-i18n="language.localMode"></label> <button class="info-dot" type="button" data-i18n-attr="data-info:language.localInfo"></button>
+                        <label class="switch"><input role="switch" type="checkbox" id="local" checked></label>
+                    </div>
+                </div>
+                <div class="tb-group tb-sys">
+                    <button class="btn" data-intro-open type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <main class="lang-main">
+
+            <!-- The two languages, shared by both views. -->
+            <div class="langbar" id="langbar">
+                <select id="from" data-i18n-attr="aria-label:language.from"></select>
+                <button class="btn" type="button" id="swap" data-i18n-attr="data-tip:language.swap, aria-label:language.swap">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4L3 8l4 4"></path><path d="M3 8h14"></path><path d="M17 20l4-4-4-4"></path><path d="M21 16H7"></path></svg>
+                </button>
+                <select id="to" data-i18n-attr="aria-label:language.to"></select>
+                <button id="cfgBtn" class="btn" type="button" data-i18n-attr="data-tip:ui.settings, aria-label:ui.settings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                </button>
+            </div>
+
+            <!-- TRANSLATOR -->
+            <section class="view" id="v-tr" data-i18n-attr="aria-label:language.translator">
+                <input type="file" id="ocr-file" accept="image/*" hidden>
+                <div class="panes">
+                    <div class="pane">
+                        <div class="pane-box">
+                            <textarea id="src" maxlength="5000" data-i18n-attr="placeholder:language.srcPh, aria-label:language.srcLabel" aria-describedby="count"></textarea>
+                            <div class="pane-tools">
+                                <span class="count" id="count"></span>
+                                <button class="btn sm" type="button" id="clearSrc" hidden data-i18n-attr="data-tip:language.clearText, aria-label:language.clearText">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                </button>
+                                <button class="btn sm" type="button" id="ocr-btn" data-i18n-attr="data-tip:language.ocr, aria-label:language.ocr">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="M21 16l-5-5-9 9"></path></svg>
+                                </button>
+                                <button class="btn sm" type="button" id="go" data-i18n-attr="data-tip:language.translateKey, aria-label:language.translate" aria-pressed="true">
+                                    <svg class="go-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+                                    <svg class="stop-ic" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>
+                                </button>
+                            </div>
+                        </div>
+                        <p class="lang-status" id="ocr-status" role="status" hidden></p>
+                    </div>
+                    <div class="pane">
+                        <div class="pane-box result-box">
+                            <div class="result placeholder" id="out" role="region" aria-live="polite" data-i18n-attr="aria-label:language.result"></div>
+                            <div class="pane-tools">
+                                <button class="btn sm" type="button" id="speak" aria-disabled="true" data-i18n-attr="data-tip:language.listen, aria-label:language.listen">
+                                    <svg class="go-ic" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"></path></svg>
+                                    <svg class="stop-ic" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>
+                                </button>
+                                <button class="btn sm" type="button" id="copy" aria-disabled="true" data-i18n-attr="data-tip:language.copy, aria-label:language.copy">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+                        <!-- Which engine, on this device or not, and the ones that failed before. -->
+                        <div class="lang-status" id="status" role="status" aria-live="polite"></div>
+                        <ul class="attempts" id="attempts" hidden></ul>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- DICTIONARY -->
+            <section class="view" id="v-dic" hidden data-i18n-attr="aria-label:language.dictionary">
+                <div class="dic-search search-fold is-open">
+                    <input id="q" type="search" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:language.searchWord, aria-label:language.searchWord">
+                    <span class="search-ends">
+                        <button class="btn sm" type="button" id="qGo" data-i18n-attr="data-tip:ui.search, aria-label:ui.search">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
+                        </button>
+                    </span>
+                </div>
+                <div class="dict-main" id="entry" aria-live="polite"></div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Settings: only this device's models. The engines and dictionaries
+         are the admin's (admin.html, Language tab). Close-only. -->
+    <div id="cfgBackdrop" class="sheet-backdrop">
+        <div class="sheet cfg-sheet" role="dialog" aria-modal="true" data-i18n-attr="aria-label:language.models">
+            <h2 data-i18n="language.models"></h2>
+            <ul class="cfg-list" id="modelList"></ul>
+
+            <div class="sheet-actions">
+                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast" role="status"></div>
+</body>
+</html>

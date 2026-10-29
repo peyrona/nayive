@@ -19,10 +19,13 @@ package main
 //	       ?find=<glob>                a flat name search
 //	       ?search=1&name=&ext=...     the advanced search (search.go)
 //	       ?big=<n>                    the n biggest files (the "space almost full" warning)
+//	       ?shortcuts=1                every Drive shortcut (links.go); &links=1 on
+//	                                   ?dir= / ?find= / ?search= lists them, else hidden
 //	       ?file=<path>                the file itself
 //	       (nothing)                   the whole tree
 //	POST   ?old=&new=                  rename / move
 //	       ?from=&new=                 copy (copy.go)
+//	       ?link=&into=                a Drive shortcut (links.go)
 //	       ?from=&bak=1                the file's .bak/ copy, replaced (copy.go)
 //	       ?trash=restore|empty        undelete / empty (&ids=a;b: only those)
 //	PUT    ?type=dir&name=&parent=     mkdir
@@ -37,6 +40,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -108,6 +112,18 @@ func (s *Server) apiFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ---- POST ?link=&into=  -> a Drive shortcut (links.go) ----------------
+	if r.Method == http.MethodPost && q.Has("link") && q.Has("into") {
+		s.filesLink(w, r, role, user, q)
+		return
+	}
+
+	// ---- GET ?shortcuts=1  -> every Drive shortcut (links.go) -------------
+	if r.Method == http.MethodGet && q.Has("shortcuts") {
+		s.linkList(w, r, role, user)
+		return
+	}
+
 	// ---- POST ?from=&new=  -> copy (copy.go) ------------------------------
 	// Not ?old=&copy=1: a server older than the copy would read that as a
 	// MOVE. Without ?old= an old server answers 400 and nothing moves.
@@ -150,7 +166,7 @@ func (s *Server) apiFiles(w http.ResponseWriter, r *http.Request) {
 		nodes, truncated := Search(s.searchRoots(role, user), pat, searchLimit)
 		sendJSON(w, r, http.StatusOK, map[string]any{
 			"pattern": pat, "role": role, "user": user,
-			"nodes": nodes, "truncated": truncated,
+			"nodes": s.withLinks(role, user, q, nodes), "truncated": truncated,
 		})
 		return
 	}
@@ -165,7 +181,7 @@ func (s *Server) apiFiles(w http.ResponseWriter, r *http.Request) {
 		nodes, truncated := SearchBy(s.searchRoots(role, user), searchLimit, spec.keep)
 		sendJSON(w, r, http.StatusOK, map[string]any{
 			"role": role, "user": user,
-			"nodes": nodes, "truncated": truncated,
+			"nodes": s.withLinks(role, user, q, nodes), "truncated": truncated,
 		})
 		return
 	}
@@ -179,7 +195,7 @@ func (s *Server) apiFiles(w http.ResponseWriter, r *http.Request) {
 		}
 		sendJSON(w, r, http.StatusOK, map[string]any{
 			"role": role, "user": user,
-			"nodes": Biggest(s.searchRoots(role, user), min(n, bigLimit)), "truncated": false,
+			"nodes": dropLinks(Biggest(s.searchRoots(role, user), min(n, bigLimit))), "truncated": false,
 		})
 		return
 	}
@@ -187,7 +203,9 @@ func (s *Server) apiFiles(w http.ResponseWriter, r *http.Request) {
 	// ---- the file itself, or the whole tree -------------------------------
 	if !q.Has("file") {
 		if r.Method == http.MethodGet {
-			sendJSON(w, r, http.StatusOK, s.tree.UserTree(role, user, false))
+			tree := s.tree.UserTree(role, user, false)
+			tree.Nodes = dropLinks(tree.Nodes)
+			sendJSON(w, r, http.StatusOK, tree)
 			return
 		}
 		sendError(w, r, http.StatusBadRequest, "missing ?file=")
@@ -203,6 +221,11 @@ func (s *Server) apiFiles(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
+		// A shortcut is its owner's own: never read through a share.
+		if IsSharedPath(fileRel) && isLinkName(path.Base(fileRel)) {
+			sendError(w, r, http.StatusNotFound, "not found")
+			return
+		}
 		s.filesRead(w, r, target, q)
 	case http.MethodPut: // its owner was checked at the top (saveOwnerOK)
 		s.filesWrite(w, r, role, user, fileRel, target)
@@ -328,9 +351,24 @@ func (s *Server) filesListDir(w http.ResponseWriter, r *http.Request, role, user
 		}
 	}
 
+	// Shortcuts: only for Drive (&links=1), one level, and never in a share.
+	if IsSharedPath(rel) || recursive {
+		nodes = dropLinks(nodes)
+	} else {
+		nodes = s.withLinks(role, user, q, nodes)
+	}
 	sendJSON(w, r, http.StatusOK, map[string]any{
 		"path": rel, "role": role, "user": user, "nodes": nodes,
 	})
+}
+
+// withLinks is a one-level answer as the caller asked it: its shortcuts
+// resolved for Drive (&links=1), else left out (links.go).
+func (s *Server) withLinks(role, user string, q Query, nodes []Node) []Node {
+	if isTrue(q.Get("links")) {
+		return s.resolveLinks(role, user, nodes)
+	}
+	return dropLinks(nodes)
 }
 
 // rootChildren is the virtual root listed ONE level deep: the admin sees the

@@ -194,8 +194,8 @@
         box.appendChild( dl );
     }
 
-    // Each file: a tap downloads it; its arrow keeps it in Nayive (a folder
-    // picked there). The size is the file's own (the server's estimate).
+    // Each file: one chip - a tap anywhere on it asks for a folder in Nayive
+    // and keeps the file there. The size is the file's own (the server's estimate).
     function renderParts( msg, acct )
     {
         var box = E.$( "readParts" );
@@ -204,15 +204,13 @@
         files.forEach( function ( p )
         {
             var url = "/api/mail/" + encodeURIComponent( acct ) + "/att/" + encodeURIComponent( msg.ref ) + "/" + encodeURIComponent( p.id );
-            var save = h( "button", { class: "icon-btn sm", html: E.icon( "save" ),
-                                      attrs: { type: "button", title: E.T( "mail.saveToDrive" ) + ": " + p.name, "aria-label": E.T( "mail.saveToDrive" ) },
-                                      on: { click: function () { saveToDrive( p, url, save ); } } } );
-            box.appendChild( h( "span", { class: "mail-part-line" },
-                                h( "a", { class: "mail-part", html: E.icon( "file" ),
-                                          attrs: { href: url, download: p.name, title: E.T( "mail.download" ) + ": " + p.name } },
-                                   h( "span", { text: p.name } ),
-                                   p.size ? h( "small", { text: NayiveUI.fmtBytes( p.size ) } ) : null ),
-                                save ) );
+            var chip = h( "button", { class: "mail-part", html: E.icon( "file" ),
+                                      attrs: { type: "button", title: E.T( "mail.saveToDrive" ) + ": " + p.name },
+                                      on: { click: function () { saveToDrive( p, url, chip ); } } },
+                          h( "span", { text: p.name } ),
+                          p.size ? h( "small", { text: NayiveUI.fmtBytes( p.size ) } ) : null );
+            chip.insertAdjacentHTML( "beforeend", E.icon( "nayive", "mail-part-save" ) );
+            box.appendChild( chip );
         } );
         box.hidden = ! files.length;
     }
@@ -254,10 +252,11 @@
 
     async function saveToDrive( p, url, btn )
     {
-        var dir = await NayiveUI.pickFolder( { title: E.T( "mail.saveToDrive" ), allowRoot: true, rootLabel: E.T( "ui.filesFolder" ) } );
+        var dir = await NayiveUI.pickFolder( { title: E.T( "mail.saveToDrive" ), allowRoot: true, rootLabel: E.T( "ui.filesRoot" ) } );
         if( ! dir ) return;
-        btn.disabled = true;
+        Ayni.setBusy( btn, E.T( "ui.sync.saving" ) );
         E.plug( "saving" );
+        E.busy( true );
         try
         {
             var res = await fetch( url, { credentials: "same-origin" } );
@@ -265,14 +264,14 @@
             var bytes = new Uint8Array( await res.arrayBuffer() );
             await saveNew( dir, fileName( p.name ), bytes );
             E.plug( "synced" );
-            NayiveUI.toast( E.TF( "mail.savedToDrive", { folder: dir.replace( /^files\/?/, "" ) || E.T( "ui.filesFolder" ) } ), { ms: 3500 } );
+            NayiveUI.toast( E.TF( "mail.savedToDrive", { folder: dir.replace( /^files\/?/, "" ) || E.T( "ui.filesRoot" ) } ), { ms: 3500 } );
         }
         catch( err )
         {
             E.plug( "offline" );
             NayiveUI.toast( E.T( "ui.saveFailed" ), { ms: 3500 } );
         }
-        finally { btn.disabled = false; }
+        finally { Ayni.setBusy( btn, false ); E.busy( false ); }
     }
 
     var renderGen = 0;

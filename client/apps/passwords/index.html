@@ -1,0 +1,519 @@
+<!-- index.html - Passwords: logins and notes, encrypted in the browser with a
+     master password that never leaves it. One file per user,
+     data/passwords/passwords.json, read and written through shared/store.js;
+     the server only ever holds ciphertext. See docs/passwords-app.md. -->
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- This page holds the open vault: no script but this site's own files
+         (no inline script, no eval, nothing from elsewhere), no plugins, no
+         <base>, no form posts. Images and fetches may go out over HTTPS: the
+         screen locker's pictures and weather, and the leak check
+         (api.pwnedpasswords.com) - a script has to run first to use that,
+         and none but ours can. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https:; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <meta name="referrer" content="no-referrer">
+    <!-- The interface language. First of all: it hides the page until the
+         dictionary is in, and every script below may call it. -->
+    <script src="../shared/i18n.js"></script>
+    <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
+    <title>Passwords</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='7.5' cy='15.5' r='4.5'/%3E%3Cpath d='M10.7 12.3 21 2'/%3E%3Cpath d='m15.5 7.5 3 3'/%3E%3Cpath d='m18 5 2.5 2.5'/%3E%3C/svg%3E">
+
+    <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
+    <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/app.css">
+    <!-- The theme before the first paint, and the service worker (what other
+         apps do inline: the policy above allows no inline script). -->
+    <script src="head.js"></script>
+    <script src="../shared/ayni/ayni-icons.js" defer></script>
+    <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-buttons.js" defer></script>
+    <script src="../shared/locker.js"></script>
+
+    <!-- Installable / offline-capable. Only takes effect over HTTPS. -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <script src="../shared/gum-api.js" defer></script>
+    <script src="../shared/ui.js" defer></script>
+    <script src="../shared/browser.js" defer></script>
+    <script src="../shared/store.js" defer></script>
+
+    <!-- The app: classic deferred files sharing one scope, in this order, then
+         the one module that waits for the dictionary and boots. -->
+    <script src="vault.js" defer></script>
+    <script src="model.js" defer></script>
+    <script src="render.js" defer></script>
+    <script src="sheets.js" defer></script>
+    <script src="lock.js" defer></script>
+    <script src="gen.js" defer></script>
+    <script src="io.js" defer></script>
+    <script src="input.js" defer></script>
+    <script src="boot.js" type="module"></script>
+
+    <link rel="stylesheet" href="passwords.css">
+</head>
+<body>
+    <noscript><h2 data-i18n="ui.needJs"></h2></noscript>
+
+    <div id="app" class="app" style="display: none;">
+
+        <div class="topbar">
+            <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="M10.7 12.3 21 2"></path><path d="m15.5 7.5 3 3"></path><path d="m18 5 2.5 2.5"></path></svg>
+            <h1>Passwords</h1>
+
+            <div class="topbar-actions">
+                <!-- The selection's buttons (shared/browser.js): only while something is picked. -->
+                <div id="selActions" class="tb-group" hidden></div>
+                <div id="vaultTools" class="tb-group">
+                    <!-- The shared search fold (NayiveUI.searchFold, input.js). -->
+                    <div class="search-wrap">
+                        <input id="searchInput" class="search-input" type="text" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:passwords.searchPh, aria-label:ui.search">
+                    </div>
+                    <button id="searchBtn" class="btn" type="button" data-rank="20" data-i18n-attr="data-tip:ui.search, aria-label:ui.search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    </button>
+                    <button id="addBtn" class="btn" type="button" data-rank="21" data-i18n-attr="data-tip:passwords.newItem, aria-label:passwords.newItem">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </button>
+                    <button id="newFolderBtn" class="btn" type="button" data-rank="23" data-i18n-attr="data-tip:ui.newFolder, aria-label:ui.newFolder">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
+                    </button>
+                    <button id="lockBtn" class="btn" type="button" data-rank="22" data-i18n-attr="data-tip:passwords.lockNow, aria-label:passwords.lockNow">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.2"></rect><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path></svg>
+                    </button>
+                </div>
+                <div class="tb-group tb-sys">
+                    <!-- The ONE "⋮" (NayiveUI.fitBar, input.js): the buttons that do not
+                         fit the header, then Passwords' own rows (import, export...). -->
+                    <button id="moreBtn" class="btn" type="button" hidden aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.moreOptions, aria-label:ui.moreOptions">
+                        <span class="icon" data-icon="more"></span>
+                    </button>
+                    <button class="btn" data-intro-open data-rank="31" type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    </button>
+                </div>
+                <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="data-tip:ui.sync.synced"></button>
+            </div>
+        </div>
+
+        <!-- The open vault. -->
+        <div id="vaultRow" class="body-row" hidden>
+            <!-- The folder tree (PC + tablet; on a phone it slides in from the folder button). -->
+            <nav id="treePane" class="tree-pane" data-i18n-attr="aria-label:ui.folders">
+                <div class="tree-head">
+                    <span class="section-label" data-i18n="ui.folders"></span>
+                </div>
+                <div id="tree" class="tree-fit"></div>
+            </nav>
+            <div id="paneResizer" class="pane-resizer" role="separator" aria-orientation="vertical" data-i18n-attr="title:ui.dragResize"></div>
+
+            <main id="listPane" class="list-pane">
+                <div id="filterRow" class="filter-row">
+                    <button class="pill" type="button" data-filter="all"></button>
+                    <button class="pill" type="button" data-filter="fav"></button>
+                </div>
+
+                <div class="crumb-row">
+                    <button id="treeBtn" class="btn" type="button" data-i18n-attr="data-tip:ui.folders, aria-label:ui.folders">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    </button>
+                    <button id="upBtn" class="btn" type="button" hidden data-i18n-attr="data-tip:passwords.up, aria-label:passwords.up"></button>
+                    <div id="crumbs" class="open-crumb"></div>
+                </div>
+
+                <div id="items" class="items"></div>
+                <div id="emptyHint" class="empty-hint" hidden></div>
+            </main>
+        </div>
+
+        <!-- Everything before the vault is open: set-up, unlock, the recovery
+             key, and what to say when the file cannot be used. -->
+        <div id="gate" class="pw-gate" hidden>
+            <div class="pw-gate-card">
+                <div class="pw-gate-ic">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.2"></rect><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path></svg>
+                </div>
+                <h2 id="gateTitle"></h2>
+                <p id="gateLead" class="pw-gate-lead"></p>
+
+                <div id="unlockBox" hidden>
+                    <div class="field">
+                        <label data-i18n="passwords.masterPw"></label>
+                        <div class="pw-line">
+                            <input id="unlockPw" type="password" data-i18n-attr="aria-label:passwords.masterPw" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
+                            <button type="button" class="btn sm" data-eye="unlockPw" data-i18n-attr="data-tip:ui.showPassword, aria-label:ui.showPassword"></button>
+                        </div>
+                    </div>
+                    <p id="hintText" class="pw-hint" hidden></p>
+                    <p id="unlockErr" class="field-error" hidden></p>
+                    <button id="unlockBtn" class="btn text primary pw-gate-go" type="button" data-i18n="passwords.unlock"></button>
+                    <button id="hintBtn" class="btn text bordered" type="button" hidden data-i18n="passwords.hintShow"></button>
+                    <button id="useRecoveryBtn" class="btn text bordered" type="button" data-i18n="passwords.useRecovery"></button>
+                </div>
+
+                <div id="setupBox" hidden>
+                    <div class="field">
+                        <label data-i18n="passwords.masterPw"></label>
+                        <div class="pw-line">
+                            <input id="setupPw" type="password" data-i18n-attr="aria-label:passwords.masterPw" autocomplete="new-password" spellcheck="false" autocapitalize="off" autocorrect="off">
+                            <button type="button" class="btn sm" data-eye="setupPw" data-i18n-attr="data-tip:ui.showPassword, aria-label:ui.showPassword"></button>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label data-i18n="passwords.repeatPw"></label>
+                        <div class="pw-line">
+                            <input id="setupPw2" type="password" data-i18n-attr="aria-label:passwords.repeatPw" autocomplete="new-password" spellcheck="false" autocapitalize="off" autocorrect="off">
+                            <button type="button" class="btn sm" data-eye="setupPw2" data-i18n-attr="data-tip:ui.showPassword, aria-label:ui.showPassword"></button>
+                        </div>
+                    </div>
+                    <ul id="setupChecks" class="pw-checks"></ul>
+                    <div class="field">
+                        <label data-i18n="passwords.hint"></label>
+                        <input id="setupHint" type="text" maxlength="120" autocomplete="off" spellcheck="false" data-i18n-attr="aria-label:passwords.hint">
+                        <p id="setupHintWarn" class="pw-hint-warn" hidden></p>
+                        <p class="pw-hint-note" data-i18n="passwords.hintNote"></p>
+                    </div>
+                    <!-- Only with a phrase: the Nayive password seals it. -->
+                    <div id="setupLoginRow" class="field" hidden>
+                        <label data-i18n="passwords.loginPw"></label>
+                        <div class="pw-line">
+                            <input id="setupLogin" type="password" data-i18n-attr="aria-label:passwords.loginPw" autocomplete="current-password" spellcheck="false" autocapitalize="off" autocorrect="off">
+                            <button type="button" class="btn sm" data-eye="setupLogin" data-i18n-attr="data-tip:ui.showPassword, aria-label:ui.showPassword"></button>
+                        </div>
+                    </div>
+                    <p id="setupErr" class="field-error" hidden></p>
+                    <button id="createBtn" class="btn text primary pw-gate-go" type="button" data-i18n="passwords.create"></button>
+                </div>
+
+                <div id="recoveryBox" hidden>
+                    <p id="recoveryCode" class="pw-rec-code"></p>
+                    <div class="choice-row">
+                        <button id="recCopyBtn" class="btn text bordered" type="button" data-i18n="ui.copy"></button>
+                        <button id="recPrintBtn" class="btn text bordered" type="button" data-i18n="passwords.print"></button>
+                    </div>
+                    <button id="recDoneBtn" class="btn text primary pw-gate-go" type="button" data-i18n="passwords.recWritten"></button>
+                </div>
+
+                <p id="gateBusy" class="pw-gate-busy" hidden></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add / edit an entry -->
+    <div id="itemBackdrop" class="sheet-backdrop">
+        <div class="sheet sheet--wide">
+            <h2 id="itemTitle"></h2>
+            <div id="itemTypeRow" class="tabs pw-type-tabs">
+                <button class="pill" type="button" data-type="login" data-i18n="passwords.typeLogin"></button>
+                <button class="pill" type="button" data-type="note" data-i18n="passwords.typeNote"></button>
+            </div>
+            <div class="field">
+                <label for="itName" data-i18n="passwords.name"></label>
+                <input id="itName" type="text" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="pw-login-only">
+                <div class="field">
+                    <label for="itUser" data-i18n="passwords.user"></label>
+                    <div class="pw-line">
+                        <input id="itUser" type="text" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
+                        <button type="button" class="btn sm" data-copy-field="itUser" data-i18n-attr="data-tip:passwords.copyUser, aria-label:passwords.copyUser"></button>
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="itPass" data-i18n="passwords.password"></label>
+                    <div class="pw-line">
+                        <input id="itPass" type="password" class="pw-mono" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
+                        <button type="button" class="btn sm" data-eye="itPass" data-i18n-attr="data-tip:ui.showPassword, aria-label:ui.showPassword"></button>
+                        <button type="button" class="btn sm" data-copy-field="itPass" data-i18n-attr="data-tip:passwords.copyPass, aria-label:passwords.copyPass"></button>
+                        <button id="itGenBtn" type="button" class="btn sm" data-i18n-attr="data-tip:passwords.generate, aria-label:passwords.generate"></button>
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="itUrls" data-i18n="passwords.websites"></label>
+                    <div class="pw-line">
+                        <textarea id="itUrls" rows="1" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off" data-i18n-attr="placeholder:passwords.websitesPh"></textarea>
+                        <button id="itOpenBtn" type="button" class="btn sm" data-i18n-attr="data-tip:passwords.openSite, aria-label:passwords.openSite"></button>
+                    </div>
+                </div>
+            </div>
+            <details id="itMore" class="pw-more">
+                <summary data-i18n="passwords.moreFields"></summary>
+                <div id="itNotesField" class="field">
+                    <label for="itNotes" data-i18n="ui.notes"></label>
+                    <textarea id="itNotes" rows="3" spellcheck="false"></textarea>
+                </div>
+                <div class="field pw-login-only">
+                    <label for="itTotp" data-i18n="passwords.totp"></label>
+                    <div class="pw-line">
+                        <input id="itTotp" type="password" class="pw-mono" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
+                        <button type="button" class="btn sm" data-eye="itTotp" data-i18n-attr="data-tip:ui.showPassword, aria-label:ui.showPassword"></button>
+                        <button type="button" class="btn sm" data-copy-field="itTotp" data-i18n-attr="data-tip:ui.copy, aria-label:ui.copy"></button>
+                    </div>
+                </div>
+                <div id="itFields"></div>
+                <button id="itAddField" class="btn text bordered" type="button" data-i18n="passwords.addField"></button>
+            </details>
+            <div class="field">
+                <label for="itFolder" data-i18n="ui.folder"></label>
+                <select id="itFolder"></select>
+            </div>
+            <label class="check-row switch end"><span data-i18n="passwords.favourite"></span><input role="switch" id="itFav" type="checkbox"></label>
+            <details id="itHistory" class="pw-more" hidden>
+                <summary id="itHistorySum"></summary>
+                <div id="itHistoryList"></div>
+            </details>
+            <p id="itDates" class="pw-dates"></p>
+            <div class="sheet-actions">
+                <button id="itDeleteBtn" class="btn danger sheet-actions-left" type="button" data-i18n-attr="data-tip:ui.delete"><span class="icon" data-icon="trash"></span></button>
+                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="itSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New folder / rename a folder -->
+    <div id="folderBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <h2 id="folderTitle"></h2>
+            <div class="field">
+                <label for="folderName" data-i18n="passwords.folderName"></label>
+                <input id="folderName" type="text" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="field">
+                <label for="folderParent" data-i18n="passwords.parent"></label>
+                <select id="folderParent"></select>
+            </div>
+            <div class="sheet-actions">
+                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="folderSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- The generator: on its own (the ⋮) or for an entry's password ("Use"). -->
+    <div id="genBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <h2 data-i18n="passwords.generator"></h2>
+            <div class="tabs pw-gen-tabs">
+                <button class="pill" type="button" data-gen="chars" data-i18n="passwords.genChars"></button>
+                <button class="pill" type="button" data-gen="words" data-i18n="passwords.genWords"></button>
+            </div>
+            <div class="pw-line pw-gen-out">
+                <input id="genOut" class="pw-mono" type="text" readonly spellcheck="false" autocomplete="off">
+                <button id="genAgainBtn" type="button" class="btn sm" data-i18n-attr="data-tip:passwords.genAgain, aria-label:passwords.genAgain"></button>
+                <button id="genCopyBtn" type="button" class="btn sm" data-i18n-attr="data-tip:ui.copy, aria-label:ui.copy"></button>
+            </div>
+            <p id="genBits" class="pw-gen-bits"></p>
+            <div id="genChars">
+                <div class="field">
+                    <label for="genLen"><span data-i18n="passwords.genLength"></span> <b id="genLenVal"></b></label>
+                    <input id="genLen" type="range" min="8" max="64" step="1">
+                </div>
+                <label class="check-row switch end"><span>a–z</span><input role="switch" id="genLower" type="checkbox"></label>
+                <label class="check-row switch end"><span>A–Z</span><input role="switch" id="genUpper" type="checkbox"></label>
+                <label class="check-row switch end"><span>0–9</span><input role="switch" id="genDigits" type="checkbox"></label>
+                <label class="check-row switch end"><span>! # $ % &amp; * …</span><input role="switch" id="genSymbols" type="checkbox"></label>
+                <label class="check-row switch end"><span data-i18n="passwords.genNoLookalike"></span><input role="switch" id="genNoLook" type="checkbox"></label>
+            </div>
+            <div id="genWords" hidden>
+                <div class="field">
+                    <label for="genCount"><span data-i18n="passwords.genCount"></span> <b id="genCountVal"></b></label>
+                    <input id="genCount" type="range" min="3" max="10" step="1">
+                </div>
+                <div class="field">
+                    <label for="genSep" data-i18n="passwords.genSep"></label>
+                    <select id="genSep">
+                        <option value="-">-</option>
+                        <option value=".">.</option>
+                        <option value="_">_</option>
+                        <option value=" " data-i18n="passwords.genSpace"></option>
+                    </select>
+                </div>
+                <label class="check-row switch end"><span data-i18n="passwords.genCaps"></span><input role="switch" id="genCaps" type="checkbox"></label>
+                <label class="check-row switch end"><span data-i18n="passwords.genNumber"></span><input role="switch" id="genNum" type="checkbox"></label>
+            </div>
+            <div class="sheet-actions">
+                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="genUseBtn" type="button" data-i18n-attr="data-tip:passwords.genUse"><span class="icon" data-icon="check"></span></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings: close-only, every change kept at once (NayiveUI.autoSave). -->
+    <div id="settingsBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <h2 data-i18n="passwords.settings"></h2>
+            <div class="field">
+                <label for="setLock" data-i18n="passwords.setLock"></label>
+                <select id="setLock"></select>
+            </div>
+            <div class="field">
+                <label for="setClip" data-i18n="passwords.setClip"></label>
+                <select id="setClip"></select>
+            </div>
+            <div class="choice-row pw-set-btns">
+                <button id="chpwOpenBtn" class="btn text bordered" type="button" data-i18n="passwords.changePw"></button>
+                <button id="newRecBtn" class="btn text bordered" type="button" data-i18n="passwords.newRecovery"></button>
+                <button id="hintSetBtn" class="btn text bordered" type="button" data-i18n="passwords.hintTitle"></button>
+            </div>
+            <div class="sheet-actions">
+                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- A new master password: from Settings (the current one asked), or after
+         the recovery key opened the vault (then the current one is not). -->
+    <div id="chpwBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <h2 id="chpwTitle" data-i18n="passwords.changePw"></h2>
+            <p id="chpwLead" class="sheet-lead"></p>
+            <div id="chpwCurRow" class="field">
+                <label for="chpwCur" data-i18n="passwords.currentPw"></label>
+                <div class="pw-line">
+                    <input id="chpwCur" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
+                    <button type="button" class="btn sm" data-eye="chpwCur" data-i18n-attr="data-tip:ui.showPassword, aria-label:ui.showPassword"></button>
+                </div>
+            </div>
+            <div class="field">
+                <label for="chpwNew" data-i18n="passwords.newPw"></label>
+                <div class="pw-line">
+                    <input id="chpwNew" type="password" autocomplete="new-password" spellcheck="false" autocapitalize="off" autocorrect="off">
+                    <button type="button" class="btn sm" data-eye="chpwNew" data-i18n-attr="data-tip:ui.showPassword, aria-label:ui.showPassword"></button>
+                </div>
+            </div>
+            <div class="field">
+                <label for="chpwNew2" data-i18n="passwords.repeatPw"></label>
+                <div class="pw-line">
+                    <input id="chpwNew2" type="password" autocomplete="new-password" spellcheck="false" autocapitalize="off" autocorrect="off">
+                    <button type="button" class="btn sm" data-eye="chpwNew2" data-i18n-attr="data-tip:ui.showPassword, aria-label:ui.showPassword"></button>
+                </div>
+            </div>
+            <ul id="chpwChecks" class="pw-checks"></ul>
+            <p id="chpwHintWarn" class="pw-hint-warn" hidden></p>
+            <p id="chpwErr" class="field-error" hidden></p>
+            <p id="chpwBusy" class="pw-gate-busy" hidden></p>
+            <div class="sheet-actions">
+                <button class="btn" id="chpwCancel" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="chpwSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings › Reminder phrase: change it, remove it (empty), or seal it
+         again after the Nayive password changed. -->
+    <div id="hintBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <h2 data-i18n="passwords.hintTitle"></h2>
+            <p class="sheet-lead" data-i18n="passwords.hintSheetLead"></p>
+            <div class="field">
+                <label for="hintEdit" data-i18n="passwords.hint"></label>
+                <input id="hintEdit" type="text" maxlength="120" autocomplete="off" spellcheck="false">
+                <p id="hintEditWarn" class="pw-hint-warn" hidden></p>
+                <p class="pw-hint-note" data-i18n="passwords.hintNote"></p>
+            </div>
+            <div id="hintPwRows">
+                <div class="field">
+                    <label for="hintMaster" data-i18n="passwords.masterPw"></label>
+                    <div class="pw-line">
+                        <input id="hintMaster" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
+                        <button type="button" class="btn sm" data-eye="hintMaster" data-i18n-attr="data-tip:ui.showPassword, aria-label:ui.showPassword"></button>
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="hintLogin" data-i18n="passwords.loginPw"></label>
+                    <div class="pw-line">
+                        <input id="hintLogin" type="password" autocomplete="current-password" spellcheck="false" autocapitalize="off" autocorrect="off">
+                        <button type="button" class="btn sm" data-eye="hintLogin" data-i18n-attr="data-tip:ui.showPassword, aria-label:ui.showPassword"></button>
+                    </div>
+                </div>
+            </div>
+            <p id="hintErr" class="field-error" hidden></p>
+            <p id="hintBusy" class="pw-gate-busy" hidden></p>
+            <div class="sheet-actions">
+                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="hintSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Open with the recovery key -->
+    <div id="recBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <h2 data-i18n="passwords.useRecovery"></h2>
+            <p class="sheet-lead" data-i18n="passwords.recEnterLead"></p>
+            <div class="field">
+                <label for="recInput" data-i18n="passwords.recKey"></label>
+                <input id="recInput" class="pw-mono" type="text" autocomplete="off" spellcheck="false" autocapitalize="characters" autocorrect="off" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX">
+            </div>
+            <p id="recErr" class="field-error" hidden></p>
+            <p id="recBusy" class="pw-gate-busy" hidden></p>
+            <div class="sheet-actions">
+                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="recGoBtn" type="button" data-i18n-attr="data-tip:passwords.unlock"><span class="icon" data-icon="check"></span></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- A new recovery key, shown once -->
+    <div id="recShowBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <h2 data-i18n="passwords.recTitle"></h2>
+            <p class="sheet-lead" data-i18n="passwords.recLead"></p>
+            <p id="recShowCode" class="pw-rec-code"></p>
+            <div class="choice-row">
+                <button id="recShowCopy" class="btn text bordered" type="button" data-i18n="ui.copy"></button>
+                <button id="recShowPrint" class="btn text bordered" type="button" data-i18n="passwords.print"></button>
+            </div>
+            <div class="sheet-actions">
+                <button class="btn primary" id="recShowDone" type="button" data-i18n-attr="data-tip:passwords.recWritten"><span class="icon" data-icon="check"></span></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import -->
+    <div id="importBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <h2 data-i18n="passwords.import"></h2>
+            <p class="sheet-lead" data-i18n="passwords.importLead"></p>
+            <p class="sheet-lead" data-i18n="passwords.importFrom"></p>
+            <div class="choice-row">
+                <button id="importPickBtn" class="btn text primary" type="button" data-i18n="passwords.importPick"></button>
+            </div>
+            <div class="sheet-actions">
+                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export -->
+    <div id="exportBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <h2 data-i18n="passwords.export"></h2>
+            <p class="sheet-lead" data-i18n="passwords.exportLead"></p>
+            <div class="choice-row">
+                <button id="exportEncBtn" class="btn text primary" type="button" data-i18n="passwords.exportEnc"></button>
+            </div>
+            <p class="sheet-lead pw-warn" data-i18n="passwords.exportCsvWarn"></p>
+            <div class="choice-row">
+                <button id="exportCsvBtn" class="btn text bordered" type="button" data-i18n="passwords.exportCsv"></button>
+            </div>
+            <div class="sheet-actions">
+                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="importInput" accept=".csv,.json,text/csv,application/json" hidden>
+    <div id="printRoot"></div>
+    <div id="toast" class="toast"></div>
+</body>
+</html>

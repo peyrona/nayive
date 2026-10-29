@@ -23,7 +23,7 @@ const c = await browser( s );
 const phone = await s.client();
 
 ok( await c.open( "/nayive/desktop/index.html" ), "desktop page opens" );
-ok( await c.until( "typeof NayiveUI !== 'undefined' && typeof NayiveLock !== 'undefined' && typeof NayiveI18n !== 'undefined'" ), "ready" );
+ok( await c.until( "typeof NayiveUI !== 'undefined' && typeof NayiveLock !== 'undefined' && typeof NayiveWho !== 'undefined'" ), "ready" );
 // The lockers' scripts, as the desktop's ⋮ menu loads them; a switch that
 // makes the server's answer to one settings file a 503 (window.__failRead);
 // and a count of the page's PUTs (window.__puts), so the disk is read only
@@ -41,13 +41,13 @@ ok( await c.evaluate( `( async () => {
     return !! window.NayiveSalonSettings; } )()` ), "locker scripts loaded" );
 const SETTLED = "window.__puts.on === window.__puts.off";
 
-const NO_OK = "! document.querySelector( '#salonSettings .btn-primary' )";
+const NO_OK = "! document.querySelector( '#salonSettings .btn.primary' )";
 const DRAWN = "!! document.querySelector( '#salonSettings .salon-pane .salon-row' )";
-const close = () => c.evaluate( "( () => { const b = document.querySelector( '#salonSettings [data-act=close], #salonSettings .sheet-close' ); if( b ) b.click(); return !! b; } )()" );
+const close = () => c.evaluate( "( () => { const b = document.querySelector( '#salonSettings [data-close]' ); if( b ) b.click(); return !! b; } )()" );
 const setField = ( key, value ) => c.evaluate( `( () => {
-    const f = [ ...document.querySelectorAll( '#salonSettings .field' ) ].find( x => x.querySelector( 'label' ) && x.querySelector( 'label' ).textContent === NayiveI18n.t( ${JSON.stringify( key )} ) );
+    const f = [ ...document.querySelectorAll( '#salonSettings .field' ) ].find( x => x.querySelector( 'label' ) && x.querySelector( 'label' ).textContent === Ayni.t( ${JSON.stringify( key )} ) );
     const sel = f.querySelector( 'select' ); sel.value = ${JSON.stringify( value )}; sel.dispatchEvent( new Event( 'change' ) ); return true; } )()` );
-const readFailShown = "document.querySelector( '#salonSettings' ).textContent.indexOf( NayiveI18n.t( 'salon.readFail' ) ) !== -1";
+const readFailShown = "document.querySelector( '#salonSettings' ).textContent.indexOf( Ayni.t( 'salon.readFail' ) ) !== -1";
 // The save runs after the dialog is gone (a read, then the PUT): wait for the disk.
 async function onDiskWhen( fn, ms = 10000 )
 {
@@ -104,7 +104,7 @@ await setField( "salon.contrast", "normal" );
 const kept = onDisk( s, SALON );
 await c.evaluate( "window.__failRead = 'salon.json'; window.__toasts = []; true" );
 await close();
-ok( await c.until( "( window.__toasts || [] ).some( x => x.indexOf( NayiveI18n.t( 'salon.notSaved' ) ) !== -1 )" ),
+ok( await c.until( "( window.__toasts || [] ).some( x => x.indexOf( Ayni.t( 'salon.notSaved' ) ) !== -1 )" ),
     "it says the changes were not saved" );
 ok( await c.until( SETTLED ), "every write that close started has landed" );
 ok( onDisk( s, SALON ) === kept, "nothing was written" );

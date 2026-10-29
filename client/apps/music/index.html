@@ -38,49 +38,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- The interface language. First of all: it hides the page until the
-         dictionary is in, and every inline script below may call it. -->
+    <!-- Nayive's first script (old settings, whose page, error reports), then
+         Ayni's language layer: it hides the page until the texts are in, and
+         every inline script below may call Ayni.t(). -->
     <script src="../shared/i18n.js"></script>
+    <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
     <title>Music</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18V5l12-2v13'/%3E%3Ccircle cx='6' cy='18' r='3'/%3E%3Ccircle cx='18' cy='16' r='3'/%3E%3C/svg%3E">
 
     <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
-    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
-    <script src="../shared/theme.js" defer></script>
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script src="../shared/ayni/ayni-icons.js" defer></script>
+    <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
     <script src="../shared/browser.js" defer></script>
     <script>
-    NayiveI18n.ready.then( function () {
+    Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
         NayiveUI.firstRun( {
             app:   'music',
             title: 'Music',
-            lead:  NayiveUI.t( 'music.introLead' ),
+            lead:  Ayni.t( 'music.introLead' ),
             buttons: [
-                { sel: '#folderInfoBtn', text: NayiveUI.t( 'music.introFolder' ) },
-                { sel: '#searchToggle', text: NayiveUI.t( 'music.introSearch' ) },
-                { sel: '#reloadBtn',   text: NayiveUI.t( 'music.introRescan' ) },
-                { icon: 'folder',       name: NayiveUI.t( 'music.library' ), text: NayiveUI.t( 'music.introTree' ), tour: { sel: '#treePane, #treeBtn' } },
+                { sel: '#folderInfoBtn', text: Ayni.t( 'music.introFolder' ) },
+                { sel: '#searchToggle', text: Ayni.t( 'music.introSearch' ) },
+                { sel: '#reloadBtn',   text: Ayni.t( 'music.introRescan' ) },
+                { icon: 'folder',       name: Ayni.t( 'music.library' ), text: Ayni.t( 'music.introTree' ), tour: { sel: '#treePane, #treeBtn' } },
                 // tour: on a phone the queue is a sheet behind #queueBtn
-                { sel: '#seqBtn',       name: NayiveUI.t( 'music.introOrderName' ), text: NayiveUI.t( 'music.introOrder' ), tour: { open: '#queueBtn' } },
-                { sel: '#saveListBtn',  text: NayiveUI.t( 'music.introSaveList' ), tour: { open: '#queueBtn' } },
-                { sel: '#clearQueueBtn', text: NayiveUI.t( 'music.introClear' ), tour: { open: '#queueBtn' } }
+                { sel: '#seqBtn',       name: Ayni.t( 'music.introOrderName' ), text: Ayni.t( 'music.introOrder' ), tour: { open: '#queueBtn' } },
+                { sel: '#saveListBtn',  text: Ayni.t( 'music.introSaveList' ), tour: { open: '#queueBtn' } },
+                { sel: '#clearQueueBtn', text: Ayni.t( 'music.introClear' ), tour: { open: '#queueBtn' } }
             ],
             // The guided tour ("Ver el tour" in the card): the card's rows, picking
             // songs (the shared item browser), the player.
             tour: [ 'buttons', { use: 'pick', ghost: '#libContent' }, { use: 'picked', ghost: '#libContent' },
-                    { sel: '#playerBar', text: NayiveUI.t( 'music.tourPlayer' ) } ]
+                    { sel: '#playerBar', text: Ayni.t( 'music.tourPlayer' ) } ]
         } );
     } );
     </script>
 
     <style>
     /* ===================================================================
-     * MUSIC - per-app layout only. Chrome (header, .icon-btn, .field,
+     * MUSIC - per-app layout only. Chrome (header, .btn, .field,
      * .sheet, .btn) comes from shared/theme.css + app.css; this block holds
      * the library / queue split and the player bar, none of which exists
      * anywhere else yet.
@@ -124,7 +130,7 @@
 
     .scope-bar  { display: flex; align-items: center; margin: 18px 0 12px; }
 
-    /* "Show more" is the shared .text-btn.ghost, full width. */
+    /* "Show more" is the shared .btn.text.bordered, full width. */
     .show-more { width: 100%; margin: 10px 0 4px; }
 
     /* ---- library rows: one song (a shared .card-row), real drag source;
@@ -238,12 +244,12 @@
         <h1>Music</h1>
         <!-- The toolbar, shown once a folder is open (display: contents). -->
         <div class="tb-tools" id="tools" hidden>
-            <button class="icon-btn has-popup" id="folderInfoBtn" type="button" data-rank="22" aria-haspopup="menu" aria-expanded="false" data-i18n-attr="title:ui.folderInfo, aria-label:ui.folderInfo">
+            <button class="btn" id="folderInfoBtn" type="button" data-rank="22" aria-haspopup="menu" aria-expanded="false" data-i18n-attr="data-tip:ui.folderInfo, aria-label:ui.folderInfo">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="10.5" x2="12.01" y2="10.5"/><line x1="12" y1="13.5" x2="12" y2="17.5"/></svg>
             </button>
 
             <!-- Phones only (<= 640 px): the tree (library + playlists) slides in. -->
-            <button class="icon-btn" id="treeBtn" type="button" data-rank="23" data-i18n-attr="title:music.library, aria-label:music.library">
+            <button class="btn" id="treeBtn" type="button" data-rank="23" data-i18n-attr="data-tip:music.library, aria-label:music.library">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
             </button>
         </div>
@@ -255,19 +261,19 @@
                 <div class="search-wrap">
                     <input type="search" class="topbar-search" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:music.searchPh">
                 </div>
-                <button class="icon-btn" id="searchToggle" type="button" data-rank="20" data-i18n-attr="title:ui.search, aria-label:ui.search">
+                <button class="btn" id="searchToggle" type="button" data-rank="20" data-i18n-attr="data-tip:ui.search, aria-label:ui.search">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 </button>
                 <!-- Phones only (<= 760 px): the queue has no pane there, it opens as a sheet. -->
-                <button class="icon-btn queue-open-btn" id="queueBtn" type="button" data-rank="24" data-i18n-attr="title:music.openQueue, aria-label:music.openQueue">
+                <button class="btn queue-open-btn" id="queueBtn" type="button" data-rank="24" data-i18n-attr="data-tip:music.openQueue, aria-label:music.openQueue">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="15" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="11" y2="18"/><path d="M17 18V9l4-1"/><circle cx="15.5" cy="18" r="1.5"/></svg>
                 </button>
-                <button class="icon-btn" id="reloadBtn" data-rank="25" data-i18n-attr="title:ui.rescanFolder, aria-label:ui.rescanFolder">
+                <button class="btn" id="reloadBtn" data-rank="25" data-i18n-attr="data-tip:ui.rescanFolder, aria-label:ui.rescanFolder">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
                 </button>
             </div>
             <div class="tb-group tb-sys" data-tools hidden>
-                <button class="icon-btn" data-intro-open data-rank="31" type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                <button class="btn" data-intro-open data-rank="31" type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                 </button>
             </div>
@@ -277,7 +283,7 @@
 
     <!-- The folder-? button's menu: the folder (tap = change it), then the counts. -->
     <div class="top-menu folder-menu" id="folderMenu" role="menu" hidden>
-        <button class="menu-item" id="crumb" type="button" role="menuitem" data-i18n-attr="title:ui.changeFolder, aria-label:ui.changeFolder"></button>
+        <button class="menu-item" id="crumb" type="button" role="menuitem" data-i18n-attr="data-tip:ui.changeFolder, aria-label:ui.changeFolder"></button>
         <div class="menu-info" id="subStrip"></div>
     </div>
 
@@ -297,22 +303,22 @@
                 <div class="queue-title-row"><h2 data-i18n="music.queue"></h2></div>
                 <div class="queue-mode-row">
                     <div class="mode-pills">
-                        <button class="icon-btn is-active" id="seqBtn" data-i18n-attr="title:music.playSeq, aria-label:music.playSeq">
+                        <button class="btn" id="seqBtn" data-i18n-attr="data-tip:music.playSeq, aria-label:music.playSeq" aria-pressed="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>
                         </button>
-                        <button class="icon-btn" id="shuffleBtn" data-i18n-attr="title:music.playShuffle, aria-label:music.playShuffle">
+                        <button class="btn" id="shuffleBtn" data-i18n-attr="data-tip:music.playShuffle, aria-label:music.playShuffle">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
                         </button>
                         <!-- Off: the queue stops after its last song. On: it starts again. -->
-                        <button class="icon-btn" id="repeatBtn" type="button" aria-pressed="false" data-i18n-attr="title:music.repeat, aria-label:music.repeat">
+                        <button class="btn" id="repeatBtn" type="button" aria-pressed="false" data-i18n-attr="data-tip:music.repeat, aria-label:music.repeat">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
                         </button>
                     </div>
                     <div class="queue-actions">
-                        <button class="icon-btn" id="saveListBtn" disabled data-i18n-attr="title:music.saveQueue, aria-label:music.saveQueue">
+                        <button class="btn" id="saveListBtn" aria-disabled="true" data-i18n-attr="data-tip:music.saveQueue, aria-label:music.saveQueue">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h11l3 3v11H5V5Z"/><path d="M8 5v5h7V5"/><path d="M8 14h8"/></svg>
                         </button>
-                        <button class="icon-btn danger" id="clearQueueBtn" disabled data-i18n-attr="title:music.clearQueue, aria-label:music.clearQueue">
+                        <button class="btn danger" id="clearQueueBtn" aria-disabled="true" data-i18n-attr="data-tip:music.clearQueue, aria-label:music.clearQueue">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
                         </button>
                     </div>
@@ -326,7 +332,7 @@
     <div class="empty-hint" id="noDirHint" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
         <p data-i18n="music.needFolder"></p>
-        <a class="text-btn" href="../drive/index.html" data-i18n="ui.openDrive"></a>
+        <a class="btn text primary" href="../drive/index.html" data-i18n="ui.openDrive"></a>
     </div>
 
     <div class="player-bar" id="playerBar" hidden>
@@ -341,13 +347,13 @@
         </div>
 
         <div class="transport">
-            <button class="transport-btn" id="prevBtn" disabled data-i18n-attr="title:ui.prev, aria-label:ui.prev">
+            <button class="btn transport-btn" id="prevBtn" aria-disabled="true" data-i18n-attr="data-tip:ui.prev, aria-label:ui.prev">
                 <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M19 20 9 12l10-8v16Z"/><rect x="4.5" y="4" width="2" height="16" rx="1"/></svg>
             </button>
-            <button class="transport-btn play-btn" id="playBtn" data-i18n-attr="title:media.play, aria-label:media.play" disabled>
+            <button class="btn primary transport-btn play-btn" id="playBtn" data-i18n-attr="data-tip:media.play, aria-label:media.play" aria-disabled="true">
                 <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" id="playIcon"><path d="M8 5v14l11-7-11-7Z"/></svg>
             </button>
-            <button class="transport-btn" id="nextBtn" disabled data-i18n-attr="title:ui.next, aria-label:ui.next">
+            <button class="btn transport-btn" id="nextBtn" aria-disabled="true" data-i18n-attr="data-tip:ui.next, aria-label:ui.next">
                 <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M5 4l10 8-10 8V4Z"/><rect x="17.5" y="4" width="2" height="16" rx="1"/></svg>
             </button>
         </div>
@@ -365,7 +371,7 @@
 
         <!-- Play on: a paired speaker (setSinkId) or Cast / AirPlay (Remote
              Playback). Shown only when the browser has one of the two. -->
-        <button class="icon-btn has-popup" id="outBtn" type="button" hidden aria-haspopup="menu" aria-expanded="false" data-i18n-attr="title:media.outBtn, aria-label:media.outBtn">
+        <button class="btn" id="outBtn" type="button" hidden aria-haspopup="menu" aria-expanded="false" data-i18n-attr="data-tip:media.outBtn, aria-label:media.outBtn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><circle cx="12" cy="14" r="4"/><circle cx="12" cy="6" r="1"/></svg>
         </button>
     </div>
@@ -377,7 +383,7 @@
     <div class="sheet-backdrop" id="queueBackdrop">
         <div class="sheet queue-sheet" id="queueSheet">
             <div class="sheet-actions">
-                <button data-act="close" id="queueCloseBtn" data-i18n-attr="title:ui.close"></button>
+                <button class="btn" data-close id="queueCloseBtn" data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
             </div>
         </div>
     </div>
@@ -393,8 +399,8 @@
                 <input id="playlistName" type="text" autocomplete="off" data-i18n-attr="placeholder:music.listNamePh">
             </div>
             <div class="sheet-actions">
-                <button data-act="close" id="saveCancelBtn" data-i18n-attr="title:ui.cancel"></button>
-                <button data-act="primary" id="saveConfirmBtn" data-i18n-attr="title:ui.save"></button>
+                <button class="btn" data-close id="saveCancelBtn" data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="saveConfirmBtn" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
             </div>
         </div>
     </div>
@@ -522,7 +528,7 @@ function deriveFromPath( fullPath )
 async function scan()
 {
     var gen = ++scanGen;
-    setLibMsg( NayiveUI.t( 'music.scanning' ) );
+    setLibMsg( Ayni.t( 'music.scanning' ) );
     var tree = await NayiveMedia.loadFolderTree( DIR, setLibMsg, true );
     if( ! tree || gen !== scanGen ) return;
     st.folderTree = { path: DIR, nodes: tree.nodes };
@@ -794,7 +800,7 @@ async function refineTags( gen )
 // them, without rebuilding the lists.
 function patchSongRows( song )
 {
-    var sub = ( song.artist || NayiveUI.t( 'music.unknownArtist' ) ) + ' · ' + ( song.album || NayiveUI.t( 'music.unknownAlbum' ) );
+    var sub = ( song.artist || Ayni.t( 'music.unknownArtist' ) ) + ' · ' + ( song.album || Ayni.t( 'music.unknownAlbum' ) );
     $$( '.song-row[data-path="' + cssEsc( song.path ) + '"]' ).forEach( function ( row )
     {
         row.querySelector( ".song-title" ).textContent = song.title;
@@ -807,7 +813,7 @@ function patchSongRows( song )
         var row = $( '.queue-row[data-index="' + i + '"]' );
         if( ! row ) return;
         row.querySelector( ".queue-title" ).textContent = song.title;
-        row.querySelector( ".queue-sub" ).textContent   = song.artist || NayiveUI.t( 'music.unknownArtist' );
+        row.querySelector( ".queue-sub" ).textContent   = song.artist || Ayni.t( 'music.unknownArtist' );
         row.querySelector( ".queue-art" ).style.background = song.color;
     } );
     var cur = st.queue[ st.playingIndex ];
@@ -850,13 +856,13 @@ function computeAlbums( songs )
     {
         var key = albumKey( s );
         if( ! map[ key ] ) map[ key ] = {
-            key: key, title: s.album || NayiveUI.t( 'music.unknownAlbum' ),
-            artist: s.artist || NayiveUI.t( 'music.unknownArtist' ), color: s.color, count: 0
+            key: key, title: s.album || Ayni.t( 'music.unknownAlbum' ),
+            artist: s.artist || Ayni.t( 'music.unknownArtist' ), color: s.color, count: 0
         };
         map[ key ].count++;
     } );
     return Object.keys( map ).map( function ( k ) { return map[ k ]; } )
-        .sort( function ( a, b ) { return a.artist.localeCompare( b.artist, NayiveUI.lang() ) || a.title.localeCompare( b.title, NayiveUI.lang() ); } );
+        .sort( function ( a, b ) { return a.artist.localeCompare( b.artist, Ayni.i18n.lang() ) || a.title.localeCompare( b.title, Ayni.i18n.lang() ); } );
 }
 
 function computeArtists( songs )
@@ -864,7 +870,7 @@ function computeArtists( songs )
     var map = {};
     ( songs || st.songs ).forEach( function ( s )
     {
-        var name = s.artist || NayiveUI.t( 'music.unknownArtist' );
+        var name = s.artist || Ayni.t( 'music.unknownArtist' );
         if( ! map[ name ] ) map[ name ] = { name: name, songCount: 0, albums: {}, color: colorFor( name ) };
         map[ name ].songCount++;
         map[ name ].albums[ s.album || s.folder || "" ] = true;
@@ -873,7 +879,7 @@ function computeArtists( songs )
     {
         var a = map[ k ];
         return { name: a.name, songCount: a.songCount, albumCount: Object.keys( a.albums ).length, color: a.color };
-    } ).sort( function ( a, b ) { return a.name.localeCompare( b.name, NayiveUI.lang() ); } );
+    } ).sort( function ( a, b ) { return a.name.localeCompare( b.name, Ayni.i18n.lang() ); } );
 }
 
 /* ---------------------------------------------------------------------------
@@ -889,8 +895,8 @@ function songRowHtml( s )
 {
     var cur = st.queue[ st.playingIndex ];
     var playing = !! cur && cur.song === s;
-    var sub = s.missing ? NayiveUI.t( 'music.notFound' )
-            : ( s.artist || NayiveUI.t( 'music.unknownArtist' ) ) + ' · ' + ( s.album || NayiveUI.t( 'music.unknownAlbum' ) );
+    var sub = s.missing ? Ayni.t( 'music.notFound' )
+            : ( s.artist || Ayni.t( 'music.unknownArtist' ) ) + ' · ' + ( s.album || Ayni.t( 'music.unknownAlbum' ) );
     return '<div class="card-row song-row' + ( playing ? ' is-playing' : '' ) + ( s.missing ? ' is-missing' : '' ) + '" data-path="' + esc( s.path ) + '">' +
         '<span class="song-art" style="background:' + s.color + '">' + MUSIC_NOTE_SVG + '</span>' +
         '<span class="song-meta">' +
@@ -906,8 +912,8 @@ function songListHtml( list, windowed )
     if( ! list.length ) return '<div class="empty-hint"><p data-i18n="music.noMatch"></p></div>';
     if( windowed && list.length > listShown )
         return list.slice( 0, listShown ).map( songRowHtml ).join( "" ) +
-            '<button class="text-btn ghost show-more" id="showMoreBtn">' +
-            esc( NayiveUI.tf( "music.showMore", { n: list.length - listShown } ) ) + '</button>';
+            '<button class="btn text bordered show-more" id="showMoreBtn">' +
+            esc( Ayni.tf( "music.showMore", { n: list.length - listShown } ) ) + '</button>';
     return list.map( songRowHtml ).join( "" );
 }
 
@@ -917,7 +923,7 @@ function renderCollectionSummary()
 {
     var albums  = computeAlbums().length;
     var artists = computeArtists().length;
-    $( "#subStrip" ).textContent = NayiveUI.tf( "music.libraryCounts", { songs: st.songs.length, albums: albums, artists: artists } );
+    $( "#subStrip" ).textContent = Ayni.tf( "music.libraryCounts", { songs: st.songs.length, albums: albums, artists: artists } );
     setCrumb();
 }
 
@@ -970,11 +976,11 @@ function renderLibrary()
             return '<button class="artist-card media-card' + ( active ? ' is-active' : '' ) + '" data-artist="' + esc( a.name ) + '">' +
                 '<span class="artist-avatar" style="background:' + a.color + '">' + esc( a.name.charAt( 0 ).toUpperCase() ) + '</span>' +
                 '<span class="artist-name media-card-title">' + esc( a.name ) + '</span>' +
-                '<span class="artist-meta media-card-sub">' + esc( NayiveUI.tf( "music.artistCounts", { albums: a.albumCount, songs: a.songCount } ) ) + '</span></button>';
+                '<span class="artist-meta media-card-sub">' + esc( Ayni.tf( "music.artistCounts", { albums: a.albumCount, songs: a.songCount } ) ) + '</span></button>';
         } ).join( "" ) + '</div>';
         if( st.selectedArtist )
         {
-            var songs2 = pool.filter( function ( s ) { return ( s.artist || NayiveUI.t( 'music.unknownArtist' ) ) === st.selectedArtist; } );
+            var songs2 = pool.filter( function ( s ) { return ( s.artist || Ayni.t( 'music.unknownArtist' ) ) === st.selectedArtist; } );
             html += scopeBarHtml( st.selectedArtist ) + songListHtml( songs2, true );
         }
         else html += '<div class="empty-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg><p data-i18n="music.pickArtist"></p></div>';
@@ -988,8 +994,8 @@ function renderLibrary()
         var inPool = new Set( pool );
         var shown = ! q ? all : all.filter( function ( s ) { return inPool.has( s ) || s.missing && q( s.title ); } );
         var gone = all.filter( function ( s ) { return s.missing; } ).length;
-        html += '<h2 class="view-head">' + esc( pl ? pl.name : "" ) + '<small>' + esc( NayiveUI.tf( "music.nSongs", { n: all.length } ) ) +
-                ( gone ? " · " + esc( NayiveUI.tf( gone === 1 ? "music.oneMissing" : "music.nMissing", { n: gone } ) ) : "" ) + '</small></h2>';
+        html += '<h2 class="view-head">' + esc( pl ? pl.name : "" ) + '<small>' + esc( Ayni.tf( "music.nSongs", { n: all.length } ) ) +
+                ( gone ? " · " + esc( Ayni.tf( gone === 1 ? "music.oneMissing" : "music.nMissing", { n: gone } ) ) : "" ) + '</small></h2>';
         html += ! all.length ? '<div class="empty-hint">' + MUSIC_NOTE_SVG + '<p data-i18n="music.listEmpty"></p></div>'
                              : songListHtml( shown, true );
     }
@@ -1101,13 +1107,13 @@ function queueRowHtml( entry, index )
         '<span class="queue-indicator">' + ( playing
             ? '<span class="eq"><span></span><span></span><span></span></span>'
             : GRIP_SVG ) + '</span>' +
-        '<button class="queue-art" style="background:' + song.color + '" data-play="' + index + '" data-i18n-attr="title:music.playThis, aria-label:music.playThis">' + MUSIC_NOTE_SVG + '</button>' +
+        '<button class="queue-art" style="background:' + song.color + '" data-play="' + index + '" data-i18n-attr="data-tip:music.playThis, aria-label:music.playThis">' + MUSIC_NOTE_SVG + '</button>' +
         '<span class="queue-meta">' +
             '<div class="queue-title">' + esc( song.title ) + '</div>' +
-            '<div class="queue-sub">' + esc( song.artist || NayiveUI.t( 'music.unknownArtist' ) ) + '</div>' +
+            '<div class="queue-sub">' + esc( song.artist || Ayni.t( 'music.unknownArtist' ) ) + '</div>' +
         '</span>' +
         '<span class="queue-dur">' + ( song.duration != null ? fmtClock( song.duration ) : "…" ) + '</span>' +
-        '<button class="icon-btn sm danger" data-remove="' + index + '" data-i18n-attr="title:music.removeFromQueue, aria-label:music.removeFromQueue">' +
+        '<button class="btn sm danger" data-remove="' + index + '" data-i18n-attr="data-tip:music.removeFromQueue, aria-label:music.removeFromQueue">' +
             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>' +
         '</button>' +
     '</div>';
@@ -1128,8 +1134,8 @@ function renderQueueList()
     }
     wireQueueRows();
 
-    $( "#clearQueueBtn" ).disabled = ! st.queue.length;
-    $( "#saveListBtn"  ).disabled = ! st.queue.length;
+    $( "#clearQueueBtn" ).ariaDisabled = ! st.queue.length;
+    $( "#saveListBtn"  ).ariaDisabled = ! st.queue.length;
 }
 
 function renderQueueDuration( song )
@@ -1231,7 +1237,7 @@ function playSongs( songs )
     stopPlayback();
     playIndex( 0 );
     if( snap.queue.length )
-        NayiveUI.undoToast( NayiveUI.tf( 'music.playingN', { n: songs.length } ), function () { restoreQueue( snap, entries ); } );
+        NayiveUI.undoToast( Ayni.tf( 'music.playingN', { n: songs.length } ), function () { restoreQueue( snap, entries ); } );
 }
 
 function handleQueueDrop( targetIndex )
@@ -1275,7 +1281,7 @@ function removeFromQueue( index )
     renderLibrary();
 
     // Undo: the row goes back where it was; the song playing now keeps playing.
-    NayiveUI.undoToast( NayiveUI.t( 'ui.toast.removed' ), function ()
+    NayiveUI.undoToast( Ayni.t( 'ui.toast.removed' ), function ()
     {
         var cur = st.queue[ st.playingIndex ];
         st.queue.splice( Math.min( index, st.queue.length ), 0, entry );
@@ -1397,7 +1403,6 @@ function autoNext()
 function setRepeat( on )
 {
     st.repeat = !! on;
-    $( "#repeatBtn" ).classList.toggle( "is-active", st.repeat );
     $( "#repeatBtn" ).setAttribute( "aria-pressed", st.repeat ? "true" : "false" );
     try { localStorage.setItem( "music-repeat", st.repeat ? "1" : "0" ); } catch( e ) {}
 }
@@ -1434,15 +1439,15 @@ function updatePlayerBar()
 {
     var entry = st.queue[ st.playingIndex ];
     var song = entry ? entry.song : null;
-    $( "#playerTitle" ).textContent = song ? song.title : NayiveUI.t( 'music.nothingPlaying' );
-    $( "#playerSub"   ).textContent = song ? ( song.artist || NayiveUI.t( 'music.unknownArtist' ) ) + ( song.album ? " · " + song.album : "" )
-                                            : NayiveUI.t( 'music.pickSong' );
+    $( "#playerTitle" ).textContent = song ? song.title : Ayni.t( 'music.nothingPlaying' );
+    $( "#playerSub"   ).textContent = song ? ( song.artist || Ayni.t( 'music.unknownArtist' ) ) + ( song.album ? " · " + song.album : "" )
+                                            : Ayni.t( 'music.pickSong' );
     $( "#playerArt"   ).style.background = song ? song.color : "#3A3C42";
 
     var has = !! song;
-    $( "#prevBtn" ).disabled = ! has;
-    $( "#nextBtn" ).disabled = ! has;
-    $( "#playBtn" ).disabled = ! has;
+    $( "#prevBtn" ).ariaDisabled = ! has;
+    $( "#nextBtn" ).ariaDisabled = ! has;
+    $( "#playBtn" ).ariaDisabled = ! has;
     $( "#seekRange" ).disabled = ! has;
 }
 
@@ -1455,7 +1460,7 @@ function updateMediaSession( song )
 {
     if( ! song ) return;
     NayiveMedia.mediaSession(
-        { title: song.title, artist: song.artist || NayiveUI.t( 'music.unknownArtist' ), album: song.album || "" },
+        { title: song.title, artist: song.artist || Ayni.t( 'music.unknownArtist' ), album: song.album || "" },
         {
             play:          function () { audio.play().catch( function () {} ); },
             pause:         function () { audio.pause(); },
@@ -1481,7 +1486,7 @@ async function readPlaylists()
     if( ! why && list !== null && ! Array.isArray( list ) ) why = "bad";
     if( why )
     {
-        NayiveUI.toast( NayiveUI.t( why === "bad" ? 'ui.store.badFile' : 'ui.store.notRead' ) );
+        NayiveUI.toast( Ayni.t( why === "bad" ? 'ui.store.badFile' : 'ui.store.notRead' ) );
         var err = new Error( "playlists not read" );
         err.read = why;
         throw err;
@@ -1527,7 +1532,7 @@ function changePlaylists( apply )
             var why = e && e.read ? e.read : e && e.notRead ? ( e instanceof SyntaxError ? "bad" : "unread" ) : "";
             if( why )
             {
-                NayiveUI.toast( NayiveUI.t( why === "bad" ? 'ui.store.badFile' : 'ui.store.notRead' ) );
+                NayiveUI.toast( Ayni.t( why === "bad" ? 'ui.store.badFile' : 'ui.store.notRead' ) );
                 e.read = why;
             }
             throw e;
@@ -1567,7 +1572,7 @@ function loadPlaylist( id, shuffled )
     if( ! pl ) return;
     var found = pl.paths.map( findSong ).filter( Boolean ).map( function ( s ) { return { song: s }; } );
     var missing = pl.paths.length - found.length;
-    var missingMsg = missing ? NayiveUI.tf( missing === 1 ? "music.oneMissing" : "music.nMissing", { n: missing } ) : "";
+    var missingMsg = missing ? Ayni.tf( missing === 1 ? "music.oneMissing" : "music.nMissing", { n: missing } ) : "";
     var snap = queueSnapshot();                 // the queue this list throws away
     st.queue = found;
     st.playingIndex = -1;
@@ -1577,7 +1582,7 @@ function loadPlaylist( id, shuffled )
 
     // Undo puts the old queue back - only when there was one to lose.
     if( snap.queue.length )
-        NayiveUI.undoToast( NayiveUI.t( 'music.listLoaded' ) + ( missingMsg ? " " + missingMsg : "" ),
+        NayiveUI.undoToast( Ayni.t( 'music.listLoaded' ) + ( missingMsg ? " " + missingMsg : "" ),
                             function () { restoreQueue( snap, found ); } );
     else if( missingMsg ) NayiveUI.toast( missingMsg );
 }
@@ -1599,7 +1604,7 @@ async function deletePlaylist( id )
         for( var i = list.length - 1; i >= 0; i-- ) if( list[ i ] && list[ i ].id === id ) list.splice( i, 1 );
         return list.length !== n;               // gone there already: nothing to write
     } );
-    NayiveUI.undoToast( NayiveUI.t( 'ui.toast.deleted' ), async function ()
+    NayiveUI.undoToast( Ayni.t( 'ui.toast.deleted' ), async function ()
     {
         try { await saving; } catch( e ) {}     // the delete's write lands first, or it could land last
         try
@@ -1610,11 +1615,11 @@ async function deletePlaylist( id )
                 list.splice( Math.min( at, list.length ), 0, pl );
             } );
         }
-        catch( e ) { if( ! e || ! e.read ) NayiveUI.toast( NayiveUI.t( 'music.listUpdateFailed' ) ); }
+        catch( e ) { if( ! e || ! e.read ) NayiveUI.toast( Ayni.t( 'music.listUpdateFailed' ) ); }
         refreshPlaylists();
     } );
     try { await saving; }
-    catch( e ) { if( ! e || ! e.read ) NayiveUI.toast( NayiveUI.t( 'music.listUpdateFailed' ) ); return; }
+    catch( e ) { if( ! e || ! e.read ) NayiveUI.toast( Ayni.t( 'music.listUpdateFailed' ) ); return; }
     refreshPlaylists();                         // with the lists saved elsewhere
 }
 
@@ -1681,7 +1686,7 @@ function playlistNodes()
 
 function treeRoots()
 {
-    var T = NayiveUI.t;
+    var T = Ayni.t;
     return [
         { id: "lib", name: T( "music.library" ), icon: ICON.library, noMenu: true, group: true, kids: [
             { id: "v:songs",   name: T( "music.songs" ),   icon: MUSIC_NOTE_SVG, noMenu: true },
@@ -1716,7 +1721,7 @@ function goNode( id )
 // A playlist's menu (right-click, a long-press); the Playlists row's.
 function treeMenu( id, x, y, anchor )
 {
-    var T = NayiveUI.t, items = null;
+    var T = Ayni.t, items = null;
     if( id === "pls" )
         items = [ { id: "newList", label: T( "music.newList" ), icon: "plus", run: function () { openNameSheet( { kind: "new", paths: [] } ); } } ];
     else if( id.indexOf( "pl:" ) === 0 )
@@ -1750,8 +1755,8 @@ function setShuffle( on )
 {
     if( on && ! st.shuffle ) { st.played = new Set(); st.history = []; }   // a fresh round
     st.shuffle = !! on;
-    $( "#shuffleBtn" ).classList.toggle( "is-active", st.shuffle );
-    $( "#seqBtn" ).classList.toggle( "is-active", ! st.shuffle );
+    $( "#shuffleBtn" ).setAttribute( "aria-pressed", !! st.shuffle );
+    $( "#seqBtn" ).setAttribute( "aria-pressed", ! st.shuffle );
 }
 
 /* ---------------------------------------------------------------------------
@@ -1759,7 +1764,7 @@ function setShuffle( on )
  * again, changes only that list, by id, version-checked). Taking a song out
  * of a list never touches the song's file.
  * -------------------------------------------------------------------------*/
-function listToast( e ) { if( ! e || ! e.read ) NayiveUI.toast( NayiveUI.t( 'music.listUpdateFailed' ) ); }
+function listToast( e ) { if( ! e || ! e.read ) NayiveUI.toast( Ayni.t( 'music.listUpdateFailed' ) ); }
 
 function findList( list, id ) { return list.filter( function ( p ) { return p && p.id === id; } )[ 0 ] || null; }
 
@@ -1784,7 +1789,7 @@ async function addToPlaylist( id, paths )
     }
     catch( e ) { listToast( e ); return; }
     if( gone ) { listToast( null ); return; }
-    NayiveUI.toast( added ? NayiveUI.tf( 'music.addedTo', { n: added, name: name } ) : NayiveUI.tf( 'music.alreadyIn', { name: name } ) );
+    NayiveUI.toast( added ? Ayni.tf( 'music.addedTo', { n: added, name: name } ) : Ayni.tf( 'music.alreadyIn', { name: name } ) );
 }
 
 // Out of the playlist on screen, at once; the Undo puts each song back at
@@ -1808,7 +1813,7 @@ async function removeFromPlaylist( ids )
     catch( e ) { listToast( e ); return; }
     if( ! removed.length ) return;
     var back = removed;
-    NayiveUI.undoToast( NayiveUI.t( 'ui.toast.removed' ), async function ()
+    NayiveUI.undoToast( Ayni.t( 'ui.toast.removed' ), async function ()
     {
         try
         {
@@ -1840,9 +1845,9 @@ function openNameSheet( o )
     // second one.
     if( o.kind !== "rename" ) o.newId = "pl" + Date.now().toString( 36 );
     nameSheet = o;
-    $( "#saveTitle" ).textContent = NayiveUI.t( o.kind === "rename" ? "music.renameList" : o.kind === "queue" ? "music.saveList" : "music.newList" );
-    $( "#saveHint" ).textContent = o.kind === "queue" ? NayiveUI.tf( "music.saveHint", { n: st.queue.length } )
-                                 : o.kind === "new" && o.paths.length ? NayiveUI.tf( "music.newListHint", { n: o.paths.length } ) : "";
+    $( "#saveTitle" ).textContent = Ayni.t( o.kind === "rename" ? "music.renameList" : o.kind === "queue" ? "music.saveList" : "music.newList" );
+    $( "#saveHint" ).textContent = o.kind === "queue" ? Ayni.tf( "music.saveHint", { n: st.queue.length } )
+                                 : o.kind === "new" && o.paths.length ? Ayni.tf( "music.newListHint", { n: o.paths.length } ) : "";
     $( "#playlistName" ).value = pl ? pl.name : "";
     NayiveUI.open( "saveBackdrop" );
     $( "#playlistName" ).focus();
@@ -1853,7 +1858,7 @@ async function confirmName()
 {
     if( ! nameSheet ) return;
     var o = nameSheet, name = $( "#playlistName" ).value.trim();
-    if( ! name ) { NayiveUI.toast( NayiveUI.t( 'music.needListName' ) ); return; }
+    if( ! name ) { NayiveUI.toast( Ayni.t( 'music.needListName' ) ); return; }
     if( savingList ) return;
     var old = null;
     savingList = true;
@@ -1883,20 +1888,20 @@ async function confirmName()
     {
         // Not saved: the sheet stays open with the name typed, ✓ tries
         // again. A read that failed has said why already.
-        if( ! e || ! e.read ) NayiveUI.toast( NayiveUI.t( 'music.listSaveFailed' ) );
+        if( ! e || ! e.read ) NayiveUI.toast( Ayni.t( 'music.listSaveFailed' ) );
         return;
     }
     finally { savingList = false; }
     NayiveUI.setOpen( "saveBackdrop", false );
     nameSheet = null;
-    if( o.kind === "queue" ) NayiveUI.toast( NayiveUI.t( 'music.listSaved' ) );
+    if( o.kind === "queue" ) NayiveUI.toast( Ayni.t( 'music.listSaved' ) );
     else if( o.kind === "new" )
     {
-        if( o.paths.length ) NayiveUI.toast( NayiveUI.tf( 'music.addedTo', { n: o.paths.length, name: name } ) );
-        else { NayiveUI.toast( NayiveUI.t( 'music.listSaved' ) ); goNode( "pl:" + o.newId ); }
+        if( o.paths.length ) NayiveUI.toast( Ayni.tf( 'music.addedTo', { n: o.paths.length, name: name } ) );
+        else { NayiveUI.toast( Ayni.t( 'music.listSaved' ) ); goNode( "pl:" + o.newId ); }
     }
     else if( old !== null && old !== name )
-        NayiveUI.undoToast( NayiveUI.t( 'ui.toast.renamed' ), async function ()
+        NayiveUI.undoToast( Ayni.t( 'ui.toast.renamed' ), async function ()
         {
             try
             {
@@ -1942,7 +1947,7 @@ function openSong( id )
 {
     var ids = browse.has( id ) && browse.ids().length > 1 ? browse.ids() : [ id ];
     var songs = songsOf( ids );
-    if( ! songs.length ) { NayiveUI.toast( NayiveUI.tf( 'music.oneMissing', { n: 1 } ) ); return; }
+    if( ! songs.length ) { NayiveUI.toast( Ayni.tf( 'music.oneMissing', { n: 1 } ) ); return; }
     playSongs( songs );
 }
 
@@ -1964,10 +1969,10 @@ function pickPlaylist( ids )
     if( ! paths.length ) return;
     var here = st.filter === "playlist" ? "pl:" + st.playlistId : null;
     NayiveUI.pickNode( {
-        title:   NayiveUI.t( "music.addToPlaylist" ),
-        okLabel: NayiveUI.t( "music.addToPlaylist" ),
+        title:   Ayni.t( "music.addToPlaylist" ),
+        okLabel: Ayni.t( "music.addToPlaylist" ),
         lit:     null,
-        roots:   function () { return [ { id: "new", name: NayiveUI.t( "music.newList" ), icon: "plus" } ].concat( playlistNodes() ); },
+        roots:   function () { return [ { id: "new", name: Ayni.t( "music.newList" ), icon: "plus" } ].concat( playlistNodes() ); },
         disabled: function ( id ) { return id === here; }
     } ).then( function ( id )
     {
@@ -1980,7 +1985,7 @@ function pickPlaylist( ids )
 // Built once the dictionary is in (boot).
 function musicActions()
 {
-    var T = NayiveUI.t, tf = NayiveUI.tf;
+    var T = Ayni.t, tf = Ayni.tf;
     function some( ids ) { return ids.some( function ( p ) { return !! findSong( p ); } ); }
     function one( ids )  { return ids.length === 1 && !! findSong( ids[ 0 ] ); }
     return [
@@ -1995,7 +2000,7 @@ function musicActions()
           run: function ( ids ) { goToAlbum( findSong( ids[ 0 ] ) ); } },
         { id: "drive", label: T( "ui.showInDrive" ), icon: "folder", rank: 8, group: 1, when: one,
           run: function ( ids ) { NayiveMedia.showInDrive( ids[ 0 ] ); } },
-        { id: "remove", label: T( "music.removeFromList" ), icon: "x", key: "Del", rank: 5, danger: true, group: 2,
+        { id: "remove", label: T( "music.removeFromList" ), icon: "close", key: "Del", rank: 5, danger: true, group: 2,
           where: function () { return st.filter === "playlist"; }, run: removeFromPlaylist }
     ];
 }
@@ -2088,7 +2093,7 @@ function wireStaticUI()
         if( ! st.queue.length ) return;
         var snap = queueSnapshot();
         clearQueue();
-        NayiveUI.undoToast( NayiveUI.t( 'music.queueEmptied' ), function () { restoreQueue( snap, [] ); } );
+        NayiveUI.undoToast( Ayni.t( 'music.queueEmptied' ), function () { restoreQueue( snap, [] ); } );
     } );
 
     $( "#saveListBtn" ).addEventListener( "click", openSaveSheet );
@@ -2128,7 +2133,7 @@ function wireStaticUI()
     {
         var entry = st.queue[ st.playingIndex ];
         if( ! entry || ! audio.getAttribute( "src" ) ) return;
-        NayiveUI.toast( NayiveUI.tf( 'music.cantPlay', { name: entry.song.title } ) );
+        NayiveUI.toast( Ayni.tf( 'music.cantPlay', { name: entry.song.title } ) );
         if( ++failedInRow >= st.queue.length ) { failedInRow = 0; return; }
         if( ! autoNext() ) failedInRow = 0;
     } );
@@ -2144,7 +2149,7 @@ async function boot()
     wireStaticUI();
     NayivePlayOn.wire( audio, $( "#outBtn" ) );
 
-    DIR = await NayiveMedia.openLibrary( DIR, { app: "music", title: NayiveUI.t( "music.whereFolder" ), note: NayiveUI.t( "music.whereFolderNote" ) } );
+    DIR = await NayiveMedia.openLibrary( DIR, { app: "music", title: Ayni.t( "music.whereFolder" ), note: Ayni.t( "music.whereFolderNote" ) } );
     if( ! DIR ) return;
     wireBrowser();
 
@@ -2155,7 +2160,7 @@ async function boot()
 
 function setCrumb() { if( DIR ) NayiveMedia.setCrumb( NayiveMedia.dirLabel( DIR ) ); }
 
-NayiveI18n.ready.then( boot );
+Ayni.i18n.ready.then( boot );
 </script>
 </body>
 </html>

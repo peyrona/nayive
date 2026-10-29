@@ -93,7 +93,7 @@ await c.evaluate( "document.querySelector('.item-menu [data-act=pin]').click(); 
 ok( await waitFor( async () => ( await conv( CA ) ).pin === true ), "Pin: the server has it pinned" );
 ok( await c.until( `document.querySelector( '#rows .row[data-conv]' ).dataset.conv === ${JSON.stringify( CA )} && !! document.querySelector( '${ROW( CA )} .flag' )` ),
     "…it goes to the top, with the pin mark" );
-ok( await c.until( `document.querySelector( '#selActions [data-sel-act=pin]' )?.title.startsWith( 'Unpin' )` ), "the toggle now reads Unpin", await c.evaluate( "document.querySelector( '#selActions [data-sel-act=pin]' )?.title" ) );
+ok( await c.until( `document.querySelector( '#selActions [data-sel-act=pin]' )?.dataset.tip.startsWith( 'Unpin' )` ), "the toggle now reads Unpin", await c.evaluate( "document.querySelector( '#selActions [data-sel-act=pin]' )?.dataset.tip" ) );
 await mouse( c, "#selActions [data-sel-act=pin]" );
 ok( await waitFor( async () => ! ( await conv( CA ) ).pin ), "the header's Unpin: unpinned on the server" );
 await c.until( `NayiveChat.convOf( ${JSON.stringify( CA )} ).pin !== true` );
@@ -133,7 +133,7 @@ ok( fs.tools.join() === CONV_BTNS.join() && ! fs.more && ! fs.crowded, "wide: se
 ok( await c.evaluate( "! document.getElementById( 'convMenu' )" ), "…and no old ⋮ menu behind it" );
 await mouse( c, "#convMuteBtn" );
 ok( await waitFor( async () => ( await conv( LU ) ).mute === true ), "the bar's Mute: muted on the server" );
-ok( await c.until( "document.getElementById( 'convMuteBtn' )?.title.startsWith( 'Unmute' )" ), "…the button now reads Unmute" );
+ok( await c.until( "document.getElementById( 'convMuteBtn' )?.dataset.tip.startsWith( 'Unmute' )" ), "…the button now reads Unmute" );
 await mouse( c, "#convMuteBtn" );
 ok( await waitFor( async () => ! ( await conv( LU ) ).mute ), "…and Unmute" );
 await mouse( c, "#convHelpBtn" );
@@ -164,7 +164,7 @@ await c.evaluate( "document.querySelector( '#toast .toast-undo' ).click(); true"
 ok( await c.until( `!! document.querySelector( '${ROW( JA )}' )` ) && ( await onServer( JA ) ).includes( "para borrar" ), "Undo brings it back, nothing lost" );
 await mouse( c, ROW( JA ), { dx: 160 } );
 await c.until( `NayiveChat.S.open === ${JSON.stringify( JA )}` );
-ok( await c.evaluate( "document.getElementById( 'convDeleteBtn' ).title === 'Delete all messages'" ), "the open chat's trash: \"Delete all messages\"" );
+ok( await c.evaluate( "document.getElementById( 'convDeleteBtn' ).dataset.tip === 'Delete all messages'" ), "the open chat's trash: \"Delete all messages\"" );
 await c.evaluate( "document.getElementById( 'convDeleteBtn' ).click(); true" );
 ok( await c.until( `! document.querySelector( '${ROW( JA )}' )` ) && await c.evaluate( "! document.querySelector( '.sheet-backdrop.open' )" ), "…clears at once, no question" );
 ok( await c.until( "!! document.querySelector( '#toast .toast-undo' )" ) && ( await onServer( JA ) ).includes( "para borrar" ), "…an Undo; the server still has the message" );

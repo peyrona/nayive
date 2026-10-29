@@ -100,7 +100,7 @@ try
     await nav( c, `${BASE}/nayive/login.html`, "/nayive/login.html" );
     await c.evaluate( `localStorage.setItem('balata-coach-seen','1'); localStorage.setItem('nayive-install-snooze','never');
         ['launcher','email','chat'].forEach( a => localStorage.setItem('balata-intro-dismiss:' + a, '1') );
-        localStorage.setItem('balata-lang','es');
+        localStorage.setItem('ayni-lang','es');
         fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:'ana',password:'abc'})}).then(r=>r.status)` );
 
     console.log( "BOOT" );
@@ -125,7 +125,7 @@ try
     ok( await c.evaluate( "!document.getElementById('cDrive')" ), "no folder button any more" );
     ok( await c.evaluate( "document.getElementById('cTo').placeholder === 'Una o más direcciones, separadas por comas'" ), "To says more than one address fits",
         await c.evaluate( "document.getElementById('cTo').placeholder" ) );
-    ok( await c.evaluate( "document.getElementById('cAttach').title === 'Adjuntar'" ), "the clip's tooltip is 'Adjuntar'",
+    ok( await c.evaluate( "document.getElementById('cAttach').dataset.tip === 'Adjuntar'" ), "the clip's tooltip is 'Adjuntar'",
         await c.evaluate( "document.getElementById('cAttach').title" ) );
     await c.evaluate( "document.getElementById('cAttach').click(); true" );
     const panel = await c.evaluate( `( () => { const p = document.querySelector('.attach.mail-attach'); if( ! p ) return null;
@@ -196,6 +196,12 @@ try
     ok( await waitFor( c, "document.getElementById('composeView').hidden", 8000 ), "with saves working again, ← leaves" );
     ok( /Guardado en Borradores/.test( await lastToast( c ) ), "…saved to Drafts", await lastToast( c ) );
 
+    // the × Close: the same as ←, kept in Drafts
+    await c.evaluate( "document.getElementById('composeBtn').click(); true" );
+    await c.evaluate( TYPE( "<div>Cerrado con la equis</div>" ) );
+    await c.evaluate( "document.getElementById('cClose').click(); true" );
+    ok( await waitFor( c, "document.getElementById('composeView').hidden", 8000 ) && /Guardado en Borradores/.test( await lastToast( c ) ), "× Close: kept in Drafts", await lastToast( c ) );
+
     // #75: Discard, then Undo
     await c.evaluate( "document.getElementById('composeBtn').click(); true" );
     await c.evaluate( TYPE( "<div>Casi lo pierdo</div>" ) );
@@ -224,7 +230,7 @@ try
         await new Promise( r => setTimeout( r, 80 ) ); } )()` );
     const fmt = await c.evaluate( "document.getElementById('cText').innerHTML" );
     ok( /<b>negrita<\/b>/.test( fmt ) && /<ul><li>uno/.test( fmt ), "Bold and the list button format the text", fmt );
-    ok( await c.evaluate( "document.getElementById('fBullet').classList.contains('is-active')" ), "…the list button lit in the list" );
+    ok( await c.evaluate( "document.getElementById('fBullet').getAttribute('aria-pressed') === 'true'" ), "…the list button lit in the list" );
     ok( await c.evaluate( TEXT ) === "Hola negrita\n- uno", "…the plain text has the list as '- '", await c.evaluate( TEXT ) );
     await c.evaluate( `( async () => { const t = document.getElementById('cText'); t.focus();
         const n = t.querySelector('b').firstChild, r = document.createRange(); r.setStart( n, 0 ); r.setEnd( n, n.length );
@@ -239,6 +245,20 @@ try
     ok( /<a href="https:\/\/x\.es">negrita<\/a>/.test( lnk ), "the link sheet links the words picked", lnk );
     ok( await c.evaluate( TEXT ) === "Hola negrita <https://x.es>\n- uno", "…its address after them in plain text", await c.evaluate( TEXT ) );
     await shot( c, "02b-format-bar" );
+
+    // Send closes the writer at once: the draft saves behind it (slow here),
+    // the busy line runs meanwhile, then the Undo. Refused (To "juan"): the
+    // writer comes back as it was, saying so.
+    await fetch( BASE + "/e2e/draft?slow=2500" );
+    await c.evaluate( "var e = document.getElementById('cTo'); e.value = 'juan'; e.dispatchEvent( new Event('input') ); window.__toasts = []; document.getElementById('cSend').click(); true" );
+    ok( await waitFor( c, "document.getElementById('composeView').hidden", 500 ), "Send: the writer closes at once, its save still on its way" );
+    ok( await waitFor( c, "! document.getElementById('busyLine').hidden", 2000 ), "…the busy line runs meanwhile" );
+    ok( await waitFor( c, "!! document.querySelector('#toast .toast-undo')", 10000 ), "…then the Undo" );
+    await fetch( BASE + "/e2e/draft?slow=0" );
+    await c.evaluate( "NayiveUI.undoSettle(); true" );
+    ok( await waitFor( c, "!document.getElementById('composeView').hidden && document.getElementById('cTo').value === 'juan'", 10000 ), "refused: the writer is back as it was" );
+    ok( /No se envió/.test( await lastToast( c ) ), "…saying so", await lastToast( c ) );
+    ok( await waitFor( c, "document.getElementById('busyLine').hidden", 3000 ), "…the busy line is gone" );
 
     // send, with Bcc: fresh Message-ID, no Bcc on the wire. The send waits for
     // its Undo (6 s): Undo first brings the writer back with nothing sent.
@@ -318,7 +338,9 @@ try
         "pressed again: hidden again" );
     // a link opens a new tab: the frame is another origin (its own target):
     // the link's box from inside it, the click on the page, where it is drawn
-    const before = ( await ( await fetch( `http://127.0.0.1:${c.port}/json` ) ).json() ).length;
+    // only tabs count: the service worker and Chromium's own targets (chrome://omnibox-popup…) come and go
+    const pages = list => list.filter( t => t.type === "page" && ! /^chrome:/.test( t.url ) );
+    const before = pages( await ( await fetch( `http://127.0.0.1:${c.port}/json` ) ).json() ).length;
     const srcdoc = ( await ( await fetch( `http://127.0.0.1:${c.port}/json` ) ).json() ).find( t => t.url === "about:srcdoc" );
     let link = null;
     if( srcdoc )
@@ -341,23 +363,23 @@ try
         await sleep( 1200 );
     }
     const tabs = await ( await fetch( `http://127.0.0.1:${c.port}/json` ) ).json();
-    ok( !! link && tabs.length > before && tabs.some( t => /example\.org/.test( t.url ) ), "a link opens in a new tab", { link, urls: tabs.map( t => t.url ) } );
+    ok( !! link && pages( tabs ).length > before && tabs.some( t => /example\.org/.test( t.url ) ), "a link opens in a new tab", { link, urls: tabs.map( t => t.url ) } );
     await c.evaluate( "document.getElementById('backBtn').click(); true" );
 
     // -----------------------------------------------------------------------
     console.log( "READING: files" );
     await c.evaluate( OPEN( "With a file" ) + "; true" );
-    ok( await waitFor( c, "document.querySelector('#readParts .mail-part-line')" ), "the file shows" );
+    ok( await waitFor( c, "document.querySelector('#readParts .mail-part')" ), "the file shows" );
     const size = await c.evaluate( "document.querySelector('#readParts small').textContent" );
     ok( /^\d+\s*B/.test( size ) && parseInt( size ) >= 25 && parseInt( size ) <= 45, "its size is the file's own (not the base64's)", size );
-    await c.evaluate( "window.__toasts = []; document.querySelector('#readParts .mail-part-line .icon-btn').click(); true" );
+    await c.evaluate( "window.__toasts = []; document.querySelector('#readParts .mail-part').click(); true" );
     ok( await waitFor( c, "document.querySelector('.sheet-backdrop.open .fp-tree .tree-row')" ), "Save to Nayive asks for a folder" );
     await c.evaluate( "document.querySelector('.sheet-backdrop.open .fp-tree .tree-row').click(); true" );     // the root: Archivos
-    await waitFor( c, "! document.querySelector('.sheet-backdrop.open .btn-primary').disabled" );
-    await c.evaluate( "document.querySelector('.sheet-backdrop.open .btn-primary').click(); true" );
+    await waitFor( c, "document.querySelector('.sheet-backdrop.open .btn.primary').ariaDisabled !== 'true'" );
+    await c.evaluate( "document.querySelector('.sheet-backdrop.open .btn.primary').click(); true" );
     ok( await waitFor( c, "window.__toasts.some( t => /^Guardado en (?!Borradores)/.test( t ) )", 8000 ), "saved in Nayive", await lastToast( c ) );
     const saved = ( await c.evaluate( "window.__toasts.filter( t => /^Guardado en (?!Borradores)/.test( t ) ).pop()" ) ).replace( /^Guardado en /, "" );
-    const folder = saved === "Carpeta Archivos" ? "files" : "files/" + saved;
+    const folder = saved === "Inicio" ? "files" : "files/" + saved;
     const tree = await c.evaluate( `fetch('/api/files?dir=' + encodeURIComponent( ${JSON.stringify( folder )} ) ).then( r => r.json() ).then( j => ( j.nodes || [] ).map( n => n.path.split('/').pop() ) )` );
     ok( tree.includes( "informe.pdf" ), "the file is in the folder (" + folder + ")", tree );
     await c.evaluate( "document.getElementById('backBtn').click(); true" );
@@ -395,11 +417,11 @@ try
     console.log( "SETTINGS" );
     await c.evaluate( "document.getElementById('setBtn').click(); true" );
     await waitFor( c, "document.getElementById('setSheet').classList.contains('open')" );
-    ok( await c.evaluate( "document.querySelectorAll('#acctList .card-row .icon-btn').length === 2" ), "each account: a key and a bin" );
-    await c.evaluate( "document.querySelector('#acctList .card-row .icon-btn').click(); document.querySelector('.mail-newpass input').value = 'wrong'; document.querySelector('.mail-newpass .text-btn').click(); true" );
+    ok( await c.evaluate( "document.querySelectorAll('#acctList .card-row .btn').length === 2" ), "each account: a key and a bin" );
+    await c.evaluate( "document.querySelector('#acctList .card-row .btn').click(); document.querySelector('.mail-newpass input').value = 'wrong'; document.querySelector('.mail-newpass .btn.text').click(); true" );
     ok( await waitFor( c, "!document.querySelector('.mail-newpass .field-error').hidden", 8000 ), "a wrong new password is refused",
         await c.evaluate( "document.querySelector('.mail-newpass .field-error').textContent" ) );
-    await c.evaluate( "document.querySelector('.mail-newpass input').value = 'abcdefghijklmnop'; document.querySelector('.mail-newpass .text-btn').click(); true" );
+    await c.evaluate( "document.querySelector('.mail-newpass input').value = 'abcdefghijklmnop'; document.querySelector('.mail-newpass .btn.text').click(); true" );
     ok( await waitFor( c, "window.__toasts.some( t => /Contraseña cambiada/.test( t ) )", 8000 ), "the right one is kept", await lastToast( c ) );
     await shot( c, "05-settings" );
     // The "pictures by default" setting is gone (his order, 2026-10-01): only the button in a message.

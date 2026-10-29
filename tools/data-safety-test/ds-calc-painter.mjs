@@ -35,11 +35,11 @@ try
     ok( await c.until( "!! ( window.__g.activeSheet.cellStyles.A1 || {} ).bold" ), "A1 is bold" );
 
     await click( c, "#fmtPainterBtn" );
-    ok( await c.evaluate( "document.getElementById('fmtPainterBtn').classList.contains('active')" ), "the painter is on" );
+    ok( await c.evaluate( "document.getElementById('fmtPainterBtn').getAttribute('aria-pressed') === 'true'" ), "the painter is on" );
     await pick( 2, 2, 3, 3 );                                      // C3:D4
     ok( JSON.parse( await look( "C3" ) )?.bold === true && JSON.parse( await look( "D4" ) )?.bold === true, "C3 and D4 took the look" );
     ok( await look( "B2" ) === "null" && await look( "E5" ) === "null", "nothing outside C3:D4 changed" );
-    ok( await c.evaluate( "! document.getElementById('fmtPainterBtn').classList.contains('active')" ), "one use, then off" );
+    ok( await c.evaluate( "document.getElementById('fmtPainterBtn').getAttribute('aria-pressed') !== 'true'" ), "one use, then off" );
 
     // Ctrl+Z / Ctrl+Y: one step.
     await c.front();

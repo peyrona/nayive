@@ -42,7 +42,7 @@ try
 {
     const a = await tab( "login.html" );
     await a.evaluate( `fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:'test',password:'test'})}).then(r=>r.status)` );
-    await a.evaluate( `localStorage.setItem('balata-coach-seen','1');localStorage.setItem('nayive-install-snooze','never');localStorage.setItem('balata-intro-dismiss:launcher','1');localStorage.setItem('balata-lang','en');localStorage.removeItem('nayive-locker');localStorage.removeItem('nayive-lock');1` );
+    await a.evaluate( `localStorage.setItem('balata-coach-seen','1');localStorage.setItem('nayive-install-snooze','never');localStorage.setItem('balata-intro-dismiss:launcher','1');localStorage.setItem('ayni-lang','en');localStorage.removeItem('nayive-locker');localStorage.removeItem('nayive-lock');1` );
     await a.go( "index.html" );
     ok( await a.evaluate( "typeof NayiveLock" ) === "object", "NayiveLock loaded in launcher" );
 

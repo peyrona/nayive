@@ -83,6 +83,6 @@ ok( await c.until( `${WINS} === ${n4 + 1} && ( function () { try { return ${FRAM
 await c.evaluate( `${FRAME}.open( '/nayive/text/index.html?file=files%2Fd.csv', '_blank' ), true` );
 ok( await c.evaluate( WINS ) === n4 + 1, "Text on d.csv shows the Calc window, no second editor" );
 
-ok( /window/i.test( await c.evaluate( "NayiveUI.t('ui.conflictTitle')" ) ), "the 412 question says another window, too" );
+ok( /window/i.test( await c.evaluate( "Ayni.t('ui.conflictTitle')" ) ), "the 412 question says another window, too" );
 
 await done( c, s );

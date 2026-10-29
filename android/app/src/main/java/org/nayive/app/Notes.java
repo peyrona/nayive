@@ -117,16 +117,25 @@ final class Notes {
         nm.notify(PENDING, note);
     }
 
-    static void update(Context c, String url) {
-        Intent open = new Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+    /**
+     * A newer APK, already downloaded: the tap is Android's installer on it
+     * (Updater). It stays after the tap - the first time Android sends the
+     * person to "allow this source" and the installer may not come back - and
+     * goes once the new version runs (updateDone).
+     */
+    static void update(Context c, Intent install) {
         Notification n = new NotificationCompat.Builder(c, NayiveApp.CH_UPDATES)
                 .setSmallIcon(R.drawable.ic_stat)
                 .setContentTitle(c.getString(R.string.update_title))
                 .setContentText(c.getString(R.string.update_text))
-                .setAutoCancel(true)
-                .setContentIntent(PendingIntent.getActivity(c, 50, open, IMMUTABLE))
+                .setOnlyAlertOnce(true)
+                .setContentIntent(PendingIntent.getActivity(c, 50, install, IMMUTABLE))
                 .build();
         c.getSystemService(NotificationManager.class).notify(UPDATE, n);
+    }
+
+    static void updateDone(Context c) {
+        c.getSystemService(NotificationManager.class).cancel(UPDATE);
     }
 
     /** The end of a photo run: "12 fotos, 2 vídeos - lisboa". Nothing sent, nothing said. */

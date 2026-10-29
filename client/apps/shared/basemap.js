@@ -53,7 +53,7 @@
     // language first, then the Latin-script name, then the local one.
     function localizeLabels( glMap )
     {
-        var lang = ( window.NayiveUI && NayiveUI.lang ) ? NayiveUI.lang() : "en";
+        var lang = window.Ayni ? Ayni.i18n.lang() : "en";
         var text = [ "coalesce", [ "get", "name:" + lang ], [ "get", "name:latin" ], [ "get", "name" ] ];
 
         glMap.getStyle().layers.forEach( function ( l )

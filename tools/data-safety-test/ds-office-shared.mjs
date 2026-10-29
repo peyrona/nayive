@@ -29,7 +29,7 @@ ok( await untilDraft( c, "mis notas" ), "the edits are in a device draft (the 7 
 
 await c.evaluate( "document.getElementById('newBtn').click(), true" );
 ok( await c.until( `${CM}.getValue() === ''` ), "New: a blank document" );
-ok( await c.until( "document.getElementById('toast').classList.contains('show') && document.getElementById('toast').textContent.indexOf( NayiveUI.t('write.draftSetAside') ) !== -1", 3000 ),
+ok( await c.until( "document.getElementById('toast').classList.contains('show') && document.getElementById('toast').textContent.indexOf( Ayni.t('write.draftSetAside') ) !== -1", 3000 ),
     "the toast says the edits are set aside", await c.evaluate( "document.getElementById('toast').textContent" ) );
 ok( await c.evaluate( "!! document.querySelector('#toast .toast-undo')" ), "with an Undo" );
 ok( await untilDraft( c, "mis notas", 1000 ), "and their draft is still there" );

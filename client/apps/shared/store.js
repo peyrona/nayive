@@ -258,7 +258,7 @@
     var ME = whoNow();
 
     // Who is signed in on this browser NOW (the cookie as it is at this moment,
-    // unlike ME): "" = unknown. The same read as NayiveI18n.whoNow (shared/i18n.js
+    // unlike ME): "" = unknown. The same read as NayiveWho.now (shared/i18n.js
     // WHOSE PAGE), kept here: the data-safety harness loads this file alone.
     function whoNow()
     {
@@ -742,9 +742,9 @@
             window.nayiveBeforeClose = function ()
             {
                 if( ! Object.keys( pageOnly ).length ) return true;
-                if( ! window.NayiveUI || ! NayiveUI.confirm || ! NayiveUI.t ) return false;
-                return NayiveUI.confirm( { title: NayiveUI.t( "drive.unsavedTitle" ), body: NayiveUI.t( "ui.store.pageOnly" ),
-                                           confirm: NayiveUI.t( "drive.closeWithout" ), danger: true } );
+                if( ! window.NayiveUI || ! NayiveUI.confirm || ! Ayni.t ) return false;
+                return NayiveUI.confirm( { title: Ayni.t( "drive.unsavedTitle" ), body: Ayni.t( "ui.store.pageOnly" ),
+                                           confirm: Ayni.t( "drive.closeWithout" ), danger: true } );
             };
     }
     catch ( e ) {}
@@ -1059,14 +1059,14 @@
     // today 18:40" - and the file's name when they are on more than one.
     function pendingText( list )
     {
-        var T = window.NayiveUI && NayiveUI.tf ? NayiveUI : null, now = new Date();
+        var T = window.Ayni ? Ayni : null, now = new Date();
         var many = ( list || [] ).some( function ( m ) { return m.path !== list[ 0 ].path; } );
         return ( list || [] ).map( function ( m )
         {
             var d    = new Date( +m.at || 0 );
             var hm   = ( "0" + d.getHours() ).slice( -2 ) + ":" + ( "0" + d.getMinutes() ).slice( -2 );
             var when = d.toDateString() === now.toDateString() ? ( T ? T.tf( "ui.park.today", { time: hm } ) : hm )
-                     : d.toLocaleDateString( T && T.lang ? T.lang() : undefined ) + " " + hm;
+                     : d.toLocaleDateString( T ? T.i18n.lang() : undefined ) + " " + hm;
             return "• " + ( T ? T.tf( "ui.park.since", { device: m.name, when: when } ) : m.name + ", " + when ) +
                    ( many ? " · " + String( m.path ).split( "/" ).pop() : "" );
         } ).join( "\n" );
@@ -1082,7 +1082,7 @@
         var d    = new Date( at || Date.now() );
         var time = ( "0" + d.getHours() ).slice( -2 ) + "." + ( "0" + d.getMinutes() ).slice( -2 );
         var v    = { name: name, device: deviceName(), time: time, ext: ext };
-        try { if( window.NayiveUI && NayiveUI.tf ) { var s = NayiveUI.tf( "ui.park.copyName", v ); if( s && s.indexOf( "ui.park" ) !== 0 ) return s; } }
+        try { if( window.NayiveUI && Ayni.tf ) { var s = Ayni.tf( "ui.park.copyName", v ); if( s && s.indexOf( "ui.park" ) !== 0 ) return s; } }
         catch ( e ) {}
         return name + " (" + v.device + ", " + time + ")" + ext;
     }
@@ -2648,9 +2648,9 @@
         function refusedToast( reason )
         {
             var now = Date.now();
-            if( now - toastAt < 4000 || ! window.NayiveUI || ! NayiveUI.toast || ! NayiveUI.t ) return;
+            if( now - toastAt < 4000 || ! window.NayiveUI || ! NayiveUI.toast || ! Ayni.t ) return;
             toastAt = now;
-            NayiveUI.toast( NayiveUI.t( reason === "bad"     ? "ui.store.badFile"
+            NayiveUI.toast( Ayni.t( reason === "bad"     ? "ui.store.badFile"
                                       : reason === "loading" ? "ui.store.loading" : "ui.store.notRead" ), { ms: 6000 } );
         }
 
@@ -2662,9 +2662,9 @@
         function pageOnlyToast()
         {
             var now = Date.now();
-            if( now - toastAt < 4000 || ! window.NayiveUI || ! NayiveUI.toast || ! NayiveUI.t ) return;
+            if( now - toastAt < 4000 || ! window.NayiveUI || ! NayiveUI.toast || ! Ayni.t ) return;
             toastAt = now;
-            NayiveUI.toast( NayiveUI.t( "ui.store.pageOnly" ), { ms: 8000, keepUndo: true } );
+            NayiveUI.toast( Ayni.t( "ui.store.pageOnly" ), { ms: 8000, keepUndo: true } );
         }
 
         //--------------------------------------------------------------------//

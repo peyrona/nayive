@@ -8,7 +8,7 @@
  * engine about whether bold is on, whether there is anything to undo, or
  * whether the caret is somewhere a footnote may go.
  *
- * The drop-downs (.has-popup) open the pull-down menus' own panel
+ * The drop-downs (aria-haspopup) open the pull-down menus' own panel
  * (NayiveMenus.openItems in shared/menubar.js) with the SAME item tables the
  * Formato / Insertar / Ver menus use - the colours, the styles, the zoom - so a
  * drop-down and its menu entry are one table and one set of handlers.
@@ -76,7 +76,7 @@ export function createToolbar( o )
     bar.addEventListener( 'click', function( e )
     {
         const b = e.target.closest( 'button' );
-        if( ! b || b.disabled ) return;
+        if( ! b || b.ariaDisabled === 'true' ) return;
 
         const slot = b.dataset.slot;
         if( slot === 'format.painter' ) { o.painter(); return; }
@@ -125,15 +125,15 @@ export function createToolbar( o )
             const s = by[ b.dataset.slot ];
             if( ! s ) continue;
 
-            b.disabled = ! s.enabled || ( !! o.blocked && o.blocked( b.dataset.slot ) );
-            b.classList.toggle( 'is-active', !! s.active );
+            b.ariaDisabled = ! s.enabled || ( !! o.blocked && o.blocked( b.dataset.slot ) );
+            b.setAttribute( 'aria-pressed', !! s.active );
             if( TOGGLES.has( b.dataset.slot ) ) b.setAttribute( 'aria-pressed', String( !! s.active ) );
         }
 
         for( const id in TRIGGER_SLOT )
         {
             const s = by[ TRIGGER_SLOT[ id ] ];
-            document.getElementById( id ).disabled = ! s || ! s.enabled;
+            document.getElementById( id ).ariaDisabled = ! s || ! s.enabled;
         }
 
         showValue( famSel,  by[ 'font.family' ], function( v ) { return v; } );

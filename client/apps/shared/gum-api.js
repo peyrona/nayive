@@ -56,7 +56,7 @@
     // Who this page belongs to (WHOSE PAGE above): read ONCE, as the page
     // loads - never again, so a tab left open across another account's
     // sign-in still names its own. "" = unknown: no header, taken as before.
-    var ME_AT_LOAD = ( window.NayiveI18n && NayiveI18n.whoAtLoad ) || "";   // shared/i18n.js WHOSE PAGE
+    var ME_AT_LOAD = ( window.NayiveWho && NayiveWho.atLoad ) || "";   // shared/i18n.js WHOSE PAGE
 
     function owner()
     {
@@ -538,12 +538,15 @@
     // GET ?dir=<path>  -> { path, role, user, nodes: [...] } where each node is
     // a file with nodes:null + size + mtime or a sub-folder with nodes:[] (not
     // expanded). Cheap even when the folder holds thousands of files.
-    async function listDir( path )
+    // `links` (Drive only): its shortcuts too, each with a `link` field
+    // (server/go/links.go); every other caller never sees one.
+    async function listDir( path, links )
     {
         // "/" (not "") for the root: an empty query value gets dropped before it
         // reaches the handler; the server strips the slash back off.
-        var q = new URLSearchParams( { dir: path || "/" } ).toString();
-        return JSON.parse( await fetchText( API_FILES + "?" + q ) );
+        var q = new URLSearchParams( { dir: path || "/" } );
+        if( links ) q.set( "links", "1" );
+        return JSON.parse( await fetchText( API_FILES + "?" + q.toString() ) );
     }
 
     // The names (no folder part) of what is directly inside `dir`, files and
@@ -583,10 +586,11 @@
     // GET ?find=<pattern>  -> { pattern, nodes:[...], truncated, role, user };
     // `nodes` is capped at 500 (same node shape as listDir()), `truncated` is
     // true when there were more.
-    async function find( pattern )
+    async function find( pattern, links )
     {
-        var q = new URLSearchParams( { find: pattern } ).toString();
-        return JSON.parse( await fetchText( API_FILES + "?" + q ) );
+        var q = new URLSearchParams( { find: pattern } );
+        if( links ) q.set( "links", "1" );
+        return JSON.parse( await fetchText( API_FILES + "?" + q.toString() ) );
     }
 
     // Drive's advanced search. `spec` = { rules: [ { op, text } ], any,
@@ -595,9 +599,10 @@
     // enough, `folders` / `exts` = the kinds wanted, since / until = modified
     // in [since, until) in Unix seconds. Same answer as find().
     // GET ?search=1&name=<op>:<text>&any=1&folders=1&ext=pdf&since=&until=
-    async function search( spec )
+    async function search( spec, links )
     {
         var q = new URLSearchParams( { search: "1" } );
+        if( links ) q.set( "links", "1" );
         ( spec.rules || [] ).forEach( function ( r ) { q.append( "name", r.op + ":" + r.text ); } );
         if( spec.any )     q.append( "any", "1" );
         if( spec.folders ) q.append( "folders", "1" );
@@ -621,6 +626,23 @@
         var q = new URLSearchParams( { type: "dir", name: name, parent: parent } ).toString();
         return fetchText( API_FILES + "?" + q, { method: "PUT" } )
                .then( changed( [ parent ? parent + "/" + name : name ], true ) );
+    }
+
+    // A Drive shortcut to `target` in the folder `into` (server/go/links.go):
+    // a small file under the first free name, never over anything; the
+    // target is only read. -> { path }. POST ?link=&into=
+    function makeShortcut( target, into )
+    {
+        var q = new URLSearchParams( { link: target, into: into } ).toString();
+        return fetchText( API_FILES + "?" + q, { method: "POST" } )
+               .then( JSON.parse )
+               .then( function ( r ) { return changed( [ r.path ], false )( r ); } );
+    }
+
+    // Every Drive shortcut and where it leads: { links: [ { path, to } ] }.
+    async function shortcuts()
+    {
+        return JSON.parse( await fetchText( API_FILES + "?shortcuts=1" ) );
     }
 
     // ONE "paths" parameter per path - repeated, never joined by a separator.
@@ -876,6 +898,8 @@
         search:          search,
         biggest:         biggest,
         makeDir:         makeDir,
+        makeShortcut:    makeShortcut,
+        shortcuts:       shortcuts,
         deletePaths:     deletePaths,
         binPaths:        binPaths,
         purgePaths:      purgePaths,

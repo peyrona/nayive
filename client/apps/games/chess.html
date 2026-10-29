@@ -119,7 +119,7 @@
            glyphs and not icons, so they are the same drawing as the piece that
            lands on the board. */
         .chess-promo-row      { display: flex; gap: 10px; }
-        .chess-promo-row .text-btn { font-size: 1.9rem; line-height: 1; padding: 4px 12px; }
+        .chess-promo-row .btn.text { font-size: 1.9rem; line-height: 1; padding: 4px 12px; }
 
         /* Whose turn it is, or how the game ended: one line under the board,
            where a player looks anyway. The height is held so the board does not
@@ -137,13 +137,13 @@
                         <!-- How deep the machine looks. The three bars are the
                              suite's difficulty icon (Sudoku's own). -->
                         <div class="tb-modes">
-                            <button class="icon-btn sm" data-chess-level="easy" type="button" data-i18n-attr="title:games.chessEasy, aria-label:games.chessEasy">
+                            <button class="btn sm" data-chess-level="easy" type="button" data-i18n-attr="data-tip:games.chessEasy, aria-label:games.chessEasy">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="20" x2="12" y2="13"></line></svg>
                             </button>
-                            <button class="icon-btn sm is-active" data-chess-level="medium" type="button" data-i18n-attr="title:games.chessMedium, aria-label:games.chessMedium">
+                            <button class="btn sm" data-chess-level="medium" type="button" data-i18n-attr="data-tip:games.chessMedium, aria-label:games.chessMedium" aria-pressed="true">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="9" y1="20" x2="9" y2="13"></line><line x1="15" y1="20" x2="15" y2="8.5"></line></svg>
                             </button>
-                            <button class="icon-btn sm" data-chess-level="hard" type="button" data-i18n-attr="title:games.chessHard, aria-label:games.chessHard">
+                            <button class="btn sm" data-chess-level="hard" type="button" data-i18n-attr="data-tip:games.chessHard, aria-label:games.chessHard">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="6" y1="20" x2="6" y2="13"></line><line x1="12" y1="20" x2="12" y2="8.5"></line><line x1="18" y1="20" x2="18" y2="4"></line></svg>
                             </button>
                         </div>
@@ -160,14 +160,14 @@
                         </div>
 
                         <div class="tb-actions">
-                            <button class="icon-btn sm" id="chessPause" type="button" data-i18n-attr="title:games.pause, aria-label:games.pause">
+                            <button class="btn sm" id="chessPause" type="button" data-i18n-attr="data-tip:games.pause, aria-label:games.pause">
                                 <svg data-ic="pause" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="5" width="3.6" height="14" rx="1.2"></rect><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"></rect></svg>
                                 <svg data-ic="play" viewBox="0 0 24 24" fill="currentColor" hidden><path d="M8 5.5a1 1 0 0 1 1.5-.87l9 6.5a1 1 0 0 1 0 1.74l-9 6.5A1 1 0 0 1 8 18.5z"></path></svg>
                             </button>
-                            <button class="icon-btn sm" id="chessUndo" type="button" data-i18n-attr="title:games.chessUndo, aria-label:games.chessUndo">
+                            <button class="btn sm" id="chessUndo" type="button" data-i18n-attr="data-tip:games.chessUndo, aria-label:games.chessUndo">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-6a5 5 0 0 0-5-5H4"></path></svg>
                             </button>
-                            <button class="icon-btn sm" id="chessNew" type="button" data-i18n-attr="title:games.newGame, aria-label:games.newGame">
+                            <button class="btn sm" id="chessNew" type="button" data-i18n-attr="data-tip:games.newGame, aria-label:games.newGame">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8"></path><polyline points="21 3 21 8 16 8"></polyline><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16"></path><polyline points="3 21 3 16 8 16"></polyline></svg>
                             </button>
                         </div>
@@ -183,7 +183,7 @@
                             <div class="game-cover" id="chessOver" hidden>
                                 <p class="game-cover-t" id="chessOverTitle"></p>
                                 <p class="game-cover-s" id="chessOverSub"></p>
-                                <button class="text-btn" id="chessOverBtn" type="button"></button>
+                                <button class="btn text primary" id="chessOverBtn" type="button"></button>
                             </div>
 
                             <!-- A pawn that reached the far rank, waiting to be
@@ -191,10 +191,10 @@
                             <div class="game-cover" id="chessPromo" hidden>
                                 <p class="game-cover-t" data-i18n="games.chessPromote"></p>
                                 <div class="chess-promo-row">
-                                    <button class="text-btn" type="button" data-promo="5" data-i18n-attr="title:games.chessQueen, aria-label:games.chessQueen">&#9819;</button>
-                                    <button class="text-btn" type="button" data-promo="4" data-i18n-attr="title:games.chessRook, aria-label:games.chessRook">&#9820;</button>
-                                    <button class="text-btn" type="button" data-promo="3" data-i18n-attr="title:games.chessBishop, aria-label:games.chessBishop">&#9821;</button>
-                                    <button class="text-btn" type="button" data-promo="2" data-i18n-attr="title:games.chessKnight, aria-label:games.chessKnight">&#9822;</button>
+                                    <button class="btn text primary" type="button" data-promo="5" data-i18n-attr="data-tip:games.chessQueen, aria-label:games.chessQueen">&#9819;</button>
+                                    <button class="btn text primary" type="button" data-promo="4" data-i18n-attr="data-tip:games.chessRook, aria-label:games.chessRook">&#9820;</button>
+                                    <button class="btn text primary" type="button" data-promo="3" data-i18n-attr="data-tip:games.chessBishop, aria-label:games.chessBishop">&#9821;</button>
+                                    <button class="btn text primary" type="button" data-promo="2" data-i18n-attr="data-tip:games.chessKnight, aria-label:games.chessKnight">&#9822;</button>
                                 </div>
                             </div>
                         </div>
@@ -1266,7 +1266,7 @@
                 render();
                 cover();
                 pauseButton( pauseBtn, state === 'paused', !! promoM || ( state !== 'playing' && state !== 'paused' ) );
-                undoBtn.disabled = ! history.length || !! promoM || state === 'thinking' || state === 'paused';
+                undoBtn.ariaDisabled = ! history.length || !! promoM || state === 'thinking' || state === 'paused';
             }
 
             //---- mounting ----------------------------------------------------
@@ -1337,7 +1337,7 @@
                     {
                         level = b.dataset.chessLevel;
                         Array.prototype.slice.call( document.querySelectorAll( '[data-chess-level]' ) )
-                             .forEach( function ( o ) { o.classList.toggle( 'is-active', o === b ); } );
+                             .forEach( function ( o ) { o.setAttribute( 'aria-pressed', o === b ); } );
                     } );
                 } );
 

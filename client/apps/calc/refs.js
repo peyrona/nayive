@@ -4,7 +4,7 @@
  * and a frame of the same colour round the cells it points at - as every
  * spreadsheet does. Imported by grid.js.
  *
- * Its top level runs BEFORE calc.js's `await NayiveI18n.ready`: nothing out
+ * Its top level runs BEFORE calc.js's `await Ayni.i18n.ready`: nothing out
  * here may call T() or read another file's names - keep that inside functions.
  */
 

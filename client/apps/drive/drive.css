@@ -1,7 +1,7 @@
 /* drive.css - Drive's own styles. */
-/* Base reset, .app shell, .topbar, .icon-btn, .sheet, .field and the
+/* Base reset, .app shell, .topbar, .btn, .sheet, .field and the
    input look all come from ../shared/app.css. Drive overrides the page
-   scroll (both axes hidden - the tree / list panes scroll themselves)
+   scroll (both axes hidden - the listing scrolls itself)
    and adds its file-browser chrome. */
 html, body { height: 100%; overflow: hidden; }
 
@@ -38,7 +38,7 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
      80% { transform: scale(1);    color: var(--text-dim); }
     100% { transform: scale(1);    color: var(--text-dim); }
 }
-.icon-btn.bin-gulp { animation: bin-gulp 1.5s ease-in-out 2; }
+.btn.bin-gulp { animation: bin-gulp 1.5s ease-in-out 2; }
 
 /* The search field is the shared SEARCH FOLD (app.css): the funnel and the ×
    inside its right end are made there too (NayiveUI.searchFold). */
@@ -60,13 +60,13 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
 .search-wrap.adv-on #searchBuilderBtn { color: var(--accent); }
 
 /* Advanced search dialog. Layout only: every control in it is a shared one
-   (.field, .pill, .text-btn, .icon-btn, .dt-field). */
+   (.field, .pill, .btn.text, .btn, .dt-field). */
 .sb-rules    { display: flex; flex-direction: column; gap: 8px; }
 .sb-rule     { display: flex; align-items: center; gap: 8px; }
 .sb-rule select { flex: 0 0 auto; width: 150px; }
 .sb-rule input  { flex: 1 1 auto; min-width: 0; }
 .sb-rule-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 8px; }
-.sb-rule-bar .text-btn.dashed { width: auto; }      /* the shared "add" button, as wide as its words */
+.sb-rule-bar .btn.text.dashed { width: auto; }      /* the shared "add" button, as wide as its words */
 .sb-mode     { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 0.8rem; color: var(--text-dim); }
 .sb-pills    { display: flex; flex-wrap: wrap; gap: 6px; }
 .sb-hint     { color: var(--text-faint); }
@@ -79,19 +79,9 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
 .sb-count    { font-weight: 700; color: var(--accent); }
 .sb-count.none { color: var(--danger); }
 
-/* Body: tree + listing */
+/* Body: the breadcrumb and the listing */
 .body-row { flex: 1 1 auto; min-height: 0; display: flex; }
 
-.tree-pane
-{
-    width: var(--tree-w, 250px); flex: 0 0 auto; overflow: auto;
-    padding: 8px 4px;
-}
-/* The tree is the shared one (.ntree, app.css): it grows to its widest row
-   so .tree-pane scrolls it sideways. The drag handle (.pane-resizer) between
-   the tree and the file list is in app.css too. */
-
-/* Right pane */
 .list-pane { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
 
 .breadcrumb { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 0.85rem; flex: 0 0 auto; }
@@ -128,7 +118,10 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
 }
 .row:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
 .row.is-selected { background: color-mix(in srgb, var(--accent) 22%, transparent); }
-/* The tick is the item browser's (app.css .pick-tick). */
+/* The tick is the item browser's (app.css .pick-tick). In the list it is
+   as big as the file icon beside it (18px); the icons view keeps its own. */
+.list-rows:not(.is-grid) .row > .pick-tick     { width: 18px; height: 18px; border-radius: 4px; }
+.list-rows:not(.is-grid) .row > .pick-tick svg { width: 11px; height: 11px; }
 .row .row-ic { flex: 0 0 auto; color: var(--text-dim); }
 /* File-type icon colours. The dark set is pastel for the dark ground; the
    light set is deepened so it stays legible on the grey light background. */
@@ -152,11 +145,60 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
 :root[data-theme="light"] .row .row-ic.ic-media  { color: #1F6F63; }
 :root[data-theme="light"] .row .row-ic.ic-photos { color: #8A3466; }
 :root[data-theme="light"] .row .row-ic.ic-trips  { color: #1F6F63; }
+/* A shortcut (listing.js): the arrow over the corner of its icon; a broken
+   one is dimmed and its arrow turns red. */
+.row.is-link .row-ic { position: relative; }
+.row .link-arrow
+{
+    position: absolute; left: -3px; bottom: -2px; width: 11px; height: 11px;
+    fill: var(--bg); stroke: var(--text); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round;
+}
+.row.is-broken .row-ic, .row.is-broken .row-name { opacity: 0.5; }
+.row.is-broken .link-arrow { stroke: var(--danger); }
 .row .row-name { flex: 0 0 auto; white-space: nowrap; font-size: 0.92rem; }
 /* size · date sit at the right edge; margin-left:auto eats the gap so they
    line up in a column. On a row wider than the pane (very long name) the
    auto margin collapses and the meta just follows the name, scrolled off. */
 .row .row-meta { flex: 0 0 auto; margin-left: auto; padding-left: 16px; white-space: nowrap; font-size: 0.78rem; color: var(--text-dim); }
+/* "Shared with me" at the top of Home (listing.js sharedEntry). */
+.row .row-ic.ic-shared { color: var(--accent); }
+.row.row-virtual:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 70%, var(--text)); outline-offset: -2px; }
+
+/* ICONS (the default view, listing.js): the same rows as tiles in a grid -
+   a big icon over the name, at most two lines of it; size and date go
+   (the list view has them), save a video being converted. The tick sits in
+   the tile's top-left corner, as on Bookmarks' cards. */
+.list-rows.is-grid
+{
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+    gap: 6px; padding: 8px 10px; width: auto; min-width: 0;
+}
+.list-rows.is-grid .row
+{
+    position: relative; flex-direction: column; justify-content: flex-start; gap: 6px;
+    padding: 14px 6px 10px; min-width: 0; text-align: center;
+    border: 1px solid transparent; border-radius: var(--radius-m);
+}
+.list-rows.is-grid .row:hover       { border-color: var(--line); }
+.list-rows.is-grid .row.is-selected { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.list-rows.is-grid .row > .pick-tick { position: absolute; top: 6px; left: 6px; z-index: 1; background: var(--bg); }
+.list-rows.is-grid .row.is-selected > .pick-tick { background: var(--accent); }
+.list-rows.is-grid .row-ic svg { width: 46px; height: 46px; stroke-width: 1.5; }
+.list-rows.is-grid .row .row-name
+{
+    flex: 0 0 auto; max-width: 100%; font-size: 0.85rem; line-height: 1.3;
+    white-space: normal; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
+.list-rows.is-grid .row .row-meta { display: none; }
+.list-rows.is-grid .row .row-meta:has(.row-convert) { display: block; margin: 0; padding: 0; white-space: normal; }
+.list-rows.is-grid .row .link-arrow { width: 16px; height: 16px; left: -2px; bottom: 0; }
+/* A picture's own preview (thumbs.js) over its file-type glyph: the glyph
+   shows only until the preview is in, or when there is none. */
+.list-rows.is-grid .row-ic.has-thumb { position: relative; display: flex; align-items: center; justify-content: center;
+                                       width: 100%; height: 76px; }
+.list-rows.is-grid .row-ic .row-thumb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+                                        border-radius: var(--radius-s); background: var(--card2); }
 
 .list-pane { position: relative; }
 
@@ -270,7 +312,7 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
     margin-top: 14px; max-width: 100%; font-size: 0.85rem; color: rgba(255, 255, 255, 0.7);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.viewer-close { position: absolute; top: 14px; right: 16px; }   /* the look is the shared .editor-btn */
+.viewer-close { position: absolute; top: 14px; right: 16px; }   /* the look is Ayni .btn.on-media */
 
 /* Built-in audio / video viewer (same dark overlay as the image lightbox).
    The media element keeps the browser's own controls; clicking the dark
@@ -316,20 +358,7 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
     100% { left: 100%; }
 }
 
-/* Properties dialog: a label / value grid. The dimmed label reads like a
-   .field label (app.css); the exact byte count goes under its own value
-   in small type, the way every file manager writes it. */
-.props
-{
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 8px 16px;
-    margin: 0 0 14px;
-    font-size: 0.9rem;
-}
-.props dt { color: var(--text-dim); }
-.props dd { margin: 0; overflow-wrap: anywhere; }
-.props dd .props-sub { display: block; font-size: 0.8rem; color: var(--text-dim); }
+/* Properties dialog: .props in app.css. */
 
 /* Trash view ("Papelera"). A flat listing of trashed items; the file-tree
    toolbar buttons are hidden while it is open. */
@@ -343,7 +372,7 @@ body.trash-mode #downloadBtn, body.trash-mode #deleteBtn,
 body.trash-mode #shareBtn,   body.trash-mode #bigFilesBtn,
 body.trash-mode #selActions,
 body.trash-mode #driveTools::before,
-body.trash-mode .tree-pane { display: none; }
+body.trash-mode .tb-modes { display: none; }
 
 .trash-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .trash-bar .trash-title { font-weight: 600; margin-right: auto; }
@@ -351,11 +380,11 @@ body.trash-mode .tree-pane { display: none; }
 /* 5em, not 3.5em: the shared 10px side padding plus the spinner arrows ate
    all but one digit, so "30" read as "3" */
 .trash-bar .trash-days input { width: 5em; padding-inline: 8px 4px; text-align: center; }
-/* Every button in the bar is a shared one: "←" an .icon-btn, "Vaciar
-   papelera" a .text-btn.ghost.danger, the days hint an .info-dot (its size
+/* Every button in the bar is a shared one: "←" an .btn, "Vaciar
+   papelera" a .btn.text.bordered.danger, the days hint an .info-dot (its size
    lives in app.css, so every (i) looks like this one). */
 
-/* Restore / delete-forever: two shared .icon-btn.sm (the second .danger) */
+/* Restore / delete-forever: two shared .btn.sm (the second .danger) */
 .row .row-trash-actions { display: flex; gap: 6px; flex: 0 0 auto; }
 
 /* --- Responsive: phone layout (≤640px). New elements below are hidden here
@@ -380,16 +409,10 @@ body.trash-mode .tree-pane { display: none; }
     .adv-chip { padding-right: 70px; }
     .adv-chip { font-size: 16px; }      /* the same height as the 16px phone field it stands in for */
     .sb-rule select { width: 128px; }
-    .search-wrap .search-ends .icon-btn.sm { width: 32px; height: 32px; }
+    .search-wrap .search-ends .btn.sm { width: 32px; height: 32px; }
 
-    /* B4 — the folder tree becomes a slide-in sheet (app.css .tree-sheet) */
-
-    .breadcrumb .crumb-root
-    {
-        border: 1px solid var(--line); background: var(--card2);
-        border-radius: 6px; padding: 5px 9px; color: var(--text); font-weight: 600;
-    }
-    .breadcrumb .crumb-root::after { content: " ▾"; color: var(--text-dim); }
+    /* B4 — the view switch leaves the header for its ⋮ (menus.js viewMenuItems). */
+    .tb-modes { display: none; }
 
     /* B6 — the header keeps what fits; the rest is in its ⋮ (NayiveUI.fitBar). */
 
@@ -402,9 +425,12 @@ body.trash-mode .tree-pane { display: none; }
     .breadcrumb .crumb { padding: 5px 6px; }
 
     /* B8 — no sideways scrolling on a phone: names truncate as before. */
-    .pane-resizer { display: none; }
-    .tree-pane { overflow-x: hidden; }
     .listing { overflow-x: hidden; }
     .list-rows { width: auto; min-width: 0; }
     .row .row-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+    /* B9 — icons: three or more to a row on a 320px phone. */
+    .list-rows.is-grid { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 4px; padding: 6px; }
+    .list-rows.is-grid .row { padding: 12px 4px 8px; gap: 6px; }
+    .list-rows.is-grid .row-ic svg { width: 40px; height: 40px; }
 }

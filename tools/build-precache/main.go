@@ -39,7 +39,7 @@ import (
 // shared/store.js"; games is here for the other reason - it asks the server for
 // nothing at all, so its shell IS the whole app.
 var offlineApps = []string{"tasks", "calendar", "contact", "planner", "trips", "write", "split", "habits",
-	"games", "bookmarks", "desktop", // desktop: the launcher sends a big screen there, so it must open offline too
+	"games", "bookmarks", "passwords", "calculator", "desktop", // desktop: the launcher sends a big screen there, so it must open offline too
 	"share-target"} // photos shared with no connection: the page opens and keeps them to try again
 
 // Files under apps/<app>/ to precache, by glob. lib/ is recursive. *.js and
@@ -47,13 +47,17 @@ var offlineApps = []string{"tasks", "calendar", "contact", "planner", "trips", "
 // *.html is index.html plus any page it fetches (games has one per game).
 var appGlobs = []string{"*.html", "manifest.json", "*.js", "*.css", "lib/**/*", "icons/*"}
 
-var shared = []string{"shared/theme.css", "shared/app.css", "shared/theme.js", "shared/store.js",
+var shared = []string{"shared/ayni/ayni-i18n.js", "shared/ayni/ayni-base.css", "shared/ayni/ayni-base.js",
+	"shared/ayni/ayni-buttons.css", "shared/ayni/ayni-buttons.js", "shared/ayni/ayni-icons.js", "shared/ayni/tz-geo.json", "shared/ayni/i18n/en.json", "shared/ayni/i18n/es.json",
+	"shared/ayni/i18n/pt.json", "shared/ayni/i18n/fr.json", "shared/ayni/i18n/de.json",
+	"shared/theme.css", "shared/app.css", "shared/store.js",
 	"shared/gum-api.js", "shared/i18n.js", "shared/ui.js", "shared/desk-rule.js", "shared/menubar.js",
 	"shared/ical.js", "shared/media.js", "shared/play-on.js", "shared/vcard.js",
-	"shared/photo.js", "shared/office.js", "shared/crypt.js", "shared/basemap.js", "shared/tz-geo.json",
+	"shared/photo.js", "shared/image-editor.js", "shared/office.js", "shared/crypt.js", "shared/basemap.js",
 	"shared/locker.js", "shared/lockers/clock.js", "shared/lockers/matrix.js", "shared/lockers/life.js", "shared/lockers/culture.js", "shared/lockers/culture-settings.js", "shared/lockers/science.js",
 	"shared/lib/ical_v2.2.1.esm.min.js",
 	"shared/lib/luxon_v3.7.2.min.js", "shared/lib/rrule_v2.8.1.min.js",
+	"shared/lib/fabric_v7.4.0.min.js",
 	"shared/i18n/es.json", "shared/i18n/en.json", "shared/i18n/pt.json",
 	"shared/i18n/fr.json", "shared/i18n/de.json"}
 

@@ -1,6 +1,7 @@
-// drive.mjs - Drive on the shared item browser: a mouse picks, a double-click
-// opens, one menu, the keys, the tree, "Move to…", drag, the bin with Undo
-// and no question; then a phone: tap opens, long-press picks.
+// drive.mjs - Drive on the shared item browser: icons (the default) or a
+// list, a mouse picks, a double-click opens, one menu, the keys, "Move to…",
+// drag onto a folder and onto the breadcrumb, the bin with Undo and no
+// question; then a phone: tap opens, long-press picks. No folder tree.
 import { server, browser, ok, section, done, sleep, where, mouse, key, finger, drag, menuRows, seed, exists, fitState } from "./lib.mjs";
 
 const s = await server();
@@ -9,10 +10,27 @@ seed( s, { "files/Docs/a.txt": "a", "files/Docs/b.txt": "b", "files/Docs/c.md": 
 const c = await browser( s, { mouse: true } );
 const ROW = p => `#listing .row[data-path="${p}"]`;
 const sel = () => c.evaluate( "browse.ids().join()" );
+const currentOk = f => f === "files/Old";
 
-section( "DRIVE · MOUSE" );
+section( "DRIVE · ICONS" );
 ok( await c.open( "/nayive/drive/?open=files/Docs", "/nayive/drive/" ) && await c.until( "document.querySelectorAll('#listing .row[data-path]').length === 4" ), "Drive opens Docs" );
 await c.evaluate( "document.querySelectorAll('.sheet-backdrop.open').forEach( b => b.classList.remove('open') ); true" );
+ok( await c.evaluate( "! document.getElementById('treePane') && ! document.getElementById('paneResizer')" ), "no folder tree, no pane divider" );
+ok( await c.evaluate( "!! document.querySelector('#listing .list-rows.is-grid') && document.getElementById('gridBtn').getAttribute('aria-pressed') === 'true'" ), "icons are the default view" );
+ok( await c.evaluate( "document.querySelector('.breadcrumb .crumb-root').textContent === 'Home'" ), "the first crumb says Home" );
+const tiles = await c.evaluate( `( () => { const r = [ ...document.querySelectorAll( '#listing .row[data-path]' ) ].map( e => e.getBoundingClientRect() );
+    return r.length === 4 && r[ 1 ].top === r[ 0 ].top && r[ 1 ].left > r[ 0 ].right - 1; } )()` );
+ok( tiles, "…side by side in a grid" );
+await mouse( c, ROW( "files/Docs/a.txt" ) );
+ok( await sel() === "files/Docs/a.txt", "a click on an icon picks it" );
+ok( await c.evaluate( "getComputedStyle( document.querySelector('#listing .row.is-selected .pick-tick') ).borderTopLeftRadius !== '50%'" ), "the tick is a square, not a radio circle" );
+await key( c, "ArrowRight" );
+ok( await sel() !== "files/Docs/a.txt" && ( await sel() ).split( ',' ).length === 1, "→ moves to the next icon", await sel() );
+await mouse( c, "#listBtn" );
+ok( await c.evaluate( "! document.querySelector('#listing .list-rows.is-grid') && localStorage.getItem('drive-view') === 'list' && document.getElementById('listBtn').getAttribute('aria-pressed') === 'true'" ), "the list button switches to a list, kept on this device" );
+
+section( "DRIVE · MOUSE" );
+await key( c, "Escape" );
 await mouse( c, ROW( "files/Docs/a.txt" ), { dx: 120 } );
 ok( await sel() === "files/Docs/a.txt", "a click picks one row" );
 ok( await c.evaluate( "!document.getElementById('selActions').hidden && document.querySelector('#selActions .sel-count').textContent.trim() === '1'" ), "the header group shows, count 1" );
@@ -37,7 +55,7 @@ ok( rows && rows.some( r => r.act === "bin" ) && rows.some( r => r.act === "move
 ok( await c.evaluate( "[ ...document.querySelectorAll('.item-menu .mi-key') ].some( k => k.textContent === 'F2' )" ), "…and its key beside it" );
 await key( c, "Escape" );
 ok( await c.evaluate( "document.querySelector('.item-menu').hidden" ), "Esc closes the menu" );
-ok( await c.evaluate( "! document.querySelector('#listing [data-more], #tree [data-more], #selActions [data-sel=menu]')" ), "no row ⋮, no tree ⋮, no ⋮ in the selection group" );
+ok( await c.evaluate( "! document.querySelector('#listing [data-more], #selActions [data-sel=menu]')" ), "no row ⋮, no ⋮ in the selection group" );
 let fs = await fitState( c );
 ok( fs.acts.join() === "download,move,copyTo,rename,link,share,compress,props,bin" && ! fs.out.length && ! fs.more && ! fs.crowded,
     "wide: every action is a button, in menu order (no cut / copy, no Extract on a .txt); no ⋮", fs );
@@ -73,15 +91,23 @@ ok( await c.until( "! document.querySelector('#listing .row[data-path=\"files/Pi
 ok( await c.evaluate( "! document.querySelector('.sheet-backdrop.open')" ) && await c.until( "!! document.querySelector('#toast .toast-undo')" ), "…no question, an Undo" );
 await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
 ok( await c.until( "!! document.querySelector('#listing .row[data-path=\"files/Pics/a.txt\"]')" ) && exists( s, "files/Pics/a.txt" ), "Undo brings it back" );
-await c.evaluate( "renderTree(); true" );
-await mouse( c, '#tree .tree-row[data-id="files/Old"]', { button: "right", dx: 40 } );
+await c.evaluate( "navigateTo('files'); true" );
+await c.until( "currentFolder === 'files' && ! listingLoading && !! document.querySelector('#listing .row[data-path=\"files/Old\"]')" );
+await mouse( c, ROW( "files/Old" ), { button: "right", dx: 120 } );
 rows = await menuRows( c );
-ok( rows && rows.some( r => r.act === "bin" && ! r.off ), "a tree folder's right-click: the same menu" );
+ok( rows && rows.some( r => r.act === "bin" && ! r.off ) && rows.some( r => r.act === "rename" ), "a folder row's right-click: the same menu" );
 await c.evaluate( "document.querySelector('.item-menu [data-act=bin]').click(); true" );
-ok( await c.until( "! document.querySelector('#tree .tree-row[data-id=\"files/Old\"]')" ) && ! exists( s, "files/Old" ) && await c.evaluate( "! document.querySelector('.sheet-backdrop.open')" ), "a folder goes to the bin at once too" );
+ok( await c.until( "! document.querySelector('#listing .row[data-path=\"files/Old\"]')" ) && ! exists( s, "files/Old" ) && await c.evaluate( "! document.querySelector('.sheet-backdrop.open')" ), "a folder goes to the bin at once too" );
 await c.until( "!! document.querySelector('#toast .toast-undo')" );
 await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
-ok( await c.until( "!! document.querySelector('#tree .tree-row[data-id=\"files/Old\"]')", 8000 ) && exists( s, "files/Old/x.txt" ), "…and Undo brings the folder back" );
+ok( await c.until( "!! document.querySelector('#listing .row[data-path=\"files/Old\"]')", 8000 ) && exists( s, "files/Old/x.txt" ), "…and Undo brings the folder back" );
+// Nothing picked: Del bins nothing (no "the open folder" fallback).
+await c.evaluate( "navigateTo('files/Old'); true" );
+await c.until( "currentFolder === 'files/Old' && ! listingLoading" );
+await c.evaluate( "browse.clear(); document.activeElement && document.activeElement.blur(); true" );
+await key( c, "Delete" );
+await sleep( 400 );
+ok( exists( s, "files/Old" ) && exists( s, "files/Old/x.txt" ) && currentOk( await c.evaluate( "currentFolder" ) ), "nothing picked: Del bins nothing, not the open folder" );
 
 section( "DRIVE · MOVE TO… AND DRAG" );
 await c.evaluate( "navigateTo('files/Docs'); true" );
@@ -93,8 +119,10 @@ ok( await c.evaluate( "! document.querySelector('.sheet-backdrop.open .pick-tree
 await c.evaluate( `( () => { const P = '.sheet-backdrop.open .pick-tree '; const d = document.querySelector( P + '.tree-row[data-id="files/Docs"]' ); if( d.getAttribute('aria-expanded') !== 'true' ) d.querySelector('[data-twisty]').click(); document.querySelector( P + '.tree-row[data-id="files/Docs/Work"]' ).click(); document.querySelector('.pick-ok').click(); } )(); true` );
 ok( await c.until( "! document.querySelector('#listing .row[data-path=\"files/Docs/b.txt\"]')" ) && exists( s, "files/Docs/Work/b.txt" ), "…and moves there" );
 await c.until( "! listingLoading" );
-const lit = await drag( c, ROW( "files/Docs/c.md" ), '#tree .tree-row[data-id="files/Pics"]' );
-ok( lit === true && await c.until( "! document.querySelector('#listing .row[data-path=\"files/Docs/c.md\"]')" ) && exists( s, "files/Pics/c.md" ), "a row dragged onto a tree folder moves (target lit)", lit );
+const lit = await drag( c, ROW( "files/Docs/c.md" ), '.breadcrumb .crumb-root' );
+ok( lit === true && await c.until( "! document.querySelector('#listing .row[data-path=\"files/Docs/c.md\"]')" ) && exists( s, "files/c.md" ), "a row dragged onto the Home crumb moves up there (target lit)", lit );
+const own = await drag( c, ROW( "files/Docs/Work" ), '.breadcrumb .crumb.current' );
+ok( own !== true && own !== 'missing' && exists( s, "files/Docs/Work/b.txt" ), "…the open folder's own crumb takes nothing", own );
 await mouse( c, ROW( "files/Docs/Work" ), { dx: 120, count: 2 } );
 ok( await c.until( "currentFolder === 'files/Docs/Work'" ), "a double-click opens a folder" );
 
@@ -127,14 +155,14 @@ await rawKey( "Dead", "KeyN", 78, 1 );
 ok( await c.until( "document.getElementById('newFolderBackdrop').classList.contains('open')" ), "Mac ⌥N (a dead key) opens New folder" );
 await c.evaluate( "document.getElementById('newFolderCancelBtn').click(); true" );
 await sleep( 200 );
-// CS5: Tab leaves the tree when the list is empty.
+// CS5: Tab is the browser's own (there is no tree to jump into).
 await c.evaluate( "navigateTo('files/Empty'); true" );
 await c.until( "currentFolder === 'files/Empty' && ! listingLoading" );
 await c.evaluate( `( () => { window.__tabPrevented = null;
     window.addEventListener( 'keydown', e => { if( e.key === 'Tab' ) window.__tabPrevented = e.defaultPrevented; } );
-    document.querySelector( '#tree .tree-row[data-id="files/Empty"]' ).focus(); return true; } )()` );
+    document.getElementById( 'listing' ).focus(); return true; } )()` );
 await key( c, "Tab" );
-ok( await c.evaluate( "window.__tabPrevented === false" ), "Tab from the tree, the list empty: the browser's Tab goes on" );
+ok( await c.evaluate( "window.__tabPrevented === false" ), "Tab, the list empty: the browser's Tab goes on" );
 
 section( "DRIVE · PHONE" );
 await c.send( "Emulation.setDeviceMetricsOverride", { width: 390, height: 800, deviceScaleFactor: 1, mobile: true } );
@@ -149,8 +177,8 @@ ok( await c.until( "browse.ids().join() === 'files/Docs/Work'" ) && await c.eval
 fs = await fitState( c );
 ok( ! fs.crowded && fs.more && [ "move", "share", "bin" ].every( a => fs.acts.includes( a ) ) && ! fs.tools.includes( "trashViewBtn" ),
     "phone header: one row; the top ranks stay, the tools leave first, the ⋮ shows", fs );
-ok( fs.rows.slice( 0, fs.out.length ).join() === fs.out.join() && fs.out.join() === [ "download", "copyTo", "rename", "link", "share", "compress", "props" ].filter( a => fs.out.includes( a ) ).join(),
-    "…its ⋮ lists the hidden actions in toolbar order, then the hidden tools", fs );
+ok( fs.rows.filter( r => r !== "all" ).slice( 0, fs.out.length ).join() === fs.out.join() && fs.out.join() === [ "download", "copyTo", "rename", "link", "share", "compress", "props" ].filter( a => fs.out.includes( a ) ).join(),
+    "…its ⋮ lists the hidden actions in toolbar order (Select all first, when hidden), then the hidden tools", fs );
 await mouse( c, "#moreBtn" );
 let mrows = await menuRows( c );
 ok( mrows && mrows.some( r => r.act === fs.out[ 0 ] ) && mrows.some( r => r.act === "trashViewBtn" ), "the ⋮ opens with them", mrows );
@@ -163,9 +191,14 @@ fs = await fitState( c );
 ok( fs.tools.includes( "searchToggleBtn" ) && ! fs.crowded, "nothing picked, 300 px: Search stays in the bar", fs );
 await c.send( "Emulation.setDeviceMetricsOverride", { width: 390, height: 800, deviceScaleFactor: 1, mobile: true } );
 await sleep( 250 );
+ok( await c.evaluate( "getComputedStyle( document.querySelector('.tb-modes') ).display === 'none'" ), "phone: the view switch leaves the header…" );
+await mouse( c, "#moreBtn" );
+mrows = await menuRows( c );
+ok( mrows && mrows.some( r => r.act === "view:grid" ) && mrows.some( r => r.act === "view:list" ), "…for the ⋮", mrows );
+await c.evaluate( "document.querySelector('.item-menu [data-act=\"view:grid\"]').click(); true" );
+ok( await c.until( "!! document.querySelector('#listing .list-rows.is-grid')" ), "…and switches from there" );
 await finger( c, ".breadcrumb .crumb-root" );
-ok( await c.until( "document.getElementById('treePane').classList.contains('open')" ), "the Drive crumb slides the tree in" );
-await c.evaluate( "treeView.closeSheet(); true" );
+ok( await c.until( "currentFolder === 'files'" ), "the Home crumb goes Home (no tree sheet)" );
 await c.send( "Emulation.setDeviceMetricsOverride", { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false } );
 await c.until( "!! document.querySelector('#listing .row[data-path]')" );
 await c.evaluate( "browse.set( [ document.querySelector('#listing .row[data-path]').dataset.path ] ); true" );

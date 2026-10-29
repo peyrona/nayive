@@ -92,7 +92,7 @@ async function signIn( c )
     await nav( c, `${BASE}/nayive/login.html`, "/nayive/login.html" );
     await c.evaluate( `localStorage.setItem('balata-coach-seen','1'); localStorage.setItem('nayive-install-snooze','never');
         localStorage.setItem('balata-intro-dismiss:launcher','1'); localStorage.setItem('balata-intro-dismiss:bookmarks','1');
-        localStorage.setItem('balata-lang','en');
+        localStorage.setItem('ayni-lang','en');
         fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:'test',password:'test'})}).then(r=>r.status)` );
 }
 
@@ -417,7 +417,7 @@ try
     await c.evaluate( "document.querySelector('#filterRow [data-filter=recent]').click(); true" );
     ok( await c.evaluate( "document.querySelectorAll('#items .bm-item').length === 15" ), "Recent = 15 newest" );
     await c.evaluate( "document.querySelector('#filterRow [data-filter=all]').click(); document.getElementById('listBtn').click(); true" );
-    ok( await c.evaluate( "document.getElementById('items').classList.contains('is-list') && document.getElementById('listBtn').classList.contains('is-active')" ), "list mode" );
+    ok( await c.evaluate( "document.getElementById('items').classList.contains('is-list') && document.getElementById('listBtn').getAttribute('aria-pressed') === 'true'" ), "list mode" );
     await shot( c, "03-list-pc-light" );
     await c.evaluate( "document.getElementById('gridBtn').click(); true" );
     ok( await c.evaluate( "JSON.parse( localStorage.getItem('balata-bookmarks-ui') ).mode === 'grid'" ), "view choice kept on this device" );
@@ -573,7 +573,7 @@ try
 
 
     // Dark.
-    await c.evaluate( "localStorage.setItem('balata-theme','dark'); true" );
+    await c.evaluate( "localStorage.setItem('ayni-theme','dark'); true" );
     await openApp( c );
     await c.evaluate( "goFolder( Object.values( data.nodes ).find( n => n.title === 'Util' ).id ); true" );
     await sleep( 1500 );
@@ -601,7 +601,7 @@ try
         await c.evaluate( "document.getElementById('upBtn').click(); true" );
         ok( await c.evaluate( "curFolder !== '" + util + "'" ), `phone ${w}: ← goes up` );
     }
-    await c.evaluate( "localStorage.setItem('balata-theme','light'); true" );
+    await c.evaluate( "localStorage.setItem('ayni-theme','light'); true" );
     await openApp( c );
     await c.evaluate( "document.getElementById('moreBtn').click(); true" );
     await shot( c, "07-phone-menu-light" );

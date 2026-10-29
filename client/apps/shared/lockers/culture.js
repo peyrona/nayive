@@ -175,7 +175,7 @@ var DEFAULTS =
 // 2026-09-30: by default all are on).
 function allLangs()
 {
-    var ui = window.NayiveI18n && NayiveI18n.lang ? String( NayiveI18n.lang() ).slice( 0, 2 ) : "";
+    var ui = window.Ayni ? String( Ayni.i18n.lang() ).slice( 0, 2 ) : "";
     return LANGS.indexOf( ui ) >= 0 ? [ ui ].concat( LANGS.filter( function ( l ) { return l !== ui; } ) ) : LANGS.slice();
 }
 
@@ -315,7 +315,7 @@ function fetchTagged( file, ms )
 var OWNER = ( window.NayiveStore && typeof NayiveStore.me === "string" && NayiveStore.me ) ||
             ( window.GumApi && GumApi.owner && GumApi.owner() ) ||
             ( window.NayiveLock && NayiveLock.who ) ||
-            ( window.NayiveI18n && NayiveI18n.whoAtLoad ) || "";
+            ( window.NayiveWho && NayiveWho.atLoad ) || "";
 
 // ✓ of the settings dialog: `fn( now )` gets the settings as they are on the
 // server NOW (`readNow()` -> { s, tag }) and returns what to save. That goes
@@ -762,12 +762,14 @@ function story( cached, lang, title )
 }
 
 //------------------------------------------------------------------------//
-// WEATHER - the place from the account's time zone (Nayive's tz-geo.json),
+// WEATHER - the place from the account's time zone (Ayni's tz-geo.json),
 // Open-Meteo straight from the browser (1 call per 30 min).
 
-// Where the weather is for: this computer's position when the browser may
-// tell it (the permission is asked in the settings dialog, never on the
-// lock screen), else the city chosen there, else the account's time zone.
+// Where the weather is for. "Where this computer is": its position when the
+// browser may tell it (the permission is asked in the settings dialog, never
+// on the lock screen), else this computer's own time zone - never the city
+// typed in the box, which is only for "A city". "A city": that city, else
+// the account's time zone.
 function placeOf( cfg, cached )
 {
     var here = cfg.place === "geo" && navigator.geolocation && navigator.permissions
@@ -791,22 +793,24 @@ function placeOf( cfg, cached )
                 ? NayiveUI.townName( pos.lat, pos.lon ).then( function ( n ) { if( ! n ) throw new Error( "no name" ); return n; } )
                 : Promise.reject( new Error( "no NayiveUI" ) );
         } ).catch( function () { return ""; } ).then( function ( name ) { return { name: name, lat: pos.lat, lon: pos.lon, tz: myTz() }; } );
+        if( cfg.place === "geo" ) return tzPlace( cached, myTz() );
         if( cfg.city ) return { name: cfg.city.name, lat: cfg.city.lat, lon: cfg.city.lon, tz: cfg.city.tz || myTz() };
         return tzPlace( cached );
     } );
 }
 
-function tzPlace( cached )
+// `own`: this zone, not the account's.
+function tzPlace( cached, own )
 {
-    return fetch( "/api/tz", { credentials: "same-origin" } )
-        .then( function ( r ) { return r.ok ? r.json() : {}; }, function () { return {}; } )
+    return ( own ? Promise.resolve( { tz: own } ) : fetch( "/api/tz", { credentials: "same-origin" } )
+        .then( function ( r ) { return r.ok ? r.json() : {}; }, function () { return {}; } ) )
         .then( function ( j )
         {
             var tz = j && j.tz;
             tz = tz || myTz();
             return cached( "place:" + tz, 30 * 864e5, function ()
             {
-                return fetch( FONTS + "../tz-geo.json" ).then( function ( r ) { return r.json(); } ).then( function ( g )
+                return fetch( FONTS + "../ayni/tz-geo.json" ).then( function ( r ) { return r.json(); } ).then( function ( g )
                 {
                     var p = g[ tz ];
                     if( ! p ) throw new Error( "no place" );

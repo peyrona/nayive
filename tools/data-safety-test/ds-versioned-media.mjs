@@ -177,7 +177,7 @@ section( "C7 · A MOVE WHOSE NOTES CANNOT FOLLOW NOW: SAID, KEPT, MADE LATER - N
     await arm( c, NOTES, "t => { const d = JSON.parse( t ); d[ 'files/Z/busy.png' ] = String( Math.random() ); return JSON.stringify( d ); }", true );
     await c.evaluate( "window.__toasts = []; NayiveMedia.remapPaths( [ [ 'files/M/m.png', 'files/N/m.png' ] ] ).then( () => true )" );
     await disarm( c );
-    ok( await c.until( "( window.__toasts || [] ).some( t => t.indexOf( NayiveUI.t( 'media.notesMoveFailed' ) ) !== -1 )", 10000 ), "the user is told the notes could not follow", await c.toasts() );
+    ok( await c.until( "( window.__toasts || [] ).some( t => t.indexOf( Ayni.t( 'media.notesMoveFailed' ) ) !== -1 )", 10000 ), "the user is told the notes could not follow", await c.toasts() );
     ok( json( NOTES )[ "files/M/m.png" ] === "note m", "(the note is still at the old path)", json( NOTES ) );
 
     // Photos opens the folder the photo left: it makes the waiting move first,

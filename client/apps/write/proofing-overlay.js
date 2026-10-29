@@ -259,7 +259,7 @@ export function createSpellOverlay( o )
         if( ! items.length ) items.push( { key: 'write.noSuggestions', enabled: function() { return false; } } );
 
         items.push( { sep: true },
-                    { text: NayiveUI.tf( 'write.addToDict', { word: hit.word } ),
+                    { text: Ayni.tf( 'write.addToDict', { word: hit.word } ),
                       run: function() { o.addWord( hit.word ); } },
                     { key: 'write.ignoreWord',
                       run: function() { ignored.add( hit.word.toLowerCase() ); draw(); } } );

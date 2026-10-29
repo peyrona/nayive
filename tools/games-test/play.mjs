@@ -27,10 +27,10 @@ async function clockAndPause( g, pre, start )
 {
     section( g.toUpperCase() + " · CLOCK + PAUSE" );
     ok( await txt( pre + "Time" ) === "0:00", "clock at 0:00 before the first move" );
-    ok( await c.evaluate( `document.getElementById( '${pre}Pause' ).disabled` ), "pause disabled before the first move" );
+    ok( await c.evaluate( `document.getElementById( '${pre}Pause' ).ariaDisabled === 'true'` ), "pause disabled before the first move" );
     await start();
     ok( await c.until( `document.getElementById( '${pre}Time' ).textContent === '0:02'`, 4000 ), "the clock runs", await txt( pre + "Time" ) );
-    ok( ! await c.evaluate( `document.getElementById( '${pre}Pause' ).disabled` ), "pause enabled once started" );
+    ok( ! await c.evaluate( `document.getElementById( '${pre}Pause' ).ariaDisabled === 'true'` ), "pause enabled once started" );
     await mouse( c, "#" + pre + "Pause" );
     ok( ! await hidden( pre + "Paused" ), "pause covers the board" );
     const at = await txt( pre + "Time" );

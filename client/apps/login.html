@@ -4,17 +4,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- The interface language. First of all: it hides the page until the
-         dictionary is in, and every inline script below may call it. -->
+    <!-- Nayive's first script (old settings, whose page, error reports), then
+         Ayni's language layer: it hides the page until the texts are in, and
+         every inline script below may call Ayni.t(). -->
     <script src="shared/i18n.js"></script>
+    <script src="shared/ayni/ayni-i18n.js" data-dict="shared/i18n/" data-langs="es en pt fr de"></script>
     <title>Nayive</title>
     <link rel="icon" type="image/png" href="icons/icon-192.png">
 
     <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="shared/ayni/ayni-base.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="shared/theme.css">
     <link rel="stylesheet" href="shared/app.css">
-    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
-    <script src="shared/theme.js" defer></script>
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script src="shared/ayni/ayni-icons.js" defer></script>
+    <script src="shared/ayni/ayni-base.js" defer></script>
+    <script src="shared/ayni/ayni-buttons.js" defer></script>
 
     <style>
         /* Base reset + fonts from ../shared/app.css. This is the standalone
@@ -87,6 +93,8 @@
             <span>Nayive</span>
         </div>
 
+        <p class="warn-box" id="notMine" role="alert" data-i18n="login.notMine" hidden></p>
+
         <label for="user" data-i18n="login.user"></label>
         <input id="user" name="user" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
 
@@ -96,14 +104,14 @@
             <button type="button" class="pw-eye" id="pwEye" data-i18n-attr="aria-label:ui.showPassword"></button>
         </div>
 
-        <label class="remember" for="remember">
+        <label class="remember switch" for="remember">
             <span data-i18n="login.remember"></span>
-            <span class="switch sm"><input type="checkbox" id="remember" name="remember" checked><span class="track"></span></span>
+            <input role="switch" type="checkbox" id="remember" name="remember" checked>
         </label>
 
         <div class="foot">
             <p class="error" id="error" role="alert"></p>
-            <button type="submit" id="submit" data-i18n-attr="title:login.signIn, aria-label:login.signIn">
+            <button type="submit" id="submit" data-i18n-attr="data-tip:login.signIn, aria-label:login.signIn">
                 <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
             </button>
         </div>
@@ -116,10 +124,44 @@
             var errBox = document.getElementById( 'error' );
             var submit = document.getElementById( 'submit' );
 
+            // SOMEONE ELSE'S PC (server/go/api_auth.go apiLogout). A session
+            // signed in with "Keep me signed in" off is wiped from this browser
+            // at its sign-out. "nayive-shared" says the last session here was
+            // one. A browser with no trace of Nayive, or such a browser, may
+            // not be the user's: say "use a private window", and start with
+            // the switch off.
+            //
+            // LEFTOVERS: such a session that ended without a sign-out (the
+            // browser closed, the 12 h ran out) left its files here; with no
+            // session left, the server is asked to wipe this browser now. The
+            // sign-in waits for it, so it never wipes the new session's work.
+            var shared = false, known = false;
+            try
+            {
+                shared = localStorage.getItem( 'nayive-shared' ) === '1';
+                for( var i = 0; i < localStorage.length; i++ )
+                {
+                    var k = localStorage.key( i ) || '';
+                    if( k !== 'nayive-shared' && ( k.indexOf( 'nayive' ) === 0 || k.indexOf( 'balata' ) === 0 ) ) known = true;
+                }
+            }
+            catch ( e ) {}
+            if( shared || ! known )
+            {
+                document.getElementById( 'notMine' ).hidden = false;
+                document.getElementById( 'remember' ).checked = false;
+            }
+            var leftovers = ! shared ? Promise.resolve() :
+                fetch( '/api/whoami', { credentials: 'same-origin' } ).then( function ( r )
+                {
+                    if( r.status !== 401 ) return;
+                    return fetch( '/api/logout', { method: 'POST', credentials: 'same-origin', headers: { 'X-Nayive-Forget': '1' } } );
+                } ).catch( function () {} );
+
             // i18n.js hides the page until the dictionary is in, and a hidden
             // field cannot take focus: focus once the page is shown.
             var focusUser = function () { document.getElementById( 'user' ).focus(); };
-            NayiveI18n.ready.then( focusUser, focusUser );
+            Ayni.i18n.ready.then( focusUser, focusUser );
 
             // Eye toggle: show / hide the password text.
             ( function ()
@@ -134,7 +176,7 @@
                     var show = pw.type === 'password';
                     pw.type = show ? 'text' : 'password';
                     eye.innerHTML = show ? EYE_OFF : EYE;
-                    eye.setAttribute( 'aria-label', show ? NayiveI18n.t( 'ui.hidePassword' ) : NayiveI18n.t( 'ui.showPassword' ) );
+                    eye.setAttribute( 'aria-label', show ? Ayni.t( 'ui.hidePassword' ) : Ayni.t( 'ui.showPassword' ) );
                     pw.focus();
                 } );
             } )();
@@ -181,6 +223,8 @@
 
                 try
                 {
+                    await leftovers;
+                    var remember = document.getElementById( 'remember' ).checked;
                     var res = await fetch( '/api/login',
                     {
                         method:      'POST',
@@ -190,7 +234,7 @@
                         {
                             user:     document.getElementById( 'user' ).value.trim(),
                             password: document.getElementById( 'password' ).value,
-                            remember: document.getElementById( 'remember' ).checked
+                            remember: remember
                         } )
                     } );
 
@@ -205,6 +249,12 @@
                         // device's push: the launcher's next load registers it
                         // again, even when this sign-in goes straight to Chat.
                         try { localStorage.removeItem( 'nayive-push-note' ); } catch ( e ) {}
+                        try
+                        {
+                            if( remember ) localStorage.removeItem( 'nayive-shared' );
+                            else           localStorage.setItem( 'nayive-shared', '1' );
+                        }
+                        catch ( e ) {}
                         // No password yet: the launcher (never the big-screen
                         // desktop, whose apps the server now refuses) asks for one.
                         try
@@ -218,11 +268,11 @@
                     }
 
                     // The server's own words are Spanish: say it in the user's language.
-                    errBox.textContent = NayiveI18n.t( res.status === 401 ? 'login.badCreds' : 'login.failed' );
+                    errBox.textContent = Ayni.t( res.status === 401 ? 'login.badCreds' : 'login.failed' );
                 }
                 catch ( e )
                 {
-                    errBox.textContent = NayiveI18n.t( 'login.noServer' );
+                    errBox.textContent = Ayni.t( 'login.noServer' );
                 }
 
                 submit.disabled = false;

@@ -1,5 +1,5 @@
 /*
- * tree.js - Drive: tree helpers, the pane resizer and render().
+ * tree.js - Drive: path / node helpers and render().
  */
 "use strict";
 
@@ -10,9 +10,10 @@ function splitPath( path ) { return path ? path.split( '/' ) : []; }
 
 function joinPath( parent, name ) { return parent ? parent + '/' + name : name; }
 
-// Walks the FOLDERS-ONLY tree. Resolves any folder path; returns null for
-// a file path (files no longer live in this tree — use rowNode() for
-// something shown in the right pane, or fetch the folder with listDir()).
+// Walks the FOLDERS-ONLY tree (never drawn: it answers "is this a folder?"
+// and feeds the "Move to…" picker). Resolves any folder path; returns null
+// for a file path (use rowNode() for something shown in the listing, or
+// fetch the folder with listDir()).
 function findNode( path )
 {
     if( ! path ) return dirTreeRoot;
@@ -28,7 +29,7 @@ function findNode( path )
     return node || null;
 }
 
-// The node behind a path currently shown in the right pane: a folder from
+// The node behind a path currently shown in the listing: a folder from
 // the tree, or a file from the open folder's one-level listing / the
 // active search results.
 function rowNode( path )
@@ -41,7 +42,10 @@ function rowNode( path )
 
 function isDir( node ) { return node && node.nodes !== null && node.nodes !== undefined; }
 
-function nameOf( node ) { return node.path === '' ? 'Drive' : node.path.split( '/' ).pop(); }
+// The top folder is "Home" in every app ("Drive" is only the app's name).
+function homeName() { return T( 'ui.filesRoot' ); }
+
+function nameOf( node ) { return node.path === '' ? homeName() : node.path.split( '/' ).pop(); }
 
 // What the user reads. Same as nameOf() everywhere except in "Compartido
 // conmigo": there the path segment is a slug the server made ("Le Nord" ->
@@ -49,22 +53,22 @@ function nameOf( node ) { return node.path === '' ? 'Drive' : node.path.split( '
 // ON-DISK name — copy-to and the zip writer must keep using that.
 function displayName( node )
 {
+    if( isLink( node ) ) return nameOf( node ).slice( 0, -LINK_EXT.length );
     return ( node && node.shared && node.shared.title ) || nameOf( node );
 }
 
-//------------------------------------------------------------------------//
-// PANE RESIZER — drag the divider to set the tree-pane width (desktop only).
-// Width is stored in localStorage and applied as the --tree-w custom
-// property; the phone @media rule hard-codes its own width, so the sheet
-// layout is untouched. Double-click resets to the default (shared/ui.js).
+// A shortcut (server/go/links.go): a small "<name>.nayive-link" file whose
+// `link` says where it leads - { to, dir } - or { broken: true }. Drive
+// alone lists them (GumApi.listDir( path, true )); the name shown drops the
+// ending.
+const LINK_EXT = '.nayive-link';
+function isLink( node )     { return !! ( node && node.link ); }
+function linkBroken( node ) { return isLink( node ) && ( node.link.broken || ! node.link.to ); }
 
-function initPaneResizer()
+// What a shortcut leads to, as a node of its own: openNode / listIcon take it.
+function linkTarget( node )
 {
-    NayiveUI.paneResizer( document.getElementById( 'paneResizer' ), document.getElementById( 'treePane' ),
-    {
-        key: 'drive-tree-width', min: 140, max: 640, def: 250, off: isPhone,
-        set: function( w ) { document.documentElement.style.setProperty( '--tree-w', w + 'px' ); }
-    });
+    return { path: node.link.to, nodes: node.link.dir ? [] : null };
 }
 
 //------------------------------------------------------------------------//
@@ -76,12 +80,15 @@ function render()
     // The bin is the Papelera's on/off switch: lit while it is open, and
     // then its tooltip says where a tap takes you - back to Drive.
     const binBtn = document.getElementById( 'trashViewBtn' );
-    binBtn.classList.toggle( 'is-active', trashMode );
-    binBtn.title = T( trashMode ? 'drive.backToDrive' : 'acct.trash' );
+    binBtn.setAttribute( 'aria-pressed', trashMode );
+    Ayni.setTip( binBtn, T( trashMode ? 'drive.backToDrive' : 'acct.trash' ) );
     // "Biggest files" is the same kind of switch.
     const bigBtn = document.getElementById( 'bigFilesBtn' );
-    bigBtn.classList.toggle( 'is-active', bigMode );
-    bigBtn.title = T( bigMode ? 'drive.backToDrive' : 'drive.bigTitle' );
+    bigBtn.setAttribute( 'aria-pressed', bigMode );
+    Ayni.setTip( bigBtn, T( bigMode ? 'drive.backToDrive' : 'drive.bigTitle' ) );
+    // The view switch: which of its two is lit.
+    document.getElementById( 'gridBtn' ).setAttribute( 'aria-pressed', viewMode === 'grid' );
+    document.getElementById( 'listBtn' ).setAttribute( 'aria-pressed', viewMode === 'list' );
 
     if( trashMode )
     {
@@ -90,7 +97,6 @@ function render()
         return;
     }
 
-    renderTree();
     renderBreadcrumb();
     renderListing();
     updateToolbarState();

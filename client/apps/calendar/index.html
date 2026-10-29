@@ -5,18 +5,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- The interface language. First of all: it hides the page until the
-         dictionary is in, and every inline script below may call it. -->
+    <!-- Nayive's first script (old settings, whose page, error reports), then
+         Ayni's language layer: it hides the page until the texts are in, and
+         every inline script below may call Ayni.t(). -->
     <script src="../shared/i18n.js"></script>
+    <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
     <title>Calendar</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'%3E%3C/rect%3E%3Cline x1='16' y1='2' x2='16' y2='6'%3E%3C/line%3E%3Cline x1='8' y1='2' x2='8' y2='6'%3E%3C/line%3E%3Cline x1='3' y1='10' x2='21' y2='10'%3E%3C/line%3E%3C/svg%3E">
 
     <!-- Shared colour scheme (light default, opt-in dark). Toggle lives in Drive / the launcher; this page just follows the saved choice. -->
     <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
-    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
-    <script src="../shared/theme.js" defer></script>
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script src="../shared/ayni/ayni-icons.js" defer></script>
+    <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
@@ -49,7 +55,7 @@
     <!-- Small shared UI helpers: backdrop open/close, toast, viewerTz. -->
     <script src="../shared/ui.js" defer></script>
     <script>
-    NayiveI18n.ready.then( function () {
+    Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
         NayiveUI.firstRun( {
             app:   'calendar',
@@ -57,26 +63,26 @@
             // A phone shows the month as a dots grid + the picked day's list (PHONE MONTH below), so
             // its lead and its extra "+" row differ from the PC ones.
             lead:  window.matchMedia( '(max-width: 640px)' ).matches
-                 ? NayiveUI.t( 'calendar.introLeadPhone' )
-                 : NayiveUI.t( 'calendar.introLead' ),
+                 ? Ayni.t( 'calendar.introLeadPhone' )
+                 : Ayni.t( 'calendar.introLead' ),
             buttons: [
-                { sel: '.topbar [data-view="timeGridDay"]',  text: NayiveUI.t( 'calendar.introDay' ) },
-                { sel: '.topbar [data-view="rollWeek"]',     text: NayiveUI.t( 'calendar.introWeek' ) },
-                { sel: '.topbar [data-view="dayGridMonth"]', text: NayiveUI.t( 'calendar.introMonth' ) },
-                { sel: '#prevBtn',   text: NayiveUI.t( 'calendar.introPrev'   ) },
-                { sel: '#nextBtn',   text: NayiveUI.t( 'calendar.introNext'   ) },
-                { sel: '#searchBtn', text: NayiveUI.t( 'calendar.introSearch' ) },
-                { sel: '#gotoBtn',   text: NayiveUI.t( 'calendar.introGoTo'   ) },
-                { sel: '#settingsBtn', text: NayiveUI.t( 'calendar.introSettings' ) },
-                { sel: '#moreBtn',   text: NayiveUI.t( 'calendar.introViews'  ) }
+                { sel: '.topbar [data-view="timeGridDay"]',  text: Ayni.t( 'calendar.introDay' ) },
+                { sel: '.topbar [data-view="rollWeek"]',     text: Ayni.t( 'calendar.introWeek' ) },
+                { sel: '.topbar [data-view="dayGridMonth"]', text: Ayni.t( 'calendar.introMonth' ) },
+                { sel: '#prevBtn',   text: Ayni.t( 'calendar.introPrev'   ) },
+                { sel: '#nextBtn',   text: Ayni.t( 'calendar.introNext'   ) },
+                { sel: '#searchBtn', text: Ayni.t( 'calendar.introSearch' ) },
+                { sel: '#gotoBtn',   text: Ayni.t( 'calendar.introGoTo'   ) },
+                { sel: '#settingsBtn', text: Ayni.t( 'calendar.introSettings' ) },
+                { sel: '#moreBtn',   text: Ayni.t( 'calendar.introViews'  ) }
             ]
             .concat( window.matchMedia( '(max-width: 640px)' ).matches
-                ? [ { sel: '#dlAddBtn', text: NayiveUI.t( 'calendar.introAdd' ) } ] : [] ),
+                ? [ { sel: '#dlAddBtn', text: Ayni.t( 'calendar.introAdd' ) } ] : [] ),
             // The guided tour ("Ver el tour" in the card): the calendar itself, then
             // the card's buttons in order.
             tour: function () {
                 return [ { sel: '#calHost', text: window.matchMedia( '(max-width: 640px)' ).matches
-                                                  ? NayiveUI.t( 'calendar.introLeadPhone' ) : NayiveUI.t( 'calendar.introLead' ) },
+                                                  ? Ayni.t( 'calendar.introLeadPhone' ) : Ayni.t( 'calendar.introLead' ) },
                          'buttons' ];
             }
         } );
@@ -87,7 +93,7 @@
     <script src="../shared/store.js" defer></script>
 
     <style>
-        /* Base reset, .app shell, .topbar, .icon-btn, .sheet, .sheet-header,
+        /* Base reset, .app shell, .topbar, .btn, .sheet, .sheet-header,
            .field and the input look all come from ../shared/app.css. Calendar
            overrides the page scroll and adds its toolbar + dialog specifics. */
         html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
@@ -117,7 +123,7 @@
         #goToRow .field:has( #gMonth ) { flex: 1 1 130px; }
         #goToRow .field:has( #gDay )   { flex: 0 1 68px; }
 
-        /* "Hoy" in that dialog is the shared .text-btn (shared/app.css): the one
+        /* "Hoy" in that dialog is the shared .btn.text (shared/app.css): the one
            deliberate exception to the round icon-only action row (shared/theme.css) -
            it took over from a toolbar button, so it reads as a word at a glance. */
 
@@ -143,8 +149,7 @@
         .dow-picker { display: flex; gap: 6px; flex-wrap: wrap; }
 
         .radio-row { display: flex; flex-direction: column; gap: 8px; }
-        .radio-opt { display: flex; align-items: center; gap: 8px; font-size: 0.94rem; }
-        .radio-opt input[type="radio"] { width: 17px; height: 17px; }
+        .radio-opt { font-size: 0.94rem; }   /* the row is Ayni's .choice */
         .radio-opt .inline-input { max-width: 90px; }
         .radio-opt .dt-field-inline { width: 90px; margin-left: 4px; }
 
@@ -336,22 +341,22 @@
         <div class="topbar">
             <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
             <h1>Calendar</h1>
-            <button data-view="timeGridDay" class="icon-btn view-btn" data-i18n-attr="title:calendar.day">
+            <button data-view="timeGridDay" class="btn view-btn" data-i18n-attr="data-tip:calendar.day">
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="15" rx="2"></rect><line x1="4" y1="10" x2="20" y2="10"></line><rect x="9.5" y="13" width="5" height="4.5" fill="currentColor" stroke="none"></rect></svg>
             </button>
-            <button data-view="rollWeek" class="icon-btn view-btn" data-i18n-attr="title:calendar.week">
+            <button data-view="rollWeek" class="btn view-btn" data-i18n-attr="data-tip:calendar.week">
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="15" rx="2"></rect><line x1="4" y1="10" x2="20" y2="10"></line><rect x="6" y="13" width="12" height="4.5" fill="currentColor" stroke="none"></rect></svg>
             </button>
-            <button data-view="dayGridMonth" class="icon-btn view-btn" data-i18n-attr="title:calendar.month">
+            <button data-view="dayGridMonth" class="btn view-btn" data-i18n-attr="data-tip:calendar.month">
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="15" rx="2"></rect><line x1="4" y1="10" x2="20" y2="10"></line><line x1="9.3" y1="10" x2="9.3" y2="20"></line><line x1="14.7" y1="10" x2="14.7" y2="20"></line><line x1="4" y1="15" x2="20" y2="15"></line></svg>
             </button>
 
             <div class="date-nav">
-                <button id="prevBtn" class="icon-btn" data-i18n-attr="title:ui.prev">
+                <button id="prevBtn" class="btn" data-i18n-attr="data-tip:ui.prev">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
                 </button>
                 <span id="rangeLabel" class="range-label"></span>
-                <button id="nextBtn" class="icon-btn" data-i18n-attr="title:ui.next">
+                <button id="nextBtn" class="btn" data-i18n-attr="data-tip:ui.next">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                 </button>
             </div>
@@ -362,26 +367,26 @@
                     <div class="search-wrap">
                         <input id="fSearch" class="search-input" type="text" autocomplete="off" data-i18n-attr="placeholder:calendar.searchPh, aria-label:ui.search">
                     </div>
-                    <button id="searchBtn" class="icon-btn" type="button" data-i18n-attr="title:calendar.searchEvent, aria-label:calendar.searchEvent">
+                    <button id="searchBtn" class="btn" type="button" data-i18n-attr="data-tip:calendar.searchEvent, aria-label:calendar.searchEvent">
                         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                     </button>
-                    <button id="gotoBtn" class="icon-btn" data-i18n-attr="title:calendar.goTo">
+                    <button id="gotoBtn" class="btn" data-i18n-attr="data-tip:calendar.goTo">
                         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="13" height="13" rx="2"></rect><line x1="3" y1="9" x2="16" y2="9"></line><line x1="7" y1="2" x2="7" y2="6"></line><line x1="12" y1="2" x2="12" y2="6"></line><circle cx="17" cy="17" r="4"></circle><line x1="20" y1="20" x2="22" y2="22"></line></svg>
                     </button>
                 </div>
                 <div class="tb-group tb-sys">
-                    <button id="moreBtn" class="icon-btn" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.moreOptions">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>
+                    <button id="moreBtn" class="btn" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.moreOptions">
+                        <span class="icon" data-icon="more"></span>
                     </button>
                     <!-- Settings: sync with phones (CalDAV) + export. The launcher's gear glyph. -->
-                    <button id="settingsBtn" class="icon-btn" data-i18n-attr="title:ui.settings, aria-label:ui.settings">
+                    <button id="settingsBtn" class="btn" data-i18n-attr="data-tip:ui.settings, aria-label:ui.settings">
                         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                     </button>
-                    <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                    <button class="btn" data-intro-open type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                     </button>
                 </div>
-                <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.sync.synced"></button>
+                <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="data-tip:ui.sync.synced"></button>
             </div>
         </div>
 
@@ -397,7 +402,7 @@
         <div id="dayList">
             <div class="dl-head">
                 <span class="dl-date" id="dlDate"></span>
-                <button id="dlAddBtn" class="icon-btn" type="button" data-i18n-attr="title:calendar.newEvent, aria-label:calendar.newEvent">
+                <button id="dlAddBtn" class="btn" type="button" data-i18n-attr="data-tip:calendar.newEvent, aria-label:calendar.newEvent">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 </button>
             </div>
@@ -411,9 +416,9 @@
         <div class="sheet">
             <div class="sheet-header">
                 <h2 id="sheetTitle" data-i18n="calendar.newEvent"></h2>
-                <label class="allday-inline">
+                <label class="allday-inline switch">
                     <span data-i18n="calendar.allDay"></span>
-                    <span class="switch sm"><input type="checkbox" id="fAllDay"><span class="track"></span></span>
+                    <input role="switch" type="checkbox" id="fAllDay">
                 </label>
             </div>
 
@@ -509,9 +514,9 @@
                     <div class="field">
                         <label data-i18n="calendar.ends"></label>
                         <div class="radio-row">
-                            <label class="radio-opt"><input type="radio" name="endMode" value="never" checked> <span data-i18n="calendar.never"></span></label>
-                            <label class="radio-opt"><input type="radio" name="endMode" value="on"> <span data-i18n="calendar.onDate"></span> <span class="dt-field dt-field-inline"><input type="date" id="fUntil" class="inline-input"><span class="dt-display"></span></span></label>
-                            <label class="radio-opt"><input type="radio" name="endMode" value="after"> <span data-i18n="calendar.after"></span> <input type="number" id="fCount" class="inline-input" min="1" value="10"> <span data-i18n="calendar.repeats"></span></label>
+                            <label class="choice radio-opt"><input type="radio" name="endMode" value="never" checked> <span data-i18n="calendar.never"></span></label>
+                            <label class="choice radio-opt"><input type="radio" name="endMode" value="on"> <span data-i18n="calendar.onDate"></span> <span class="dt-field dt-field-inline"><input type="date" id="fUntil" class="inline-input"><span class="dt-display"></span></span></label>
+                            <label class="choice radio-opt"><input type="radio" name="endMode" value="after"> <span data-i18n="calendar.after"></span> <input type="number" id="fCount" class="inline-input" min="1" value="10"> <span data-i18n="calendar.repeats"></span></label>
                         </div>
                     </div>
                     <div class="tz-hint" data-i18n="calendar.editsSeries"></div>
@@ -527,10 +532,10 @@
             </div>
 
             <div class="sheet-actions">
-                <button id="deleteBtn" class="sheet-actions-left" style="display:none" data-act="danger" data-i18n-attr="title:ui.delete"></button>
-                <button id="helpBtn"   data-act="ghost" data-i18n-attr="title:ui.help"></button>
-                <button id="cancelBtn" data-act="close" data-i18n-attr="title:ui.cancel"></button>
-                <button id="saveBtn"   data-act="primary" data-i18n-attr="title:ui.save"></button>
+                <button id="deleteBtn" class="btn danger sheet-actions-left" style="display:none" data-i18n-attr="data-tip:ui.delete"><span class="icon" data-icon="trash"></span></button>
+                <button class="btn" id="helpBtn"   data-i18n-attr="data-tip:ui.help"><span class="icon" data-icon="help"></span></button>
+                <button class="btn" id="cancelBtn" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="saveBtn"   data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
             </div>
         </div>
     </div>
@@ -559,7 +564,7 @@
             </p>
 
             <div class="sheet-actions">
-                <button id="helpCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
+                <button class="btn" id="helpCloseBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
             </div>
         </div>
     </div>
@@ -592,9 +597,9 @@
                  without filling in the three fields above. .sheet-actions-left pins it to the
                  left margin, away from the cancel / go pair. -->
             <div class="sheet-actions">
-                <button id="goToTodayBtn" type="button" class="text-btn sheet-actions-left" data-i18n="calendar.today"></button>
-                <button id="goToCancelBtn" data-act="close" data-i18n-attr="title:ui.cancel"></button>
-                <button id="goToGoBtn"     data-act="primary" data-i18n-attr="title:calendar.go"></button>
+                <button id="goToTodayBtn" type="button" class="btn text primary sheet-actions-left" data-i18n="calendar.today"></button>
+                <button class="btn" id="goToCancelBtn" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="goToGoBtn"     data-i18n-attr="data-tip:calendar.go"><span class="icon" data-icon="check"></span></button>
             </div>
         </div>
     </div>
@@ -641,7 +646,7 @@
                         </select>
                     </div>
                     <div class="sheet-actions">
-                        <button id="exportGoBtn" data-act="primary:download" data-i18n-attr="title:ui.download"></button>
+                        <button class="btn primary" id="exportGoBtn" data-i18n-attr="data-tip:ui.download"><span class="icon" data-icon="download"></span></button>
                     </div>
                 </div>
             </div>
@@ -649,7 +654,7 @@
             <!-- The only other action is closing, so shared/ui.js lifts it into the
                  sheet's top-right corner and this row goes away. -->
             <div class="sheet-actions">
-                <button id="settingsCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
+                <button class="btn" id="settingsCloseBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
             </div>
         </div>
     </div>
@@ -663,7 +668,7 @@
     <script type="module">
         // Nothing is drawn from JS before the dictionary is in: without an
         // in-source fallback, an early render would paint the bare keys.
-        await NayiveI18n.ready;
+        await Ayni.i18n.ready;
 
         // ICS model + DST-safe recurrence engine — shared with the tasks app (see ../shared/ical.js).
         import { makeEventDef, icsToCalendar, calendarToIcs, excludeOccurrence, excludeOne, endSeriesBefore, mergeIcs,
@@ -682,8 +687,8 @@
             merge: ( path, base, mine, theirs ) => path === CAL_FILE ? mergeIcs( base, mine, theirs ) : null } );
 
         // Interface strings: every one of them lives in shared/i18n/*.json.
-        const T  = k           => NayiveUI.t( k );
-        const TF = ( k, vars ) => NayiveUI.tf( k, vars );
+        const T  = k           => Ayni.t( k );
+        const TF = ( k, vars ) => Ayni.tf( k, vars );
 
         // Day initials + month names come from the browser (shared/i18n.js), so
         // they follow the interface language without a list in the dictionary.
@@ -698,8 +703,8 @@
                 b.type          = 'button';
                 b.className     = 'pill';
                 b.dataset.dow   = code;
-                b.textContent   = NayiveUI.weekday( i + 1, 'narrow' );
-                b.title         = NayiveUI.weekday( i + 1 );
+                b.textContent   = Ayni.i18n.weekday( i + 1, 'narrow' );
+                Ayni.setTip( b, Ayni.i18n.weekday( i + 1 ) );
                 picker.appendChild( b );
             } );
 
@@ -708,13 +713,13 @@
             {
                 const o = document.createElement( 'option' );
                 o.value       = String( m );
-                o.textContent = NayiveUI.month( m );
+                o.textContent = Ayni.i18n.month( m );
                 months.appendChild( o );
             }
         } )();
 
         const { DateTime, Settings } = luxon;
-        Settings.defaultLocale = NayiveUI.locale();
+        Settings.defaultLocale = Ayni.i18n.lang();
         // NB: the rrule + ical_esm libs are still loaded in <head> — ../shared/ical.js reads them.
 
         const VIEWER_TZ = NayiveUI.viewerTz();
@@ -747,7 +752,7 @@
         //------------------------------------------------------------------------//
         // INITIALIZATION
 
-        NayiveI18n.ready.then( function()
+        Ayni.i18n.ready.then( function()
         {
             populateTimezoneList();
             wireStaticUI();
@@ -916,7 +921,7 @@
                 slotDuration: '00:30:00',
                 scrollTime: earlyOfDayHint(),
                 timeZone: 'local',
-                locale: NayiveUI.locale(),
+                locale: Ayni.i18n.lang(),
                 allDayText: T( 'calendar.allDayCol' ),
                 slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
                 eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
@@ -1366,7 +1371,8 @@
         {
             document.querySelectorAll( 'button[data-view], #topMenu button[data-mview]' ).forEach( function( btn )
             {
-                btn.classList.toggle( 'is-active', (btn.dataset.view || btn.dataset.mview) === type );
+                const on = (btn.dataset.view || btn.dataset.mview) === type;
+                if( btn.matches( '.btn' ) ) btn.setAttribute( 'aria-pressed', on ); else btn.classList.toggle( 'is-active', on );
             });
         }
 
@@ -1662,7 +1668,7 @@
             document.getElementById( 'goToGoBtn' ).addEventListener( 'click', commitGoTo );
             document.getElementById( 'goToTodayBtn' ).addEventListener( 'click', function()
             {
-                if( calendar ) calendar.today();
+                if( calendar ) jumpTo( new Date() );
                 closeGoTo();
             });
 
@@ -1710,10 +1716,18 @@
             {
                 const lastDay = new Date( year, month + 1, 0 ).getDate();
                 const d = Number.isFinite( day ) ? Math.min( Math.max( day, 1 ), lastDay ) : 1;
-                calendar.gotoDate( new Date( year, month, d ) );
+                jumpTo( new Date( year, month, d ) );
             }
 
             closeGoTo();
+        }
+
+        // Phone month: the picked day follows the jump (set first, so datesSet keeps it).
+        function jumpTo( date )
+        {
+            if( isPhoneMonth() ) phoneDay = DateTime.fromJSDate( date ).toISODate();
+            calendar.gotoDate( date );
+            refreshPhoneMonth();
         }
 
         //------------------------------------------------------------------------//

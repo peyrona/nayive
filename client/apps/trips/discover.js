@@ -33,7 +33,7 @@ const DISCOVER_CATS = () => [
     [ 'food',        T( 'trips.disc.food'        ) ],
     [ 'nightlife',   T( 'trips.disc.nightlife'   ) ],
     [ 'tours',       T( 'trips.disc.tours'       ) ]
-].sort( function( a, b ) { return a[ 1 ].localeCompare( b[ 1 ], NayiveUI.locale() ); } );
+].sort( function( a, b ) { return a[ 1 ].localeCompare( b[ 1 ], Ayni.i18n.lang() ); } );
 
 // First time only: the three that answer "I just got here, what do I look at?".
 const DISCOVER_DEFAULT = [ 'exhibitions', 'museums', 'monuments' ];
@@ -90,7 +90,7 @@ function discoverWhenFor( st )
     try
     {
         return new Date( start + 'T00:00:00' )
-               .toLocaleDateString( NayiveUI.locale(), { month: 'long', year: 'numeric' } );
+               .toLocaleDateString( Ayni.i18n.lang(), { month: 'long', year: 'numeric' } );
     }
     catch( e ) { return start; }
 }
@@ -159,20 +159,14 @@ function renderDiscoverSheet()
     const actions = document.createElement( 'div' );
     actions.className = 'sheet-actions';
 
-    const cancelBtn = document.createElement( 'button' );
-    cancelBtn.type = 'button';
-    cancelBtn.setAttribute( 'data-act', 'close' );
-    cancelBtn.title = NayiveUI.t( 'ui.cancel' );
+    const cancelBtn = NayiveUI.sheetButton( 'close', Ayni.t( 'ui.cancel' ) );
     cancelBtn.addEventListener( 'click', closeDiscover );
 
     // The one control that leaves Nayive, so it says where it goes. Kept a plain
     // click handler (no await before window.open) - a popup blocker only trusts a
     // window opened inside the gesture that asked for it.
-    const goBtn = document.createElement( 'button' );
-    goBtn.type = 'button';
-    goBtn.id   = 'discoverGo';
-    goBtn.setAttribute( 'data-act', 'primary:search' );
-    goBtn.title = T( 'trips.disc.go' );
+    const goBtn = NayiveUI.sheetButton( 'primary', T( 'trips.disc.go' ), 'search' );
+    goBtn.id = 'discoverGo';
     goBtn.addEventListener( 'click', runDiscover );
 
     actions.appendChild( cancelBtn );
@@ -192,7 +186,7 @@ function refreshDiscoverGo()
     const go = document.getElementById( 'discoverGo' );
 
     if( go )
-        go.disabled = discoverPicks.size === 0;
+        go.ariaDisabled = discoverPicks.size === 0;
 }
 
 //------------------------------------------------------------------------//
@@ -205,7 +199,7 @@ function refreshDiscoverGo()
 function discoverQuery()
 {
     const order = DISCOVER_CATS().filter( function( c ) { return discoverPicks.has( c[ 0 ] ); } );
-    const what  = order.map( function( c ) { return c[ 1 ].toLocaleLowerCase( NayiveUI.locale() ); } ).join( ', ' );
+    const what  = order.map( function( c ) { return c[ 1 ].toLocaleLowerCase( Ayni.i18n.lang() ); } ).join( ', ' );
     const base  = TF( 'trips.disc.query', { what: what, place: discoverPlace } );
 
     return discoverWhen ? base + ' ' + discoverWhen : base;

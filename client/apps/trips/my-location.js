@@ -13,7 +13,7 @@
 // in shared/ui.js until 2026-09-28 (shared.md #21).
 function locationSection()
 {
-    const t = NayiveUI.t;
+    const t = Ayni.t;
 
     const box = document.createElement( 'div' );
     box.className = 'share-sect share-link';

@@ -22,7 +22,7 @@ await walk( c, "empty", {
     5: s => s.ghost || "edit: a ghost",
     6: s => s.tap && !! s.note || "«Mes» asks for a tap",
     7: s => s.ghost || "no month yet: a ghost",
-    8: s => /icon-btn/.test( s.lit ) && s.n === s.m || "ends at the «?»" } );
+    8: s => /btn/.test( s.lit ) && s.n === s.m || "ends at the «?»" } );
 ok( await tourGone( c ) && await shows( "todayView" ), "it closes and leaves «Hoy» on screen" );
 
 section( "HABITS · BACK, ESCAPE" );

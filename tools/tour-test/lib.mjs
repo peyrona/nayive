@@ -73,7 +73,7 @@ export async function runSteps( c, steps )
 // Siguiente (Terminar on the last step), then waits for the next bubble.
 export async function next( c )
 {
-    await mouse( c, ".tour-overlay .tour-row .text-btn:not(.ghost)" );
+    await mouse( c, ".tour-overlay .tour-row .btn.text:not(.bordered)" );
     await c.until( "! document.querySelector( '.tour-overlay' ) || ! document.querySelector( '.tour-bubble' ).hidden", 3000 );
     await sleep( 120 );
 }

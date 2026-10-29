@@ -257,7 +257,7 @@ const ASK = `( function () { window.__asks = []; NayiveUI.confirm = function ( o
     await d.evaluate( `( deleteTargets = [ ${J( G )} ], confirmDelete().then( function () { return true; } ) )` );
     ok( await untilNode( () => disk( G ) === null ), "deleted from device A" );
     const asked = await d.evaluate( "window.__asks" );
-    ok( asked.length === 1 && asked[ 0 ] === await d.evaluate( "NayiveUI.t( 'ui.park.title' )" ), "after the question about device B's changes", asked );
+    ok( asked.length === 1 && asked[ 0 ] === await d.evaluate( "Ayni.t( 'ui.park.title' )" ), "after the question about device B's changes", asked );
     ok( ( markOf( G )[ 0 ] || {} ).state === "dismissed", "its mark is dismissed" );
     await closeTab( B, q.t );
     await flush( B );

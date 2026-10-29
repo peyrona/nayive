@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The TWA's splash picture is handed to Chrome through this provider. -->
+<!-- The TWA's splash picture is handed to Chrome through this provider,
+     and a downloaded update to Android's installer (Updater). -->
 <paths>
     <files-path name="twa_splash" path="twa_splash/" />
+    <cache-path name="update" path="update/" />
 </paths>

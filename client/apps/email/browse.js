@@ -34,6 +34,7 @@
     var E = window.NayiveMail, S = E.S;
     var ROLES = [ "inbox", "drafts", "sent", "spam", "trash" ];
     var OPEN_KEY = "nayive-mail-tree";      // this device: is "Labels" open
+    var VEIL_KEY = "nayive-mail-veil";      // this device: the labels whose eye is closed
 
     var browse = null, treeView = null, actions = [];
 
@@ -152,7 +153,8 @@
               run: function ( ids ) { E.act.restore( itemsOf( ids ) ); } },
             // to the Trash, with Undo; in the Trash: for good, with Undo (it
             // goes only when the Undo is gone)
-            { id: "del", label: T( "mail.delete" ), icon: E.icon( "trash" ), key: [ "Del", "Backspace" ], rank: 1, group: 3, danger: true,
+            // Never a bare ⌫ (Drive's rule): ⌘⌫ on a Mac, Del elsewhere.
+            { id: "del", label: T( "mail.delete" ), icon: E.icon( "trash" ), key: NayiveUI.isMac ? [ "Del", "Ctrl+Backspace" ] : "Del", rank: 1, group: 3, danger: true,
               where: function () { return ! inTray( "trash" ); },
               when: function ( ids ) { return ! roleIs( ids, "trash" ); },
               run: function ( ids ) { E.act.del( itemsOf( ids ) ); } },
@@ -214,11 +216,11 @@
                 if( b[ 0 ] === "actRead" ) on = on && ! m.seen;
                 if( b[ 0 ] === "actUnread" ) on = on && !! m.seen;
                 btn.hidden = ! on;
-                btn.disabled = false;
+                btn.ariaDisabled = false;
                 if( ! a ) return;
                 var l = typeof a.label === "function" ? a.label( ids ) : a.label;
                 var k = a.key ? " (" + NayiveUI.keyLabel( a.key ) + ")" : "";
-                btn.title = l + k;
+                Ayni.setTip( btn, l + k );
                 btn.setAttribute( "aria-label", l );
             } );
             E.$( "actStar" ).classList.toggle( "is-on", !! m.flagged );
@@ -288,9 +290,46 @@
                      cls: "mail-node-" + role + ( t.missing ? " is-missing" : "" ),
                      noMenu: role !== "trash" && role !== "spam" };
         } );
-        out.push( { id: "labels", name: E.T( "mail.labels" ), icon: E.icon( "tag" ), cls: "mail-node-labels",
-                    kids: S.labels.map( function ( l ) { return { id: "l:" + l.id, name: l.name, icon: dot( l.color ) }; } ) } );
+        var kids = S.labels.map( function ( l ) { return { id: "l:" + l.id, name: l.name, icon: dot( l.color ), tail: eye( l.id ) }; } );
+        if( kids.length ) kids.push( { id: "nolabel", name: E.T( "mail.noLabel" ), icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"></circle></svg>', tail: eye( "none" ), noMenu: true, noDrag: true } );
+        out.push( { id: "labels", name: E.T( "mail.labels" ), icon: E.icon( "tag" ), cls: "mail-node-labels", kids: kids } );
         return out;
+    }
+
+    // THE EYES. A label's eye hides from the trays the mail that carries it
+    // (a label's own list still shows all of its mail); the eye of "No
+    // label" hides the mail with none. Only out of sight: nothing is moved.
+    // This device only.
+    var veil = ( function ()
+    {
+        try { return new Set( JSON.parse( localStorage.getItem( VEIL_KEY ) || "[]" ) ); } catch( e ) { return new Set(); }
+    } )();
+
+    function eye( key )
+    {
+        var off = veil.has( key );
+        return { icon: off ? "eye-off" : "eye", on: off, title: E.T( off ? "mail.showTagged" : "mail.hideTagged" ) };
+    }
+
+    E.veiled = function ( m )
+    {
+        if( S.label || ! veil.size ) return false;
+        var ids = ( m.labels || [] ).filter( E.labelById );
+        if( ! ids.length ) return veil.has( "none" );
+        return ids.some( function ( id ) { return veil.has( id ); } );
+    };
+
+    function toggleVeil( key )
+    {
+        if( veil.has( key ) ) veil.delete( key ); else veil.add( key );
+        try { localStorage.setItem( VEIL_KEY, JSON.stringify( Array.from( veil ) ) ); } catch( e ) {}
+        S.items.forEach( function ( m ) { if( m._row ) m._row.hidden = ( !! S.only && ! S.only.has( m ) ) || E.veiled( m ); } );
+        // a picked row that went out of sight is no longer picked
+        var ids = browse ? browse.ids() : [];
+        var keep = ids.filter( function ( id ) { var m = itemOf( id ); return m && ! E.veiled( m ); } );
+        if( keep.length !== ids.length ) browse.set( keep );
+        E.showEmpty();
+        treeView.render();
     }
 
     function labelOfNode( id ) { return id.indexOf( "l:" ) === 0 ? E.labelById( id.slice( 2 ) ) : null; }
@@ -300,6 +339,7 @@
         if( ROLES.indexOf( id ) >= 0 ) { E.openTray( id ); return; }
         var l = labelOfNode( id );
         if( l ) { E.openLabel( l.id ); return; }
+        if( id === "nolabel" ) { toggleVeil( "none" ); return; }
         if( id === "labels" )
         {
             treeView.toggle( "labels" );
@@ -382,6 +422,7 @@
             setOpen: function ( id, v ) { try { localStorage.setItem( OPEN_KEY, v ? "open" : "closed" ); } catch( e ) {} },
             current: function () { return S.label ? "l:" + S.label : S.tray; },
             go:      go,
+            tail:    function ( id ) { toggleVeil( id === "nolabel" ? "none" : id.slice( 2 ) ); },
             menu:    nodeMenu,
             drop:    { can: function ( ids, id ) { return dropVerb( ids, id ) ? "inside" : false; }, drop: function ( ids, id ) { dropOn( ids, id ); } }
         } );
@@ -399,7 +440,7 @@
             open:     openItem,
             preview:  preview,
             active:   function () { return S.accounts.length > 0 && E.listShown() && ! E.isComposing(); },
-            pickable: function ( id ) { var m = itemOf( id ); return !! m && ( ! S.only || S.only.has( m ) ); },
+            pickable: function ( id ) { var m = itemOf( id ); return !! m && ( ! S.only || S.only.has( m ) ) && ! E.veiled( m ); },
             search:   function () { if( E.searchFold ) E.searchFold.open(); },
             drag:     { text: function ( ids ) { var m = itemOf( ids[ 0 ] ); return m ? m.subject || "" : ""; } },
             onSelect: function ( ids )

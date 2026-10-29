@@ -51,6 +51,7 @@ var glyphs = []glyph{
 	{name: "tasks", svg: "<rect x='3' y='4' width='18' height='17' rx='2'></rect>" +
 		"<path d='M8 4V3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1'></path>" +
 		"<polyline points='8 13 11 16 16 10.5'></polyline>"},
+	{name: "language", svg: "<circle cx='9' cy='9' r='6.5'></circle><ellipse cx='9' cy='9' rx='2.8' ry='6.5'></ellipse><path d='M2.5 9h13'></path><path d='M15 14h5.5a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3l-2.5 2.2v-2.2a1.5 1.5 0 0 1-1.5-1.5v-3a1.5 1.5 0 0 1 1.5-1.5z'></path>"},
 	{name: "split", svg: "<path d='M16.5 7A7 7 0 1 0 16.5 17'></path>" +
 		"<line x1='3' y1='10.2' x2='13.5' y2='10.2'></line>" +
 		"<line x1='3' y1='13.8' x2='13.5' y2='13.8'></line>"},
@@ -64,6 +65,14 @@ var glyphs = []glyph{
 	{name: "email", svg: "<rect x='2' y='4' width='20' height='16' rx='2'></rect>" +
 		"<polyline points='22 6 12 13 2 6'></polyline>"},
 	{name: "bookmarks", svg: "<path d='M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z'/>"},
+	{name: "calculator", svg: "<rect x='4' y='2' width='16' height='20' rx='2'></rect>" +
+		"<line x1='8' y1='6' x2='16' y2='6'></line>" +
+		"<line x1='16' y1='14' x2='16' y2='18'></line>" +
+		"<path d='M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01'></path>"},
+	{name: "passwords", svg: "<circle cx='7.5' cy='15.5' r='4.5'/>" +
+		"<path d='M10.7 12.3 21 2'/>" +
+		"<path d='m15.5 7.5 3 3'/>" +
+		"<path d='m18 5 2.5 2.5'/>"},
 	{name: "contact", svg: "<rect x='3' y='4' width='18' height='17' rx='2'/>" +
 		"<circle cx='9' cy='11' r='2.2'/>" +
 		"<path d='M5.5 17.5c0-2.2 1.7-3.3 3.5-3.3s3.5 1.1 3.5 3.3'/>" +

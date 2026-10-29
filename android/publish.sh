@@ -46,6 +46,9 @@ fi
 rm -rf "$out"; mkdir -p "$out"
 cp site/index.html "$out/"
 cp app/build/outputs/apk/release/app-release.apk "$out/nayive.apk"
-printf '{"code": %s, "name": "%s", "url": "/app/nayive.apk"}\n' "$code" "$name" > "$out/version.json"
+# "apk": what 0.10+ downloads and installs itself. "url": what older apps open
+# in the browser - the page with the steps, not the bare file (a bare download
+# was mostly never opened, so those phones never updated).
+printf '{"code": %s, "name": "%s", "url": "/app/", "apk": "/app/nayive.apk"}\n' "$code" "$name" > "$out/version.json"
 echo "$sum" > "$stamp"
 ls -la "$out"

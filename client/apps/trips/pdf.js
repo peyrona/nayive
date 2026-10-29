@@ -279,7 +279,7 @@ function buildTripPrintDoc( trip )
                 [ T( 'trips.currency' ),      cur.code + ( cur.matched ? '' : ' (aproximada)' ) ],
                 [ T( 'trips.weather' ), stagePrintWeather( st ) ],
                 [ T( 'trips.lodging' ), st.accommodation && st.accommodation.trim() ? st.accommodation.trim() : '' ],
-                [ NayiveUI.t( 'ui.notes' ),       st.notes && st.notes.trim() ? st.notes.trim() : '' ],
+                [ Ayni.t( 'ui.notes' ),       st.notes && st.notes.trim() ? st.notes.trim() : '' ],
                 [ T( 'trips.documents' ),  String( stDocs.length ) ]
             ] ) );
 

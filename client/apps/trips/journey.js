@@ -19,8 +19,9 @@ function buildMapModeSwitch()
         const on = mapMode === m[ 0 ];
         const b  = document.createElement( 'button' );
         b.type      = 'button';
-        b.className = 'icon-btn sm' + ( on ? ' is-active' : '' );
-        b.title     = T( m[ 2 ] );
+        b.className = 'btn sm';
+        b.setAttribute( 'aria-pressed', on );
+        Ayni.setTip( b, T( m[ 2 ] ) );
         b.setAttribute( 'aria-label', T( m[ 2 ] ) );
         b.setAttribute( 'aria-pressed', on ? 'true' : 'false' );
         b.appendChild( svgIcon( m[ 1 ], 16 ) );
@@ -96,6 +97,11 @@ function buildJourneyBlock( trip, sWhich, wrap, bar )
     loadJourney( trip ).then( function( j )
     {
         if( stale() ) return;
+
+        // Only what a GPS reported: the plan's stages (and "now" taken from
+        // the plan) stay on the Plan map. The public link still shows them.
+        j = { ...j, route: j.route.filter( function( p ) { return p.kind !== 'stage'; } ),
+                    now:   j.now && j.now.source !== 'plan' ? j.now : null };
 
         const spots = j.photos.filter( function( p ) { return p.lat != null && p.lon != null; } );
         if( ! j.route.length && ! j.now && ! spots.length ) { note( T( 'trips.journeyEmpty' ) ); return; }

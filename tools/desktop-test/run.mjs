@@ -175,9 +175,9 @@ try
         var out = { scale: [ c( 'scale' ), tok( '--win-scale' ) ], min: [ c( 'min' ), tok( '--warn' ) ], max: [ c( 'max' ), tok( '--ok' ) ], close: [ c( 'close' ), tok( '--danger' ) ] }; probe.remove(); return JSON.stringify( out ); } )()` ) );
     check( "colours: blue Scale / Resize, then the old dots' warn / ok / danger", Object.values( colours ).every( ( [ a, z ] ) => a === z ) && /rgb\(\s*(24, 115, 204|30, 144, 255)/.test( colours.scale[ 0 ] ), colours );
     const fi = await ev( "NayiveDesktop.windows().findIndex( function ( x ) { return x.name === document.querySelector( '#tasks .task.front span' ).textContent; } )" );
-    const sc0 = JSON.parse( await ev( `JSON.stringify( [ NayiveDesktop.windows()[ ${fi} ].scale, ${frontBtn( "scale" )}.title, ${frontBtn( "scale" )}.innerHTML.length, ${frontBtn( "scale" )}.getAttribute( 'aria-pressed' ) ] )` ) );
+    const sc0 = JSON.parse( await ev( `JSON.stringify( [ NayiveDesktop.windows()[ ${fi} ].scale, ${frontBtn( "scale" )}.dataset.tip, ${frontBtn( "scale" )}.innerHTML.length, ${frontBtn( "scale" )}.getAttribute( 'aria-pressed' ) ] )` ) );
     await press( frontBtn( "scale" ) );
-    const sc1 = JSON.parse( await ev( `JSON.stringify( [ NayiveDesktop.windows()[ ${fi} ].scale, ${frontBtn( "scale" )}.title, ${frontBtn( "scale" )}.innerHTML.length, ${frontBtn( "scale" )}.getAttribute( 'aria-pressed' ) ] )` ) );
+    const sc1 = JSON.parse( await ev( `JSON.stringify( [ NayiveDesktop.windows()[ ${fi} ].scale, ${frontBtn( "scale" )}.dataset.tip, ${frontBtn( "scale" )}.innerHTML.length, ${frontBtn( "scale" )}.getAttribute( 'aria-pressed' ) ] )` ) );
     check( "Scale / Resize button: flips the mode, its icon and its tooltip", sc0[ 0 ] !== sc1[ 0 ] && sc0[ 1 ] !== sc1[ 1 ] && sc0[ 2 ] !== sc1[ 2 ] && sc1[ 3 ] === String( sc1[ 0 ] ) && /^(Scale|Resize)/.test( sc1[ 1 ] ), { sc0, sc1 } );
     await press( frontBtn( "scale" ) );
     check( "Scale / Resize button: and back", await ev( `NayiveDesktop.windows()[ ${fi} ].scale` ) === sc0[ 0 ] );
@@ -267,7 +267,7 @@ try
     await press( "document.querySelectorAll( '#tasks .task' )[ 1 ]" );          // B's bar button: B to the front
     await press( frontBtn( "max" ) );
     const before = await wins();
-    await pressTile( "document.querySelector( '#tileSw .track' )" );               // the switch: Free -> Tile
+    await pressTile( "document.querySelector( '#tileChk' )" );               // the switch: Free -> Tile
     check( "Tile switch: on, bold Tile", await ev( "document.getElementById( 'tileChk' ).checked && document.getElementById( 'tileSw' ).classList.contains( 'on' )" ) === true );
     await settle();
     w = await wins();
@@ -402,6 +402,22 @@ try
     await ev( "NayiveDesktop.open( '/nayive/fixture/box.html?w=300&h=200&n=H' )" ); await settle();
     nw = await ev( "NayiveDesktop.windows()" );
     check( "Scale default off: a new window starts with Resize", nw[ nw.length - 1 ].scale === false, nw[ nw.length - 1 ] );
+
+    // ----- 10b. A closed window leaves its place and size to the app's next one (LAST)
+    {
+        const wasTiled = await ev( "NayiveDesktop.isTiled()" );
+        if( wasTiled ) { await ev( "NayiveDesktop.untile()" ); await settle(); }      // a tiled window keeps nothing
+        await ev( `( function () { var n = NayiveDesktop.windows().length; document.querySelectorAll( '#tasks [data-win="close"]' )[ n - 1 ].click(); return true; } )()` ); await settle();
+        const gone = JSON.parse( await ev( "localStorage.getItem( 'balata-desktop-last' )" ) || "null" );
+        check( "Last: a closed window is kept per app", gone && gone.fixture && gone.fixture.w > 0, gone );
+        await ev( `( function () { var g = JSON.parse( localStorage.getItem( 'balata-desktop-last' ) ); g.fixture = { l: 111, t: 77, w: 640, h: 360, max: false };
+                   localStorage.setItem( 'balata-desktop-last', JSON.stringify( g ) ); return true; } )()` );
+        await ev( "NayiveDesktop.open( '/nayive/fixture/box.html?w=300&h=200&n=H' )" ); await settle();
+        nw = await ev( "NayiveDesktop.windows()" );
+        const b = nw[ nw.length - 1 ].box;
+        check( "Last: the next window of that app opens there", b.l === 111 && b.t === 77 && b.w === 640 && b.h === 360, b );
+        if( wasTiled ) { await ev( "NayiveDesktop.tile()" ); await settle(); }
+    }
 
     // ----- 11. Sticky windows (the "⋮" menu): an edge offers that half of the desk
     const dk = await ev( "JSON.stringify( [ document.getElementById( 'desk' ).clientWidth, document.getElementById( 'desk' ).clientHeight, document.getElementById( 'desk' ).getBoundingClientRect().top ] )" ).then( JSON.parse );

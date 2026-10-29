@@ -49,7 +49,7 @@
     // ---------------------------------------------------------------------
 
     // The rows in sight: the dialog's matches, or every one.
-    function pool() { return S.only ? S.items.filter( function ( m ) { return S.only.has( m ); } ) : S.items; }
+    function pool() { return S.items.filter( function ( m ) { return ( ! S.only || S.only.has( m ) ) && ! E.veiled( m ); } ); }
 
     function everyPicked()
     {
@@ -62,7 +62,7 @@
     {
         if( ! list && ! S.only ) return;
         S.only = list ? new Set( list ) : null;
-        S.items.forEach( function ( m ) { if( m._row ) m._row.hidden = !! S.only && ! S.only.has( m ); } );
+        S.items.forEach( function ( m ) { if( m._row ) m._row.hidden = ( !! S.only && ! S.only.has( m ) ) || E.veiled( m ); } );
     }
 
     // Every row in sight picked (the browser's Select all: on a phone the

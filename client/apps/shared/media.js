@@ -142,10 +142,10 @@
             // problem, so it must never bounce the page to the login page. Only
             // a 401 does: a server restarting, or Wi-Fi with no internet
             // behind it, is "try again", not "sign in".
-            if( st === 404 )      onMsg( NayiveUI.t( 'media.folderGone' ) );
-            else if( st === 403 ) onMsg( NayiveUI.t( 'media.noAccess' ) );
+            if( st === 404 )      onMsg( Ayni.t( 'media.folderGone' ) );
+            else if( st === 403 ) onMsg( Ayni.t( 'media.noAccess' ) );
             else if( st === 401 ) GumApi.loginRedirect();
-            else onMsg( NayiveUI.t( navigator.onLine ? 'ui.loadFailed' : 'media.offlineRetry' ) );
+            else onMsg( Ayni.t( navigator.onLine ? 'ui.loadFailed' : 'media.offlineRetry' ) );
             return null;
         }
     }
@@ -160,16 +160,16 @@
         if( s.indexOf( "shared/" ) === 0 )
         {
             var ext = s.indexOf( "/~/" );
-            return NayiveUI.tf( "media.sharedBy", { what: ext === -1 ? s.slice( 7 ) : s.split( "/" ).pop() } );
+            return Ayni.tf( "media.sharedBy", { what: ext === -1 ? s.slice( 7 ) : s.split( "/" ).pop() } );
         }
-        return s.replace( /^files\//, "" ).replace( /^data\//, "" ) || NayiveUI.t( "ui.filesRoot" );
+        return s.replace( /^files\//, "" ).replace( /^data\//, "" ) || Ayni.t( "ui.filesRoot" );
     }
 
     // The crumb (first row of the folder-? menu): folder icon + the label.
     function setCrumb( label )
     {
         var el = document.getElementById( "crumb" );
-        if( el ) el.innerHTML = NayiveUI.icon( "folder" ) + "<span>" + esc( label ) + "</span>";
+        if( el ) el.innerHTML = Ayni.icon( "folder" ) + "<span>" + esc( label ) + "</span>";
     }
 
     // The folder-? button (#folderInfoBtn) opens its menu (#folderMenu): the
@@ -562,7 +562,7 @@
         var waiting = waitingMoves();
         waiting.push( { pairs: pairs, keep: !! keep } );
         storeMoves( waiting );
-        if( ! await settleNoteMoves() && window.NayiveUI ) NayiveUI.toast( NayiveUI.t( 'media.notesMoveFailed' ), { ms: 8000 } );
+        if( ! await settleNoteMoves() && window.NayiveUI ) NayiveUI.toast( Ayni.t( 'media.notesMoveFailed' ), { ms: 8000 } );
     }
 
     // The note moves still to be made on this device, oldest first.
@@ -825,9 +825,9 @@
     // The "filtered by X" strip with its clear button (#clearScopeBtn).
     function scopeBarHtml( label, clearTitle )
     {
-        var t = esc( clearTitle || NayiveUI.t( 'media.clearFilter' ) );
+        var t = esc( clearTitle || Ayni.t( 'media.clearFilter' ) );
         return '<div class="scope-bar"><span class="scope-chip">' + esc( label ) +
-            '<button id="clearScopeBtn" title="' + t + '" aria-label="' + t + '">' + ICONS.x + '</button></span></div>';
+            '<button id="clearScopeBtn" data-tip="' + t + '" aria-label="' + t + '">' + ICONS.x + '</button></span></div>';
     }
 
     //------------------------------------------------------------------------//
@@ -838,8 +838,8 @@
     {
         var btn = document.getElementById( "playBtn" ), ico = document.getElementById( "playIcon" );
         if( ! btn || ! ico ) return;
-        btn.title = playing ? NayiveUI.t( 'media.pause' ) : NayiveUI.t( 'media.play' );
-        btn.setAttribute( "aria-label", btn.title );
+        Ayni.setTip( btn, playing ? Ayni.t( 'media.pause' ) : Ayni.t( 'media.play' ) );
+        btn.setAttribute( "aria-label", btn.dataset.tip );
         ico.outerHTML = playing
             ? '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" id="playIcon"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>'
             : '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" id="playIcon"><path d="M8 5v14l11-7-11-7Z"/></svg>';

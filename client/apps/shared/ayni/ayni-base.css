@@ -1,0 +1,96 @@
+/* Ayni library 0.1.0, base: the colours, sizes, type and icons every Ayni page and family builds on. Plain CSS, no
+   build step, evergreen browsers 2024+. Load it before any family stylesheet. Fonts: the system's own, nothing is
+   loaded from the network. */
+/* RULE: colour. Each scheme (light, dark) sets its colours by hand; each has one job, written beside it. A few more
+   are derived below with color-mix(), so they follow any scheme. An app overrides any of them for its own look.
+   Never write a hex colour, a raw shadow or an off-scale radius in a rule: use these names. */
+:root {
+  color-scheme: light;
+  --bg: #D8D0C0;                   /* page background behind Panels */
+  --card: #E3DCCC;                 /* Panels: dialogs, menus, popups, windows */
+  --card2: #F2ECDF;                /* fields, inner cards, chips */
+  --line: #86714B;                 /* Panel borders, separators */
+  --text: #242732;                 /* text, icons */
+  --text-dim: #484C5B;             /* secondary text, quiet icons, field labels, placeholders */
+  --text-faint: #5E6472;           /* only things that are off or done: disabled text, done items */
+  --accent: #61410A;               /* default button fill, selection, focus ring, active marks */
+  --on-accent: #F9F9FB;            /* text and icons on an Accent fill */
+  --on-solid: #FFFFFF;             /* icons on a solid Success or Danger fill, a switch's knob */
+  --danger: #9C4150;               /* danger icons, errors, required mark */
+  --ok: #2E6B4E;                   /* success icons, "saved" */
+  --warn: #8A5A0B;                 /* warning icons, "offline, changes waiting" */
+  --busy: #1C5FA6;                 /* "sending or fetching data" */
+  --link: #1A4F9E;                 /* links */
+  --shadow: rgba(0, 0, 0, .14);    /* shadow colour */
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #1E1F23; --card: #25272B; --card2: #2F3034; --line: #424349;
+    --text: #E7E7E9; --text-dim: #9597A1; --text-faint: #6B6E77;
+    --accent: #1F80B1; --on-accent: #0D0F17; --danger: #D9707D;
+    --ok: #7BA88F; --warn: #E0A21E; --busy: #2179CF; --link: #5B9DF9; --shadow: rgba(0, 0, 0, .35);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1E1F23; --card: #25272B; --card2: #2F3034; --line: #424349;
+  --text: #E7E7E9; --text-dim: #9597A1; --text-faint: #6B6E77;
+  --accent: #1F80B1; --on-accent: #0D0F17; --danger: #D9707D;
+  --ok: #7BA88F; --warn: #E0A21E; --busy: #2179CF; --link: #5B9DF9; --shadow: rgba(0, 0, 0, .35);
+}
+/* Derived colours: the same formulas serve every scheme */
+:root {
+  --card-head: color-mix(in oklab, var(--text) 5%, var(--card));       /* Panel title rows */
+  --field-line: color-mix(in oklab, var(--text) 50%, var(--card2));    /* field borders, >= 3:1 (WCAG 1.4.11) */
+  --accent-soft: color-mix(in oklab, var(--accent) 16%, var(--card));  /* selected rows, highlights */
+  --readonly-bg: color-mix(in oklab, var(--text) 7%, var(--card));     /* read-only fields */
+  --track: color-mix(in srgb, var(--accent) 18%, var(--bg));           /* the empty part of a bar */
+  --scrim: rgba(0, 0, 0, .5);                                          /* modal backdrop */
+}
+/* Everything else: the same in both schemes */
+:root {
+  /* Type: the system's own fonts, nothing loaded from the network. Sizes are in rem. */
+  --font-sans: BlinkMacSystemFont, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --field-fs: .77rem;              /* text typed into a field; 16px on phones (below) */
+  /* Corners: the whole scale. Buttons and avatars are circles. */
+  --radius-s: 8px;                 /* fields, small buttons, chips */
+  --radius-m: 12px;                /* inner cards, list rows, menus, popups */
+  --radius-l: 16px;                /* dialogs, windows, page cards */
+  --radius-pill: 999px;
+  /* Spacing: multiples of 4 */
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px;
+  /* Shadows */
+  --elev-card: 0 8px 24px var(--shadow);              /* popups, menus, page cards */
+  --elev-dialog: 0 12px 32px rgba(0, 0, 0, .45);      /* dialogs over the scrim */
+  /* Motion: quick and plain, no entrance animations */
+  --tr-fast: .12s ease;            /* colour, background, opacity */
+  --tr-move: .15s ease;            /* movement */
+  /* Panels and controls */
+  --panel-bg: var(--card); --panel-head-bg: var(--card-head); --panel-border: 1px solid var(--line);
+  --panel-radius: var(--radius-l); --panel-shadow: var(--elev-card);
+  --panel-pad: var(--space-4); --panel-gap: var(--space-3);
+  --ctl-h: 32px; --ctl-radius: var(--radius-s); --icon: 20px;
+}
+/* Touch (html.touch, set by ayni-base.js): every target takes at least --touch, as an invisible hit area */
+html.touch { --touch: 44px; }
+/* On a phone, Safari zooms the page in on a field whose text is under 16px and never zooms back out */
+@media (max-width: 599px) { html.touch { --field-fs: 16px; } }
+@media (prefers-reduced-motion: reduce) { :root { --tr-fast: 0s; --tr-move: 0s; } }
+
+/* ---------- Icons ---------- */
+/* An icon is a span that holds the set's svg (or a font glyph). Its size is --icon; an app's own rule that sizes the
+   svg (.toolbar svg { width: 18px }) wins, because these rules weigh nothing (:where) and the span wraps the svg. */
+:where(.icon) { flex: none; }
+:where(span.icon) { display: inline-flex; align-items: center; justify-content: center; font-size: var(--icon); line-height: 1; }
+:where(span.icon) > svg, :where(svg.icon) { width: var(--icon); height: var(--icon); }
+:where(span.icon.flip) { transform: rotate(180deg); }
+:where(svg.icon, .icon > svg.st) { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- Tooltips (data-tip on any element) ---------- */
+.tooltip { position: fixed; inset: auto; margin: 0; border: 0; pointer-events: none; background: var(--text); color: var(--card);
+  font-size: .8rem; line-height: 1.35; padding: 4px 8px; border-radius: 4px; max-width: 240px; box-shadow: var(--panel-shadow); }
+
+/* ---------- Motion shared by the families ---------- */
+@keyframes spin { to { transform: rotate(360deg); } }

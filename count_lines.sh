@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Count Lines (not LoC) in files in this project.
-# Counting is made per file type for: .html, .css, .js, .mjs, .py and .go
+# Counting is made per file type for: .html, .css, .js, .mjs, .py, .go and .sh
 # At end shows a table with the results.
 # ==============================================================================
 
@@ -22,7 +22,7 @@ PRUNE=(
     -o -path './server/go/vendor'         # vendored Go module (x/text), not ours
 )
 
-EXTS=(html css js mjs py go)
+EXTS=(html css js mjs py go sh)
 
 printf '%-8s %10s %14s\n' "Type" "Files" "Lines"
 printf '%-8s %10s %14s\n' "----" "-----" "-----"

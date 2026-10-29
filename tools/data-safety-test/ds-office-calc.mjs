@@ -30,7 +30,7 @@ let c = first;
 
 const A1 = "( function () { var td = document.querySelector('#gridHost .ht_master tbody tr td'); return td ? td.textContent : null; } )()";
 const B2 = "( function () { var td = document.querySelector('#gridHost .ht_master tbody tr:nth-child(2) td:nth-of-type(2)'); return td ? td.textContent : null; } )()";
-const TOLD = key => `( window.__toasts || [] ).some( function ( t ) { return t.indexOf( NayiveUI.t( '${key}' ) ) !== -1; } )`;
+const TOLD = key => `( window.__toasts || [] ).some( function ( t ) { return t.indexOf( Ayni.t( '${key}' ) ) !== -1; } )`;
 
 async function openSheet( rel, a1 )
 {
@@ -68,7 +68,7 @@ ok( bytesOnDisk( s, "files/land.xlsx" ).equals( LAND ), "the file itself is unto
 
 ok( await c.evaluate( "typeof window.nayiveBeforeClose === 'function'" ), "the page answers the desktop's close" );
 await c.evaluate( "window.__closing = window.nayiveBeforeClose && window.nayiveBeforeClose(), true" );
-ok( await c.until( "window.__sheet().indexOf( NayiveUI.t('drive.unsavedBody') ) !== -1" ), "and closing it asks first (held back, not in the file)" );
+ok( await c.until( "window.__sheet().indexOf( Ayni.t('drive.unsavedBody') ) !== -1" ), "and closing it asks first (held back, not in the file)" );
 
 //----------------------------------------------------------------------------//
 section( "G2 · RESTORE WHEN THE FILE HAS WHAT CALC CANNOT WRITE" );
@@ -79,7 +79,7 @@ c = await first.tab();
 
 ok( await openSheet( "files/sheet.xlsx", "NOW" ), "sheet.xlsx (landscape) is open; its .bak is protected" );
 await c.evaluate( "document.getElementById('restoreBtn').click(), true" );
-ok( await c.until( "window.__sheet().indexOf( NayiveUI.t('write.restore') ) !== -1" ), "Restore asks first (no Undo for it)" );
+ok( await c.until( "window.__sheet().indexOf( Ayni.t('write.restore') ) !== -1" ), "Restore asks first (no Undo for it)" );
 await c.evaluate( "window.__pressConfirm()" );
 ok( await c.until( `${A1} === 'OLD'` ), "the previous copy is on screen" );
 let file = null, bak = null;

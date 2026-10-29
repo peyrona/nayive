@@ -29,7 +29,7 @@ const at = await c.evaluate( "( function () { var r = document.querySelector('.s
 await c.send( "Input.dispatchMouseEvent", { type: "mouseMoved", x: at.x, y: at.y } );
 await c.send( "Input.dispatchMouseEvent", { type: "mousePressed", x: at.x, y: at.y, button: "right", buttons: 2, clickCount: 1 } );
 await c.send( "Input.dispatchMouseEvent", { type: "mouseReleased", x: at.x, y: at.y, button: "right", buttons: 0, clickCount: 1 } );
-const addText = await c.evaluate( `NayiveUI.tf( 'write.addToDict', { word: ${JSON.stringify( WORD )} } )` );
+const addText = await c.evaluate( `Ayni.tf( 'write.addToDict', { word: ${JSON.stringify( WORD )} } )` );
 const ITEM = `Array.prototype.find.call( document.querySelectorAll( 'button.menu-item' ), function ( e ) { return e.offsetParent && e.textContent.indexOf( ${JSON.stringify( addText )} ) !== -1; } )`;
 ok( await c.until( ITEM, 10000 ), "its menu offers \"" + addText + "\"" );
 await c.evaluate( `${ITEM}.click(), true` );

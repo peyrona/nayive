@@ -30,7 +30,7 @@ section( "A1 · TEXT, ONE DOCUMENT IN TWO TABS" );
     const CM  = "document.querySelector('.CodeMirror') && document.querySelector('.CodeMirror').CodeMirror";
     const val = c => c.evaluate( `( ${CM} ) ? ${CM}.getValue() : null` );
     const typeIn = ( c, t ) => c.evaluate( `${CM}.replaceRange( ${JSON.stringify( t )}, { line: 0, ch: 0 } ), true` );
-    const conflictAsked = c => c.evaluate( "!! document.querySelector('.sheet-backdrop.open') && document.querySelector('.sheet-backdrop.open').textContent.indexOf( NayiveUI.t( 'ui.conflictTitle' ) ) !== -1" );
+    const conflictAsked = c => c.evaluate( "!! document.querySelector('.sheet-backdrop.open') && document.querySelector('.sheet-backdrop.open').textContent.indexOf( Ayni.t( 'ui.conflictTitle' ) ) !== -1" );
 
     await A.open( "/nayive/text/?file=files/a.txt", "/nayive/text/" );
     await B.open( "/nayive/text/?file=files/a.txt", "/nayive/text/" );

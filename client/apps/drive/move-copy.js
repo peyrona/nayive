@@ -5,16 +5,15 @@
 "use strict";
 
 //------------------------------------------------------------------------//
-// ACTIONS: MOVE TO… / COPY TO…
+// ACTIONS: MOVE TO… / COPY TO… (and its "Shortcut only")
 //
 // Both open the same folder chooser. "Move" is one server rename() per
 // item (old path -> new parent). "Copy" is one server copy per item
 // (POST ?from=&new=, server/go/copy.go): the bytes go disk to
 // disk, never through the browser, so a big video cannot fill the tab.
 
-// The chooser is the shared "Move to…" (NayiveUI.pickNode): the same tree
-// as the side pane, Drive's own folders only (nothing moves or copies INTO
-// "Shared with me"). The paths are read once, before it opens.
+// The chooser is the shared "Move to…" (NayiveUI.pickNode): the folder
+// tree of Home only (nothing moves or copies INTO "Shared with me"). The paths are read once, before it opens.
 async function openFolderPicker( mode )
 {
     const paths = actionTargets();
@@ -23,9 +22,15 @@ async function openFolderPicker( mode )
     // A folder is not a valid destination if it is one of the selected
     // folders itself, or lives inside one (dragdrop.js intoOwnTree).
     const isBadDest = function( path ) { return intoOwnTree( paths, path ); };
+    const one  = paths.length === 1 && rowNode( paths[0] );
     const what = paths.length === 1
-        ? ('"' + paths[0].split( '/' ).pop() + '"')
+        ? ('"' + ( one ? displayName( one ) : paths[0].split( '/' ).pop() ) + '"')
         : TF( 'drive.nItems', { n: paths.length } );
+
+    // "Copy to…" can make shortcuts instead (server/go/links.go): of my own
+    // things only, and never of a shortcut.
+    const canLink  = mode === 'copy' && ! readOnlyOf( paths ) && ! anyLink( paths );
+    let   shortcut = false;
 
     const dest = await NayiveUI.pickNode( {
         title:    mode === 'move' ? T( 'drive.moveTo' ) : T( 'drive.copyTo' ),
@@ -37,14 +42,58 @@ async function openFolderPicker( mode )
         note:     function( lit )
         {
             if( lit === null ) return TF( 'drive.pickDest', { what: what } );
-            const dst = lit === FS_ROOT ? 'Drive' : lit.split( '/' ).pop();
-            return TF( mode === 'move' ? 'drive.moveWhatTo' : 'drive.copyWhatTo', { what: what, dst: dst } );
-        }
+            const dst = lit === FS_ROOT ? homeName() : lit.split( '/' ).pop();
+            return TF( mode === 'move' ? 'drive.moveWhatTo' : shortcut ? 'drive.shortcutWhatTo' : 'drive.copyWhatTo',
+                       { what: what, dst: dst } );
+        },
+        extra:    canLink ? function( sync ) { return shortcutSwitch( function( on ) { shortcut = on; sync(); } ); } : null
     } );
     if( dest === null ) return;
 
     if( mode === 'move' ) await doMove( paths, dest );
+    else if( shortcut )   await doShortcuts( paths, dest );
     else                  await doCopy( paths, dest );
+}
+
+// The "Shortcut only" on / off row of "Copy to…" (off each time it opens).
+function shortcutSwitch( onChange )
+{
+    const row   = document.createElement( 'label' );
+    const sw    = document.createElement( 'span' );
+    const box   = document.createElement( 'input' );
+    row.className   = 'share-add';
+    sw.className    = 'switch';
+    box.type        = 'checkbox';
+    box.setAttribute( 'role', 'switch' );
+    box.addEventListener( 'change', function() { onChange( box.checked ); } );
+    sw.appendChild( box );
+    row.appendChild( document.createTextNode( T( 'drive.shortcutOnly' ) ) );
+    row.appendChild( sw );
+    return row;
+}
+
+// One shortcut per item in `dest`, each under a free name (the server picks
+// it, never over anything). The originals are only read.
+async function doShortcuts( paths, dest )
+{
+    let made = 0;
+    try
+    {
+        for( const p of paths )
+        {
+            await withBusy( GumApi.makeShortcut( p, dest ) );
+            made++;
+        }
+        clearSel();
+        await reload();
+        flashStatus( TF( 'drive.nShortcuts', { n: made } ) );
+    }
+    catch( err )
+    {
+        if( err && err.status === 507 ) NayiveUI.toast( T( 'ui.room.none' ) );
+        else                            NayiveUI.toast( TF( 'drive.shortcutFailed', { err: err && err.message || err } ) );
+        await reload();
+    }
 }
 
 // The names already present in `dest` (one listDir call). Empty on failure

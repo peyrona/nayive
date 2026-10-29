@@ -25,7 +25,7 @@ async function parkedFirst( paths )
             title: T( 'ui.park.title' ),
             body: TF( 'ui.park.body', { name: one ? paths[0].split( '/' ).pop() : TF( 'drive.nItems', { n: paths.length } ),
                                         list: NayiveStore.pendingText( list ) } ),
-            confirm: T( 'ui.park.goOn' ), other: T( 'ui.park.forget' ), otherIcon: 'eyeoff' } );
+            confirm: T( 'ui.park.goOn' ), other: T( 'ui.park.forget' ), otherIcon: 'eye-off' } );
         if( r === true || r === 'other' ) try { await NayiveStore.dismissPending( paths ); } catch( e ) {}
         if( r !== true ) return false;
     }
@@ -38,7 +38,7 @@ async function parkedFirst( paths )
 
 // The item the open dialog renames, kept as it opened: the picks may change
 // meanwhile (a picked file deleted elsewhere drops out of the list, and the
-// tree menu's target with it), and OK must not rename another one (AB2).
+// menu's target with it), and OK must not rename another one (AB2).
 let renameTarget = null;
 
 function openRename()
@@ -47,9 +47,34 @@ function openRename()
     if( targets.length !== 1 ) return;
 
     const path = renameTarget = targets[0];
-    document.getElementById( 'renameName' ).value = path.split( '/' ).pop();
+    const node = rowNode( path );
+    document.getElementById( 'renameName' ).value = node ? displayName( node ) : path.split( '/' ).pop();
+    document.getElementById( 'renameError' ).hidden = true;
     setBackdrop( 'renameBackdrop', true );
     document.getElementById( 'renameName' ).focus();
+}
+
+// A name never holds "/" (it would make a folder and move the item into it).
+// A pasted path keeps only its last part, the name; a "/" typed is dropped
+// at once. Either way the field says why.
+function pasteName( e )
+{
+    const text = ( e.clipboardData && e.clipboardData.getData( 'text' ) ) || '';
+    if( ! /[\/\\]/.test( text ) ) return;              // a Windows path too: C:\Docs\a.txt
+    e.preventDefault();
+    const name = text.trim().split( /[\/\\]/ ).filter( Boolean ).pop() || '';
+    e.target.setRangeText( name, e.target.selectionStart, e.target.selectionEnd, 'end' );
+    document.getElementById( 'renameError' ).hidden = false;
+}
+
+function noSlash()
+{
+    const box = document.getElementById( 'renameName' );
+    if( ! box.value.includes( '/' ) ) return;
+    const at = box.selectionStart - ( box.value.slice( 0, box.selectionStart ).split( '/' ).length - 1 );
+    box.value = box.value.replace( /\//g, '' );
+    box.setSelectionRange( at, at );
+    document.getElementById( 'renameError' ).hidden = false;
 }
 
 async function confirmRename()
@@ -58,13 +83,14 @@ async function confirmRename()
     if( ! oldPath ) return;
 
     const newName = document.getElementById( 'renameName' ).value.trim();
-    if( ! newName ) return;
+    if( ! newName || newName.includes( '/' ) ) return;     // a "/" would move it into a folder (noSlash)
     renameTarget = null;
 
     setBackdrop( 'renameBackdrop', false );
 
+    // A shortcut is renamed by the name shown: its ending stays (tree.js LINK_EXT).
     const parent  = NayiveMedia.dirOf( oldPath );
-    const newPath = joinPath( parent, newName );
+    const newPath = joinPath( parent, isLink( rowNode( oldPath ) ) ? newName + LINK_EXT : newName );
     if( newPath !== oldPath && ! await parkedFirst( [ oldPath ] ) ) return;
     setStatus( T( 'drive.renaming' ) );
 
@@ -148,7 +174,10 @@ function openProperties()
         const dir  = isDir( node );
 
         propRow( dl, T( 'drive.propName'     ), displayName( node ) );
-        propRow( dl, T( 'drive.propType'     ), dir ? T( 'drive.folder' ) : fileKind( node ) );
+        propRow( dl, T( 'drive.propType'     ), dir ? T( 'drive.folder' )
+                                              : linkBroken( node ) ? T( 'drive.shortcutBroken' )
+                                              : isLink( node ) ? TF( 'drive.shortcutTo', { path: fsRel( node.link.to ) || homeName() } )
+                                              : fileKind( node ) );
         propRow( dl, T( 'drive.propLocation' ), parentLabel( node.path ) );
 
         if( dir )
@@ -265,7 +294,7 @@ function fileKind( node )
 
 function parentLabel( path )
 {
-    return fsRel( NayiveMedia.dirOf( path ) ) || 'Drive';
+    return fsRel( NayiveMedia.dirOf( path ) ) || homeName();
 }
 
 // Where a multi-selection lives, or null when it is spread over several folders.
@@ -322,7 +351,7 @@ function setPropValue( dd, value, sub )
 
 async function copySelectionLink()
 {
-    // One checked item, else the folder selected in the tree.
+    // The one item it was run on.
     const tgts = actionTargets();
     if( tgts.length !== 1 ) return;
     const path = tgts[0];
@@ -390,11 +419,7 @@ async function applyDeepLink()
 
         if( node && isDir( node ) )
         {
-            expandTo( open );
             navigateTo( open );
-
-            const treeRow = document.querySelector( '#treePane .tree-row.is-active' );
-            if( treeRow ) treeRow.scrollIntoView( { block: 'nearest' } );
             return;
         }
         // a file, or gone — reveal it like ?sel (its parent folder is checked below)
@@ -402,8 +427,13 @@ async function applyDeepLink()
     }
 
     const sel = params.get( 'sel' );
-    if( ! sel ) return;
+    if( sel ) await revealItem( sel );
+}
 
+// Open the folder that holds `sel` with it picked - a ?sel= link, or a
+// shortcut's "Go to the original" (menus.js).
+async function revealItem( sel )
+{
     const parent = NayiveMedia.dirOf( sel );
 
     if( parent && ! findNode( parent ) )
@@ -413,7 +443,6 @@ async function applyDeepLink()
     }
 
     currentFolder = parent;
-    expandTo( sel );                       // open the tree all the way down to the target
     clearSearch();
     await loadListing( parent );           // fetch the folder that holds the target
 
@@ -425,25 +454,8 @@ async function applyDeepLink()
 
     setSel( [ sel ] );
 
-    const treeRow = document.querySelector( '#treePane .tree-row.is-active' );
-    if( treeRow ) treeRow.scrollIntoView( { block: 'nearest' } );
-
     const row = document.querySelector( '#listing .row.is-selected' );
     if( row ) row.scrollIntoView( { block: 'center' } );
-}
-
-// Mark every folder on the way to `path` (and `path` itself) as expanded,
-// so renderTree() draws the branch open down to it.
-function expandTo( path )
-{
-    let acc = '';
-    expandedFolders.add( '' );
-
-    for( const seg of splitPath( path ) )
-    {
-        acc = acc ? acc + '/' + seg : seg;
-        expandedFolders.add( acc );
-    }
 }
 
 //------------------------------------------------------------------------//
@@ -453,7 +465,8 @@ let deleteTargets = [];   // paths the next confirmDelete() sends to the bin
 
 // To the bin at once, folders too: the toast's Undo brings it all back (no
 // "Are you sure?" - the item-browser rule). Only what is picked: with
-// nothing picked, the open folder goes from its own menu in the tree.
+// nothing picked, nothing goes - the open folder itself goes from its own
+// row in the folder above it.
 function openDeleteConfirm()
 {
     deleteTargets = actionTargets();
@@ -473,6 +486,7 @@ async function confirmDelete()
     deleteTargets = [];
     deleteBusy    = true;
 
+    if( ! await shortcutsLeftOk( targets ) ) { deleteBusy = false; return; }
     if( ! await parkedFirst( targets ) ) { deleteBusy = false; return; }
     setStatus( T( 'drive.movingToTrash' ) );
 
@@ -503,6 +517,29 @@ async function confirmDelete()
     const msg = T( failed ? 'drive.trashFailed' : 'ui.toast.binned' );
     if( ids && ids.length ) NayiveUI.undoToast( msg, function() { undoBin( ids ); } );
     else                    NayiveUI.toast( msg );
+}
+
+// Shortcuts that lead into what goes to the bin, and are not going with it,
+// stop working: say how many and let them stop. Nothing to say, or the list
+// could not be read: go ahead (the bin has its Undo).
+async function shortcutsLeftOk( targets )
+{
+    const under = function( p, t ) { return p === t || p.indexOf( t + '/' ) === 0; };
+    let links;
+    try { links = ( await GumApi.shortcuts() ).links || []; }
+    catch( _ ) { return true; }
+
+    const n = links.filter( function( l )
+    {
+        return targets.some( function( t ) { return under( l.to, t ); } ) &&
+             ! targets.some( function( t ) { return under( l.path, t ); } );
+    } ).length;
+    if( ! n ) return true;
+
+    return NayiveUI.confirm( {
+        title: T( 'drive.shortcutsLeftTitle' ),
+        body: TF( 'drive.shortcutsLeftBody', { n: n } ),
+        confirm: T( 'ui.toTrash' ), danger: true } );
 }
 
 // Undo of a move to the bin: everything comes back to where it was. The

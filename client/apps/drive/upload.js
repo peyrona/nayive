@@ -158,8 +158,8 @@ function askReplace( names, allCollide )
     document.getElementById( 'replaceOverwrite' ).checked = allCollide;
 
     const confirmBtn = document.getElementById( 'replaceConfirmBtn' );
-    confirmBtn.title = allCollide ? T( 'drive.replace' ) : T( 'drive.continue' );
-    confirmBtn.setAttribute( 'aria-label', confirmBtn.title );
+    Ayni.setTip( confirmBtn, allCollide ? T( 'drive.replace' ) : T( 'drive.continue' ) );
+    confirmBtn.setAttribute( 'aria-label', confirmBtn.dataset.tip );
 
     setBackdrop( 'replaceBackdrop', true );
 
@@ -731,7 +731,7 @@ function askAppImport( imports )
         body:      names.join( '\n' ) + '\n\n' + TF( 'drive.importAskBody', { app: app } ),
         confirm:   T( 'drive.importAdd' ),
         other:     T( 'drive.importKeep' ),
-        otherIcon: 'doc' } );
+        otherIcon: 'file' } );
 }
 
 // The toast counts what went in (added or replaced by a newer copy) and

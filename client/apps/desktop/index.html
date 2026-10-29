@@ -51,15 +51,20 @@
     </script>
     <script src="../shared/desk-rule.js"></script>
     <script src="../shared/i18n.js"></script>
+    <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
     <script src="tiling.js"></script>
     <title>Nayive</title>
     <link rel="icon" type="image/png" href="../icons/icon-192.png">
 
     <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
-    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
-    <script src="../shared/theme.js" defer></script>
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script src="../shared/ayni/ayni-icons.js" defer></script>
+    <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/ui.js" defer></script>
     <script src="../shared/store.js" defer></script>
@@ -260,7 +265,7 @@
 
         .tasks { display: flex; align-items: center; gap: 4px; flex: 1 1 auto; min-width: 0; height: 100%; overflow: hidden; }
 
-        /* A window's button: the shared quiet .text-btn.ghost, narrowed to fit a bar.
+        /* A window's button: the shared quiet .btn.text.bordered, narrowed to fit a bar.
            Only the app's icon - no name; the tooltip says the app and its document. */
         .task { flex: 0 0 auto; width: calc(var(--bar-h) - 8px); min-width: 0; height: calc(var(--bar-h) - 14px);
                 justify-content: center; padding: 0; font-weight: 500; }
@@ -277,11 +282,11 @@
                                   border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 1.5px var(--bg); }
         /* THE WINDOW'S BUTTONS - Scale / Resize, minimise, maximise, close - at the
            right end of the bar button of the window IN FRONT only (the others show
-           just their icon): small .icon-btn's sized to the bar, each in the
+           just their icon): small .btn's sized to the bar, each in the
            colour the old title-bar dots had, Scale / Resize in blue (--win-scale). */
         /* The one in front grows to its icon, 1rem, then its buttons. */
         .task.front     { width: auto; padding: 0 3px 0 10px; }
-        .task.front > svg { margin-right: calc(1rem - 6px); }   /* + .text-btn's 6px gap = 1rem */
+        .task.front > svg { margin-right: calc(1rem - 6px); }   /* + .btn.text's 6px gap = 1rem */
         .task > .task-ctl { display: flex; flex: 0 0 auto; margin-left: auto; overflow: visible; }
         .task:not(.front) > .task-ctl { display: none; }
         .task-ctl > .task-x, #cds > .cd-chip > .task-x { width: 22px; height: 22px; margin-left: auto; overflow: visible; color: var(--text-dim); }
@@ -297,9 +302,9 @@
         body.touch .task-ctl > .task-x svg { width: 18px; height: 18px; }
         body.touch #cds > .cd-chip > .task-x svg   { width: 16px; height: 16px; }
 
-        /* The "⋮" sits closer to its neighbours: half the room a plain .icon-btn
+        /* The "⋮" sits closer to its neighbours: half the room a plain .btn
            leaves on each side (his call for the "?" it replaced, 2026-09-28).
-           Margins only - the button is the shared .icon-btn. */
+           Margins only - the button is the shared .btn. */
         #moreBtn { margin: 0 -4px 0 -13px; }
         /* The "?" after it (back on the bar, 2026-09-28): the same tight room. It
            ends the bar: the sync plug floats off it as a chip (theme.css). */
@@ -336,7 +341,7 @@
         .tile-sw.on .tile-word[data-tile="on"] { color: var(--text); font-weight: 600; }
         .tile-sw.idle { opacity: 0.5; }
         .tile-sw.idle .tile-word { cursor: default; }
-        .tile-sw.idle .switch input:disabled + .track { opacity: 1; }   /* the row is dimmed already */
+        .tile-sw.idle .switch input:disabled { opacity: 1; }   /* the row is dimmed already */
 
         /* WEATHER - the bar's sky icon and its popup: the hour, the sky, the
            temperature, 5 times side by side. The sun and the bolt amber, rain blue. */
@@ -360,7 +365,7 @@
         .wx-ico .r  { stroke: var(--wx-rain); }
 
         /* The clock: "<weekday> <date> <time>", each part optional but the time. A quiet
-           .text-btn.ghost with no border: a press on the time opens the countdown
+           .btn.text.bordered with no border: a press on the time opens the countdown
            dialog, on the weekday / date the month (#calPop). Two places to press, so
            two hover chips: the button itself never lights, each part does. */
         #clock      { gap: 2px; height: calc(var(--bar-h) - 14px); padding: 0; border-color: transparent;
@@ -433,8 +438,7 @@
         /* THE COUNTDOWN DIALOG - hours / minutes / seconds side by side, the text below.
            Not centred: it opens by the clock (or its chip), like the month (cdOpen). */
         #cdBackdrop > .sheet { position: fixed; }
-        .cd-note      { margin: 0 0 12px; font-size: 0.8rem; line-height: 1.4; color: var(--text-dim); }
-        .cd-nums      { flex-wrap: nowrap; }
+        .cd-nums      { flex-wrap: nowrap; contain: inline-size; }   /* the number boxes never widen the dialog: it packs to its 300px minimum */
         .cd-nums .field { flex: 1 1 0; min-width: 76px; }
         .cd-nums .field input { width: 100%; text-align: center; font-variant-numeric: tabular-nums; }
 
@@ -505,7 +509,7 @@
             background: var(--card); box-shadow: 0 20px 52px var(--desk-shadow);
             font-family: var(--font-sans);
         }
-        /* A tile: the shared quiet .text-btn.ghost, stood up - the app's icon over the
+        /* A tile: the shared quiet .btn.text.bordered, stood up - the app's icon over the
            window's name. The chosen one gets the bar's "in front" look. */
         .sw-item            { flex-direction: column; justify-content: center; gap: 10px; width: 132px; height: 108px;
                               padding: 10px 8px; font-family: inherit; font-weight: 500; }
@@ -528,26 +532,26 @@
         <div class="desk" id="desk"><div class="snap-ghost" id="snapGhost" hidden></div></div>
 
         <div class="bar" id="bar">
-            <button class="icon-btn" id="menuBtn" data-i18n-attr="title:ui.toApps" title="Apps"><img src="../icons/icon-192.png" alt=""></button>
+            <button class="btn" id="menuBtn" data-i18n-attr="data-tip:ui.toApps" data-tip="Apps"><img src="../icons/icon-192.png" alt=""></button>
             <div class="tasks" id="tasks"></div>
             <!-- COUNTDOWNS - one chip each (see THE COUNTDOWNS), cloned from cdTpl. -->
             <span id="cds"></span>
-            <template id="cdTpl"><button class="cd-chip text-btn ghost" type="button"><b></b><span class="cd-text"></span><span class="icon-btn task-x cd-pp" role="button" data-cd="pp"></span><span class="icon-btn task-x cd-stop" role="button" data-cd="stop"></span><span class="icon-btn task-x cd-x" role="button" data-cd="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></span></button></template>
+            <template id="cdTpl"><button class="btn text bordered cd-chip" type="button"><b></b><span class="cd-text"></span><span class="btn task-x cd-pp" role="button" data-cd="pp"></span><span class="btn task-x cd-stop" role="button" data-cd="stop"></span><span class="btn task-x cd-x" role="button" data-cd="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></span></button></template>
             <!-- WEATHER - the sky now (set.weatherBar, see WEATHER below); a press shows today's forecast. -->
-            <button id="wxBtn" class="icon-btn" type="button" aria-expanded="false" hidden data-i18n-attr="aria-label:desktop.weather"></button>
+            <button id="wxBtn" class="btn" type="button" aria-expanded="false" hidden data-i18n-attr="aria-label:desktop.weather"></button>
             <!-- BATTERY - its level (set.battBar, see BATTERY below); shows only, no press. -->
             <span id="batt" role="img" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"/><line x1="22" y1="11" x2="22" y2="13"/><rect class="batt-fill" x="4" y="9" width="14" height="6" rx="1" stroke="none" fill="currentColor"/></svg><b></b></span>
             <!-- SECOND CLOCK - another time zone (set.tz2, see THE SECOND CLOCK); shows only, no press. -->
             <span id="clock2" hidden><span></span><b></b><i></i></span>
-            <button id="clock" class="text-btn ghost" type="button"><span></span><b></b></button>
+            <button id="clock" class="btn text bordered" type="button"><span></span><b></b></button>
             <!-- MORE (2026-09-28) - the "⋮" after the clock: what used to sit on the
                  bar (Free/Tile) and what has no room there (Lock now, the clock, the bar).
                  More rows will come; see MORE below. -->
-            <button id="moreBtn" class="icon-btn" type="button" aria-expanded="false" data-i18n-attr="title:ui.moreOptions, aria-label:ui.moreOptions"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="12" cy="19" r="1.8"></circle></svg></button>
+            <button id="moreBtn" class="btn" type="button" aria-expanded="false" data-i18n-attr="data-tip:ui.moreOptions, aria-label:ui.moreOptions"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="12" cy="19" r="1.8"></circle></svg></button>
             <!-- HELP - the shared help card (NayiveUI.firstRun, see HELP below). -->
-            <button id="helpBtn" class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></button>
+            <button id="helpBtn" class="btn" data-intro-open type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></button>
             <!-- ONE connection status for every window (see SYNC below); hidden until one has its own. -->
-            <button id="syncIndicator" class="sync-indicator" type="button" hidden data-i18n-attr="title:ui.synced"></button>
+            <button id="syncIndicator" class="sync-indicator" type="button" hidden data-i18n-attr="data-tip:ui.synced"></button>
         </div>
 
         <div class="menu" id="menu" hidden></div>
@@ -555,10 +559,10 @@
         <div class="top-menu" id="moreMenu" role="menu" hidden>
             <!-- BATTERY ON THE BAR - set.battBar (2026-10-04): the #batt on the bar (see
                  BATTERY). Always the first row; greyed with no battery or no browser API. -->
-            <label class="menu-item" id="battRow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line><line x1="6" y1="11" x2="6" y2="13"></line><line x1="10" y1="11" x2="10" y2="13"></line></svg><span data-i18n="desktop.battBar"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:desktop.battBarInfo"></span><span class="switch sm"><input type="checkbox" id="battBarChk" disabled><span class="track"></span></span></label>
+            <label class="menu-item switch end" id="battRow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line><line x1="6" y1="11" x2="6" y2="13"></line><line x1="10" y1="11" x2="10" y2="13"></line></svg><span data-i18n="desktop.battBar"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:desktop.battBarInfo"></span><input role="switch" type="checkbox" id="battBarChk" disabled></label>
             <!-- WEATHER ON THE BAR - set.weatherBar (2026-10-02): the #wxBtn on the bar
                  (see WEATHER). A label, so flipping it leaves the menu open. -->
-            <label class="menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path></svg><span data-i18n="desktop.weatherBar"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:desktop.weatherBarInfo"></span><span class="switch sm"><input type="checkbox" id="weatherBarChk"><span class="track"></span></span></label>
+            <label class="menu-item switch end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path></svg><span data-i18n="desktop.weatherBar"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:desktop.weatherBarInfo"></span><input role="switch" type="checkbox" id="weatherBarChk"></label>
             <!-- WINDOWS - how the windows behave on the desk. -->
             <div class="menu-sep"></div>
             <div class="menu-label" data-i18n="desktop.windowsLabel"></div>
@@ -566,15 +570,15 @@
                  Not a button, so flipping it leaves the menu open. -->
             <div class="tile-sw" id="tileSw" data-i18n-attr="title:desktop.tileTip">
                 <span class="tile-word" data-tile="off" data-i18n="desktop.tileFree"></span>
-                <label class="switch sm"><input type="checkbox" id="tileChk" data-i18n-attr="aria-label:desktop.tileTip"><span class="track"></span></label>
+                <label class="switch"><input role="switch" type="checkbox" id="tileChk" data-i18n-attr="aria-label:desktop.tileTip"></label>
                 <span class="tile-word" data-tile="on" data-i18n="desktop.tileOn"></span>
             </div>
             <!-- STICKY WINDOWS - on: a window dropped on an edge of the desk takes that
                  half (see drag). A label, not a button, so flipping it leaves the menu open. -->
-            <label class="menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="12" y1="4" x2="12" y2="20"></line></svg><span data-i18n="desktop.sticky"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:desktop.stickyInfo"></span><span class="switch sm"><input type="checkbox" id="stickyChk"><span class="track"></span></span></label>
+            <label class="menu-item switch end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="12" y1="4" x2="12" y2="20"></line></svg><span data-i18n="desktop.sticky"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:desktop.stickyInfo"></span><input role="switch" type="checkbox" id="stickyChk"></label>
             <!-- SCALE ON OPEN - new windows start with Scale on (set.scaleNew; see SCALE).
                  The (i) is a span, not a button: a button would close the menu. -->
-            <label class="menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 11 5 5 11 5"></polyline><polyline points="19 13 19 19 13 19"></polyline><line x1="5" y1="5" x2="19" y2="19"></line></svg><span data-i18n="desktop.scaleNew"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:desktop.scaleNewInfo"></span><span class="switch sm"><input type="checkbox" id="scaleNewChk"><span class="track"></span></span></label>
+            <label class="menu-item switch end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 11 5 5 11 5"></polyline><polyline points="19 13 19 19 13 19"></polyline><line x1="5" y1="5" x2="19" y2="19"></line></svg><span data-i18n="desktop.scaleNew"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:desktop.scaleNewInfo"></span><input role="switch" type="checkbox" id="scaleNewChk"></label>
             <!-- THE CLOCK - what it shows beside the time (see THE CLOCK). Labels, not
                  buttons, so a change leaves the menu open. -->
             <div class="menu-sep"></div>
@@ -585,10 +589,10 @@
                     <option value="short" data-i18n="desktop.weekdayShort"></option>
                     <option value="long"  data-i18n="desktop.weekdayLong"></option>
                 </select></label>
-            <label class="menu-item"><span data-i18n="desktop.showDate"></span><span class="switch sm"><input type="checkbox" id="setDate"><span class="track"></span></span></label>
-            <label class="menu-item"><span data-i18n="desktop.showSeconds"></span><span class="switch sm"><input type="checkbox" id="setSecs"><span class="track"></span></span></label>
+            <label class="menu-item switch end"><span data-i18n="desktop.showDate"></span><input role="switch" type="checkbox" id="setDate"></label>
+            <label class="menu-item switch end"><span data-i18n="desktop.showSeconds"></span><input role="switch" type="checkbox" id="setSecs"></label>
             <!-- SECOND CLOCK - on: its zone's list below (filled at each menu open, see THE CLOCK AND THE BAR). -->
-            <label class="menu-item"><span data-i18n="desktop.clock2"></span><span class="switch sm"><input type="checkbox" id="setTz2On"><span class="track"></span></span></label>
+            <label class="menu-item switch end"><span data-i18n="desktop.clock2"></span><input role="switch" type="checkbox" id="setTz2On"></label>
             <label class="menu-item" id="tz2Wrap" hidden><span data-i18n="desktop.clock2Zone"></span>
                 <select id="setTz2"></select></label>
             <!-- THE BAR - its side of the screen and its height (its width when at a side). -->
@@ -627,9 +631,9 @@
              step a month, the year box in the middle jumps to any year. -->
         <div class="top-menu" id="calPop" role="dialog" hidden data-i18n-attr="aria-label:desktop.calendar">
             <div class="cal-head">
-                <button class="icon-btn" id="calPrev" type="button" data-i18n-attr="title:desktop.prevMonth, aria-label:desktop.prevMonth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg></button>
+                <button class="btn" id="calPrev" type="button" data-i18n-attr="data-tip:desktop.prevMonth, aria-label:desktop.prevMonth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg></button>
                 <span class="cal-title"><b id="calMonth"></b><input id="calYear" type="number" min="1" max="9999" step="1" inputmode="numeric" data-i18n-attr="title:calendar.year, aria-label:calendar.year"></span>
-                <button class="icon-btn" id="calNext" type="button" data-i18n-attr="title:desktop.nextMonth, aria-label:desktop.nextMonth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></button>
+                <button class="btn" id="calNext" type="button" data-i18n-attr="data-tip:desktop.nextMonth, aria-label:desktop.nextMonth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></button>
             </div>
             <div class="cal-grid" id="calGrid"></div>
         </div>
@@ -643,8 +647,7 @@
          optional text; Play starts it. Pause / Play and Stop live on the chip. -->
     <div class="sheet-backdrop" id="cdBackdrop">
         <div class="sheet sheet--pack" role="dialog" aria-modal="true" aria-labelledby="cdTitle">
-            <h2 id="cdTitle"></h2>
-            <p class="cd-note" id="cdNote" data-i18n="desktop.cdNote"></p>
+            <h2><span id="cdTitle"></span> <button class="info-dot" id="cdNote" type="button" data-i18n-attr="data-info:desktop.cdNote"></button></h2>
             <div class="field-row cd-nums">
                 <div class="field"><label for="cdH" data-i18n="desktop.cdHours"></label><input id="cdH" type="number" min="0" max="99" step="1" inputmode="numeric"></div>
                 <div class="field"><label for="cdM" data-i18n="desktop.cdMins"></label><input id="cdM" type="number" min="0" max="59" step="1" inputmode="numeric"></div>
@@ -655,8 +658,8 @@
                 <input id="cdText" type="text" maxlength="120" autocomplete="off" spellcheck="false">
             </div>
             <div class="sheet-actions">
-                <button data-act="close" type="button" data-i18n-attr="title:ui.close"></button>
-                <button id="cdPlay" type="button" data-act="primary:play" data-i18n-attr="title:desktop.cdStart"></button>
+                <button class="btn" data-close type="button" data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="cdPlay" type="button" data-i18n-attr="data-tip:desktop.cdStart"><span class="icon" data-icon="play"></span></button>
             </div>
         </div>
     </div>
@@ -667,6 +670,13 @@
 <script>
 ( function ()
 {
+    // A new tooltip. This script runs as the page is read, before Ayni (a
+    // deferred script) is in: until then the tooltip is only written down.
+    function setTip( el, text )
+    {
+        if( window.Ayni && Ayni.setTip ) Ayni.setTip( el, text ); else el.dataset.tip = text;
+    }
+
     var ROOT    = '/nayive/';
     var desktop = document.getElementById( 'desktop' );
     var desk    = document.getElementById( 'desk' );
@@ -680,7 +690,7 @@
 
     function t( key, fallback )
     {
-        var s = window.NayiveI18n ? NayiveI18n.t( key ) : key;
+        var s = window.Ayni ? Ayni.t( key ) : key;
         return ( ! s || s === key ) ? ( fallback || key ) : s;
     }
 
@@ -733,7 +743,9 @@
     var APPS = {};     // "drive" -> { name, svg }
     // A new window's widest (openApp): one-column apps, and Write - an A4 page
     // at 100 % (794 + the engine's 2 x 24 gutter) + scrollbar + borders.
-    var NARROW = { contact: 560, write: 864 };
+    var NARROW = { contact: 560, write: 864, calculator: 360 };
+    // ...and no taller than it needs: Calculator is a small fixed panel.
+    var SHORT  = { calculator: 660 };
     var appsReady = fetch( '../index.html', { credentials: 'same-origin' } )
         .then( function ( r ) { return r.text(); } )
         .then( function ( html )
@@ -795,36 +807,45 @@
             [ 'n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw' ].map( function ( d ) { return '<div class="grip ' + d + '" data-dir="' + d + '"></div>'; } ).join( '' );
         el.querySelector( '.win-title' ).textContent = info.name;
 
-        var g = opts.geom;
+        var g = opts.geom, last = g ? null : ( store( LAST_KEY ) || {} )[ app ];
         if( g )
         {
             // a saved window: "123px" strings, plus its Scale (see SCALE)
             w.scale = !! g.scale; w.nat = g.nat || null;
             g = { l: parseFloat( g.l ) || 0, t: parseFloat( g.t ) || 0, w: parseFloat( g.w ) || 0, h: parseFloat( g.h ) || 0 };
         }
+        else if( last )
+        {
+            // where this app's window was when last closed (LAST), kept inside the desk
+            var d = deskRect();
+            g = { w: Math.min( last.w, d.w ), h: Math.min( last.h, d.h ) };
+            g.l = Math.max( 0, Math.min( last.l, d.w - g.w ) );
+            g.t = Math.max( 0, Math.min( last.t, d.h - g.h ) );
+            if( last.max ) el.classList.add( 'max' );
+        }
         else
         {
             // 70% x 82% of the desk, each new one 32px down-right of the last;
             // a one-column app (a list) no wider than it needs (NARROW).
             var r = deskRect();
-            var W = Math.min( NARROW[ app ] || 1100, Math.round( r.w * 0.7 ) ), H = Math.min( 780, Math.round( r.h * 0.82 ) );
+            var W = Math.min( NARROW[ app ] || 1100, Math.round( r.w * 0.7 ) ), H = Math.min( SHORT[ app ] || 780, Math.round( r.h * 0.82 ) );
             var n = wins.length % 6;
             g = { l: Math.max( 0, Math.round( ( r.w - W ) / 2 ) - 80 + n * 32 ), t: Math.max( 0, 24 + n * 32 ), w: W, h: H };
         }
 
         var btn = document.createElement( 'button' );
-        btn.className = 'text-btn ghost task';
+        btn.className = 'btn text bordered task';
         btn.innerHTML = info.svg + '<span></span><span class="task-ctl">' +
-            CTL.map( function ( d ) { return '<span class="icon-btn task-x" role="button" data-win="' + d[ 0 ] + '">' + d[ 3 ] + '</span>'; } ).join( '' ) +
+            CTL.map( function ( d ) { return '<span class="btn task-x" role="button" data-win="' + d[ 0 ] + '">' + d[ 3 ] + '</span>'; } ).join( '' ) +
             '</span>';
         btn.querySelector( 'span' ).textContent = info.name;
-        btn.title = info.name;
+        setTip( btn, info.name );
         CTL.forEach( function ( d )
         {
             if( ! d[ 1 ] ) return;              // Scale / Resize: see paintScale
             var b = btn.querySelector( '[data-win="' + d[ 0 ] + '"]' );
-            b.title = t( d[ 1 ], d[ 2 ] );
-            b.setAttribute( 'aria-label', b.title );
+            setTip( b, t( d[ 1 ], d[ 2 ] ) );
+            b.setAttribute( 'aria-label', b.dataset.tip );
         } );
 
         w.el = el; w.btn = btn; w.frame = el.querySelector( 'iframe' );
@@ -866,7 +887,7 @@
     {
         w.el.querySelector( '.win-title' ).textContent = text;
         w.btn.querySelector( 'span' ).textContent = text;
-        w.btn.title = tip || text;
+        setTip( w.btn, tip || text );
     }
 
     function focus( w )
@@ -911,6 +932,7 @@
     function shut( w )
     {
         if( wins.indexOf( w ) < 0 ) return;     // gone already
+        keepLast( w );
         if( kbWin === w ) kbWin = null;
         w.el.remove(); w.btn.remove();
         wins.splice( wins.indexOf( w ), 1 );
@@ -1257,9 +1279,9 @@
         if( ! b || b.getAttribute( 'aria-pressed' ) === String( on ) ) return;
         b.setAttribute( 'aria-pressed', String( on ) );
         b.innerHTML = on ? ICON_SCALE : ICON_RESIZE;
-        b.title = on ? t( 'desktop.scaleOn',  'Scale: a smaller window shrinks everything in it' )
-                     : t( 'desktop.scaleOff', 'Resize: a smaller window rearranges its content' );
-        b.setAttribute( 'aria-label', b.title );
+        setTip( b, on ? t( 'desktop.scaleOn',  'Scale: a smaller window shrinks everything in it' )
+                     : t( 'desktop.scaleOff', 'Resize: a smaller window rearranges its content' ) );
+        b.setAttribute( 'aria-label', b.dataset.tip );
     }
 
     //------------------------------------------------------------------------//
@@ -1436,6 +1458,20 @@
             store( WINS_KEY, list );
             store( TILE_KEY, tiled ? { dw: tiled.dw, dh: tiled.dh, auto: !! tiled.auto } : null );
         }, 300 );
+    }
+
+    // LAST - where each app's window was when it closed, per device
+    // ("balata-desktop-last"); its next window opens there. Of two windows of
+    // one app, the last one closed counts. A tiled window keeps nothing; Scale
+    // is not kept ("Scale on open" decides it).
+    var LAST_KEY = 'balata-desktop-last';
+
+    function keepLast( w )
+    {
+        if( ! w.app || ! w.g || ( tiled && tiled.snaps.has( w ) ) ) return;
+        var last = store( LAST_KEY ) || {};
+        last[ w.app ] = { l: w.g.l, t: w.g.t, w: w.g.w, h: w.g.h, max: isMax( w ) };
+        store( LAST_KEY, last );
     }
 
     function restoreWins()
@@ -1754,15 +1790,22 @@
     {
         if( pop.hidden ) return;
         var r = bar.getBoundingClientRect(), s = pop.style;
+        // ui.js's fitMenu measured it where wireMenu first put it (under the
+        // button: off the screen with the bar at the bottom) and capped it; so
+        // the cap goes, and is set again here for where it really opens.
+        s.maxHeight = '';
         if( set.bar === 'left' || set.bar === 'right' )
         {
             var b = btn.getBoundingClientRect();
+            if( pop.offsetHeight > window.innerHeight - 12 ) s.maxHeight = ( window.innerHeight - 12 ) + 'px';
             s.top = Math.max( 6, Math.min( b.top, window.innerHeight - 6 - pop.offsetHeight ) ) + 'px';
             if( set.bar === 'left' ) { s.left = ( r.right + 6 ) + 'px'; s.right = 'auto'; }
             else                     { s.left = 'auto'; s.right = ( window.innerWidth - r.left + 6 ) + 'px'; }
             return;
         }
         var m = btn.getBoundingClientRect();
+        var room = set.bar === 'top' ? window.innerHeight - r.bottom - 12 : r.top - 12;
+        if( pop.offsetHeight > room ) s.maxHeight = Math.max( 120, room ) + 'px';
         s.left = 'auto'; s.right = Math.max( 6, window.innerWidth - m.right ) + 'px';
         s.top  = ( set.bar === 'top' ? r.bottom + 6 : Math.max( 6, r.top - 6 - pop.offsetHeight ) ) + 'px';
     }
@@ -2019,7 +2062,7 @@
 
     function wxT( S )                         // the engine's words, in the interface language
     {
-        var l = window.NayiveI18n && NayiveI18n.lang ? String( NayiveI18n.lang() ).slice( 0, 2 ) : '';
+        var l = window.Ayni ? String( Ayni.i18n.lang() ).slice( 0, 2 ) : '';
         return S.engine.T[ l ] || S.engine.T.en;
     }
 
@@ -2027,7 +2070,7 @@
     {
         var E = d.S.engine, c = d.w.current;
         wxBtn.innerHTML = wxSvg( E.skyOf( c.weather_code ), wxDay( d.w, c.time, c.is_day ) );
-        wxBtn.title = t( 'desktop.weather' ) + ': ' + E.deg( c.temperature_2m ) + ', ' + wxT( d.S ).sky[ E.skyOf( c.weather_code ) ];
+        setTip( wxBtn, t( 'desktop.weather' ) + ': ' + E.deg( c.temperature_2m ) + ', ' + wxT( d.S ).sky[ E.skyOf( c.weather_code ) ] );
     }
 
     function wxTick( fresh )
@@ -2149,7 +2192,7 @@
     }
     battChk.addEventListener( 'change', function () { set.battBar = battChk.checked; saveSet(); battApply(); placeMore(); } );
     battApply();
-    if( window.NayiveI18n && NayiveI18n.ready ) NayiveI18n.ready.then( battApply );     // the tooltip's words
+    if( window.Ayni ) Ayni.i18n.ready.then( battApply );     // the tooltip's words
     if( navigator.getBattery ) navigator.getBattery().then( function ( b )
     {
         batt = b;
@@ -2379,11 +2422,11 @@
         {
             var b = document.createElement( 'button' );
             b.type = 'button';
-            b.className = 'text-btn ghost sw-item' + ( w.el.hidden ? ' min' : '' );
+            b.className = 'btn text bordered sw-item' + ( w.el.hidden ? ' min' : '' );
             b.setAttribute( 'role', 'option' );
             b.innerHTML = w.svg + '<span></span>';
             b.querySelector( 'span' ).textContent = w.btn.querySelector( 'span' ).textContent;
-            b.title = w.btn.title;
+            setTip( b, w.btn.dataset.tip );
             b.swWin = w;
             switcher.appendChild( b );
         } );
@@ -2472,7 +2515,7 @@
     function dayName( d, style )
     {
         var iso = d.getDay() || 7;
-        return window.NayiveI18n ? NayiveI18n.weekday( iso, style ) : d.toLocaleDateString( undefined, { weekday: style } );
+        return window.Ayni ? Ayni.i18n.weekday( iso, style ) : d.toLocaleDateString( undefined, { weekday: style } );
     }
     function tick()
     {
@@ -2485,7 +2528,7 @@
         clock.querySelector( 'span' ).hidden = ! head.length;
         clock.querySelector( 'b' ).textContent =
             pad( now.getHours() ) + ':' + pad( now.getMinutes() ) + ( set.secs ? ':' + pad( now.getSeconds() ) : '' );
-        clock.title = dayName( now, 'long' ) + ' ' + isoDate( now );
+        setTip( clock, dayName( now, 'long' ) + ' ' + isoDate( now ) );
         tick2( now );
         clockTimer = setTimeout( tick, set.secs ? 1000 - now.getMilliseconds() + 20
                                                 : 60000 - now.getSeconds() * 1000 - now.getMilliseconds() + 50 );
@@ -2519,7 +2562,7 @@
     }
     tick();
     // the weekday is written in the interface language: once more when that is in
-    if( window.NayiveI18n && NayiveI18n.ready ) NayiveI18n.ready.then( tick );
+    if( window.Ayni ) Ayni.i18n.ready.then( tick );
 
     //------------------------------------------------------------------------//
     // THE MONTH (2026-10-08) - a press on the clock's weekday / date (only when
@@ -2542,12 +2585,12 @@
 
     function calPaint()
     {
-        calMonth.textContent = window.NayiveI18n ? NayiveI18n.month( calM ) : String( calM + 1 );
+        calMonth.textContent = window.Ayni ? Ayni.i18n.month( calM ) : String( calM + 1 );
         if( +calYear.value !== calY ) calYear.value = calY;          // not while it is being typed
         calGrid.textContent = '';
         calCell( '', 'cal-wd' );                                      // over the week numbers
         for( var i = 1; i <= 7; i++ )
-            calCell( window.NayiveI18n ? NayiveI18n.weekday( i, 'narrow' ) : String( i ), 'cal-wd' );
+            calCell( window.Ayni ? Ayni.i18n.weekday( i, 'narrow' ) : String( i ), 'cal-wd' );
         var d = new Date( 2000, 0, 1 ), now = new Date();
         d.setFullYear( calY, calM, 1 );                               // years below 100 too
         d.setDate( 1 - ( d.getDay() + 6 ) % 7 );                      // back to its Monday
@@ -2677,22 +2720,22 @@
         el.classList.toggle( 'done', done );
         el.querySelector( 'b' ).textContent = on ? cdFmt( cdMs( c ) ) : done && ! c.text ? cdFmt( 0 ) : '';
         el.querySelector( '.cd-text' ).textContent = done ? c.text : '';   // the text only once time is up
-        el.title = done ? t( 'desktop.cdDone' ) : t( 'desktop.countdown' ) + ( c.text ? ' - ' + c.text : '' );
+        setTip( el, done ? t( 'desktop.cdDone' ) : t( 'desktop.countdown' ) + ( c.text ? ' - ' + c.text : '' ) );
         pp.hidden = stop.hidden = ! on;
         x.hidden = ! done;
         var icon = c.end ? 'pause' : 'play';
         if( pp.getAttribute( 'data-icon' ) !== icon && window.NayiveUI )
         {
-            pp.innerHTML = NayiveUI.icon( icon );
+            pp.innerHTML = Ayni.icon( icon );
             pp.setAttribute( 'data-icon', icon );
         }
-        if( ! stop.firstChild && window.NayiveUI ) stop.innerHTML = NayiveUI.icon( 'stop' );
+        if( ! stop.firstChild && window.NayiveUI ) stop.innerHTML = Ayni.icon( 'stop' );
         tip( pp, c.end ? 'desktop.cdPause' : 'desktop.cdContinue' );
         tip( stop, 'desktop.cdStop' );
         tip( x, 'ui.close' );
     }
 
-    function tip( el, key ) { el.title = t( key ); el.setAttribute( 'aria-label', el.title ); }
+    function tip( el, key ) { setTip( el, t( key ) ); el.setAttribute( 'aria-label', el.dataset.tip ); }
 
     // Ends the ones whose time is up, repaints, and comes back at the next
     // second change of the soonest running one.
@@ -2860,7 +2903,7 @@
     // the desktop was closed still says so, on its chip.
     if( document.readyState === 'loading' ) document.addEventListener( 'DOMContentLoaded', cdTick );
     else cdTick();
-    if( window.NayiveI18n && NayiveI18n.ready ) NayiveI18n.ready.then( cdPaint );
+    if( window.Ayni ) Ayni.i18n.ready.then( cdPaint );
 
     //------------------------------------------------------------------------//
     // CHAT - shared/ui.js asks the server for the unread count (every minute,
@@ -3006,7 +3049,7 @@
         syncDot.hidden = ! worst;
         if( ! worst ) return;
         [ 'synced', 'busy', 'offline' ].forEach( function ( cls ) { syncDot.classList.toggle( cls, worst.classList.contains( cls ) ); } );
-        syncDot.title = worst.title || '';
+        setTip( syncDot, worst.dataset.tip || '' );
     }
     setInterval( mirrorSync, 1000 );
 
@@ -3107,7 +3150,7 @@
     var CLOCK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
 
     // After DOMContentLoaded: ui.js is deferred, this script is not.
-    document.addEventListener( 'DOMContentLoaded', function () { ( window.NayiveI18n && NayiveI18n.ready ? NayiveI18n.ready : Promise.resolve() ).then( function ()
+    document.addEventListener( 'DOMContentLoaded', function () { ( window.Ayni ? Ayni.i18n.ready : Promise.resolve() ).then( function ()
     {
         if( ! window.NayiveUI ) return;
         NayiveUI.firstRun( {
@@ -3121,13 +3164,13 @@
                 // window open / the item off, the desk or the bar as a ghost.
                 { svg: ICON_WIN,  name: t( 'desktop.helpWinName' ),    text: t( 'desktop.helpWin' ), tour: { sel: '.win:not([hidden]) .win-bar', ghost: '#desk' } },
                 { svg: ICON_SCALE, name: t( 'desktop.helpScaleName' ), text: t( 'desktop.helpScale' ), tour: { sel: '#tasks button', ghost: '#tasks, #bar' } },
-                { icon: 'fullscr', name: t( 'desktop.helpMoveName' ),   text: t( 'desktop.helpMove' ), tour: { sel: '.win:not([hidden])', ghost: '#desk' } },
+                { icon: 'fullscreen', name: t( 'desktop.helpMoveName' ),   text: t( 'desktop.helpMove' ), tour: { sel: '.win:not([hidden])', ghost: '#desk' } },
                 { svg: ICON_TILE, name: t( 'desktop.tileOn' ),          text: t( 'desktop.helpTile' ), tour: { sel: '#tileSw', open: '#moreBtn' } },
                 { icon: 'forward', name: t( 'desktop.helpSwitchName' ), text: t( 'desktop.helpSwitch' ), tour: { sel: '#tasks', ghost: '#bar' } },
                 { svg: wxSvg( 1, true ), name: t( 'desktop.weather' ), text: t( 'desktop.helpWeather' ), tour: { sel: '#wxBtn', ghost: '#bar' } },   // listed even while off: it says where to turn it on
                 { svg: battEl.querySelector( 'svg' ).outerHTML, name: t( 'desktop.battery' ), text: t( 'desktop.helpBattery' ), tour: { sel: '#batt', ghost: '#bar' } },   // the same
                 { sel: '#clock',         svg: CLOCK_SVG, name: t( 'desktop.tabClock' ), text: t( 'desktop.helpClock' ) },
-                { sel: '#moreBtn',       icon: 'menudots', text: t( 'desktop.helpMore' ) }
+                { sel: '#moreBtn',       icon: 'more', text: t( 'desktop.helpMore' ) }
             ],
             tour: [ 'buttons' ]
         } );

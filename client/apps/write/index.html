@@ -6,9 +6,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- The interface language. First of all: it hides the page until the
-         dictionary is in, and every inline script below may call it. -->
+    <!-- Nayive's first script (old settings, whose page, error reports), then
+         Ayni's language layer: it hides the page until the texts are in, and
+         every inline script below may call Ayni.t(). -->
     <script src="../shared/i18n.js"></script>
+    <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
     <title>Write</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='%2316A085'%3E%3Cg transform='translate(45 465) rotate(-48)'%3E%3Cpath d='M0 0 28 -14 82 -36C96 -36 110 -27 122 -19L122 19C110 27 96 36 82 36L28 14Z'/%3E%3Crect x='132' y='-26' width='350' height='52'/%3E%3Cpath d='M494 -26 522 -26C542 -26 550 -14 550 0 550 14 542 26 522 26L494 26Z'/%3E%3C/g%3E%3Crect x='262' y='220' width='176' height='50' rx='12'/%3E%3Cpath fill='none' stroke='%2316A085' stroke-width='18' stroke-linecap='round' stroke-linejoin='round' d='M294 270 294 300C294 314 228 312 228 332L228 445C228 460 240 472 255 472L445 472C460 472 472 460 472 445L472 332C472 312 406 314 406 300L406 270'/%3E%3Cpath d='M228 355 472 355 472 445C472 460 460 472 445 472L255 472C240 472 228 460 228 445Z'/%3E%3C/svg%3E">
 
@@ -16,6 +18,10 @@
          rewrites it on a bump and tools/check-docx-editor holds it to the build on disk. -->
     <link rel="stylesheet" href="lib/docx-editor/docx-editor_v2.21.0.css">
 
+    <!-- Ayni's base: colours, light / dark, icons (before the shared scripts that use it). -->
+    <script src="../shared/ayni/ayni-icons.js" defer></script>
+    <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
     <script src="../shared/gum-api.js" defer></script>
     <!-- Small shared UI helpers: backdrop open/close, toast. -->
@@ -33,37 +39,37 @@
          the .docx, so a phone photo would otherwise be carried whole. -->
     <script src="../shared/photo.js" defer></script>
     <script>
-    NayiveI18n.ready.then( function () {
+    Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
         NayiveUI.firstRun( {
             app:   'write',
             title: 'Write',
-            lead:  NayiveUI.t( 'write.introLead' ),
+            lead:  Ayni.t( 'write.introLead' ),
             buttons: [
-                { sel: '#chromeMenusBtn',  text: NayiveUI.t( 'write.chromeNote' ) },
-                { sel: '#fmtBtn',          text: NayiveUI.t( 'write.introFormatBar' ) },
-                { sel: '#moreToolsBtn',    text: NayiveUI.t( 'write.introMoreBar' ) },
-                { sel: '#moreBtn',         text: NayiveUI.t( 'write.introFileMenu' ) },
-                { sel: '#newBtn',          text: NayiveUI.t( 'write.introNew' ), tour: { open: '#moreBtn' } },
-                { sel: '#openBtn',         text: NayiveUI.t( 'write.introOpen' ), tour: { open: '#moreBtn' } },
-                { sel: '#importBtn',       text: NayiveUI.t( 'write.introImport' ), tour: { open: '#moreBtn' } },
-                { sel: '#saveAsBtn',       text: NayiveUI.t( 'write.introSaveAs' ), tour: { open: '#moreBtn' } },
-                { sel: '#printBtn',        text: NayiveUI.t( 'write.introPrint' ), tour: { open: [ '#wrOutputBtn', '#moreBtn' ] } },
-                { sel: '#pageSetupBtn',    text: NayiveUI.t( 'write.introPage' ), tour: { open: [ '#wrPageBtn', '#moreBtn' ] } },
-                { sel: '#headerBtn',       text: NayiveUI.t( 'write.introHeader' ), tour: { open: [ '#wrPageBtn', '#moreBtn' ] } },
-                { sel: '#pageNumBtn',      text: NayiveUI.t( 'write.introPageNum' ), tour: { open: [ '#wrPageBtn', '#moreBtn' ] } },
-                { sel: '#settingsBtn',     text: NayiveUI.t( 'write.introSettings' ), tour: { open: '#moreBtn' } },
-                { sel: '#tplBtn',          text: NayiveUI.t( 'write.introTemplates' ), tour: { open: '#moreBtn' } },
-                { sel: '#restoreBtn',      text: NayiveUI.t( 'write.introRestore' ), tour: { open: '#moreBtn' } },
-                { sel: '#lockBtn',         text: NayiveUI.t( 'write.introLock' ), tour: { open: '#moreBtn' } },
-                { sel: '#paraBtn',         text: NayiveUI.t( 'write.introPara' ), tour: { open: '#moreBtn' } },
-                { sel: '#statsBtn',        text: NayiveUI.t( 'write.introStats' ), tour: { open: '#helpBtn' } },
-                { sel: '#scBtn',           text: NayiveUI.t( 'write.introShortcuts' ), tour: { open: '#moreBtn' } }
+                { sel: '#chromeMenusBtn',  text: Ayni.t( 'write.chromeNote' ) },
+                { sel: '#fmtBtn',          text: Ayni.t( 'write.introFormatBar' ) },
+                { sel: '#moreToolsBtn',    text: Ayni.t( 'write.introMoreBar' ) },
+                { sel: '#moreBtn',         text: Ayni.t( 'write.introFileMenu' ) },
+                { sel: '#newBtn',          text: Ayni.t( 'write.introNew' ), tour: { open: '#moreBtn' } },
+                { sel: '#openBtn',         text: Ayni.t( 'write.introOpen' ), tour: { open: '#moreBtn' } },
+                { sel: '#importBtn',       text: Ayni.t( 'write.introImport' ), tour: { open: '#moreBtn' } },
+                { sel: '#saveAsBtn',       text: Ayni.t( 'write.introSaveAs' ), tour: { open: '#moreBtn' } },
+                { sel: '#printBtn',        text: Ayni.t( 'write.introPrint' ), tour: { open: [ '#wrOutputBtn', '#moreBtn' ] } },
+                { sel: '#pageSetupBtn',    text: Ayni.t( 'write.introPage' ), tour: { open: [ '#wrPageBtn', '#moreBtn' ] } },
+                { sel: '#headerBtn',       text: Ayni.t( 'write.introHeader' ), tour: { open: [ '#wrPageBtn', '#moreBtn' ] } },
+                { sel: '#pageNumBtn',      text: Ayni.t( 'write.introPageNum' ), tour: { open: [ '#wrPageBtn', '#moreBtn' ] } },
+                { sel: '#settingsBtn',     text: Ayni.t( 'write.introSettings' ), tour: { open: '#moreBtn' } },
+                { sel: '#tplBtn',          text: Ayni.t( 'write.introTemplates' ), tour: { open: '#moreBtn' } },
+                { sel: '#restoreBtn',      text: Ayni.t( 'write.introRestore' ), tour: { open: '#moreBtn' } },
+                { sel: '#lockBtn',         text: Ayni.t( 'write.introLock' ), tour: { open: '#moreBtn' } },
+                { sel: '#paraBtn',         text: Ayni.t( 'write.introPara' ), tour: { open: '#moreBtn' } },
+                { sel: '#statsBtn',        text: Ayni.t( 'write.introStats' ), tour: { open: '#helpBtn' } },
+                { sel: '#scBtn',           text: Ayni.t( 'write.introShortcuts' ), tour: { open: '#moreBtn' } }
             ],
             // The guided tour (Ayuda ▸ Ver el tour): the page, then the card's rows;
             // `tour: { open }` lights a row inside the menu or popup that holds it
             // (a list: the first one on screen - a phone keeps these in the ⋮).
-            tour: [ { sel: '#editor', text: NayiveUI.t( 'write.introLead' ) }, 'buttons' ]
+            tour: [ { sel: '#editor', text: Ayni.t( 'write.introLead' ) }, 'buttons' ]
         } );
     } );
     </script>
@@ -75,10 +81,11 @@
          launcher; this page just follows the saved choice. The page itself stays light
          paper in both themes; only the app chrome follows the scheme. -->
     <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
-    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
-    <script src="../shared/theme.js" defer></script>
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
@@ -103,18 +110,9 @@
         .topbar .file-label { flex: 0 1 auto; }
 
         /* The toolbar row's buttons - the formatting strip and Write's own - are
-           the TOOLBAR BUTTON of shared/app.css (its comment there): a smaller
-           circle than the header's .icon-btn, and a property that is ON
-           in the document (bold, a list, the formatting marks) shows as an
-           accent tint, not the header's full accent fill. */
-        #toolbarRow .icon-btn
-        {
-            flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
-            width: 32px; height: 32px; margin: 2px 0; border: none; border-radius: 50%; cursor: pointer;
-            color: var(--text-dim);
-        }
-        #toolbarRow .icon-btn.is-active { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
-        #toolbarRow .icon-btn:disabled  { opacity: 0.4; cursor: default; background: transparent; color: var(--text-dim); }
+           Ayni's .btn at 32 px; a property that is ON in the document (bold, a
+           list, the formatting marks) is aria-pressed. */
+        #toolbarRow .btn { --btn: 32px; margin: 2px 0; }
 
         #syncIndicator { margin-left: 4px; }
 
@@ -139,7 +137,7 @@
         #fmtBtn { display: none; }
 
         /* The "⋮" that opens the rest of the toolbar in place: the row's own
-           .icon-btn (above), open = the tint of a property that is on (shared
+           .btn (above), open = the tint of a property that is on (shared
            app.css). Phone only, and always last in the row. */
         #toolbarRow #moreToolsBtn { display: none; order: 99; }
 
@@ -232,7 +230,7 @@
                line of its own; opened, wrapping is the whole point. */
             #toolbarRow                { row-gap: 0; padding: 0 2px; }
             #toolbarRow:not(.is-open)  { flex-wrap: nowrap; }
-            #toolbarRow .icon-btn      { width: 36px; height: 36px; }
+            #toolbarRow .btn      { width: 36px; height: 36px; }
 
             /* Collapsed: only the .tb-keep ones, undo first. */
             #toolbarRow:not(.is-open) #toolbar > :not(.tb-keep) { display: none; }
@@ -345,7 +343,7 @@
 
         /* The icon controls (presets, weights, styles). The colour swatch and the
            apply button below carry their own look — the apply button is the
-           shared round .btn .btn-primary (shared/ui.js, data-act="primary"). */
+           shared round .btn.primary (Ayni). */
         .tb-popup .tb-grid button,
         .tb-popup .tb-lines button
         {
@@ -449,10 +447,10 @@
                  with the accent. Tooltips only - a label here would push the
                  file name off a phone. -->
             <div class="tb-modes">
-                <button id="chromeToolbarBtn" class="icon-btn chrome-btn" type="button" data-chrome="toolbar" data-i18n-attr="title:ui.chromeToolbar, aria-label:ui.chromeToolbar">
+                <button id="chromeToolbarBtn" class="btn chrome-btn" type="button" data-chrome="toolbar" data-i18n-attr="data-tip:ui.chromeToolbar, aria-label:ui.chromeToolbar">
                     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="7.5" width="19" height="9" rx="2"></rect><rect x="5.2" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect><rect x="10.4" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect><rect x="15.6" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect></svg>
                 </button>
-                <button id="chromeMenusBtn" class="icon-btn chrome-btn" type="button" data-chrome="menus" data-i18n-attr="title:ui.chromeMenus, aria-label:ui.chromeMenus">
+                <button id="chromeMenusBtn" class="btn chrome-btn" type="button" data-chrome="menus" data-i18n-attr="data-tip:ui.chromeMenus, aria-label:ui.chromeMenus">
                     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="5.5" x2="21" y2="5.5"></line><rect x="5.5" y="9.5" width="11" height="10.5" rx="1.6"></rect><line x1="8.2" y1="13.2" x2="13.8" y2="13.2" stroke-width="1.6"></line><line x1="8.2" y1="16.5" x2="13.8" y2="16.5" stroke-width="1.6"></line></svg>
                 </button>
             </div>
@@ -461,8 +459,8 @@
                  formatting row away, "⋮" holds the app's own buttons. write.js
                  moves the toolbar's "?" in here too while the phone layout is on. -->
             <div id="topActions" class="topbar-actions">
-                <button id="fmtBtn" class="icon-btn" type="button" aria-expanded="true" data-i18n-attr="title:write.formatBar, aria-label:write.formatBar">Aa</button>
-                <button id="moreBtn" class="icon-btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.menu.file, aria-label:ui.menu.file">
+                <button id="fmtBtn" class="btn" type="button" aria-expanded="true" data-i18n-attr="data-tip:write.formatBar, aria-label:write.formatBar">Aa</button>
+                <button id="moreBtn" class="btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.menu.file, aria-label:ui.menu.file">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="13" y2="17"></line></svg>
                 </button>
             </div>
@@ -497,7 +495,7 @@
                  run by toolbar.js through runToolbarCommand and lit from
                  toolbarCommandStates), in Write's order: styles, font, letters,
                  colours, link + image, table, insert, paragraph, undo / redo, view.
-                 The drop-downs (.has-popup) open the pull-down menus' own panel with
+                 The drop-downs (aria-haspopup) open the pull-down menus' own panel with
                  the same item tables as the menus, so the two cannot drift.
                  .tb-keep: the ones a phone keeps on its one row.
                  Glyphs: Material Symbols (Apache-2.0), the path data the engine's
@@ -506,82 +504,82 @@
                 <!-- A PC's File button (#moreBtn) goes in before this rule - write.js
                      moves it here from the header, and back on a phone. -->
                 <span id="fileSep" class="vsep" aria-hidden="true"></span>
-                <button id="stylesBtn" class="icon-btn has-popup" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:write.tb.linkedStyles, aria-label:write.tb.linkedStyles"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 19 8 5l5 14"></path><line x1="4.8" y1="14" x2="11.2" y2="14"></line><line x1="15" y1="8" x2="21" y2="8"></line><line x1="15" y1="12" x2="21" y2="12"></line><line x1="15" y1="16" x2="21" y2="16"></line></svg></button>
+                <button id="stylesBtn" class="btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:write.tb.linkedStyles, aria-label:write.tb.linkedStyles"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 19 8 5l5 14"></path><line x1="4.8" y1="14" x2="11.2" y2="14"></line><line x1="15" y1="8" x2="21" y2="8"></line><line x1="15" y1="12" x2="21" y2="12"></line><line x1="15" y1="16" x2="21" y2="16"></line></svg></button>
                 <select id="fontFamilySel" class="tb-select tb-font" data-i18n-attr="title:write.tb.fontFamily, aria-label:write.tb.fontFamily"></select>
                 <select id="fontSizeSel" class="tb-select tb-size tb-keep" data-i18n-attr="title:write.tb.fontSize, aria-label:write.tb.fontSize"></select>
                 <span class="vsep" aria-hidden="true"></span>
-                <button id="boldBtn" class="icon-btn tb-keep" type="button" data-slot="text.bold" data-i18n-attr="title:write.tb.bold, aria-label:write.tb.bold"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M272-200v-560h221q65 0 120 40t55 111q0 51-23 78.5T602-491q25 11 55.5 41t30.5 90q0 89-65 124.5T501-200H272Zm121-112h104q48 0 58.5-24.5T566-372q0-11-10.5-35.5T494-432H393v120Zm0-228h93q33 0 48-17t15-38q0-24-17-39t-44-15h-95v109Z"></path></svg></button>
-                <button id="italicBtn" class="icon-btn tb-keep" type="button" data-slot="text.italic" data-i18n-attr="title:write.tb.italic, aria-label:write.tb.italic"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M200-200v-100h160l120-360H320v-100h400v100H580L460-300h140v100H200Z"></path></svg></button>
-                <button id="underlineBtn" class="icon-btn tb-keep" type="button" data-slot="text.underline" data-i18n-attr="title:write.tb.underline, aria-label:write.tb.underline"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M200-120v-80h560v80H200Zm123-223q-56-63-56-167v-330h103v336q0 56 28 91t82 35q54 0 82-35t28-91v-336h103v330q0 104-56 167t-157 63q-101 0-157-63Z"></path></svg></button>
-                <button id="strikeBtn" class="icon-btn" type="button" data-slot="text.strike" data-i18n-attr="title:write.tb.strikethrough, aria-label:write.tb.strikethrough"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M486-160q-76 0-135-45t-85-123l88-38q14 48 48.5 79t85.5 31q42 0 76-20t34-64q0-18-7-33t-19-27h112q5 14 7.5 28.5T694-340q0 86-61.5 133T486-160ZM80-480v-80h800v80H80Zm402-326q66 0 115.5 32.5T674-674l-88 39q-9-29-33.5-52T484-710q-41 0-68 18.5T386-640h-96q2-69 54.5-117.5T482-806Z"></path></svg></button>
-                <button id="superBtn" class="icon-btn" type="button" data-slot="script.super" data-i18n-attr="title:write.superscript, aria-label:write.superscript"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M760-600v-80q0-17 11.5-28.5T800-720h80v-40H760v-40h120q17 0 28.5 11.5T920-760v40q0 17-11.5 28.5T880-680h-80v40h120v40H760ZM235-160l185-291-172-269h106l124 200h4l123-200h107L539-451l186 291H618L482-377h-4L342-160H235Z"></path></svg></button>
-                <button id="subBtn" class="icon-btn" type="button" data-slot="script.sub" data-i18n-attr="title:write.subscript, aria-label:write.subscript"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M760-160v-80q0-17 11.5-28.5T800-280h80v-40H760v-40h120q17 0 28.5 11.5T920-320v40q0 17-11.5 28.5T880-240h-80v40h120v40H760Zm-525-80 185-291-172-269h106l124 200h4l123-200h107L539-531l186 291H618L482-457h-4L342-240H235Z"></path></svg></button>
+                <button id="boldBtn" class="btn tb-keep" type="button" data-slot="text.bold" data-i18n-attr="data-tip:write.tb.bold, aria-label:write.tb.bold"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M272-200v-560h221q65 0 120 40t55 111q0 51-23 78.5T602-491q25 11 55.5 41t30.5 90q0 89-65 124.5T501-200H272Zm121-112h104q48 0 58.5-24.5T566-372q0-11-10.5-35.5T494-432H393v120Zm0-228h93q33 0 48-17t15-38q0-24-17-39t-44-15h-95v109Z"></path></svg></button>
+                <button id="italicBtn" class="btn tb-keep" type="button" data-slot="text.italic" data-i18n-attr="data-tip:write.tb.italic, aria-label:write.tb.italic"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M200-200v-100h160l120-360H320v-100h400v100H580L460-300h140v100H200Z"></path></svg></button>
+                <button id="underlineBtn" class="btn tb-keep" type="button" data-slot="text.underline" data-i18n-attr="data-tip:write.tb.underline, aria-label:write.tb.underline"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M200-120v-80h560v80H200Zm123-223q-56-63-56-167v-330h103v336q0 56 28 91t82 35q54 0 82-35t28-91v-336h103v330q0 104-56 167t-157 63q-101 0-157-63Z"></path></svg></button>
+                <button id="strikeBtn" class="btn" type="button" data-slot="text.strike" data-i18n-attr="data-tip:write.tb.strikethrough, aria-label:write.tb.strikethrough"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M486-160q-76 0-135-45t-85-123l88-38q14 48 48.5 79t85.5 31q42 0 76-20t34-64q0-18-7-33t-19-27h112q5 14 7.5 28.5T694-340q0 86-61.5 133T486-160ZM80-480v-80h800v80H80Zm402-326q66 0 115.5 32.5T674-674l-88 39q-9-29-33.5-52T484-710q-41 0-68 18.5T386-640h-96q2-69 54.5-117.5T482-806Z"></path></svg></button>
+                <button id="superBtn" class="btn" type="button" data-slot="script.super" data-i18n-attr="data-tip:write.superscript, aria-label:write.superscript"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M760-600v-80q0-17 11.5-28.5T800-720h80v-40H760v-40h120q17 0 28.5 11.5T920-760v40q0 17-11.5 28.5T880-680h-80v40h120v40H760ZM235-160l185-291-172-269h106l124 200h4l123-200h107L539-451l186 291H618L482-377h-4L342-160H235Z"></path></svg></button>
+                <button id="subBtn" class="btn" type="button" data-slot="script.sub" data-i18n-attr="data-tip:write.subscript, aria-label:write.subscript"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M760-160v-80q0-17 11.5-28.5T800-280h80v-40H760v-40h120q17 0 28.5 11.5T920-320v40q0 17-11.5 28.5T880-240h-80v40h120v40H760Zm-525-80 185-291-172-269h106l124 200h4l123-200h107L539-531l186 291H618L482-457h-4L342-240H235Z"></path></svg></button>
                 <span class="vsep" aria-hidden="true"></span>
-                <button id="colorBtn" class="icon-btn has-popup tb-keep" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:write.tb.color, aria-label:write.tb.color"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M220-280l210-560h100l210 560h-96l-50-144H368l-52 144h-96Zm176-224h168l-82-232h-4l-82 232Z"></path><path class="tb-bar" d="M80 0v-160h800V0H80Z"></path></svg></button>
-                <button id="highlightBtn" class="icon-btn has-popup" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:write.tb.highlight, aria-label:write.tb.highlight"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><g transform="translate(96 -130) scale(0.8)"><path d="M544-400 440-504 240-304l104 104 200-200Zm-47-161 104 104 199-199-104-104-199 199Zm-84-28 216 216-229 229q-24 24-56 24t-56-24l-2-2-26 26H60l126-126-2-2q-24-24-24-56t24-56l229-229Zm0 0 227-227q24-24 56-24t56 24l104 104q24 24 24 56t-24 56L629-373 413-589Z"></path></g><path class="tb-bar" d="M80 0v-120h800V0H80Z"></path></svg></button>
+                <button id="colorBtn" class="btn tb-keep" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:write.tb.color, aria-label:write.tb.color"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M220-280l210-560h100l210 560h-96l-50-144H368l-52 144h-96Zm176-224h168l-82-232h-4l-82 232Z"></path><path class="tb-bar" d="M80 0v-160h800V0H80Z"></path></svg></button>
+                <button id="highlightBtn" class="btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:write.tb.highlight, aria-label:write.tb.highlight"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><g transform="translate(96 -130) scale(0.8)"><path d="M544-400 440-504 240-304l104 104 200-200Zm-47-161 104 104 199-199-104-104-199 199Zm-84-28 216 216-229 229q-24 24-56 24t-56-24l-2-2-26 26H60l126-126-2-2q-24-24-24-56t24-56l229-229Zm0 0 227-227q24-24 56-24t56 24l104 104q24 24 24 56t-24 56L629-373 413-589Z"></path></g><path class="tb-bar" d="M80 0v-120h800V0H80Z"></path></svg></button>
                 <span class="vsep" aria-hidden="true"></span>
-                <button id="linkBtn" class="icon-btn" type="button" data-i18n-attr="title:write.tb.link, aria-label:write.tb.link"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M440-280H280q-83 0-141.5-58.5T80-480q0-83 58.5-141.5T280-680h160v80H280q-50 0-85 35t-35 85q0 50 35 85t85 35h160v80ZM320-440v-80h320v80H320Zm200 160v-80h160q50 0 85-35t35-85q0-50-35-85t-85-35H520v-80h160q83 0 141.5 58.5T880-480q0 83-58.5 141.5T680-280H520Z"></path></svg></button>
-                <button id="imageBtn" class="icon-btn" type="button" data-i18n-attr="title:write.tb.image, aria-label:write.tb.image"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm40-80h480L570-480 450-320l-90-120-120 160Zm-40 80v-560 560Z"></path></svg></button>
+                <button id="linkBtn" class="btn" type="button" data-i18n-attr="data-tip:write.tb.link, aria-label:write.tb.link"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M440-280H280q-83 0-141.5-58.5T80-480q0-83 58.5-141.5T280-680h160v80H280q-50 0-85 35t-35 85q0 50 35 85t85 35h160v80ZM320-440v-80h320v80H320Zm200 160v-80h160q50 0 85-35t35-85q0-50-35-85t-85-35H520v-80h160q83 0 141.5 58.5T880-480q0 83-58.5 141.5T680-280H520Z"></path></svg></button>
+                <button id="imageBtn" class="btn" type="button" data-i18n-attr="data-tip:write.tb.image, aria-label:write.tb.image"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm40-80h480L570-480 450-320l-90-120-120 160Zm-40 80v-560 560Z"></path></svg></button>
                 <span class="vsep" aria-hidden="true"></span>
-                <button id="tableBtn" class="icon-btn has-popup" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:write.tb.table, aria-label:write.tb.table"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm240-240H200v160h240v-160Zm80 0v160h240v-160H520Zm-80-80v-160H200v160h240Zm80 0h240v-160H520v160ZM200-680h560v-80H200v80Z"></path></svg></button>
-                <button id="tableBordersBtn" class="icon-btn" type="button" data-i18n-attr="title:write.tableBorders, aria-label:write.tableBorders"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M120-120v-720h720v720H120Zm640-80v-240H520v240h240Zm0-560H520v240h240v-240Zm-560 0v240h240v-240H200Zm0 560h240v-240H200v240Z"></path></svg></button>
+                <button id="tableBtn" class="btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:write.tb.table, aria-label:write.tb.table"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm240-240H200v160h240v-160Zm80 0v160h240v-160H520Zm-80-80v-160H200v160h240Zm80 0h240v-160H520v160ZM200-680h560v-80H200v80Z"></path></svg></button>
+                <button id="tableBordersBtn" class="btn" type="button" data-i18n-attr="data-tip:write.tableBorders, aria-label:write.tableBorders"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M120-120v-720h720v720H120Zm640-80v-240H520v240h240Zm0-560H520v240h240v-240Zm-560 0v240h240v-240H200Zm0 560h240v-240H200v240Z"></path></svg></button>
                 <span class="vsep" aria-hidden="true"></span>
-                <button id="pageBreakBtn" class="icon-btn" type="button" data-slot="insert.pageBreak" data-i18n-attr="title:write.pageBreak, aria-label:write.pageBreak"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M120-440v-80h160v80H120Zm200 0v-80h160v80H320Zm200 0v-80h160v80H520Zm200 0v-80h120v80H720ZM240-120q-33 0-56.5-23.5T160-200v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-120H240Zm-80-520v-120q0-33 23.5-56.5T240-840h480q33 0 56.5 23.5T800-760v120h-80v-120H240v120h-80Z"></path></svg></button>
-                <button id="footnoteBtn" class="icon-btn" type="button" data-slot="insert.footnote" data-i18n-attr="title:write.footnote, aria-label:write.footnote"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3.5" y1="5" x2="14" y2="5"></line><line x1="3.5" y1="9.5" x2="11" y2="9.5"></line><line x1="3.5" y1="18" x2="12" y2="18"></line><line x1="3.5" y1="21" x2="9" y2="21"></line><line x1="3.5" y1="13.8" x2="9" y2="13.8" stroke-width="1.4"></line><text x="15" y="10" font-size="9" font-family="serif" fill="currentColor" stroke="none">1</text></svg></button>
-                <button id="tocBtn" class="icon-btn" type="button" data-slot="insert.toc" data-i18n-attr="title:write.toc, aria-label:write.toc"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M120-240v-80h240v80H120Zm0-200v-80h480v80H120Zm0-200v-80h720v80H120Z"></path></svg></button>
-                <button id="symbolsBtn" class="icon-btn" type="button" data-i18n-attr="title:write.symbols, aria-label:write.symbols"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="20" font-size="22" font-weight="600" font-family="serif" text-anchor="middle" fill="currentColor">Ω</text></svg></button>
+                <button id="pageBreakBtn" class="btn" type="button" data-slot="insert.pageBreak" data-i18n-attr="data-tip:write.pageBreak, aria-label:write.pageBreak"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M120-440v-80h160v80H120Zm200 0v-80h160v80H320Zm200 0v-80h160v80H520Zm200 0v-80h120v80H720ZM240-120q-33 0-56.5-23.5T160-200v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-120H240Zm-80-520v-120q0-33 23.5-56.5T240-840h480q33 0 56.5 23.5T800-760v120h-80v-120H240v120h-80Z"></path></svg></button>
+                <button id="footnoteBtn" class="btn" type="button" data-slot="insert.footnote" data-i18n-attr="data-tip:write.footnote, aria-label:write.footnote"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3.5" y1="5" x2="14" y2="5"></line><line x1="3.5" y1="9.5" x2="11" y2="9.5"></line><line x1="3.5" y1="18" x2="12" y2="18"></line><line x1="3.5" y1="21" x2="9" y2="21"></line><line x1="3.5" y1="13.8" x2="9" y2="13.8" stroke-width="1.4"></line><text x="15" y="10" font-size="9" font-family="serif" fill="currentColor" stroke="none">1</text></svg></button>
+                <button id="tocBtn" class="btn" type="button" data-slot="insert.toc" data-i18n-attr="data-tip:write.toc, aria-label:write.toc"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M120-240v-80h240v80H120Zm0-200v-80h480v80H120Zm0-200v-80h720v80H120Z"></path></svg></button>
+                <button id="symbolsBtn" class="btn" type="button" data-i18n-attr="data-tip:write.symbols, aria-label:write.symbols"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="20" font-size="22" font-weight="600" font-family="serif" text-anchor="middle" fill="currentColor">Ω</text></svg></button>
                 <span class="vsep" aria-hidden="true"></span>
-                <button id="alignBtn" class="icon-btn has-popup tb-keep" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:write.tb.textAlign, aria-label:write.tb.textAlign"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M120-120v-80h720v80H120Zm0-160v-80h480v80H120Zm0-160v-80h720v80H120Zm0-160v-80h480v80H120Zm0-160v-80h720v80H120Z"></path></svg></button>
-                <button id="bulletBtn" class="icon-btn tb-keep" type="button" data-slot="list.bullet" data-i18n-attr="title:write.tb.bulletList, aria-label:write.tb.bulletList"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M360-200v-80h480v80H360Zm0-240v-80h480v80H360Zm0-240v-80h480v80H360ZM200-160q-33 0-56.5-23.5T120-240q0-33 23.5-56.5T200-320q33 0 56.5 23.5T280-240q0 33-23.5 56.5T200-160Zm0-240q-33 0-56.5-23.5T120-480q0-33 23.5-56.5T200-560q33 0 56.5 23.5T280-480q0 33-23.5 56.5T200-400Zm-56.5-263.5Q120-687 120-720t23.5-56.5Q167-800 200-800t56.5 23.5Q280-753 280-720t-23.5 56.5Q233-640 200-640t-56.5-23.5Z"></path></svg></button>
-                <button id="numberedBtn" class="icon-btn tb-keep" type="button" data-slot="list.numbered" data-i18n-attr="title:write.tb.numberedList, aria-label:write.tb.numberedList"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M120-80v-60h100v-30h-60v-60h60v-30H120v-60h120q17 0 28.5 11.5T280-280v40q0 17-11.5 28.5T240-200q17 0 28.5 11.5T280-160v40q0 17-11.5 28.5T240-80H120Zm0-280v-110q0-17 11.5-28.5T160-510h60v-30H120v-60h120q17 0 28.5 11.5T280-560v70q0 17-11.5 28.5T240-450h-60v30h100v60H120Zm60-280v-180h-60v-60h120v240h-60Zm180 440v-80h480v80H360Zm0-240v-80h480v80H360Zm0-240v-80h480v80H360Z"></path></svg></button>
-                <button id="outdentBtn" class="icon-btn" type="button" data-slot="list.outdent" data-i18n-attr="title:write.tb.indentLeft, aria-label:write.tb.indentLeft"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M120-120v-80h720v80H120Zm320-160v-80h400v80H440Zm0-160v-80h400v80H440Zm0-160v-80h400v80H440ZM120-760v-80h720v80H120Zm160 440L120-480l160-160v320Z"></path></svg></button>
-                <button id="indentBtn" class="icon-btn" type="button" data-slot="list.indent" data-i18n-attr="title:write.tb.indentRight, aria-label:write.tb.indentRight"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M120-120v-80h720v80H120Zm320-160v-80h400v80H440Zm0-160v-80h400v80H440Zm0-160v-80h400v80H440ZM120-760v-80h720v80H120Zm0 440v-320l160 160-160 160Z"></path></svg></button>
-                <button id="lineSpacingBtn" class="icon-btn has-popup" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:write.tb.lineHeight, aria-label:write.tb.lineHeight"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M240-160 80-320l56-56 64 62v-332l-64 62-56-56 160-160 160 160-56 56-64-62v332l64-62 56 56-160 160Zm240-40v-80h400v80H480Zm0-240v-80h400v80H480Zm0-240v-80h400v80H480Z"></path></svg></button>
-                <button id="painterBtn" class="icon-btn" type="button" data-slot="format.painter" data-i18n-attr="title:write.tb.copyFormat, aria-label:write.tb.copyFormat"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M440-80q-33 0-56.5-23.5T360-160v-160H240q-33 0-56.5-23.5T160-400v-280q0-66 47-113t113-47h480v440q0 33-23.5 56.5T720-320H600v160q0 33-23.5 56.5T520-80h-80ZM240-560h480v-200h-40v160h-80v-160h-40v80h-80v-80H320q-33 0-56.5 23.5T240-680v120Zm0 160h480v-80H240v80Zm0 0v-80 80Z"></path></svg></button>
-                <button id="clearBtn" class="icon-btn" type="button" data-slot="format.clear" data-i18n-attr="title:write.tb.clearFormatting, aria-label:write.tb.clearFormatting"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M800-436q0 36-8 69t-22 63l-62-60q6-17 9-34.5t3-37.5q0-47-17.5-89T650-600L480-768l-88 86-56-56 144-142 226 222q44 42 69 99.5T800-436Zm-8 380L668-180q-41 29-88 44.5T480-120q-133 0-226.5-92.5T160-436q0-51 16-98t48-90L56-792l56-56 736 736-56 56ZM480-200q36 0 68.5-10t61.5-28L280-566q-21 32-30.5 64t-9.5 66q0 98 70 167t170 69Zm-37-204Zm110-116Z"></path></svg></button>
+                <button id="alignBtn" class="btn tb-keep" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:write.tb.textAlign, aria-label:write.tb.textAlign"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M120-120v-80h720v80H120Zm0-160v-80h480v80H120Zm0-160v-80h720v80H120Zm0-160v-80h480v80H120Zm0-160v-80h720v80H120Z"></path></svg></button>
+                <button id="bulletBtn" class="btn tb-keep" type="button" data-slot="list.bullet" data-i18n-attr="data-tip:write.tb.bulletList, aria-label:write.tb.bulletList"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M360-200v-80h480v80H360Zm0-240v-80h480v80H360Zm0-240v-80h480v80H360ZM200-160q-33 0-56.5-23.5T120-240q0-33 23.5-56.5T200-320q33 0 56.5 23.5T280-240q0 33-23.5 56.5T200-160Zm0-240q-33 0-56.5-23.5T120-480q0-33 23.5-56.5T200-560q33 0 56.5 23.5T280-480q0 33-23.5 56.5T200-400Zm-56.5-263.5Q120-687 120-720t23.5-56.5Q167-800 200-800t56.5 23.5Q280-753 280-720t-23.5 56.5Q233-640 200-640t-56.5-23.5Z"></path></svg></button>
+                <button id="numberedBtn" class="btn tb-keep" type="button" data-slot="list.numbered" data-i18n-attr="data-tip:write.tb.numberedList, aria-label:write.tb.numberedList"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M120-80v-60h100v-30h-60v-60h60v-30H120v-60h120q17 0 28.5 11.5T280-280v40q0 17-11.5 28.5T240-200q17 0 28.5 11.5T280-160v40q0 17-11.5 28.5T240-80H120Zm0-280v-110q0-17 11.5-28.5T160-510h60v-30H120v-60h120q17 0 28.5 11.5T280-560v70q0 17-11.5 28.5T240-450h-60v30h100v60H120Zm60-280v-180h-60v-60h120v240h-60Zm180 440v-80h480v80H360Zm0-240v-80h480v80H360Zm0-240v-80h480v80H360Z"></path></svg></button>
+                <button id="outdentBtn" class="btn" type="button" data-slot="list.outdent" data-i18n-attr="data-tip:write.tb.indentLeft, aria-label:write.tb.indentLeft"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M120-120v-80h720v80H120Zm320-160v-80h400v80H440Zm0-160v-80h400v80H440Zm0-160v-80h400v80H440ZM120-760v-80h720v80H120Zm160 440L120-480l160-160v320Z"></path></svg></button>
+                <button id="indentBtn" class="btn" type="button" data-slot="list.indent" data-i18n-attr="data-tip:write.tb.indentRight, aria-label:write.tb.indentRight"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M120-120v-80h720v80H120Zm320-160v-80h400v80H440Zm0-160v-80h400v80H440Zm0-160v-80h400v80H440ZM120-760v-80h720v80H120Zm0 440v-320l160 160-160 160Z"></path></svg></button>
+                <button id="lineSpacingBtn" class="btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:write.tb.lineHeight, aria-label:write.tb.lineHeight"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M240-160 80-320l56-56 64 62v-332l-64 62-56-56 160-160 160 160-56 56-64-62v332l64-62 56 56-160 160Zm240-40v-80h400v80H480Zm0-240v-80h400v80H480Zm0-240v-80h400v80H480Z"></path></svg></button>
+                <button id="painterBtn" class="btn" type="button" data-slot="format.painter" data-i18n-attr="data-tip:write.tb.copyFormat, aria-label:write.tb.copyFormat"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M440-80q-33 0-56.5-23.5T360-160v-160H240q-33 0-56.5-23.5T160-400v-280q0-66 47-113t113-47h480v440q0 33-23.5 56.5T720-320H600v160q0 33-23.5 56.5T520-80h-80ZM240-560h480v-200h-40v160h-80v-160h-40v80h-80v-80H320q-33 0-56.5 23.5T240-680v120Zm0 160h480v-80H240v80Zm0 0v-80 80Z"></path></svg></button>
+                <button id="clearBtn" class="btn" type="button" data-slot="format.clear" data-i18n-attr="data-tip:write.tb.clearFormatting, aria-label:write.tb.clearFormatting"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M800-436q0 36-8 69t-22 63l-62-60q6-17 9-34.5t3-37.5q0-47-17.5-89T650-600L480-768l-88 86-56-56 144-142 226 222q44 42 69 99.5T800-436Zm-8 380L668-180q-41 29-88 44.5T480-120q-133 0-226.5-92.5T160-436q0-51 16-98t48-90L56-792l56-56 736 736-56 56ZM480-200q36 0 68.5-10t61.5-28L280-566q-21 32-30.5 64t-9.5 66q0 98 70 167t170 69Zm-37-204Zm110-116Z"></path></svg></button>
                 <span class="vsep" aria-hidden="true"></span>
-                <button id="undoBtn" class="icon-btn tb-keep" type="button" data-slot="history.undo" data-i18n-attr="title:write.tb.undo, aria-label:write.tb.undo"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M280-200v-80h284q63 0 109.5-40T720-420q0-60-46.5-100T564-560H312l104 104-56 56-200-200 200-200 56 56-104 104h252q97 0 166.5 63T800-420q0 94-69.5 157T564-200H280Z"></path></svg></button>
-                <button id="redoBtn" class="icon-btn" type="button" data-slot="history.redo" data-i18n-attr="title:write.tb.redo, aria-label:write.tb.redo"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M396-200q-97 0-166.5-63T160-420q0-94 69.5-157T396-640h252L544-744l56-56 200 200-200 200-56-56 104-104H396q-63 0-109.5 40T240-420q0 60 46.5 100T396-280h284v80H396Z"></path></svg></button>
-                <button id="editBtn" class="icon-btn has-popup" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.menu.edit, aria-label:ui.menu.edit"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path></svg></button>
+                <button id="undoBtn" class="btn tb-keep" type="button" data-slot="history.undo" data-i18n-attr="data-tip:write.tb.undo, aria-label:write.tb.undo"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M280-200v-80h284q63 0 109.5-40T720-420q0-60-46.5-100T564-560H312l104 104-56 56-200-200 200-200 56 56-104 104h252q97 0 166.5 63T800-420q0 94-69.5 157T564-200H280Z"></path></svg></button>
+                <button id="redoBtn" class="btn" type="button" data-slot="history.redo" data-i18n-attr="data-tip:write.tb.redo, aria-label:write.tb.redo"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M396-200q-97 0-166.5-63T160-420q0-94 69.5-157T396-640h252L544-744l56-56 200 200-200 200-56-56 104-104H396q-63 0-109.5 40T240-420q0 60 46.5 100T396-280h284v80H396Z"></path></svg></button>
+                <button id="editBtn" class="btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.menu.edit, aria-label:ui.menu.edit"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path></svg></button>
                 <span class="vsep" aria-hidden="true"></span>
-                <button id="findBtn" class="icon-btn" type="button" data-i18n-attr="title:write.tb.search, aria-label:write.tb.search"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"></path></svg></button>
-                <button id="marksBtn" class="icon-btn" type="button" data-slot="review.paragraphMarks" data-i18n-attr="title:write.formattingMarks, aria-label:write.formattingMarks"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M360-160v-240q-83 0-141.5-58.5T160-600q0-83 58.5-141.5T360-800h360v80h-80v560h-80v-560H440v560h-80Z"></path></svg></button>
-                <button id="modeBtn" class="icon-btn has-popup" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:write.mode, aria-label:write.mode"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"></path><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"></path></svg></button>
-                <button id="zoomBtn" class="icon-btn has-popup" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:write.tb.zoom, aria-label:write.tb.zoom"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="20.5" y1="20.5" x2="16" y2="16"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg></button>
+                <button id="findBtn" class="btn" type="button" data-i18n-attr="data-tip:write.tb.search, aria-label:write.tb.search"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"></path></svg></button>
+                <button id="marksBtn" class="btn" type="button" data-slot="review.paragraphMarks" data-i18n-attr="data-tip:write.formattingMarks, aria-label:write.formattingMarks"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M360-160v-240q-83 0-141.5-58.5T160-600q0-83 58.5-141.5T360-800h360v80h-80v560h-80v-560H440v560h-80Z"></path></svg></button>
+                <button id="modeBtn" class="btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:write.mode, aria-label:write.mode"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"></path><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"></path></svg></button>
+                <button id="zoomBtn" class="btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:write.tb.zoom, aria-label:write.tb.zoom"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="20.5" y1="20.5" x2="16" y2="16"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg></button>
             </div>
 
             <!-- Phone only: opens the rest of the toolbar in place (see the phone
                  block in the CSS above). -->
-            <button id="moreToolsBtn" class="icon-btn" type="button" aria-expanded="false" data-i18n-attr="title:ui.moreTools, aria-label:ui.moreTools">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>
+            <button id="moreToolsBtn" class="btn" type="button" aria-expanded="false" data-i18n-attr="data-tip:ui.moreTools, aria-label:ui.moreTools">
+                <span class="icon" data-icon="more"></span>
             </button>
 
             <div id="writeTools">
                 <span class="vsep" aria-hidden="true"></span>
 
-                <button id="tplBtn" class="icon-btn" data-i18n-attr="title:write.templates, aria-label:write.templates">
+                <button id="tplBtn" class="btn" data-i18n-attr="data-tip:write.templates, aria-label:write.templates">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="3" y1="8" x2="21" y2="8"></line><line x1="9" y1="8" x2="9" y2="21"></line></svg>
                 </button>
 
                 <span class="vsep" aria-hidden="true"></span>
-                <button id="wrOutputBtn" class="icon-btn has-popup" type="button" data-i18n-attr="title:write.grpOutput, aria-label:write.grpOutput">
+                <button id="wrOutputBtn" class="btn" type="button" data-i18n-attr="data-tip:write.grpOutput, aria-label:write.grpOutput" aria-haspopup="true">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
                 </button>
-                <button id="wrPageBtn" class="icon-btn has-popup" type="button" data-i18n-attr="title:write.grpPage, aria-label:write.grpPage">
+                <button id="wrPageBtn" class="btn" type="button" data-i18n-attr="data-tip:write.grpPage, aria-label:write.grpPage" aria-haspopup="true">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"></rect><line x1="4" y1="8" x2="20" y2="8"></line><line x1="4" y1="16" x2="20" y2="16"></line></svg>
                 </button>
-                <button id="paraBtn" class="icon-btn" data-i18n-attr="title:write.paragraph, aria-label:write.paragraph">
+                <button id="paraBtn" class="btn" data-i18n-attr="data-tip:write.paragraph, aria-label:write.paragraph">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="5" x2="20" y2="5"></line><line x1="8" y1="10" x2="20" y2="10"></line><line x1="8" y1="14" x2="20" y2="14"></line><line x1="4" y1="19" x2="20" y2="19"></line><line x1="4" y1="9" x2="4" y2="15" stroke-width="2.6"></line></svg>
                 </button>
                 <span class="vsep" aria-hidden="true"></span>
 
                 <!-- Settings: the gear before "?", as in every app. -->
-                <button id="settingsBtn" class="icon-btn" data-i18n-attr="title:ui.settings, aria-label:ui.settings">
+                <button id="settingsBtn" class="btn" data-i18n-attr="data-tip:ui.settings, aria-label:ui.settings">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                 </button>
                 <!-- Ayuda. Opens the three-entry menu below (#helpMenu), not the
                      guide card: the card is one of the three entries. -->
-                <button id="helpBtn" class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                <button id="helpBtn" class="btn" data-intro-open type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                 </button>
             </div>
@@ -592,32 +590,32 @@
                  title cloned) and an entry clicks the one it came from, so
                  there is one set of handlers and the menu cannot drift. -->
             <div id="fileTools" hidden>
-                <button id="newBtn" class="icon-btn" data-i18n-attr="title:write.newDoc, aria-label:write.newDoc">
+                <button id="newBtn" class="btn" data-i18n-attr="data-tip:write.newDoc, aria-label:write.newDoc">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="12" x2="12" y2="18"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
                 </button>
-                <button id="openBtn" class="icon-btn" data-i18n-attr="title:ui.openDoc, aria-label:ui.openDoc">
+                <button id="openBtn" class="btn" data-i18n-attr="data-tip:ui.openDoc, aria-label:ui.openDoc">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h5l2 3h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path></svg>
                 </button>
-                <button id="recentBtn" class="icon-btn" type="button" data-i18n-attr="title:ui.recent, aria-label:ui.recent">
+                <button id="recentBtn" class="btn" type="button" data-i18n-attr="data-tip:ui.recent, aria-label:ui.recent">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline></svg>
                 </button>
-                <button id="saveBtn" class="icon-btn" type="button" data-i18n-attr="title:ui.save, aria-label:ui.save">
+                <button id="saveBtn" class="btn" type="button" data-i18n-attr="data-tip:ui.save, aria-label:ui.save">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 </button>
                 <input id="importInput" type="file" accept=".docx" style="display:none">
-                <button id="importBtn" class="icon-btn" data-i18n-attr="title:ui.importDevice, aria-label:ui.importDevice">
+                <button id="importBtn" class="btn" data-i18n-attr="data-tip:ui.importDevice, aria-label:ui.importDevice">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                 </button>
-                <button id="saveAsBtn" class="icon-btn" data-i18n-attr="title:ui.saveAs, aria-label:ui.saveAs">
+                <button id="saveAsBtn" class="btn" data-i18n-attr="data-tip:ui.saveAs, aria-label:ui.saveAs">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 14 10 18 17 9" stroke-width="2.5"></polyline><line x1="12" y1="1" x2="12" y2="7" stroke-width="2.4"></line><line x1="9" y1="4" x2="15" y2="4" stroke-width="2.4"></line></svg>
                 </button>
-                <button id="restoreBtn" class="icon-btn" data-i18n-attr="title:write.restore, aria-label:write.restore">
+                <button id="restoreBtn" class="btn" data-i18n-attr="data-tip:write.restore, aria-label:write.restore">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"></path><polyline points="3 4 3 9 8 9"></polyline><polyline points="12 8 12 12 15 14"></polyline></svg>
                 </button>
-                <button id="lockBtn" class="icon-btn" data-i18n-attr="title:lock.title, aria-label:lock.title">
+                <button id="lockBtn" class="btn" data-i18n-attr="data-tip:lock.title, aria-label:lock.title">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="M10.7 12.3 21 2"></path><path d="m15.5 7.5 3 3"></path><path d="m18 5 2.5 2.5"></path></svg>
                 </button>
-                <button id="scBtn" class="icon-btn" type="button" data-i18n-attr="title:write.shortcuts, aria-label:write.shortcuts">
+                <button id="scBtn" class="btn" type="button" data-i18n-attr="data-tip:write.shortcuts, aria-label:write.shortcuts">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6" y2="10"></line><line x1="10" y1="10" x2="10" y2="10"></line><line x1="14" y1="10" x2="14" y2="10"></line><line x1="18" y1="10" x2="18" y2="10"></line><line x1="7" y1="14" x2="17" y2="14"></line></svg>
                 </button>
             </div>
@@ -627,10 +625,10 @@
                  button. Hidden here for the same reason as #fileTools: the menu
                  is built FROM it, so glyph, title and handler live in one place. -->
             <div id="helpTools" hidden>
-                <button id="statsBtn" class="icon-btn" data-i18n-attr="title:write.stats, aria-label:write.stats">
+                <button id="statsBtn" class="btn" data-i18n-attr="data-tip:write.stats, aria-label:write.stats">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"></line><line x1="10" y1="20" x2="10" y2="4"></line><line x1="16" y1="20" x2="16" y2="9"></line><line x1="21" y1="20" x2="3" y2="20"></line></svg>
                 </button>
-                <button id="guideBtn" class="icon-btn" type="button" data-i18n-attr="title:ui.toolbarButtons, aria-label:ui.toolbarButtons">
+                <button id="guideBtn" class="btn" type="button" data-i18n-attr="data-tip:ui.toolbarButtons, aria-label:ui.toolbarButtons">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="8" rx="2"></rect><line x1="6" y1="9" x2="6" y2="9"></line><line x1="10" y1="9" x2="10" y2="9"></line><line x1="14" y1="9" x2="14" y2="9"></line><line x1="18" y1="9" x2="18" y2="9"></line><line x1="7" y1="18" x2="17" y2="18"></line><line x1="7" y1="21" x2="13" y2="21"></line></svg>
                 </button>
             </div>
@@ -643,11 +641,11 @@
             <div class="find-row">
                 <input id="findInput" type="text" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:write.find.findPlaceholder, aria-label:write.find.findPlaceholder">
                 <span id="findCount" class="find-count" aria-live="polite"></span>
-                <button id="findPrevBtn" class="icon-btn sm" type="button" data-i18n-attr="title:write.find.previousMatchTitle, aria-label:write.find.previousMatchTitle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                <button id="findNextBtn" class="icon-btn sm" type="button" data-i18n-attr="title:write.find.nextMatchTitle, aria-label:write.find.nextMatchTitle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
-                <button id="findCaseBtn" class="icon-btn sm" type="button" aria-pressed="false" data-i18n-attr="title:write.find.matchCase, aria-label:write.find.matchCase"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="13" font-weight="600" font-family="sans-serif" text-anchor="middle" fill="currentColor">Aa</text></svg></button>
-                <button id="findReplToggle" class="icon-btn sm" type="button" aria-expanded="false" data-i18n-attr="title:write.find.toggleReplaceTitle, aria-label:write.find.toggleReplaceTitle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>
-                <button id="findCloseBtn" class="icon-btn sm" type="button" data-i18n-attr="title:write.find.closeTitle, aria-label:write.find.closeTitle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+                <button id="findPrevBtn" class="btn sm" type="button" data-i18n-attr="data-tip:write.find.previousMatchTitle, aria-label:write.find.previousMatchTitle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+                <button id="findNextBtn" class="btn sm" type="button" data-i18n-attr="data-tip:write.find.nextMatchTitle, aria-label:write.find.nextMatchTitle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
+                <button id="findCaseBtn" class="btn sm" type="button" aria-pressed="false" data-i18n-attr="data-tip:write.find.matchCase, aria-label:write.find.matchCase"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="13" font-weight="600" font-family="sans-serif" text-anchor="middle" fill="currentColor">Aa</text></svg></button>
+                <button id="findReplToggle" class="btn sm" type="button" aria-expanded="false" data-i18n-attr="data-tip:write.find.toggleReplaceTitle, aria-label:write.find.toggleReplaceTitle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>
+                <button id="findCloseBtn" class="btn sm" type="button" data-i18n-attr="data-tip:write.find.closeTitle, aria-label:write.find.closeTitle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
             <div id="findReplRow" class="find-row" hidden>
                 <input id="replInput" type="text" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:write.find.replacePlaceholder, aria-label:write.find.replacePlaceholder">
@@ -713,8 +711,8 @@
             </div>
 
             <div class="sheet-actions">
-                <button id="pageSetupCancelBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
-                <button id="pageSetupConfirmBtn" data-act="primary" data-i18n-attr="title:write.apply"></button>
+                <button class="btn" id="pageSetupCancelBtn"  data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="pageSetupConfirmBtn" data-i18n-attr="data-tip:write.apply"><span class="icon" data-icon="check"></span></button>
             </div>
         </div>
     </div>
@@ -755,8 +753,8 @@
             </div>
 
             <div class="section-label" data-i18n="write.paFlowLabel"></div>
-            <div class="field"><label class="check"><span data-i18n="write.paKeepNext"></span><span class="switch sm"><input type="checkbox" id="paKeepNext"><span class="track"></span></span></label></div>
-            <div class="field"><label class="check"><span data-i18n="write.paKeepLines"></span><span class="switch sm"><input type="checkbox" id="paKeepLines"><span class="track"></span></span></label></div>
+            <div class="field"><label class="check switch end"><span data-i18n="write.paKeepNext"></span><input role="switch" type="checkbox" id="paKeepNext"></label></div>
+            <div class="field"><label class="check switch end"><span data-i18n="write.paKeepLines"></span><input role="switch" type="checkbox" id="paKeepLines"></label></div>
 
             <div class="section-label" data-i18n="write.paListLabel"></div>
             <div class="field-row">
@@ -790,8 +788,8 @@
             <p class="dialog-text st-note" data-i18n="write.paTouchNote"></p>
 
             <div class="sheet-actions">
-                <button id="paraCancelBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
-                <button id="paraConfirmBtn" data-act="primary" data-i18n-attr="title:write.apply"></button>
+                <button class="btn" id="paraCancelBtn"  data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="paraConfirmBtn" data-i18n-attr="data-tip:write.apply"><span class="icon" data-icon="check"></span></button>
             </div>
         </div>
     </div>
@@ -815,8 +813,8 @@
                 <div class="field"><label for="stSize" data-i18n="write.tb.fontSize"></label><select id="stSize"></select></div>
                 <div class="field"><label for="stColor" data-i18n="write.tb.color"></label><select id="stColor"></select></div>
             </div>
-            <div class="field"><label class="check"><span data-i18n="write.tb.bold"></span><span class="switch sm"><input type="checkbox" id="stBold"><span class="track"></span></span></label></div>
-            <div class="field"><label class="check"><span data-i18n="write.tb.italic"></span><span class="switch sm"><input type="checkbox" id="stItalic"><span class="track"></span></span></label></div>
+            <div class="field"><label class="check switch end"><span data-i18n="write.tb.bold"></span><input role="switch" type="checkbox" id="stBold"></label></div>
+            <div class="field"><label class="check switch end"><span data-i18n="write.tb.italic"></span><input role="switch" type="checkbox" id="stItalic"></label></div>
 
             <div class="section-label" data-i18n="write.paSpacingLabel"></div>
             <div class="field-row">
@@ -824,12 +822,12 @@
                 <div class="field"><label for="stAfter" data-i18n="write.paAfter"></label><input type="text" id="stAfter" inputmode="decimal" value="0"></div>
             </div>
 
-            <div class="field"><label class="check"><span data-i18n="write.stDefault"></span><span class="switch sm"><input type="checkbox" id="stDefault"><span class="track"></span></span></label></div>
+            <div class="field"><label class="check switch end"><span data-i18n="write.stDefault"></span><input role="switch" type="checkbox" id="stDefault"></label></div>
             <p class="dialog-text st-note" data-i18n="write.stNote"></p>
 
             <div class="sheet-actions">
-                <button id="stylesCancelBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
-                <button id="stylesConfirmBtn" data-act="primary" data-i18n-attr="title:write.apply"></button>
+                <button class="btn" id="stylesCancelBtn"  data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="stylesConfirmBtn" data-i18n-attr="data-tip:write.apply"><span class="icon" data-icon="check"></span></button>
             </div>
         </div>
     </div>
@@ -841,13 +839,13 @@
             <!-- A row of its own: shared/ui.js moves a lone × up onto the title's
                  line. The bottom row keeps only "Change folder". -->
             <div class="sheet-actions">
-                <button id="tplCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
+                <button class="btn" id="tplCloseBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
             </div>
             <div id="tplCrumb" class="open-crumb"></div>
             <ul id="tplList" class="open-list"></ul>
             <div class="sheet-actions">
                 <div class="sheet-actions-left">
-                    <button id="tplChangeBtn" class="btn btn-secondary" data-i18n="write.changeTemplatesDir"></button>
+                    <button id="tplChangeBtn" class="btn text bordered" data-i18n="write.changeTemplatesDir"></button>
                 </div>
             </div>
         </div>
@@ -878,8 +876,8 @@
                 <input id="linkHref" type="url" inputmode="url" autocomplete="off" placeholder="https://">
             </div>
             <div class="sheet-actions">
-                <button id="linkCancelBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
-                <button id="linkConfirmBtn" data-act="primary" data-i18n-attr="title:write.apply"></button>
+                <button class="btn" id="linkCancelBtn"  data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="linkConfirmBtn" data-i18n-attr="data-tip:write.apply"><span class="icon" data-icon="check"></span></button>
             </div>
         </div>
     </div>
@@ -888,14 +886,14 @@
          anchored just under it. Pick a preset plus weight / line style / colour,
          then click the ✓ — nothing touches the table until then. The picked
          weight / style / colour are sticky (remembered after a successful apply). -->
-    <!-- The tool row's group cards: one .has-popup button opens each, and what
+    <!-- The tool row's group cards: one popup button (aria-haspopup) opens each, and what
          is inside is the REAL buttons (shared/office.js, groupPopup). -->
     <div id="outputPopup" class="popup" data-i18n-attr="aria-label:write.grpOutput">
         <div class="popup-row">
-                <button id="printBtn" class="pop-btn" data-i18n-attr="title:write.print, aria-label:write.print">
+                <button id="printBtn" class="btn pop-btn" data-i18n-attr="data-tip:write.print, aria-label:write.print">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
                 </button>
-                <button id="pdfBtn" class="pop-btn" data-i18n-attr="title:write.savePdf, aria-label:write.savePdf">
+                <button id="pdfBtn" class="btn pop-btn" data-i18n-attr="data-tip:write.savePdf, aria-label:write.savePdf">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><text x="12" y="19" font-size="7" font-family="sans-serif" text-anchor="middle" fill="currentColor" stroke="none">PDF</text></svg>
                 </button>
         </div>
@@ -903,18 +901,18 @@
 
     <div id="pagePopup" class="popup" data-i18n-attr="aria-label:write.grpPage">
         <div class="popup-row">
-                <button id="pageSetupBtn" class="pop-btn" data-i18n-attr="title:write.pageSetup, aria-label:write.pageSetup">
+                <button id="pageSetupBtn" class="btn pop-btn" data-i18n-attr="data-tip:write.pageSetup, aria-label:write.pageSetup">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"></rect><line x1="4" y1="8" x2="20" y2="8"></line><line x1="4" y1="16" x2="20" y2="16"></line></svg>
                 </button>
-                <button id="headerBtn" class="pop-btn" data-i18n-attr="title:write.header, aria-label:write.header">
+                <button id="headerBtn" class="btn pop-btn" data-i18n-attr="data-tip:write.header, aria-label:write.header">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"></rect><line x1="7" y1="6.5" x2="17" y2="6.5" stroke-width="2.6"></line><line x1="8" y1="12" x2="16" y2="12" stroke-dasharray="1 3"></line><line x1="8" y1="15" x2="14" y2="15" stroke-dasharray="1 3"></line></svg>
                 </button>
         </div>
         <div class="popup-row">
-                <button id="footerBtn" class="pop-btn" data-i18n-attr="title:write.footer, aria-label:write.footer">
+                <button id="footerBtn" class="btn pop-btn" data-i18n-attr="data-tip:write.footer, aria-label:write.footer">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"></rect><line x1="7" y1="17.5" x2="17" y2="17.5" stroke-width="2.6"></line><line x1="8" y1="9" x2="16" y2="9" stroke-dasharray="1 3"></line><line x1="8" y1="12" x2="14" y2="12" stroke-dasharray="1 3"></line></svg>
                 </button>
-                <button id="pageNumBtn" class="pop-btn" disabled data-i18n-attr="title:write.pageNumber, aria-label:write.pageNumber">
+                <button id="pageNumBtn" class="btn pop-btn" aria-disabled="true" data-i18n-attr="data-tip:write.pageNumber, aria-label:write.pageNumber">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"></rect><line x1="7" y1="7" x2="17" y2="7" stroke-dasharray="1 3"></line><line x1="7" y1="10" x2="15" y2="10" stroke-dasharray="1 3"></line><text x="12" y="20" font-size="8" font-family="sans-serif" text-anchor="middle" fill="currentColor" stroke="none">1</text></svg>
                 </button>
         </div>
@@ -922,28 +920,28 @@
 
     <div id="tbPopup" class="popup tb-popup" role="menu" data-i18n-attr="aria-label:write.tableBorders">
         <div class="tb-grid">
-            <button type="button" data-tb="all" data-i18n-attr="title:write.bAll, aria-label:write.bAll">
+            <button type="button" data-tb="all" data-i18n-attr="data-tip:write.bAll, aria-label:write.bAll">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
             </button>
-            <button type="button" data-tb="box" data-i18n-attr="title:write.bOutline, aria-label:write.bOutline">
+            <button type="button" data-tb="box" data-i18n-attr="data-tip:write.bOutline, aria-label:write.bOutline">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" stroke-width="2.4"></rect><line x1="4" y1="12" x2="20" y2="12" stroke-width="1.4" stroke-opacity=".3"></line><line x1="12" y1="4" x2="12" y2="20" stroke-width="1.4" stroke-opacity=".3"></line></svg>
             </button>
-            <button type="button" data-tb="inside" data-i18n-attr="title:write.bInner, aria-label:write.bInner">
+            <button type="button" data-tb="inside" data-i18n-attr="data-tip:write.bInner, aria-label:write.bInner">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" stroke-width="1.4" stroke-opacity=".3"></rect><line x1="4" y1="12" x2="20" y2="12" stroke-width="2.4"></line><line x1="12" y1="4" x2="12" y2="20" stroke-width="2.4"></line></svg>
             </button>
-            <button type="button" data-tb="none" data-i18n-attr="title:write.bNone, aria-label:write.bNone">
+            <button type="button" data-tb="none" data-i18n-attr="data-tip:write.bNone, aria-label:write.bNone">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="2 2" stroke-opacity=".55"><rect x="4" y="4" width="16" height="16"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
             </button>
-            <button type="button" data-tb="top" data-i18n-attr="title:write.bTop, aria-label:write.bTop">
+            <button type="button" data-tb="top" data-i18n-attr="data-tip:write.bTop, aria-label:write.bTop">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><g stroke-width="1.4" stroke-opacity=".28"><rect x="4" y="4" width="16" height="16"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="12" y1="4" x2="12" y2="20"></line></g><line x1="4" y1="4" x2="20" y2="4" stroke-width="2.8"></line></svg>
             </button>
-            <button type="button" data-tb="bottom" data-i18n-attr="title:write.bBottom, aria-label:write.bBottom">
+            <button type="button" data-tb="bottom" data-i18n-attr="data-tip:write.bBottom, aria-label:write.bBottom">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><g stroke-width="1.4" stroke-opacity=".28"><rect x="4" y="4" width="16" height="16"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="12" y1="4" x2="12" y2="20"></line></g><line x1="4" y1="20" x2="20" y2="20" stroke-width="2.8"></line></svg>
             </button>
-            <button type="button" data-tb="left" data-i18n-attr="title:write.bLeft, aria-label:write.bLeft">
+            <button type="button" data-tb="left" data-i18n-attr="data-tip:write.bLeft, aria-label:write.bLeft">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><g stroke-width="1.4" stroke-opacity=".28"><rect x="4" y="4" width="16" height="16"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="12" y1="4" x2="12" y2="20"></line></g><line x1="4" y1="4" x2="4" y2="20" stroke-width="2.8"></line></svg>
             </button>
-            <button type="button" data-tb="right" data-i18n-attr="title:write.bRight, aria-label:write.bRight">
+            <button type="button" data-tb="right" data-i18n-attr="data-tip:write.bRight, aria-label:write.bRight">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><g stroke-width="1.4" stroke-opacity=".28"><rect x="4" y="4" width="16" height="16"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="12" y1="4" x2="12" y2="20"></line></g><line x1="20" y1="4" x2="20" y2="20" stroke-width="2.8"></line></svg>
             </button>
         </div>
@@ -951,27 +949,27 @@
         <div class="tb-sep"></div>
 
         <div class="tb-lines tb-weight">
-            <button type="button" data-tbw="0.5"  data-i18n-attr="title:write.pt05, aria-label:write.pt05"><i style="height:1px"></i></button>
-            <button type="button" data-tbw="1"    data-i18n-attr="title:write.pt1, aria-label:write.pt1"><i style="height:2px"></i></button>
-            <button type="button" data-tbw="1.5"  data-i18n-attr="title:write.pt15, aria-label:write.pt15"><i style="height:3px"></i></button>
-            <button type="button" data-tbw="2.25" data-i18n-attr="title:write.pt225, aria-label:write.pt225"><i style="height:4px"></i></button>
-            <button type="button" data-tbw="3"    data-i18n-attr="title:write.pt3, aria-label:write.pt3"><i style="height:6px"></i></button>
+            <button type="button" data-tbw="0.5"  data-i18n-attr="data-tip:write.pt05, aria-label:write.pt05"><i style="height:1px"></i></button>
+            <button type="button" data-tbw="1"    data-i18n-attr="data-tip:write.pt1, aria-label:write.pt1"><i style="height:2px"></i></button>
+            <button type="button" data-tbw="1.5"  data-i18n-attr="data-tip:write.pt15, aria-label:write.pt15"><i style="height:3px"></i></button>
+            <button type="button" data-tbw="2.25" data-i18n-attr="data-tip:write.pt225, aria-label:write.pt225"><i style="height:4px"></i></button>
+            <button type="button" data-tbw="3"    data-i18n-attr="data-tip:write.pt3, aria-label:write.pt3"><i style="height:6px"></i></button>
         </div>
 
         <div class="tb-sep"></div>
 
         <div class="tb-lines tb-style">
-            <button type="button" data-tbs="single" data-i18n-attr="title:write.lineSolid, aria-label:write.lineSolid"><i style="border-top:2px solid var(--text)"></i></button>
-            <button type="button" data-tbs="dashed" data-i18n-attr="title:write.lineDashed, aria-label:write.lineDashed"><i style="border-top:2px dashed var(--text)"></i></button>
-            <button type="button" data-tbs="dotted" data-i18n-attr="title:write.lineDotted, aria-label:write.lineDotted"><i style="border-top:2px dotted var(--text)"></i></button>
-            <button type="button" data-tbs="double" data-i18n-attr="title:write.lineDouble, aria-label:write.lineDouble"><i style="border-top:3px double var(--text)"></i></button>
+            <button type="button" data-tbs="single" data-i18n-attr="data-tip:write.lineSolid, aria-label:write.lineSolid"><i style="border-top:2px solid var(--text)"></i></button>
+            <button type="button" data-tbs="dashed" data-i18n-attr="data-tip:write.lineDashed, aria-label:write.lineDashed"><i style="border-top:2px dashed var(--text)"></i></button>
+            <button type="button" data-tbs="dotted" data-i18n-attr="data-tip:write.lineDotted, aria-label:write.lineDotted"><i style="border-top:2px dotted var(--text)"></i></button>
+            <button type="button" data-tbs="double" data-i18n-attr="data-tip:write.lineDouble, aria-label:write.lineDouble"><i style="border-top:3px double var(--text)"></i></button>
         </div>
 
         <div class="tb-sep"></div>
 
         <div class="tb-last-row">
-            <button type="button" id="tbColorSwatch" class="tb-color-swatch" data-i18n-attr="title:write.lineColor, aria-label:write.lineColor"></button>
-            <button type="button" id="tbApplyBtn" data-act="primary" data-i18n-attr="title:write.applyBorders"></button>
+            <button type="button" id="tbColorSwatch" class="tb-color-swatch" data-i18n-attr="data-tip:write.lineColor, aria-label:write.lineColor"></button>
+            <button class="btn primary" type="button" id="tbApplyBtn" data-i18n-attr="data-tip:write.applyBorders"><span class="icon" data-icon="check"></span></button>
         </div>
         <input type="color" id="tbColorInput" value="#000000" tabindex="-1" aria-hidden="true">
     </div>

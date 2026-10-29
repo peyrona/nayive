@@ -52,8 +52,8 @@ const listed = () => c.evaluate( "Array.from( document.querySelectorAll( '#repla
 // The shared NayiveUI.confirm sheet: its buttons, by title.
 const sheetUp = ( ms = 5000 ) => c.until( "document.querySelector( '.sheet-backdrop.open:not([id]) .sheet-actions button' )", ms );
 const press = title => c.evaluate( `( () => { const b = Array.from( document.querySelectorAll( '.sheet-backdrop.open:not([id]) .sheet-actions button' ) )
-    .find( function( x ) { return x.title === ${JSON.stringify( title )}; } ); if( ! b ) return false; b.click(); return true; } )()` );
-const T = k => c.evaluate( `NayiveUI.t( ${JSON.stringify( k )} )` );
+    .find( function( x ) { return x.dataset.tip === ${JSON.stringify( title )}; } ); if( ! b ) return false; b.click(); return true; } )()` );
+const T = k => c.evaluate( `Ayni.t( ${JSON.stringify( k )} )` );
 
 //------------------------------------------------------------------------//
 section( "D1 · A FOLDER DROPPED AGAIN" );
@@ -226,14 +226,14 @@ section( "OPEN · THE TWIN'S NAME TAKEN DURING THE CONVERSION (409)" );
         openOffice( { path: 'files/z.odt', nodes: null }, 'write' ); return true; } )()` );
     ok( await c.until( "window.__opened.length && /write\\/index\\.html\\?file=files%2Fz\\.docx$/.test( window.__opened[ 0 ].location.href || '' )" ),
         "the twin that took the name is opened", await c.evaluate( "window.__opened.map( function( w ) { return w.location.href || ''; } )" ) );
-    ok( await c.evaluate( `window.__toasts.some( function( t ) { return t === NayiveUI.tf( 'drive.officeTwinExists', { name: 'z.docx' } ); } )` ),
+    ok( await c.evaluate( `window.__toasts.some( function( t ) { return t === Ayni.tf( 'drive.officeTwinExists', { name: 'z.docx' } ); } )` ),
         "...saying it already exists", await c.evaluate( "window.__toasts" ) );
 
     // A FOLDER of the twin's name: a 409 every time - said plainly.
     await c.evaluate( `( () => { window.__opened = []; window.__toasts = [];
         window.officeTwin = async function() { const e = new Error( 'HTTP 409: Conflict' ); e.status = 409; throw e; };
         openOffice( { path: 'files/y.odt', nodes: null }, 'write' ); return true; } )()` );
-    ok( await c.until( "window.__toasts.some( function( t ) { return t === NayiveUI.tf( 'drive.officeTwinFolder', { name: 'y.docx' } ); } )" ),
+    ok( await c.until( "window.__toasts.some( function( t ) { return t === Ayni.tf( 'drive.officeTwinFolder', { name: 'y.docx' } ); } )" ),
         "a folder named like the twin: said so", await c.evaluate( "window.__toasts" ) );
 }
 await c.stop();

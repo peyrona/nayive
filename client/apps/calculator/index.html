@@ -1,0 +1,172 @@
+<!-- index.html - Calculator: a phone-style arithmetic calculator with a currency
+     mode. Launcher › Tools › Calculator; Trips opens it in currency mode with
+     ?mode=fx&from=<the place's currency>&to=EUR (and &place=<text> when the
+     currency of that place could not be worked out).
+
+     Nothing goes to the server: the history, the last mode and currencies stay
+     on this device (localStorage). The rates are shared/fx.js's: three free
+     sources, cross-checked, never guessed. -->
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <!-- Nayive's first script (old settings, whose page, error reports), then
+         Ayni's language layer: it hides the page until the texts are in, and
+         every inline script below may call Ayni.t(). -->
+    <script src="../shared/i18n.js"></script>
+    <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
+    <title>Calculator</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='2' width='16' height='20' rx='2'/%3E%3Cline x1='8' y1='6' x2='16' y2='6'/%3E%3Cline x1='16' y1='14' x2='16' y2='18'/%3E%3Cpath d='M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01'/%3E%3C/svg%3E">
+
+    <!-- Shared colour scheme. Apply the saved choice before first paint to avoid a flash. -->
+    <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
+    <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/app.css">
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script src="../shared/ayni/ayni-icons.js" defer></script>
+    <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-buttons.js" defer></script>
+    <script src="../shared/locker.js"></script>
+
+    <!-- Installable / offline-capable. Only takes effect over HTTPS (and localhost). -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <script>
+        if( 'serviceWorker' in navigator )
+            window.addEventListener( 'load', function () { navigator.serviceWorker.register( '../sw.js' ).catch( function () {} ); } );
+    </script>
+
+    <script src="../shared/ui.js" defer></script>
+    <script src="../shared/fx.js" defer></script>
+    <link rel="stylesheet" href="calculator.css">
+</head>
+<body>
+
+    <!-- The app's own glyphs that Ayni.icon() has not got. -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <symbol id="i-arith"     viewBox="0 0 24 24"><path d="M7 3.5v6M4 6.5h6M14 6.5h6M4.5 15l5 5M9.5 15l-5 5M14 15.5h6M14 19.5h6"/></symbol>
+        <symbol id="i-euro"      viewBox="0 0 24 24"><path d="M18 6.5A7 7 0 1 0 18 17.5M4 10h10M4 14h10"/></symbol>
+        <symbol id="i-history"   viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2"/></symbol>
+        <symbol id="i-swap"      viewBox="0 0 24 24"><path d="M16 3l4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16"/></symbol>
+        <symbol id="i-backspace" viewBox="0 0 24 24"><path d="M21 5H9l-6 7 6 7h12zM12 9l6 6M18 9l-6 6"/></symbol>
+    </svg>
+
+    <div class="app">
+        <!-- [←] [icon] Calculator [±] (o)=== [€] ............ [history] | [?]
+             The ← shows only when another app opened this page (Trips). -->
+        <header class="topbar">
+            <button id="backBtn" class="btn" type="button" hidden data-i18n-attr="data-tip:ui.close, aria-label:ui.close"></button>
+            <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"></path></svg>
+            <h1>Calculator</h1>
+            <!-- The mode: Ayni's two-sided switch. The thumb points at the chosen
+                 side; neither side is "off", so the track keeps the accent on both.
+                 An icon picks its side, the track flips, Left / Right pick a side. -->
+            <div id="modeSwitch" class="switch-pair mode-pair" role="radiogroup">
+                <label data-mode="arith" data-i18n-attr="data-tip:calculator.modeArith"><input type="radio" name="calcMode" value="arith" data-i18n-attr="aria-label:calculator.modeArith">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-arith"></use></svg></label>
+                <span class="track"></span>
+                <label data-mode="fx" data-i18n-attr="data-tip:calculator.modeFx"><input type="radio" name="calcMode" value="fx" data-i18n-attr="aria-label:calculator.modeFx">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-euro"></use></svg></label>
+            </div>
+
+            <div class="topbar-actions">
+                <div class="tb-group">
+                    <button id="histBtn" class="btn" type="button" data-i18n-attr="data-tip:calculator.history, aria-label:calculator.history">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-history"></use></svg>
+                    </button>
+                </div>
+                <div class="tb-group tb-sys">
+                    <button class="btn" data-intro-open type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="calc-page">
+            <div class="calc" id="calc" data-mode="arith">
+                <!-- Currency mode: the typed currency, ⇄, the one it converts to. -->
+                <div class="fx-bar" id="fxBar">
+                    <select id="fxFrom" data-i18n-attr="title:calculator.from, aria-label:calculator.from"></select>
+                    <button id="fxSwap" class="btn" type="button" data-i18n-attr="data-tip:calculator.swap, aria-label:calculator.swap">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-swap"></use></svg>
+                    </button>
+                    <select id="fxTo" data-i18n-attr="title:calculator.to, aria-label:calculator.to"></select>
+                </div>
+                <!-- Trips could not tell the place's currency: said plainly, until one is picked. -->
+                <p class="fx-guess" id="fxGuess" hidden></p>
+
+                <!-- Arithmetic: the operation over the number. Currency: the rate
+                     note, the converted amount, the typed one. -->
+                <div class="screen">
+                    <div class="expr" id="expr" aria-hidden="true"></div>
+                    <button class="fx-note" id="fxNote" type="button" data-i18n-attr="data-tip:calculator.fxCheck"></button>
+                    <div class="line to"><span class="sym" id="symTo"></span><output class="display" id="displayTo" data-i18n-attr="aria-label:calculator.converted">—</output></div>
+                    <div class="line"><span class="sym" id="symFrom"></span><output class="display" id="display" aria-live="polite">0</output></div>
+                </div>
+
+                <div class="keys" id="keys">
+                    <button class="key fn" type="button" data-k="clear"   data-i18n-attr="data-tip:calculator.kClear, aria-label:calculator.kClear"></button>
+                    <button class="key fn" type="button" data-k="back"    data-i18n-attr="data-tip:calculator.kBack, aria-label:calculator.kBack">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-backspace"></use></svg>
+                    </button>
+                    <button class="key fn" type="button" data-k="percent" data-i18n-attr="aria-label:calculator.kPercent">%</button>
+                    <button class="key op" type="button" data-k="/"       data-i18n-attr="aria-label:calculator.kDivide">÷</button>
+                    <button class="key" type="button" data-k="7">7</button>
+                    <button class="key" type="button" data-k="8">8</button>
+                    <button class="key" type="button" data-k="9">9</button>
+                    <button class="key op" type="button" data-k="*"       data-i18n-attr="aria-label:calculator.kMultiply">×</button>
+                    <button class="key" type="button" data-k="4">4</button>
+                    <button class="key" type="button" data-k="5">5</button>
+                    <button class="key" type="button" data-k="6">6</button>
+                    <button class="key op" type="button" data-k="-"       data-i18n-attr="aria-label:calculator.kSubtract">−</button>
+                    <button class="key" type="button" data-k="1">1</button>
+                    <button class="key" type="button" data-k="2">2</button>
+                    <button class="key" type="button" data-k="3">3</button>
+                    <button class="key op" type="button" data-k="+"       data-i18n-attr="aria-label:calculator.kAdd">+</button>
+                    <button class="key" type="button" data-k="sign"       data-i18n-attr="aria-label:calculator.kSign">+/−</button>
+                    <button class="key" type="button" data-k="0">0</button>
+                    <!-- The interface language's decimal mark (calculator.js writes it). -->
+                    <button class="key" type="button" data-k="dot"        data-i18n-attr="aria-label:calculator.kDecimal"></button>
+                    <button class="key op" type="button" data-k="="       data-i18n-attr="aria-label:calculator.kEquals">=</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- History: the last 50 results; a tap puts one back on screen. The trash
+         empties it at once (a delete inside a dialog needs no second ask). -->
+    <div id="histBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <h2 data-i18n="calculator.history"></h2>
+            <ul class="hist-list" id="histList"></ul>
+            <p class="hist-empty" id="histEmpty" data-i18n="calculator.historyEmpty"></p>
+            <div class="sheet-actions">
+                <button class="btn danger" id="histClearBtn" data-i18n-attr="data-tip:calculator.historyClear"><span class="icon" data-icon="trash"></span></button>
+                <button class="btn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rate check: what each source said for the pair's currencies, and which
+         pair of sources agreed - so a real disagreement is visible, not hidden. -->
+    <div id="fxCheckBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <h2 data-i18n="calculator.fxCheck"></h2>
+            <div id="fxCheckBody"></div>
+            <div class="sheet-actions">
+                <button class="btn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script src="calculator.js" defer></script>
+</body>
+</html>

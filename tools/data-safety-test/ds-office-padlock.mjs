@@ -34,14 +34,14 @@ await c.open( "/nayive/text/?file=files/n.txt", "/nayive/text/" );
 await c.evaluate( PW + "( window )" );
 ok( await c.evaluate( "window.__typePassword( 'clave-nueva-123' )" ), "its password is asked, and given" );
 ok( await c.until( `document.querySelector('.CodeMirror') && ${CM}.getValue() === 'texto nuevo\\n'`, 20000 ), "n.txt is open" );
-ok( await c.evaluate( "document.getElementById('lockBtn').classList.contains('is-active')" ), "the padlock is lit" );
+ok( await c.evaluate( "document.getElementById('lockBtn').getAttribute('aria-pressed') === 'true'" ), "the padlock is lit" );
 
 await c.evaluate( "document.getElementById('restoreBtn').click(), true" );
-ok( await c.until( "window.__sheet().indexOf( NayiveUI.t('write.restore') ) !== -1" ), "Restore asks first (a password is on)" );
+ok( await c.until( "window.__sheet().indexOf( Ayni.t('write.restore') ) !== -1" ), "Restore asks first (a password is on)" );
 await c.evaluate( "window.__pressConfirm()" );
 ok( await c.evaluate( "window.__typePassword( 'clave-vieja-123' )" ), "the copy asks for the password of ITS day" );
 ok( await c.until( `${CM}.getValue() === 'texto viejo\\n'` ), "the previous copy is on screen" );
-ok( await c.evaluate( "document.getElementById('lockBtn').classList.contains('is-active')" ), "the padlock is still on" );
+ok( await c.evaluate( "document.getElementById('lockBtn').getAttribute('aria-pressed') === 'true'" ), "the padlock is still on" );
 
 // The restored copy is saved over the file by the autosave (the app's 7 s timer).
 const saved = await untilDisk( s, "files/n.txt", t => t && t !== sealedPair.cur, 20000 );
@@ -63,13 +63,13 @@ put( s, "files/.bak/m.txt", oldSealed );
 ok( await textPage( "/nayive/text/?file=files/m.txt" ), "m.txt (no password) is open" );
 ok( await c.until( `${CM}.getValue() === 'texto ahora\\n'` ), "with its text" );
 await c.evaluate( "document.getElementById('restoreBtn').click(), true" );
-ok( await c.until( "window.__sheet().indexOf( NayiveUI.t('write.restore') ) !== -1" ), "Restore asks first (the copy has a password)" );
+ok( await c.until( "window.__sheet().indexOf( Ayni.t('write.restore') ) !== -1" ), "Restore asks first (the copy has a password)" );
 await c.evaluate( "window.__pressConfirm()" );
 ok( await c.evaluate( "window.__typePassword( 'clave-de-antes-1' )" ), "the copy's password" );
 ok( await c.until( `${CM}.getValue() === 'texto sellado\\n'` ), "the previous copy is on screen" );
-ok( await c.until( "( window.__toasts || [] ).some( function ( t ) { return t.indexOf( NayiveUI.t('write.restoredNoPassword') ) !== -1; } )", 3000 ),
+ok( await c.until( "( window.__toasts || [] ).some( function ( t ) { return t.indexOf( Ayni.t('write.restoredNoPassword') ) !== -1; } )", 3000 ),
     "and the toast says it goes on WITHOUT a password", await c.toasts() );
-ok( ! await c.evaluate( "document.getElementById('lockBtn').classList.contains('is-active')" ), "the padlock is off, as it says" );
+ok( ! await c.evaluate( "document.getElementById('lockBtn').getAttribute('aria-pressed') === 'true'" ), "the padlock is off, as it says" );
 
 //----------------------------------------------------------------------------//
 section( "G6 · \"CLEAN COPY\" AND AN OLDER FILE OF THE SAME NAME IN THE BIN" );
@@ -86,7 +86,7 @@ ok( await textPage( "/nayive/text/?file=files/carta.txt" ), "this year's carta.t
 ok( await c.until( `${CM}.getValue() === 'texto en claro\\n'` ), "with its text" );
 
 await c.evaluate( "document.getElementById('lockBtn').click(), true" );
-ok( await c.until( "window.__sheet().indexOf( NayiveUI.t('lock.pastTitle') ) !== -1" ), "the padlock warns about the copy already written" );
+ok( await c.until( "window.__sheet().indexOf( Ayni.t('lock.pastTitle') ) !== -1" ), "the padlock warns about the copy already written" );
 await c.evaluate( "window.__pressConfirm()" );                       // "Clean copy"
 ok( await c.evaluate( "window.__typePassword( 'una-clave-larga-1' )" ), "a new password" );
 ok( await c.until( "document.getElementById('saveAsBackdrop').classList.contains('open')" ), "a new name is asked" );

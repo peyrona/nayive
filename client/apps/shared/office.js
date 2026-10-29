@@ -30,8 +30,8 @@
     "use strict";
 
     function byId( id ) { return document.getElementById( id ); }
-    function t( k )     { return window.NayiveUI ? NayiveUI.t( k ) : k; }
-    function tf( k, v ) { return window.NayiveUI ? NayiveUI.tf( k, v ) : k; }
+    function t( k )     { return window.NayiveUI ? Ayni.t( k ) : k; }
+    function tf( k, v ) { return window.NayiveUI ? Ayni.tf( k, v ) : k; }
 
     // ?new=1 - opened by New in a window of its own (newDocument): start blank,
     // never with a closed tab's draft. Dropped from the address at once, before
@@ -66,7 +66,7 @@
 
     function byBaseName( a, b )
     {
-        return baseName( a.path ).localeCompare( baseName( b.path ), window.NayiveUI ? NayiveUI.lang() : undefined );
+        return baseName( a.path ).localeCompare( baseName( b.path ), window.NayiveUI ? Ayni.i18n.lang() : undefined );
     }
 
     // The label shown in the top bar for an opened file: its path minus the
@@ -220,7 +220,7 @@
         }
 
         if( btn.querySelector( ".fp-btn-ic" ) )
-            btn.querySelector( ".fp-btn-ic" ).innerHTML = NayiveUI.icon( "folder" );
+            btn.querySelector( ".fp-btn-ic" ).innerHTML = Ayni.icon( "folder" );
 
         // The picker builds its own id-less backdrop on top of the open save-as
         // sheet, so the suite's Escape rule leaves the sheet alone (it only ever
@@ -307,7 +307,7 @@
             if( isFolder ) li.className = "is-folder";
             var ic = document.createElement( "span" );
             ic.className = "open-ic";
-            ic.innerHTML = NayiveUI.icon( iconName );
+            ic.innerHTML = Ayni.icon( iconName );
             var nm = document.createElement( "span" );
             nm.className   = "open-nm";
             nm.textContent = label;
@@ -386,7 +386,7 @@
             } );
             files.forEach( function ( n )
             {
-                var li = row( "doc", baseName( n.path ), false );
+                var li = row( "file", baseName( n.path ), false );
                 li.addEventListener( "click", function () { pick( n.path ); } );
                 list.appendChild( li );
             } );
@@ -413,11 +413,11 @@
             }
 
             crumb.textContent = t( "ui.offlineLocalOnly" );
-            paths.sort( function ( a, b ) { return a.localeCompare( b, NayiveUI.lang() ); } );
+            paths.sort( function ( a, b ) { return a.localeCompare( b, Ayni.i18n.lang() ); } );
             paths.forEach( function ( p )
             {
                 var rel = p.indexOf( opts.root + "/" ) === 0 ? p.slice( opts.root.length + 1 ) : p;
-                var li  = row( "doc", rel, false );
+                var li  = row( "file", rel, false );
                 li.addEventListener( "click", function () { pick( p ); } );
                 list.appendChild( li );
             } );
@@ -525,7 +525,7 @@
     //   var g = NayiveOffice.groupPopup( { btn: "fmtAlignBtn", popup: "alignPopup",
     //                                      activeFrom: [ "fmtWrapBtn" ] } );
     //
-    //   btn         the trigger already in the markup, carrying .has-popup
+    //   btn         the trigger already in the markup (Ayni marks it: aria-haspopup)
     //   popup       the .popup element holding the real buttons
     //   activeFrom  ids whose "active" lights the TRIGGER too, so a toggle that
     //               is on can be seen with the card shut. Left out: never lit.
@@ -571,9 +571,9 @@
         function sync()
         {
             if( ! watch.length ) return;
-            btn.classList.toggle( "active", watch.some( function ( el )
+            btn.setAttribute( "aria-pressed", watch.some( function ( el )
             {
-                return el.classList.contains( "active" ) || el.classList.contains( "is-active" );
+                return el.getAttribute( "aria-pressed" ) === "true";
             } ) );
         }
 
@@ -639,7 +639,7 @@
     // away while you type - the "?" never in menu mode (`o.menus()`), where the
     // Ayuda menu is right there; on a PC the "?" goes back into `o.tools`
     // (before `o.helpBefore`, or last) and the File button in front of #fileSep.
-    // `o.fileClass( btn, phone )` gives the File button its look. Then every
+    // `o.fileClass( btn, phone )`, if given, sizes the File button for its row. Then every
     // menu and popup `o.close()` lists is shut, the "..." expansion folded, and
     // on a PC the row unfolded (`o.fold()`: null while it is not made yet).
     function phoneChrome( phone, o )
@@ -649,7 +649,7 @@
         var btn = byId( "moreBtn" ), sep = byId( "fileSep" );
         if( phone ) byId( "topActions" ).appendChild( btn );
         else        sep.parentNode.insertBefore( btn, sep );
-        o.fileClass( btn, phone );
+        if( o.fileClass ) o.fileClass( btn, phone );
 
         o.close().forEach( function ( m ) { if( m ) m.close(); } );
         var fold = o.fold();
@@ -680,7 +680,7 @@
             isOpen = !! open;
             bar.classList.toggle( "is-folded", ! isOpen );
             if( ! isOpen ) setMore( false );
-            fmt.classList.toggle( "is-active", isOpen );
+            fmt.setAttribute( "aria-pressed", isOpen );
             fmt.setAttribute( "aria-expanded", String( isOpen ) );
             if( opts.afterChange ) opts.afterChange();
         }
@@ -783,12 +783,12 @@
     // this browser would read THAT account's .bak, write into its home and
     // delete its file. So they run only while the "nayive_who" cookie still
     // names this page's owner. Unknown either way (no cookie): as before.
-    // (NayiveI18n.whoNow: shared/i18n.js WHOSE PAGE, loaded first.)
+    // (NayiveWho.now: shared/i18n.js WHOSE PAGE, loaded first.)
     function ownerHere()
     {
         var me = draftWho();
         if( ! me ) return true;
-        var now = NayiveI18n.whoNow();
+        var now = NayiveWho.now();
         return ! now || now === me;
     }
 
@@ -938,7 +938,7 @@
         {
             var el = byId( o.savedAtId || "savedAt" );
             if( ! el ) return;
-            if( ! el.firstChild ) el.innerHTML = NayiveUI.icon( "save" );
+            if( ! el.firstChild ) el.innerHTML = Ayni.icon( "save" );
             el.dataset.state = state;
             el.title = title || t( state === "saving" ? "write.savingTip" : state === "saved" ? "ui.saved" : "write.unsavedTip" );
             el.setAttribute( "aria-label", el.title );
@@ -1702,7 +1702,7 @@
     {
         if( byId( "saveAsBackdrop" ) ) return;
 
-        function actions( id ) { return '<div class="sheet-actions">\n<button id="' + id + '" data-act="close" data-i18n-attr="title:ui.close"></button>\n</div>'; }
+        function actions( id ) { return '<div class="sheet-actions">\n<button class="btn" id="' + id + '" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>\n</div>'; }
         function field( forId, key, control ) { return '<div class="field">\n<label for="' + forId + '" data-i18n="' + key + '"></label>\n' + control + '\n</div>'; }
 
         var box = document.createElement( "div" );
@@ -1722,12 +1722,12 @@
                 '<h2 data-i18n="ui.saveAs"></h2>',
                 field( "saveName", "ui.fileName", '<input type="text" id="saveName" data-i18n-attr="placeholder:' + o.nameKey + '" autocomplete="off">' ),
                 o.formats ? field( "saveFormat", o.formatKey, '<select id="saveFormat"></select>' ) : "",
-                field( "saveDirBtn", "ui.folder", '<button type="button" id="saveDirBtn" class="folder-pick" data-i18n-attr="title:ui.fp.pickFolder">\n' +
+                field( "saveDirBtn", "ui.folder", '<button type="button" id="saveDirBtn" class="folder-pick" data-i18n-attr="data-tip:ui.fp.pickFolder">\n' +
                                                   '<span class="fp-btn-ic"></span><span id="saveDirName" class="fp-btn-nm"></span>\n</button>' ),
                 '<div class="sheet-actions">',
-                    '<button id="saveAsDeleteBtn" class="sheet-actions-left" type="button" data-act="danger" hidden data-i18n-attr="title:ui.discardDoc"></button>',
-                    '<button id="saveAsCancelBtn" data-act="close" data-i18n-attr="title:ui.close"></button>',
-                    '<button id="saveAsConfirmBtn" data-act="primary" data-i18n-attr="title:ui.save"></button>',
+                    '<button id="saveAsDeleteBtn" class="btn danger sheet-actions-left" type="button" hidden data-i18n-attr="data-tip:ui.discardDoc"><span class="icon" data-icon="trash"></span></button>',
+                    '<button class="btn" id="saveAsCancelBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>',
+                    '<button class="btn primary" id="saveAsConfirmBtn" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>',
                 '</div>',
             '</div>', '</div>',
             '<div id="openBackdrop" class="sheet-backdrop">', '<div class="sheet">',
@@ -1871,7 +1871,7 @@
                                               body:      tf( "ui.park.body", { name: baseName( p ), list: NayiveStore.pendingText( list ) } ),
                                               confirm:   t( "ui.park.open" ),
                                               other:     t( "ui.park.forget" ),
-                                              otherIcon: "eyeoff" } );
+                                              otherIcon: "eye-off" } );
             if( r === true || r === "other" ) try { await NayiveStore.dismissPending( p ); } catch ( e ) {}
             return r === true;
         }
@@ -1911,7 +1911,7 @@
         {
             var btn = byId( "lockBtn" );
             if( ! btn ) return;
-            btn.classList.toggle( "is-active", !! saver.lock() );
+            btn.setAttribute( "aria-pressed", !! saver.lock() );
             if( btn.hasAttribute( "data-only-locked" ) ) btn.hidden = ! saver.lock();
         }
 
@@ -2355,6 +2355,22 @@
             var ext  = extOf( name );
             if( ext && vals.indexOf( ext ) !== -1 ) return ext;
             return vals.indexOf( "" ) !== -1 ? "" : vals[ 0 ];
+        }
+
+        // A format picked in the list goes into the name at once: "nuevo.txt"
+        // + Python -> "nuevo.py". Only a listed extension is swapped; any other
+        // stays part of the name ("v1.2" -> "v1.2.py"). "" (other) leaves it.
+        function nameToFormat()
+        {
+            var sel   = byId( "saveFormat" );
+            var input = byId( "saveName" );
+            if( ! sel || ! sel.value ) return;
+
+            var vals = Array.prototype.map.call( sel.options, function ( op ) { return op.value; } );
+            var name = input.value.trim();
+            var ext  = extOf( name );
+            if( ext && vals.indexOf( ext ) !== -1 ) name = name.slice( 0, -( ext.length + 1 ) );
+            if( name ) input.value = withExt( name, sel.value );
         }
 
         // asCopy: the conflict question's "save my version as a copy" - never
@@ -2986,6 +3002,7 @@
         on( "saveAsConfirmBtn", "click",   function () { confirmSaveAs(); } );
         on( "saveAsDeleteBtn",  "click",   function () { discardUntitled(); } );
         on( "saveName",         "keydown", function ( e ) { if( e.key === "Enter" ) confirmSaveAs(); } );
+        on( "saveFormat",       "change",  function () { nameToFormat(); } );
 
         // ---- a desktop window ---------------------------------------------------
         //
@@ -3110,10 +3127,10 @@
             var tb = byId( "tourBtn" ) || tools.appendChild( document.createElement( "button" ) );
             tb.id = "tourBtn";
             tb.type = "button";
-            tb.className = "tb-btn";
-            tb.title = t( "ui.tour.open" );
-            tb.setAttribute( "aria-label", tb.title );
-            tb.innerHTML = NayiveUI.icon( "play" );
+            tb.className = "btn tb-btn";
+            Ayni.setTip( tb, t( "ui.tour.open" ) );
+            tb.setAttribute( "aria-label", tb.dataset.tip );
+            tb.innerHTML = Ayni.icon( "play" );
             tb.addEventListener( "click", function () { NayiveUI.tour(); } );
             ids.push( "tourBtn" );
         }
@@ -3176,7 +3193,7 @@
             var val  = document.createElement( "b" );
             row.className    = "st-row";
             what.textContent = r.text;
-            val.textContent  = typeof r.value === "number" ? r.value.toLocaleString( NayiveUI.locale() ) : r.value;
+            val.textContent  = typeof r.value === "number" ? r.value.toLocaleString( Ayni.i18n.lang() ) : r.value;
             row.appendChild( what );
             row.appendChild( val );
             list.appendChild( row );

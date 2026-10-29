@@ -125,10 +125,24 @@ func (s *Server) apiLogin(w http.ResponseWriter, r *http.Request) {
 // SameSite=Lax, which lets top-level GETs through). A GET (an old launcher
 // still in a phone's cache, a bookmark) only goes to the launcher, signed in
 // as before: its button signs out.
+//
+// SOMEONE ELSE'S PC. A session signed in with "Keep me signed in" off is a
+// browser that is not the user's own: its sign-out also tells the browser to
+// delete everything this site keeps there (Clear-Site-Data: the saves, the
+// cached files, the settings, the service worker, the HTTP cache). So does
+// the login page's "X-Nayive-Forget: 1", sent with no session left, when the
+// last one here was such a session and ended without a sign-out
+// (login.html, LEFTOVERS). A header, not a parameter: another site's form
+// cannot set it, so it can never wipe a browser from outside.
 func (s *Server) apiLogout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		redirect(w, http.StatusSeeOther, URLPrefix+"/")
 		return
+	}
+	_, live := s.sessions.Get(tokenFrom(r))
+	_, remembered := s.sessions.Remembered(tokenFrom(r))
+	if (live && !remembered) || (!live && r.Header.Get("X-Nayive-Forget") == "1") {
+		w.Header().Set("Clear-Site-Data", `"cache", "storage"`)
 	}
 	s.sessions.Drop(tokenFrom(r))
 	w.Header().Set("Set-Cookie", clearCookieHeader())

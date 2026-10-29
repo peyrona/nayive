@@ -15,7 +15,7 @@ function sheetTop( sheet, sTitle, sError )
     if( sError )
     {
         const err = document.createElement( 'p' );
-        err.className = 'calc-warn';
+        err.className = 'warn-box';
         err.textContent = sError;
         sheet.appendChild( err );
     }
@@ -29,28 +29,21 @@ function sheetActions( sheet, bBusy, sDeleteTitle, fnDelete, fnCancel, fnSave )
 
     if( fnDelete )
     {
-        const delBtn = document.createElement( 'button' );
-        delBtn.className = 'btn btn-danger sheet-actions-left';
-        delBtn.title = sDeleteTitle;
-        delBtn.disabled = bBusy;
-        delBtn.appendChild( svgIcon( ICON_TRASH, 17 ) );
+        const delBtn = NayiveUI.sheetButton( 'danger', sDeleteTitle );
+        delBtn.classList.add( 'sheet-actions-left' );
+        delBtn.ariaDisabled = bBusy;
         // Already inside a dialog: no second question, it goes at once with an Undo.
         delBtn.addEventListener( 'click', fnDelete );
         actions.appendChild( delBtn );
     }
 
-    const cancelBtn = document.createElement( 'button' );
-    cancelBtn.className = 'btn btn-secondary';
-    cancelBtn.title = NayiveUI.t( 'ui.cancel' );
-    cancelBtn.disabled = bBusy;
-    cancelBtn.appendChild( svgIcon( ICON_X, 17 ) );
+    const cancelBtn = NayiveUI.sheetButton( '', Ayni.t( 'ui.cancel' ), 'close' );
+    cancelBtn.ariaDisabled = bBusy;
     cancelBtn.addEventListener( 'click', fnCancel );
 
-    const saveBtn = document.createElement( 'button' );
-    saveBtn.className = 'btn btn-primary';
-    saveBtn.title = bBusy ? T( 'ui.sync.saving' ) : T( 'ui.save' );
-    saveBtn.disabled = bBusy;
-    saveBtn.appendChild( svgIcon( ICON_CHECK, 18 ) );
+    // While it saves: a spinner in the ✓, whose tooltip says so; clicks wait.
+    const saveBtn = NayiveUI.sheetButton( 'primary', T( 'ui.save' ) );
+    if( bBusy ) Ayni.setBusy( saveBtn, T( 'ui.sync.saving' ) );
     saveBtn.addEventListener( 'click', fnSave );
 
     actions.appendChild( cancelBtn );
@@ -284,12 +277,12 @@ function renderStageSheet()
     sheet.appendChild( transportRow );
 
     sheet.appendChild( textAreaField( T( 'trips.lodging' ), T( 'trips.hotelPh' ), stageDraft.accommodation, function( v ) { stageDraft.accommodation = v; }, 2 ) );
-    sheet.appendChild( textAreaField( NayiveUI.t( 'ui.notes' ), T( 'trips.notesPh' ), stageDraft.notes, function( v ) { stageDraft.notes = v; } ) );
+    sheet.appendChild( textAreaField( Ayni.t( 'ui.notes' ), T( 'trips.notesPh' ), stageDraft.notes, function( v ) { stageDraft.notes = v; } ) );
 
     const addDocBtn = document.createElement( 'button' );
     addDocBtn.type = 'button';
-    addDocBtn.className = 'icon-btn doc-add-btn';
-    addDocBtn.title = T( 'trips.addDoc' );
+    addDocBtn.className = 'btn doc-add-btn';
+    Ayni.setTip( addDocBtn, T( 'trips.addDoc' ) );
     addDocBtn.appendChild( svgIcon( ICON_PLUS, 14 ) );
     addDocBtn.addEventListener( 'click', addStageDoc );
 

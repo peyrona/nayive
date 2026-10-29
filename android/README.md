@@ -17,7 +17,7 @@ What the service does, all through ONE long poll to `/api/device/wait`
 | Unread messages | a silent notification carrying the number: the icon's badge (a dot on Pixel) |
 | Everything web push brings | chat messages, missed calls, Planner and trip reminders, mail, "video ready", "¿Dónde estás?": shown by the app itself (from versionCode 6, `server/go/push_app.go`), so a phone without Google gets them all; the Chrome inside the app gets none of them, so nothing comes twice |
 | "Buscar mi móvil" | rings on the ALARM stream - heard with the phone silenced - until Parar on the phone, and sends where it is |
-| A new APK | once a day, `<origin>/app/version.json` → a notification |
+| A new APK | every 6 h, `<origin>/app/version.json` → downloads it → a notification whose tap is Android's installer (Updater.java) |
 | New photos and videos | once a day on Wi-Fi, when switched on in Mi cuenta: to the trip's photo folder, else `files/Camera/<year>/`; nothing deleted on the phone |
 
 The first run is a permissions screen (notifications, location "all the time",

@@ -665,8 +665,8 @@ func (s *Server) zipSources(role, user string, virts []string) (items []zipSourc
 				return fs.SkipDir
 			}
 			isDir := d.IsDir()
-			if !isDir && (!d.Type().IsRegular() || isTempName(d.Name())) {
-				return nil // a link, a device, a half-written temp
+			if !isDir && (!d.Type().IsRegular() || isTempName(d.Name()) || isLinkName(d.Name())) {
+				return nil // a link, a device, a half-written temp, a Drive shortcut (links.go)
 			}
 			fi, err := d.Info()
 			if err != nil {

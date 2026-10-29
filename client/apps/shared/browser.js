@@ -36,7 +36,7 @@
  * ONE RULE PER ACTION
  *   { id, label, icon, key, rank, noBar, hideOff, group, danger, where, when, run }
  *   - label: a string or fn( ids ) (a toggle: "Star" / "Unstar")
- *   - icon:  a NayiveUI.icon name, or an SVG string
+ *   - icon:  a Ayni.icon name, or an SVG string
  *   - key:   "Del", "F2", "Ctrl+C", "Shift+Del", "R" ... (or an array: the first
  *            is shown). The browser runs the action on that key.
  *   - rank:  how important its header button is: 1 is the last to leave when
@@ -61,7 +61,7 @@
 
     var UI = window.NayiveUI;
     if( ! UI ) return;
-    var t  = UI.t, tf = UI.tf;
+    var t  = Ayni.t, tf = Ayni.tf;
 
     function $( x ) { return typeof x === "string" ? document.querySelector( x ) : x; }
     function esc( s ) { return UI.escapeHtml( s == null ? "" : String( s ) ); }
@@ -72,7 +72,6 @@
 
     // Glyphs this file needs that ui.js has no name for.
     var G = {
-        dots:      '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>',
         checkAll:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>',
         tick:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>',
         chevron:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>',
@@ -99,7 +98,7 @@
     {
         if( ! ic ) return "";
         if( ic.charAt( 0 ) === "<" ) return ic;
-        return G[ ic ] || UI.icon( ic );
+        return G[ ic ] || Ayni.icon( ic );
     }
 
     //------------------------------------------------------------------------//
@@ -529,14 +528,14 @@
                 }
                 b = document.createElement( "button" );
                 b.type = "button";
-                b.className = "icon-btn";
-                b.innerHTML = G.dots;
+                b.className = "btn";
+                b.innerHTML = Ayni.icon( "more" );
                 sys.insertBefore( b, sys.firstChild );
             }
             btn = b;
             btn.classList.add( "fit-more" );
             btn.setAttribute( "aria-haspopup", "menu" );
-            btn.title = t( "ui.moreOptions" );
+            Ayni.setTip( btn, t( "ui.moreOptions" ) );
             btn.setAttribute( "aria-label", t( "ui.moreOptions" ) );
             btn.hidden = true;
             btn.addEventListener( "click", function ( e )
@@ -644,11 +643,11 @@
             if( ! b ) return null;
             var grp = b.closest( ".sel-group" );
             if( grp && grp._nbRow && b.dataset.selAct ) return grp._nbRow( b.dataset.selAct );
-            var label = ( b.getAttribute( "aria-label" ) || b.title || b.textContent || "" ).replace( /\s*[(·][^()]*\)?\s*$/, "" ).trim();
+            var label = ( b.getAttribute( "aria-label" ) || b.dataset.tip || b.textContent || "" ).replace( /\s*[(·][^()]*\)?\s*$/, "" ).trim();
             var svg = b.querySelector( "svg" );
             var toggle = b.hasAttribute( "aria-pressed" ) || b.classList.contains( "is-active" );
             return { id: b.id || b.dataset.sel || "", label: label, icon: svg ? svg.outerHTML : "", danger: b.classList.contains( "danger" ),
-                     disabled: !! b.disabled, checked: toggle ? ( b.classList.contains( "is-active" ) || b.getAttribute( "aria-pressed" ) === "true" ) : null,
+                     disabled: b.disabled || b.ariaDisabled === "true", checked: toggle ? ( b.classList.contains( "is-active" ) || b.getAttribute( "aria-pressed" ) === "true" ) : null,
                      run: function () { press( el, b ); } };
         }
 
@@ -998,10 +997,10 @@
             var ids = sel.slice(), all = allPicked();
             var allLbl = all ? "ui.unselectAll" : "ui.selectAll";     // the button toggles
             var html = ( cfg.count === false ? "" :
-                       '<span class="sel-count"><button type="button" class="icon-btn" data-sel="clear" title="' + esc( t( "ui.clearSel" ) + " (" + keyLabel( "Esc" ) + ")" ) +
-                       '" aria-label="' + esc( t( "ui.clearSel" ) ) + '">' + UI.icon( "x" ) + '</button><button type="button" class="icon-btn" data-sel="jump" title="' +
+                       '<span class="sel-count"><button type="button" class="btn" data-sel="clear" data-tip="' + esc( t( "ui.clearSel" ) + " (" + keyLabel( "Esc" ) + ")" ) +
+                       '" aria-label="' + esc( t( "ui.clearSel" ) ) + '">' + Ayni.icon( "close" ) + '</button><button type="button" class="btn" data-sel="jump" data-tip="' +
                        esc( t( "ui.showSel" ) ) + '" aria-label="' + esc( t( "ui.showSel" ) ) + '">' + n + "</button></span>" ) +
-                       '<button type="button" class="icon-btn" data-sel="all" data-rank="4" title="' + esc( t( allLbl ) + " (" + keyLabel( all ? "Esc" : "Ctrl+A" ) + ")" ) +
+                       '<button type="button" class="btn" data-sel="all" data-rank="4" data-tip="' + esc( t( allLbl ) + " (" + keyLabel( all ? "Esc" : "Ctrl+A" ) + ")" ) +
                        '" aria-label="' + esc( t( allLbl ) ) + '">' + G.checkAll + "</button>";
             var g = null;
             actions.map( function ( a, i ) { return { a: a, i: i }; } )
@@ -1012,10 +1011,10 @@
                 var a = x.a, l = labelOf( a, ids );
                 var gap = g !== null && ( a.group || 0 ) !== g;
                 g = a.group || 0;
-                html += '<button type="button" class="icon-btn' + ( a.danger ? " danger" : "" ) + ( gap ? " sel-gap" : "" ) + '" data-sel-act="' + esc( a.id ) +
+                html += '<button type="button" class="btn' + ( a.danger ? " danger" : "" ) + ( gap ? " sel-gap" : "" ) + '" data-sel-act="' + esc( a.id ) +
                         '" data-rank="' + ( a.rank || 40 + x.i ) + '" data-group="' + g +
-                        '" title="' + esc( l + ( a.key ? " (" + keyLabel( a.key ) + ")" : "" ) ) + '" aria-label="' + esc( l ) + '"' +
-                        ( enabled( a, ids ) ? "" : " disabled" ) + ">" + glyph( typeof a.icon === "function" ? a.icon( ids ) : a.icon ) + "</button>";
+                        '" data-tip="' + esc( l + ( a.key ? " (" + keyLabel( a.key ) + ")" : "" ) ) + '" aria-label="' + esc( l ) + '"' +
+                        ( enabled( a, ids ) ? "" : ' aria-disabled="true"' ) + ">" + glyph( typeof a.icon === "function" ? a.icon( ids ) : a.icon ) + "</button>";
             } );
             bar.innerHTML = html;
             bar.hidden = false;
@@ -1031,7 +1030,7 @@
         if( bar ) bar.addEventListener( "click", function ( e )
         {
             var b = e.target.closest( "button" );
-            if( ! b || b.disabled ) return;
+            if( ! b || b.disabled || b.ariaDisabled === "true" ) return;
             if( b.dataset.sel === "clear" ) clear();
             else if( b.dataset.sel === "jump" ) jump( true );
             else if( b.dataset.sel === "all" ) { if( allPicked() ) clear(); else selectAll(); }
@@ -1232,6 +1231,24 @@
             return best ? idOf( best ) : idOf( all[ i ] );
         }
 
+        // The action with this key, run on ids. True: the key was one (even
+        // when the action can not run on them).
+        function actionByKey( e, ids )
+        {
+            for( var i = 0; i < actions.length; i++ )
+            {
+                var a = actions[ i ];
+                if( a.key && here( a ) && keyMatches( a.key, e ) )
+                {
+                    if( ! enabled( a, ids ) ) return true;
+                    e.preventDefault();
+                    run( a, ids, e );
+                    return true;
+                }
+            }
+            return false;
+        }
+
         function onKey( e )
         {
             if( e.defaultPrevented || ! ours() ) return;
@@ -1310,18 +1327,7 @@
 
             // The actions' own keys: on the selection; the area's (Paste,
             // New) work with nothing picked.
-            var ids = sel.slice();
-            for( var i = 0; i < actions.length; i++ )
-            {
-                var a = actions[ i ];
-                if( a.key && here( a ) && keyMatches( a.key, e ) )
-                {
-                    if( ! enabled( a, ids ) ) return;
-                    e.preventDefault();
-                    run( a, ids, e );
-                    return;
-                }
-            }
+            if( actionByKey( e, sel.slice() ) ) return;
             var area = cfg.area || [];
             for( var j = 0; j < area.length; j++ )
             {
@@ -1354,6 +1360,7 @@
             actions:   function () { return actions; },
             setActions: function ( list2 ) { actions = list2 || []; drawBar(); },
             run:       function ( id, ids ) { var a = actions.filter( function ( x ) { return x.id === id; } )[ 0 ]; if( a ) run( a, ids || sel.slice() ); },
+            key:       function ( e, ids ) { return actionByKey( e, ids ); },   // the tree's keys (tree cfg.keys)
             items:     actionItems,         // the menu rows for these ids (the tree's folder menu)
             list:      list
         };
@@ -1368,7 +1375,9 @@
     //   host:     where the rows go (a flat column of .tree-row buttons)
     //   roots:    () => [ node ]   node = { id, name, icon, kids: [node], badge,
     //                                       title, cls, noMenu, noDrag,
-    //                                       group (a heading: a click only opens / closes it) }
+    //                                       group (a heading: a click only opens / closes it),
+    //                                       tail: { icon, title, on } - a button at the row's
+    //                                       right end, cfg.tail( id ) on a click (eMail's eye) }
     //   isOpen:   id => bool,  setOpen: ( id, bool ) => {}   (the app keeps it)
     //   current:  () => id         the lit row (the open folder / tray)
     //   go:       ( id, e ) => {}  a click: open that folder
@@ -1380,6 +1389,8 @@
     //   pick:     true: a picker (Move to…): a click lights the row, a
     //             double-click / Enter confirms (cfg.confirm)
     //   disabled: id => bool       a row that can not be picked (a folder into itself)
+    //   keys:     true: the list's action keys (F2, Del...) act on the row,
+    //             as its menu does (the menu is the list's own: browse.items)
     //
     // The arrow opens and closes; a click opens the folder. Keys as in a file
     // tree: ↑ ↓ move, → opens (then steps in), ← closes (then steps up),
@@ -1420,6 +1431,9 @@
                             '<span class="tree-ic">' + glyph( n.icon || "folder" ) + "</span>" +
                             '<span class="tree-name">' + esc( n.name ) + "</span>" +
                             ( n.badge ? '<span class="tree-badge">' + esc( n.badge ) + "</span>" : "" ) +
+                            ( n.tail ? '<button class="btn sm tree-tail' + ( n.tail.on ? " is-on" : "" ) + '" type="button" data-tail' +
+                                       ' aria-pressed="' + ( n.tail.on ? "true" : "false" ) + '" data-tip="' + esc( n.tail.title || "" ) +
+                                       '" aria-label="' + esc( n.tail.title || "" ) + '">' + glyph( n.tail.icon ) + "</button>" : "" ) +
                             "</div>";
                     if( open ) walk( n.kids, depth + 1, n.id );
                 } );
@@ -1476,13 +1490,14 @@
             if( ! row ) return;
             var id = row.dataset.id;
             if( e.target.closest( "[data-twisty]" ) ) { toggleOpen( id ); kbd = id; focus( id ); return; }
+            if( e.target.closest( "[data-tail]" ) ) { if( cfg.tail ) cfg.tail( id ); return; }
             kbd = id;
             choose( id, e );
         } );
         host.addEventListener( "dblclick", function ( e )
         {
             var row = e.target.closest( ".tree-row" );
-            if( ! row || e.target.closest( "[data-twisty]" ) ) return;
+            if( ! row || e.target.closest( "[data-twisty]" ) || e.target.closest( "[data-tail]" ) ) return;
             if( cfg.pick ) { if( ! ( cfg.disabled && cfg.disabled( row.dataset.id ) ) && cfg.confirm ) cfg.confirm( row.dataset.id ); return; }
             toggleOpen( row.dataset.id );
         } );
@@ -1503,13 +1518,22 @@
                 if( n && ! n.noMenu ) cfg.menu( el.dataset.id, x, y, null );
             } );
 
+        // A key the tree does not use itself (F2, Del, Ctrl+C...): the
+        // list's action with that key, on this folder - as its menu would.
+        function actionKey( e, id, n )
+        {
+            if( ! cfg.keys || cfg.pick || ! api.peer || ( n && n.noMenu ) ) return;
+            api.peer.key( e, [ id ] );
+        }
+
         host.addEventListener( "keydown", function ( e )
         {
             var row = e.target.closest( ".tree-row" );
-            if( ! row || e.altKey || e.ctrlKey || e.metaKey ) return;
+            if( ! row ) return;
             var all = Array.prototype.slice.call( host.querySelectorAll( ".tree-row" ) );
             var i = all.indexOf( row ), id = row.dataset.id;
             var n = nodeOf[ id ], kids = n && n.kids && n.kids.length;
+            if( e.altKey || e.ctrlKey || e.metaKey ) { actionKey( e, id, n ); return; }
             var open = kids && cfg.isOpen( id );
             switch( e.key )
             {
@@ -1542,7 +1566,7 @@
                     var r = row.getBoundingClientRect();
                     cfg.menu( id, r.left + 24, r.bottom, null );
                     break;
-                default: return;
+                default: actionKey( e, id, n ); return;
             }
             e.preventDefault();
         } );
@@ -1621,8 +1645,10 @@
     //   title, roots, current (where they are now: lit first), disabled( id ),
     //   lit (the folder lit at first; default `current`, null: none),
     //   okLabel, note (a line under the title; a function: lit id -> text,
-    //   asked again on each pick). The dialog keeps its own open folders,
-    //   opened down to `current`.
+    //   asked again on each pick), extra (a function( sync ) -> an element
+    //   put under the tree, e.g. an on / off row; it calls sync() when it
+    //   changes, so the note is asked again). The dialog keeps its own open
+    //   folders, opened down to `current`.
     // The same tree as the side pane, in a dialog. Click lights a folder,
     // double-click / Enter / ✓ picks it.
 
@@ -1664,17 +1690,15 @@
             box.className = "pick-tree";
             d.sheet.appendChild( box );
 
+            if( cfg.extra ) d.sheet.appendChild( cfg.extra( function () { sync(); } ) );
+
             var row = document.createElement( "div" );
             row.className = "sheet-actions";
-            var cancel = document.createElement( "button" );
-            cancel.className = "pick-cancel";
-            cancel.setAttribute( "data-act", "close" );
-            cancel.title = t( "ui.cancel" );
+            var cancel = UI.sheetButton( "close", t( "ui.cancel" ) );
+            cancel.classList.add( "pick-cancel" );
             cancel.addEventListener( "click", function () { finish( null ); } );
-            var ok = document.createElement( "button" );
-            ok.className = "pick-ok";
-            ok.setAttribute( "data-act", "primary" );
-            ok.title = cfg.okLabel || t( "ui.moveHere" );
+            var ok = UI.sheetButton( "primary", cfg.okLabel || t( "ui.moveHere" ) );
+            ok.classList.add( "pick-ok" );
             ok.addEventListener( "click", function () { if( lit != null && ! bad( lit ) ) finish( lit ); } );
             row.appendChild( cancel );
             row.appendChild( ok );
@@ -1684,7 +1708,7 @@
             function bad( id ) { return !! ( cfg.disabled && cfg.disabled( id ) ); }
             function sync()
             {
-                ok.disabled = lit == null || bad( lit );
+                ok.ariaDisabled = lit == null || bad( lit );
                 if( noteEl ) noteEl.textContent = typeof cfg.note === "function" ? cfg.note( lit != null && ! bad( lit ) ? lit : null ) : cfg.note;
             }
 
@@ -1718,7 +1742,7 @@
     UI.keyLabel  = keyLabel;
     UI.keyMatches = keyMatches;
     UI.glyph     = glyph;
-    UI.tickHtml  = function () { return '<button type="button" class="pick-tick" data-tick tabindex="-1" title="' + esc( t( "ui.pick" ) ) + '" aria-label="' + esc( t( "ui.pick" ) ) + '">' + G.tick + "</button>"; };
+    UI.tickHtml  = function () { return '<button type="button" class="pick-tick" data-tick tabindex="-1" data-tip="' + esc( t( "ui.pick" ) ) + '" aria-label="' + esc( t( "ui.pick" ) ) + '">' + G.tick + "</button>"; };
     UI.isTouch   = touchLike;
     UI.dragIds   = function () { return drag.ids; };
 } )();

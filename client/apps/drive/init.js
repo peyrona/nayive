@@ -1,14 +1,14 @@
 /*
  * init.js - Drive: start-up: waits for the dictionary, wires the static UI and
  * loads the first folder. A module (the only one) for its top-level await;
- * it reads the state the classic scripts declare. NayiveI18n.ready only
+ * it reads the state the classic scripts declare. Ayni.i18n.ready only
  * comes after every Drive script has run, so it starts the app last even
  * though it loads second.
  */
 
 // Nothing is drawn from JS before the dictionary is in: without an
 // in-source fallback, an early render would paint the bare keys.
-await NayiveI18n.ready;
+await Ayni.i18n.ready;
 
 //------------------------------------------------------------------------//
 // INITIALIZATION
@@ -23,13 +23,12 @@ async function _tryAutoAccess_()
         // Folders-only tree — also the auth gate (401 here => not signed in).
         dirTreeRoot = scopeTree( await GumApi.dirTree() );
 
-        // A regular user's "Drive" root IS their files/ folder.
+        // A regular user's "Home" IS their files/ folder.
         computeFsRoot();
         currentFolder   = FS_ROOT;
-        expandedFolders = new Set( [ FS_ROOT ] );
 
         document.getElementById( 'app' ).style.display = '';
-        await loadListing( FS_ROOT );                       // fills the right pane + renders
+        await loadListing( FS_ROOT );                       // fills the listing + renders
         await applyDeepLink();
         pollConvert();   // a conversion may still be running from an earlier upload
         refreshDiskGauge();                                 // fill the server-HD bar under the title
@@ -70,7 +69,8 @@ function wireStaticUI()
     // The "space almost full" card (shared/ui.js) asks for the list here
     // instead of reloading Drive with ?big=1.
     document.addEventListener( 'nayive:bigfiles', function( e ) { e.preventDefault(); openBigFiles(); } );
-    initPaneResizer();
+    document.getElementById( 'gridBtn'           ).addEventListener( 'click', function() { setViewMode( 'grid' ); } );
+    document.getElementById( 'listBtn'           ).addEventListener( 'click', function() { setViewMode( 'list' ); } );
 
     document.getElementById( 'searchInput' ).addEventListener( 'input', function( e )
     {
@@ -131,7 +131,7 @@ function wireStaticUI()
     document.getElementById( 'sbFrom'      ).addEventListener( 'input', onBuilderDate );
     document.getElementById( 'sbTo'        ).addEventListener( 'input', onBuilderDate );
 
-    PHONE.addEventListener( 'change', function() { treeView.closeSheet(); render(); } );
+    PHONE.addEventListener( 'change', function() { render(); } );
 
 
     document.getElementById( 'newFolderCancelBtn'  ).addEventListener( 'click', function() { setBackdrop( 'newFolderBackdrop', false ); } );
@@ -143,6 +143,8 @@ function wireStaticUI()
     document.getElementById( 'renameCancelBtn'  ).addEventListener( 'click', function() { setBackdrop( 'renameBackdrop', false ); } );
     document.getElementById( 'renameConfirmBtn' ).addEventListener( 'click', confirmRename );
     document.getElementById( 'renameName'       ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) confirmRename(); } );
+    document.getElementById( 'renameName'       ).addEventListener( 'input', noSlash );
+    document.getElementById( 'renameName'       ).addEventListener( 'paste', pasteName );
 
 
     document.getElementById( 'replaceCancelBtn'  ).addEventListener( 'click', function() { settleReplace( 'cancel' ); } );
@@ -180,7 +182,7 @@ function wireStaticUI()
     });
     document.addEventListener( 'keydown', function( e )
     {
-        // (The menu and the phone's tree sheet close themselves on Escape.)
+        // (The menu closes itself on Escape.)
         if( e.key !== 'Escape' ) return;
 
         if( document.getElementById( 'viewerBackdrop' ).classList.contains( 'open' ) )
@@ -231,6 +233,6 @@ function wireStaticUI()
     } );
     listPane.addEventListener( 'drop', onDrop );
 
-    wireBrowser();      // picking, the actions, the menu and the tree (menus.js)
+    wireBrowser();      // picking, the actions, the menu and the drops (menus.js)
     wireZip();          // the .zip list and "Extract here" (zip.js)
 }

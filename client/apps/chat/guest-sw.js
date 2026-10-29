@@ -57,7 +57,7 @@ self.addEventListener( "notificationclick", function ( event )
 // The browser renewed (or dropped) the subscription with no page open. Firefox
 // hands over no old subscription at all, so the key comes from the server when
 // the old one cannot say it. The language goes with it, or the server takes
-// the renewed device for a Spanish one: the page's own choice (balata-lang) is
+// the renewed device for a Spanish one: the page's own choice (ayni-lang) is
 // out of a worker's reach, so it is the browser's - which is also what the page
 // uses until the person picks another.
 self.addEventListener( "pushsubscriptionchange", function ( event )

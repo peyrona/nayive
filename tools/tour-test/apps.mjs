@@ -32,12 +32,16 @@ const APPS = {
                 "SUMMARY:Dentista", "END:VEVENT", "END:VCALENDAR", "" ].join( "\r\n" ) },
         expect: { 2: s => /calHost|fc/.test( s.lit ) || "the calendar itself" }
     },
+    calculator: {
+        path: "/nayive/calculator/", ready: has( "#keys .key" ),
+        expect: { 3: s => /modeSwitch/.test( s.lit ) || "the two modes", 4: s => /keys/.test( s.lit ) || "the keypad" }
+    },
     planner: {
         path: "/nayive/planner/", ready: "document.querySelectorAll( '#panes iframe[src]' ).length >= 1",
         expect: { 2: s => /calendarPane/.test( s.lit ) || "the Calendar pane" }
     },
     image: {
-        path: "/nayive/image/?file=files/foto.jpg", ready: has( ".tui-image-editor-menu" ), seed: { "files/foto.jpg": JPEG },
+        path: "/nayive/image/?file=files/foto.jpg", ready: has( "#editorTools [data-ie=rotate]:not([aria-disabled=true])" ), seed: { "files/foto.jpg": JPEG },
         expect: { 2: s => /backBtn/.test( s.lit ) || "← first" }
     },
     text: {
@@ -53,7 +57,7 @@ const APPS = {
         expect: { 2: s => /gridHost|ht/.test( s.lit ) || "the sheet" }
     },
     photos: {
-        path: "/nayive/photos/?dir=files/fotos", ready: "document.querySelectorAll( '#grid [aria-selected]' ).length >= 2",
+        path: "/nayive/photos/?dir=files/fotos", settle: 4000, ready: "document.querySelectorAll( '#grid [aria-selected]' ).length >= 2",
         seed: { "files/fotos/a.jpg": JPEG, "files/fotos/b.jpg": JPEG, "files/fotos/viaje/c.jpg": JPEG }
     },
     music: {
@@ -73,6 +77,16 @@ const APPS = {
             b_1:  { id: "b_1", title: "Ejemplo", type: "bookmark", parentId: "root", url: "https://example.com/", tags: [], notes: "", favorite: false, createdAt: "2026-01-01T00:00:00Z" },
             b_2:  { id: "b_2", title: "Otro", type: "bookmark", parentId: "root", url: "https://example.org/", tags: [], notes: "", favorite: false, createdAt: "2026-01-01T00:00:00Z" } } } ) }
     },
+    // Language: nothing to seed - its settings live in the browser.
+    language: {
+        path: "/nayive/language/", ready: "!! window.nayiveLanguage && document.querySelectorAll( '#to option' ).length === 5"
+    },
+    // Passwords: the tour of a vault that is not open yet (set-up): the gate.
+    passwords: {
+        path: "/nayive/passwords/", ready: has( "#gate:not([hidden]) #setupBox:not([hidden])" ),
+        dismiss: "passwords",
+        expect: { 2: s => /gate|setup/.test( s.lit ) || "the gate's card" }
+    },
     trips: {
         path: "/nayive/trips/", ready: has( ".trip-card" ), empty: true, emptyReady: has( "#tripHeader .trip-header-actions" ),
         seed: { "data/trips/osaka/trip.json": JSON.stringify( { id: 9100, destination: "Osaka", dirName: "osaka", startDate: "2026-11-01", endDate: "2026-11-10",
@@ -82,8 +96,8 @@ const APPS = {
         expect: { 2: s => /trip-card/.test( s.lit ) || "a trip card" },
         group: {
             then: async c => { await c.evaluate( "goToDetail( 9100 ); true" ); return c.until( "!! document.querySelector( '.stage-actions' )" ); },
-            expect: { 4: s => /icon-btn/.test( s.lit ) && ! s.ghost || "a real stage button", 5: s => ! s.ghost || "real", 6: s => ! s.ghost || "real",
-                      7: s => /stage-drag/.test( s.lit ) || "the grip" }
+            expect: { 6: s => /btn/.test( s.lit ) && ! s.ghost || "a real stage button", 7: s => ! s.ghost || "real", 8: s => ! s.ghost || "real",
+                      9: s => /stage-drag/.test( s.lit ) || "the grip" }
         }
     },
     drive: {

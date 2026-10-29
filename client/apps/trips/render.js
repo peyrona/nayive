@@ -33,9 +33,9 @@ function renderHeader()
         header.appendChild( h1 );
 
         const addBtn = document.createElement( 'button' );
-        addBtn.className = 'icon-btn';
+        addBtn.className = 'btn';
         addBtn.id    = 'addTripBtn';          // the help dialog points at it
-        addBtn.title = T( 'trips.addTrip' );
+        Ayni.setTip( addBtn, T( 'trips.addTrip' ) );
         addBtn.appendChild( svgIcon( ICON_PLUS, 18 ) );
         addBtn.addEventListener( 'click', openAddTrip );
         tools.appendChild( addBtn );
@@ -43,12 +43,12 @@ function renderHeader()
         // Settings: Location (the URL that feeds every trip's Journey map)
         // and General (the trip reminder) - route.js openSettings.
         const setBtn = document.createElement( 'button' );
-        setBtn.className = 'icon-btn';
+        setBtn.className = 'btn';
         setBtn.type  = 'button';
         setBtn.id    = 'settingsBtn';         // the help dialog points at it
-        setBtn.title = T( 'ui.settings' );
-        setBtn.setAttribute( 'aria-label', setBtn.title );
-        setBtn.innerHTML = NayiveUI.icon( 'gear' );
+        Ayni.setTip( setBtn, T( 'ui.settings' ) );
+        setBtn.setAttribute( 'aria-label', setBtn.dataset.tip );
+        setBtn.innerHTML = Ayni.icon( 'settings' );
         setBtn.addEventListener( 'click', openSettings );
         sys.appendChild( setBtn );
 
@@ -62,7 +62,7 @@ function renderHeader()
 
         if( ! trip ) { view = 'list'; renderHeader(); return; }
 
-        const backBtn = iconBtn( 'icon-btn', T( 'trips.backToTrips' ), ICON_ARROW_L, 17, goToList );
+        const backBtn = iconBtn( 'btn', T( 'trips.backToTrips' ), ICON_ARROW_L, 17, goToList );
         header.appendChild( backBtn );
 
         const titleWrap = document.createElement( 'div' );
@@ -88,8 +88,8 @@ function renderHeader()
 
         const mapBtn = document.createElement( 'button' );
         mapBtn.id = 'mapBtn';
-        mapBtn.className = 'icon-btn';
-        mapBtn.title = T( 'trips.routeMap' );
+        mapBtn.className = 'btn';
+        Ayni.setTip( mapBtn, T( 'trips.routeMap' ) );
         mapBtn.appendChild( svgIcon( ICON_MAP, 17 ) );
         mapBtn.addEventListener( 'click', openMapSheet );
         tools.appendChild( mapBtn );
@@ -99,7 +99,7 @@ function renderHeader()
         // onto each stage card instead - see buildStageItem().
         if( currencyPlacement( trip ) === 'trip' )
         {
-            const calcBtn = iconBtn( 'icon-btn', null, ICON_CALCULATOR, 17, function() { openCurrency(); } );
+            const calcBtn = iconBtn( 'btn', null, ICON_CALCULATOR, 17, function() { openCurrency(); } );
 
             // With no stages AND a destination that isn't a recognisable place, the
             // converter can only fall back to a guessed EUR - worse than nothing for
@@ -110,12 +110,12 @@ function renderHeader()
 
             if( noStages && unknownPlace )
             {
-                calcBtn.disabled = true;
-                calcBtn.title = T( 'trips.fxNoCountry' );
+                calcBtn.ariaDisabled = true;
+                Ayni.setTip( calcBtn, T( 'trips.fxNoCountry' ) );
             }
             else
             {
-                calcBtn.title = T( 'trips.fxTitle' );
+                Ayni.setTip( calcBtn, T( 'trips.fxTitle' ) );
             }
 
             tools.appendChild( calcBtn );
@@ -130,16 +130,16 @@ function renderHeader()
         // the title, see above.)
         if( ! tripIsRO( trip ) )
         {
-            const editBtn = iconBtn( 'icon-btn', T( 'trips.editTrip' ), ICON_PENCIL, 17, openEditTrip );
+            const editBtn = iconBtn( 'btn', T( 'trips.editTrip' ), ICON_PENCIL, 17, openEditTrip );
             tools.appendChild( editBtn );
 
-            const delBtn = iconBtn( 'icon-btn danger', T( 'trips.deleteTrip' ), ICON_TRASH, 16 );
+            const delBtn = iconBtn( 'btn danger', T( 'trips.deleteTrip' ), ICON_TRASH, 16 );
             // A whole trip asks first (NayiveUI.confirm); a stage or a document
             // goes at once, with an Undo instead.
             delBtn.addEventListener( 'click', async function()
             {
                 if( await NayiveUI.confirm( { title: T( 'trips.deleteTrip' ), body: TF( 'trips.deleteTripBody', { name: trip.destination } ),
-                                              confirm: NayiveUI.t( 'ui.delete' ), danger: true } ) )
+                                              confirm: Ayni.t( 'ui.delete' ), danger: true } ) )
                     deleteTrip();
             });
             tools.appendChild( delBtn );
@@ -164,10 +164,10 @@ function renderHeader()
 function buildHelpBtn()
 {
     const b = document.createElement( 'button' );
-    b.className = 'icon-btn';
+    b.className = 'btn';
     b.type = 'button';
-    b.title = NayiveUI.t( 'ui.help' );
-    b.setAttribute( 'aria-label', NayiveUI.t( 'ui.help' ) );
+    Ayni.setTip( b, Ayni.t( 'ui.help' ) );
+    b.setAttribute( 'aria-label', Ayni.t( 'ui.help' ) );
     b.setAttribute( 'data-intro-open', '' );
     b.appendChild( svgIcon( ICON_HELP, 18 ) );
     return b;
@@ -198,21 +198,21 @@ function searchParts()
     input.className = 'search-input';
     input.autocomplete = 'off';
     input.setAttribute( 'enterkeyhint', 'search' );
-    input.placeholder = NayiveUI.t( 'ui.search' );
-    input.setAttribute( 'aria-label', NayiveUI.t( 'ui.search' ) );
+    input.placeholder = Ayni.t( 'ui.search' );
+    input.setAttribute( 'aria-label', Ayni.t( 'ui.search' ) );
     input.addEventListener( 'input', function() { tripQuery = input.value; applySearch(); } );
     const box = document.createElement( 'div' );
     box.className = 'search-wrap';
     box.appendChild( input );
 
     const btn = document.createElement( 'button' );
-    btn.className = 'icon-btn';
+    btn.className = 'btn';
     btn.type = 'button';
     btn.id = 'searchBtn';                 // the help dialog points at it
     btn.dataset.rank = 20;
-    btn.title = NayiveUI.t( 'ui.search' );
-    btn.setAttribute( 'aria-label', btn.title );
-    btn.innerHTML = NayiveUI.icon( 'search' );
+    Ayni.setTip( btn, Ayni.t( 'ui.search' ) );
+    btn.setAttribute( 'aria-label', btn.dataset.tip );
+    btn.innerHTML = Ayni.icon( 'search' );
 
     tripSearchEls = [ box, btn ];
     tripSearch = NayiveUI.searchFold( { bar: document.getElementById( 'tripHeader' ), box: box, input: input, toggle: btn } );
@@ -271,8 +271,8 @@ function buildListView()
     const wrap  = document.createElement( 'div' );
     const today = NayiveUI.todayIso();
 
-    const upcoming = trips.filter( function( t ) { return t.endDate >= today; } ).sort( function( a, b ) { return a.startDate.localeCompare( b.startDate, NayiveUI.lang() ); } );
-    const past     = trips.filter( function( t ) { return t.endDate < today; } ).sort( function( a, b ) { return b.startDate.localeCompare( a.startDate, NayiveUI.lang() ); } );
+    const upcoming = trips.filter( function( t ) { return t.endDate >= today; } ).sort( function( a, b ) { return a.startDate.localeCompare( b.startDate, Ayni.i18n.lang() ); } );
+    const past     = trips.filter( function( t ) { return t.endDate < today; } ).sort( function( a, b ) { return b.startDate.localeCompare( a.startDate, Ayni.i18n.lang() ); } );
 
     if( trips.length === 0 )
     {
@@ -375,14 +375,14 @@ function buildTripCard( t, bPast )
     actions.className = 'trip-card-actions';
 
     // trip-pdf-btn / trip-share-btn: the help dialog points at them.
-    const pdfBtn = iconBtn( 'icon-btn sm trip-pdf-btn', T( 'trips.exportPdf' ), ICON_EXPORT, 17, function() { exportTripPdf( t ); } );
+    const pdfBtn = iconBtn( 'btn sm trip-pdf-btn', T( 'trips.exportPdf' ), ICON_EXPORT, 17, function() { exportTripPdf( t ); } );
     actions.appendChild( pdfBtn );
 
     // A trip somebody shared with us is not ours to pass on - the server refuses
     // every write on a shared/... path. Printing it is fine, so only Share goes.
     if( ! tripIsRO( t ) )
     {
-        const shareBtn = iconBtn( 'icon-btn sm trip-share-btn', T( 'trips.shareTrip' ), ICON_SHARE, 17 );
+        const shareBtn = iconBtn( 'btn sm trip-share-btn', T( 'trips.shareTrip' ), ICON_SHARE, 17 );
         shareBtn.addEventListener( 'click', function()
         {
             NayiveUI.shareSheet( { path: tripBase( t ), app: 'trips',
@@ -438,6 +438,9 @@ function buildDetailView()
     if( ! tripIsRO( trip ) || (trip.photosDir || '').trim() )
         wrap.appendChild( buildPhotosRow( trip ) );
 
+    const uploadWarn = buildUploadWarn( trip );
+    if( uploadWarn ) wrap.appendChild( uploadWarn );
+
     // "Documentos  (i) [+]" - the "+" opens the trip sheet on a fresh, blank
     // document row; the info dot is the one that used to sit in that sheet.
     const ro       = tripIsRO( trip );
@@ -470,11 +473,11 @@ function buildDetailView()
     return wrap;
 }
 
-// The "Fotos" row: one row holding the "Fotos" label (styled like the Documentos /
-// Itinerario headings, just inline - no row to spare), the folder path, and the
-// [pick] + [clear] buttons. The path is a pointer into the user's files/ tree
-// (trip.photosDir); nothing reads the pictures here - clicking the path opens that
-// folder in Drive in a new tab.
+// The "Fotos" row: the "Fotos" label (styled like the Documentos / Itinerario
+// headings, just inline - no row to spare) and its buttons: the folder opens
+// the trip's photo folder in Photos (new tab; its path is the tooltip), the
+// pencil picks another one, the x forgets it. trip.photosDir is a pointer into
+// the user's files/ tree: nothing reads the pictures here.
 function photoDirDisplay( sPath )
 {
     const parts = String( sPath || '' ).replace( /^\/+/, '' ).replace( /^files\//, '' ).split( '/' ).filter( Boolean );
@@ -493,53 +496,41 @@ function buildPhotosRow( trip )
     label.textContent = T( 'trips.photos' );
     row.appendChild( label );
 
-    const dir  = (trip.photosDir || '').trim();
-    const path = document.createElement( 'span' );
+    const dir = (trip.photosDir || '').trim();
 
     if( dir )
     {
-        path.className = 'photos-path';
-        path.textContent = '"' + photoDirDisplay( dir ) + '"';
-        // The row is called "Fotos", so it opens Photos — an album, not a
-        // file list. On a shared trip that is the "shared/<slug>/~/..."
-        // path the share lends us (read-only); on our own, the folder
-        // itself. (It used to open Drive; Photos is the right tool, and it
-        // is the same app in both cases.)
-        path.title = ( ro ? photoDirDisplay( dir ) : dir ) + '\n' + T( 'trips.openInPhotos' );
-        path.addEventListener( 'click', function()
+        // On a shared trip that is the "shared/<slug>/~/..." path the share
+        // lends us (read-only); on our own, the folder itself.
+        const openBtn = iconBtn( 'btn', ( ro ? photoDirDisplay( dir ) : dir ) + '\n' + T( 'trips.openInPhotos' ), ICON_FOLDER, 15 );
+        openBtn.setAttribute( 'aria-label', T( 'trips.openPhotoFolder' ) );
+        openBtn.addEventListener( 'click', function()
         {
             window.open( '../photos/index.html?dir=' +
                          encodeURIComponent( sharedRef( tripBase( trip ), dir ) ),
                          '_blank', 'noopener' );
         });
+        row.appendChild( openBtn );
     }
     else
     {
-        path.className = 'photos-path empty';
-        path.textContent = T( 'trips.noFolder' );
+        const none = document.createElement( 'span' );
+        none.className = 'photos-path empty';
+        none.textContent = T( 'trips.noFolder' );
+        row.appendChild( none );
     }
-
-    row.appendChild( path );
 
     // Someone else's trip: look at the folder, never repoint it.
     if( ro ) return row;
 
-    const btn = iconBtn( 'icon-btn', T( 'trips.pickPhotoFolder' ), ICON_FOLDER, 15 );
-    btn.addEventListener( 'click', function()
-    {
-        // Same folder picker Photos / Music / Movies use (NayiveUI.pickFolder),
-        // not the old files/ tree sheet - don't reinvent the wheel.
-        NayiveUI.pickFolder( { title: T( 'trips.pickPhotoFolderNote' ) } ).then( function( sPath )
-        {
-            if( ! sPath ) return;
-            mutateTrip( selectedTripId, function( t ) { return { ...t, photosDir: sPath }; } );
-        });
-    });
+    const btn = iconBtn( 'btn', T( 'trips.pickPhotoFolder' ), ICON_PENCIL, 15 );
+    btn.setAttribute( 'aria-label', T( 'trips.pickPhotoFolder' ) );
+    btn.addEventListener( 'click', function() { pickTripPhotoFolder( trip ); } );
     row.appendChild( btn );
 
     if( dir )
     {
-        const clearBtn = iconBtn( 'icon-btn', T( 'trips.clearPhotoFolder' ), ICON_X, 15 );
+        const clearBtn = iconBtn( 'btn', T( 'trips.clearPhotoFolder' ), ICON_X, 15 );
         clearBtn.addEventListener( 'click', function()
         {
             const tripId = selectedTripId;
@@ -554,6 +545,100 @@ function buildPhotosRow( trip )
     }
 
     return row;
+}
+
+// The folder Photos keeps its albums in (data/photos/config.json), or null.
+async function photosLibraryDir()
+{
+    try
+    {
+        const cfg = await GumApi.readJson( 'data/photos/config.json' );
+        const f   = cfg && typeof cfg.folder === 'string' ? cfg.folder.replace( /\/+$/, '' ) : '';
+        return f || null;
+    }
+    catch( e ) { return null; }
+}
+
+// The pencil: the same folder picker Photos / Music / Movies use
+// (NayiveUI.pickFolder). A folder outside the Photos folder is not shown in
+// Photos' albums, so it says so and offers <Photos folder>/<Trips>/<trip>
+// instead (made if missing), or keeps the pick.
+async function pickTripPhotoFolder( trip )
+{
+    const tripId = trip.id;
+    let   sPath  = await NayiveUI.pickFolder( { title: T( 'trips.pickPhotoFolderNote' ) } );
+    if( ! sPath ) return;
+
+    const lib = await photosLibraryDir();
+    if( lib && sPath !== lib && sPath.indexOf( lib + '/' ) !== 0 )
+    {
+        const sub  = T( 'trips.tripsFolder' );
+        const name = trip.dirName || trip.destination || 'trip';
+        const want = lib + '/' + sub + '/' + name;
+        const pick = await NayiveUI.confirm( {
+            title:     T( 'trips.outsidePhotosTitle' ),
+            body:      TF( 'trips.outsidePhotosBody', { lib: photoDirDisplay( lib ), want: photoDirDisplay( want ) } ),
+            confirm:   T( 'trips.outsidePhotosUse' ),
+            other:     T( 'trips.outsidePhotosKeep' ),
+            otherIcon: 'folder' } );
+        if( pick !== true && pick !== 'other' ) return;
+        if( pick === true )
+        {
+            try
+            {
+                if( ! ( await GumApi.namesIn( lib ) ).has( sub ) ) await GumApi.makeDir( lib, sub );
+                if( ! ( await GumApi.namesIn( lib + '/' + sub ) ).has( name ) ) await GumApi.makeDir( lib + '/' + sub, name );
+            }
+            catch( e ) { NayiveUI.toast( T( 'ui.saveFailed' ) ); return; }
+            sPath = want;
+        }
+    }
+    mutateTrip( tripId, function( t ) { return { ...t, photosDir: sPath }; } );
+}
+
+// Shown on an own trip that starts within two weeks or is under way, when no
+// phone of the account uploads its new photos (My account › Phones, the
+// Nayive app's "Upload new photos and videos"). The x hides it for that trip.
+const UPLOAD_WARN_KEY = 'trips-upload-warn-off';
+
+function uploadWarnOff()
+{
+    try { return JSON.parse( localStorage.getItem( UPLOAD_WARN_KEY ) || '{}' ); }
+    catch( e ) { return {}; }
+}
+
+let phonesUpload = null;       // promise: true when some phone uploads photos (one GET per page)
+
+function buildUploadWarn( trip )
+{
+    if( tripIsRO( trip ) || uploadWarnOff()[ trip.dirName || trip.id ] ) return null;
+    const start = daysUntil( trip.startDate ), end = daysUntil( trip.endDate || trip.startDate );
+    if( start == null || start > 14 || ( end != null && end < 0 ) ) return null;
+
+    const box = document.createElement( 'div' );
+    box.className = 'warn-box upload-warn';
+    box.hidden = true;
+
+    const text = document.createElement( 'span' );
+    text.textContent = TF( 'trips.uploadOffWarn', { sw: T( 'dev.media' ), account: T( 'ui.account' ), phones: T( 'dev.title' ) } );
+    box.appendChild( text );
+
+    const x = iconBtn( 'btn sm', T( 'ui.close' ), ICON_X, 14, function()
+    {
+        const off = uploadWarnOff();
+        off[ trip.dirName || trip.id ] = true;
+        try { localStorage.setItem( UPLOAD_WARN_KEY, JSON.stringify( off ) ); } catch( e ) {}
+        box.remove();
+    });
+    x.setAttribute( 'aria-label', T( 'ui.close' ) );
+    box.appendChild( x );
+
+    if( ! phonesUpload )
+        phonesUpload = fetch( window.location.origin + '/api/device' )
+            .then( function( r ) { if( ! r.ok ) throw new Error( 'HTTP ' + r.status ); return r.json(); } )
+            .then( function( j ) { return ( j.devices || [] ).some( function( d ) { return d.media; } ); } );
+    phonesUpload.then( function( on ) { box.hidden = on; }, function() { phonesUpload = null; } );
+    return box;
 }
 
 const collapsedSections = (function()
@@ -624,13 +709,13 @@ function collapsibleSection( sText, bFirst, sKey, aControls )
     return { el: el, body: body };
 }
 
-// A plain icon button: <button class="sClass" title="sTitle"> (no title when
+// A plain icon button: <button class="sClass" data-tip="sTitle"> (no title when
 // sTitle is null) with the icon drawn at nSize px, fnClick on click if given.
 function iconBtn( sClass, sTitle, sIcon, nSize, fnClick )
 {
     const b = document.createElement( 'button' );
     b.className = sClass;
-    if( sTitle !== null ) b.title = sTitle;
+    if( sTitle !== null ) Ayni.setTip( b, sTitle );
     b.appendChild( svgIcon( sIcon, nSize ) );
     if( fnClick ) b.addEventListener( 'click', fnClick );
     return b;
@@ -641,8 +726,8 @@ function headingBtn( sTitle, sIcon, fnClick )
 {
     const b = document.createElement( 'button' );
     b.type = 'button';
-    b.className = 'icon-btn';
-    b.title = sTitle;
+    b.className = 'btn';
+    Ayni.setTip( b, sTitle );
     b.setAttribute( 'aria-label', sTitle );
     b.appendChild( svgIcon( sIcon, 15 ) );
     b.addEventListener( 'click', fnClick );
@@ -705,7 +790,7 @@ function buildFileList( trip, docs, fnDelete )
 
         if( canDelete )
         {
-            const delBtn = iconBtn( 'icon-btn sm danger file-del', T( 'trips.deleteDoc' ), ICON_TRASH, 15 );
+            const delBtn = iconBtn( 'btn sm danger file-del', T( 'trips.deleteDoc' ), ICON_TRASH, 15 );
             // No question: it goes at once, with an Undo (deleteDocWithUndo).
             delBtn.addEventListener( 'click', function() { fnDelete( d ); } );
             row.appendChild( delBtn );
@@ -796,19 +881,19 @@ function buildStageItem( trip, st, sViewerTz, bIsLast, hereId )
     const actions = document.createElement( 'div' );
     actions.className = 'stage-actions';
 
-    const editBtn = iconBtn( 'icon-btn', T( 'trips.editStage' ), ICON_PENCIL, 15, function() { openEditStage( st.id ); } );
+    const editBtn = iconBtn( 'btn', T( 'trips.editStage' ), ICON_PENCIL, 15, function() { openEditStage( st.id ); } );
 
-    const delBtn = iconBtn( 'icon-btn danger', T( 'trips.deleteStage' ), ICON_TRASH, 15 );
+    const delBtn = iconBtn( 'btn danger', T( 'trips.deleteStage' ), ICON_TRASH, 15 );
     // No question: it goes at once, with an Undo (see deleteStage).
     delBtn.addEventListener( 'click', function() { deleteStage( st.id ); } );
 
     // The eye toggles this stage enabled/disabled - same control as a password field.
-    const eyeBtn = iconBtn( 'icon-btn', enabled ? T( 'trips.disableStage' ) : T( 'trips.enableStage' ), enabled ? ICON_EYE : ICON_EYE_OFF, 15, function() { toggleStage( st.id ); } );
+    const eyeBtn = iconBtn( 'btn', enabled ? T( 'trips.disableStage' ) : T( 'trips.enableStage' ), enabled ? ICON_EYE : ICON_EYE_OFF, 15, function() { toggleStage( st.id ); } );
 
     // "Que hay aqui": the chooser, then the device's own browser (discover.js).
     // Deliberately outside the read-only gate below - looking a city up changes
     // nothing, so a trip somebody shared with us gets it too.
-    const discBtn = iconBtn( 'icon-btn', T( 'trips.disc.btn' ), ICON_COMPASS, 15, function() { openDiscover( st ); } );
+    const discBtn = iconBtn( 'btn', T( 'trips.disc.btn' ), ICON_COMPASS, 15, function() { openDiscover( st ); } );
 
     if( enabled && ( st.location || '' ).trim() )
         actions.appendChild( discBtn );
@@ -881,7 +966,7 @@ function buildStageItem( trip, st, sViewerTz, bIsLast, hereId )
     if( currencyPlacement( trip ) === 'stage' )
     {
         const cur     = stageCurrency( st );
-        const stCalc  = iconBtn( 'icon-btn', TF( 'trips.fxTitleCode', { code: cur.code } ), ICON_CALCULATOR, 15, function() { openCurrency( cur.code, cur.matched, st.location ); } );
+        const stCalc  = iconBtn( 'btn', TF( 'trips.fxTitleCode', { code: cur.code } ), ICON_CALCULATOR, 15, function() { openCurrency( cur.code, cur.matched, st.location ); } );
         dtRight.appendChild( stCalc );
     }
 

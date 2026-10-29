@@ -1,27 +1,10 @@
-/* currency.js - the currency of a place, and the live, cross-checked exchange rate. */
+/* currency.js - the currency of a place, and the way to the converter (Calculator). */
 
 //------------------------------------------------------------------------//
-// CURRENCY - the CODE is detected from the trip's destination text (never asked for);
-// the RATE is never hard-coded and never assumed. It is fetched live, on demand, from
-// two independent free services, cross-checked against each other, and openly reported
-// as unavailable when neither responds - this is money, so a guessed number is worse
-// than no number.
-
-// Currency names come from the browser in the interface language
-// (Intl.DisplayNames), so there is no list of them to translate.
-let _curNames = null;
-function currencyName( sCode )
-{
-    try
-    {
-        if( _curNames === null )
-            _curNames = ( typeof Intl !== "undefined" && Intl.DisplayNames )
-                      ? new Intl.DisplayNames( [ NayiveUI.locale() ], { type: "currency" } ) : false;
-        if( _curNames ) return _curNames.of( sCode ) || sCode;
-    }
-    catch ( e ) {}
-    return sCode;
-}
+// CURRENCY - the CODE is detected from the trip's destination text (never asked for).
+// The RATE is never hard-coded and never assumed: Calculator (shared/fx.js) fetches it
+// live and cross-checks it, and says so plainly when it cannot - this is money, so a
+// guessed number is worse than no number.
 
 const PLACE_CURRENCY = {
     'japan': 'JPY', 'tokyo': 'JPY', 'kyoto': 'JPY', 'osaka': 'JPY',
@@ -118,144 +101,42 @@ function currencyPlacement( trip )
 }
 
 //------------------------------------------------------------------------//
-// LIVE EXCHANGE RATE - a priority-ordered list of independent, free, no-key services.
-// Verification protocol (exact, per explicit instruction - do not "improve" this):
-//   1. Fetch sources in order, skipping any that return no data.
-//   2. Compare the 1st and 2nd sources that DID return data. If |rate1 - rate2| <= the
-//      tolerance (0.01, or 0.25 % of the rate when that is more), the rate is verified
-//      (their average is used).
-//   3. Otherwise compare the 2nd and 3rd, then the 3rd and 4th, and so on - always the
-//      next CONSECUTIVE pair, never re-trying an earlier one against a later one.
-//   4. If the list runs out with no pair agreeing, say plainly that the rate could not
-//      be verified. Never fall back to a guessed or hard-coded number - this is money.
-// The tolerance is RELATIVE for big rates (his call, 2026-09-28): an absolute 0.01 asked
-// 1 EUR = 179 JPY, 29 500 VND or 20 400 IDR to agree to 0.005 % or less, which no two
-// sources ever do (live, that day: JPY 179.28 vs 179.19, VND 29 528 vs 29 590 - 0.05 %
-// and 0.21 %). Rates near 1 keep the 0.01 floor: 1.1385 vs 1.1392 is fine.
-const RATE_TOLERANCE_ABS = 0.01;     // the floor: two quoted rates may always differ this much
-const RATE_TOLERANCE_REL = 0.0025;   // ...or 0.25 % of the bigger rate, when that is more
-
-function rateTolerance( a, b )
+// THE CONVERTER is the Calculator app (2026-10-28), in currency mode: the place's
+// currency typed, the euro beside it. The rate is shared/fx.js's - the same three
+// sources and the same cross-check this file used to run. A place whose currency
+// could not be worked out goes with &place=, and Calculator says so plainly.
+// codeArg/matchedArg/contextName come from a per-stage button; with no args (the
+// header button) the currency is derived from the trip's stages or destination.
+function openCurrency( codeArg, matchedArg, contextName )
 {
-    return Math.max( RATE_TOLERANCE_ABS, RATE_TOLERANCE_REL * Math.max( Math.abs( a ), Math.abs( b ) ) );
-}
+    const trip = findTrip( selectedTripId );
 
-// The tolerance for the sheet's words, two significant figures: 0.01, 0.45, 74.
-function rateToleranceText( a, b )
-{
-    return String( Number( rateTolerance( a, b ).toPrecision( 2 ) ) );
-}
+    if( ! trip )
+        return;
 
-function ratesAgree( a, b )
-{
-    return Math.abs( a - b ) <= rateTolerance( a, b );
-}
+    let c, place;
 
-// One quoted source: GET sUrl, then fnRate( json ) gives the EUR -> sCurrency
-// rate (anything not a number: "does not track") and fnAsOf( json ) its date.
-// fnFailed( json ), when given, names a failed lookup before any of that.
-async function rateFrom( SOURCE, sUrl, sCurrency, fnRate, fnAsOf, fnFailed )
-{
-    try
+    if( codeArg )
     {
-        const res = await fetch( sUrl );
-
-        if( ! res.ok )
-            return { ok: false, source: SOURCE, reason: 'HTTP ' + res.status };
-
-        const data = await res.json();
-
-        if( fnFailed && fnFailed( data ) )
-            return { ok: false, source: SOURCE, reason: fnFailed( data ) };
-
-        const rate = fnRate( data );
-
-        if( typeof rate !== 'number' )
-            return { ok: false, source: SOURCE, reason: 'does not track ' + sCurrency };
-
-        return { ok: true, rate: rate, asOf: fnAsOf( data ), source: SOURCE };
+        c     = { code: codeArg, matched: matchedArg !== false };
+        place = contextName || trip.destination;
     }
-    catch( _ )
+    else if( ( trip.stages || [] ).length )
     {
-        return { ok: false, source: SOURCE, reason: 'network error' };
+        c     = stageCurrency( trip.stages[ 0 ] );
+        place = trip.stages[ 0 ].location || trip.destination;
     }
-}
-
-async function fetchRateFrankfurter( sCurrency )
-{
-    const SOURCE = 'Frankfurter (ECB reference rates)';
-
-    if( sCurrency === 'EUR' )
-        return { ok: true, rate: 1, asOf: null, source: SOURCE };
-
-    return rateFrom( SOURCE, 'https://api.frankfurter.dev/v1/latest?base=EUR&symbols=' + encodeURIComponent( sCurrency ), sCurrency,
-                     function( d ) { return d && d.rates ? d.rates[ sCurrency ] : undefined; },
-                     function( d ) { return d.date; } );
-}
-
-function fetchRateExchangerateApi( sCurrency )
-{
-    return rateFrom( 'exchangerate-api.com (open access)', 'https://open.er-api.com/v6/latest/EUR', sCurrency,
-                     function( d ) { return d.rates[ sCurrency ]; },
-                     function( d ) { return d.time_last_update_utc; },
-                     function( d ) { return d.result !== 'success' || ! d.rates ? 'lookup failed' : ''; } );
-}
-
-function fetchRateFawaz( sCurrency )
-{
-    return rateFrom( 'fawazahmed0/currency-api', 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/eur.json', sCurrency,
-                     function( d ) { return d && d.eur ? d.eur[ sCurrency.toLowerCase() ] : undefined; },
-                     function( d ) { return d.date; } );
-}
-
-// Priority-ordered source list. Extend here (a 4th, 5th... source) to give the
-// verification chain more to fall back on before it has to admit defeat.
-const RATE_SOURCE_FETCHERS = [ fetchRateFrankfurter, fetchRateExchangerateApi, fetchRateFawaz ];
-
-// Walks RATE_SOURCE_FETCHERS in order (only calling as many as actually needed).
-// Sources that return no data (network error, HTTP error, or that service simply
-// doesn't track this currency) are skipped entirely - they don't occupy a "slot".
-// Among the sources that DID return a value, compares the 1st against the 2nd; if
-// that fails, the 2nd against the 3rd; then the 3rd against the 4th, and so on -
-// always the next consecutive pair, never re-trying an earlier one. Stops at the
-// first pair that agrees.
-// Result shape: { code, matched, results, verified, compared }
-//   - results:  every fetch actually made, in order, each { ok, rate?, asOf?, source, reason? }
-//   - verified: null if unverified, else { rate, sourceA, sourceB } (rate = their average)
-//   - compared: every consecutive pair actually checked, each with its absolute
-//               difference - shown so a real disagreement is visible, not hidden
-async function lookupExchangeRate( sCurrency, bMatched )
-{
-    const results    = [];
-    const compared   = [];
-    const successful = [];
-    let   verified   = null;
-
-    for( const fetchFn of RATE_SOURCE_FETCHERS )
+    else
     {
-        const r = await fetchFn( sCurrency );
-        results.push( r );
-
-        if( ! r.ok )
-            continue;   // no data from this source - not a slot, just skip it
-
-        successful.push( r );
-
-        if( successful.length < 2 )
-            continue;
-
-        const prev = successful[ successful.length - 2 ];
-        const diff = Math.abs( prev.rate - r.rate );
-        compared.push( { a: prev, b: r, diff: diff } );
-
-        if( ratesAgree( prev.rate, r.rate ) )
-        {
-            verified = { rate: (prev.rate + r.rate) / 2, sourceA: prev, sourceB: r };
-            break;
-        }
-        // else: this pair disagreed - the loop moves on and the NEXT source (if any)
-        // will be compared against `r`, not against `prev` again
+        c     = detectCurrency( trip.destination );
+        place = trip.destination;
     }
 
-    return { code: sCurrency, matched: bMatched, results: results, verified: verified, compared: compared };
+    const url = '../calculator/index.html?mode=fx&from=' + encodeURIComponent( c.code ) + '&to=EUR'
+              + ( c.matched ? '' : '&place=' + encodeURIComponent( place || '' ) );
+
+    // A phone has no visible way back from a new tab: in place, Back returns here.
+    // A desktop window opens it as a window of its own; a computer, as a tab.
+    if( window.matchMedia( '(max-width: 640px)' ).matches ) location.href = url;
+    else                                                     window.open( url, '_blank' );
 }

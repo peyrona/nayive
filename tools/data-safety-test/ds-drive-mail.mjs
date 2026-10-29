@@ -55,12 +55,12 @@ const row = subject => `[...document.querySelectorAll('#list .mail-row')].find( 
 // "Save to Nayive" on the file, into the Files root.
 async function saveToRoot()
 {
-    await c.evaluate( "window.__toasts = []; document.querySelector('#readParts .mail-part-line .icon-btn').click(); true" );
+    await c.evaluate( "window.__toasts = []; document.querySelector('#readParts .mail-part').click(); true" );
     // The folder picker draws the shared tree (.fp-tree .tree-row); the first row is the Files root.
     if( ! await c.until( "document.querySelector('.sheet-backdrop.open .fp-tree .tree-row')" ) ) return false;
     await c.evaluate( "document.querySelector('.sheet-backdrop.open .fp-tree .tree-row').click(); true" );
-    await c.until( "! document.querySelector('.sheet-backdrop.open .btn-primary').disabled" );
-    await c.evaluate( "document.querySelector('.sheet-backdrop.open .btn-primary').click(); true" );
+    await c.until( "document.querySelector('.sheet-backdrop.open .btn.primary').ariaDisabled !== 'true'" );
+    await c.evaluate( "document.querySelector('.sheet-backdrop.open .btn.primary').click(); true" );
     return true;
 }
 
@@ -73,12 +73,12 @@ section( "D5 · SAVE TO DRIVE ONTO A NAME THAT IS TAKEN" );
     ok( await c.until( "document.querySelectorAll( '#list .mail-row' ).length > 0 && NayiveMail.S.acct", 30000 ), "eMail is open" );
     // the item browser: a click picks a row, a double-click opens it
     await c.evaluate( row( "With a file" ) + ".dispatchEvent( new MouseEvent( 'dblclick', { bubbles: true } ) ); true" );
-    ok( await c.until( "document.querySelector('#readParts .mail-part-line')" ), "the mail with informe.pdf is open" );
+    ok( await c.until( "document.querySelector('#readParts .mail-part')" ), "the mail with informe.pdf is open" );
 
     // The folder's listing fails (a 5xx, a hiccup): nothing is saved.
     await c.evaluate( `window.__realList = GumApi.listDir; GumApi.listDir = function() { const e = new Error( 'HTTP 502: Bad Gateway' ); e.status = 502; return Promise.reject( e ); }; true` );
     ok( await saveToRoot(), "Save to Nayive -> Files" );
-    ok( await c.until( "window.__toasts.includes( NayiveUI.t( 'ui.saveFailed' ) )", 8000 ), "it says it could not save", await c.evaluate( "window.__toasts" ) );
+    ok( await c.until( "window.__toasts.includes( Ayni.t( 'ui.saveFailed' ) )", 8000 ), "it says it could not save", await c.evaluate( "window.__toasts" ) );
     ok( await onServer( "files/informe.pdf" ) === "LAST MONTH'S INVOICE", "last month's informe.pdf is untouched", await onServer( "files/informe.pdf" ) );
 
     // A listing that does not know the name yet (taken after the look): the

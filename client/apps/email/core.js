@@ -57,8 +57,8 @@
     E.acctOf = function ( m ) { return ( m && m.acct ) || S.acct; };
     E.roleOf = function ( m ) { return String( ( m && m.ref ) || "" ).split( "." )[ 0 ]; };
 
-    E.T  = function ( k ) { return NayiveUI.t( k ); };
-    E.TF = function ( k, v ) { return NayiveUI.tf( k, v ); };
+    E.T  = function ( k ) { return Ayni.t( k ); };
+    E.TF = function ( k, v ) { return Ayni.tf( k, v ); };
     E.$  = function ( id ) { return document.getElementById( id ); };
 
     // ---------------------------------------------------------------------
@@ -78,7 +78,17 @@
     // E.api( "GET", "a1/list?tray=inbox" ) -> the JSON answer. A failure
     // throws an Error with .status and .code ("auth", "down", "gone"...).
     // o.keepalive: it outlives a closing page (actions.js, forget).
+    // No busy line for a refresh in the background (E.hush, email.js) nor a
+    // call that outlives the page.
+    E.hush = false;
     E.api = async function ( method, path, body, o )
+    {
+        var quiet = E.hush || !! ( o && o.keepalive );
+        if( ! quiet ) E.busy( true );
+        try { return await call( method, path, body, o ); }
+        finally { if( ! quiet ) E.busy( false ); }
+    };
+    async function call( method, path, body, o )
     {
         var opts = { method: method, credentials: "same-origin", headers: { Accept: "application/json" } };
         if( o && o.keepalive ) opts.keepalive = true;
@@ -109,6 +119,18 @@
             throw err;
         }
         return data;
+    }
+
+    // THE BUSY LINE: a thin line running under the header while the mail
+    // server is being asked (it is slow: IMAP). On after 300 ms - a quick
+    // answer never flashes it -, off when the last call is back.
+    var busyN = 0, busyTimer = 0;
+    E.busy = function ( on )
+    {
+        busyN = Math.max( 0, busyN + ( on ? 1 : -1 ) );
+        var line = E.$( "busyLine" );
+        if( ! busyN ) { clearTimeout( busyTimer ); busyTimer = 0; line.hidden = true; return; }
+        if( line.hidden && ! busyTimer ) busyTimer = setTimeout( function () { busyTimer = 0; if( busyN ) line.hidden = false; }, 300 );
     };
 
     // What to tell the user about a failed call, in their language. A
@@ -241,11 +263,12 @@
         ( root || document ).querySelectorAll( "[data-icon]" ).forEach( function ( el )
         {
             var n = el.getAttribute( "data-icon" );
-            el.innerHTML = ICONS[ n ] ? E.icon( n ) : NayiveUI.icon( n );
+            el.innerHTML = ICONS[ n ] ? E.icon( n ) : Ayni.icon( n );
         } );
     };
     E.icon = function ( name, cls )
     {
+        if( name === "nayive" ) return Ayni.icon( name, cls || "" );
         return '<svg class="' + ( cls || "" ) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
                'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ( ICONS[ name ] || "" ) + '</svg>';
     };
@@ -269,7 +292,7 @@
     {
         var d = new Date( iso );
         if( isNaN( d ) ) return "";
-        var now = new Date(), loc = NayiveUI.locale();
+        var now = new Date(), loc = Ayni.i18n.lang();
         if( d.toDateString() === now.toDateString() )
             return d.toLocaleTimeString( loc, { hour: "2-digit", minute: "2-digit" } );
         if( d.getFullYear() === now.getFullYear() )
@@ -280,7 +303,7 @@
     {
         var d = new Date( iso );
         if( isNaN( d ) ) return "";
-        return d.toLocaleString( NayiveUI.locale(), { weekday: "short", day: "numeric", month: "long", year: "numeric",
+        return d.toLocaleString( Ayni.i18n.lang(), { weekday: "short", day: "numeric", month: "long", year: "numeric",
                                                       hour: "2-digit", minute: "2-digit" } );
     };
 

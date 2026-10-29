@@ -72,8 +72,8 @@ function locationField( sLabel, sPlaceholder, sValue, fnOnChange )
 
     const calBtn = document.createElement( 'button' );
     calBtn.type = 'button';
-    calBtn.className = 'icon-btn';
-    calBtn.title = T( 'trips.activities' );
+    calBtn.className = 'btn';
+    Ayni.setTip( calBtn, T( 'trips.activities' ) );
     calBtn.appendChild( svgIcon( ICON_CALENDAR, 16 ) );
     calBtn.addEventListener( 'click', function()
     {
@@ -128,15 +128,13 @@ function switchRow( sClass, sId, bChecked, aBefore )
     row.className = sClass;
     const input = document.createElement( 'input' );
     input.type    = 'checkbox';
+    input.setAttribute( 'role', 'switch' );
     input.id      = sId;
     row.htmlFor   = sId;
     input.checked = bChecked;
     const sw = document.createElement( 'span' );
-    sw.className = 'switch sm';
-    const track = document.createElement( 'span' );
-    track.className = 'track';
+    sw.className = 'switch';
     sw.appendChild( input );
-    sw.appendChild( track );
     aBefore.forEach( function( el ) { row.appendChild( el ); } );
     row.appendChild( sw );
     return { row: row, input: input };
@@ -164,7 +162,7 @@ function buildDocsField( aRows, aExtras, bCollapsed, fnSetCollapsed )
         const toggle = document.createElement( 'button' );
         toggle.type = 'button';
         toggle.className = 'doc-collapse-toggle';
-        toggle.title = T( 'trips.toggleDocs' );
+        Ayni.setTip( toggle, T( 'trips.toggleDocs' ) );
         toggle.appendChild( svgIcon( ICON_CHEVRON_DOWN, 15, 'doc-collapse-chev' ) );
         head.appendChild( toggle );
 
@@ -233,17 +231,17 @@ function buildDocRow( d, fnSetType, fnRemove, fnFolder, fnRerender, fnSiblings )
         const linkBtn = document.createElement( 'button' );
         linkBtn.type = 'button';
         linkBtn.className = 'doc-attach-btn';
-        linkBtn.appendChild( svgIcon( ICON_LINK, 13 ) );
+        linkBtn.insertAdjacentHTML( 'beforeend', Ayni.icon( 'nayive' ) );
         linkBtn.appendChild( document.createTextNode( T( 'trips.link' ) ) );
         linkBtn.disabled = ! navigator.onLine;
-        linkBtn.title = navigator.onLine ? T( 'trips.linkExisting' ) : T( 'trips.needsNet' );
+        Ayni.setTip( linkBtn, navigator.onLine ? T( 'trips.linkExisting' ) : T( 'trips.needsNet' ) );
         linkBtn.addEventListener( 'click', function() { docAttachLink( d, fnRerender ); } );
 
         const upBtn = document.createElement( 'button' );
         upBtn.type = 'button';
         upBtn.className = 'doc-attach-btn';
         upBtn.appendChild( svgIcon( ICON_UPLOAD, 13 ) );
-        upBtn.appendChild( document.createTextNode( NayiveUI.t( 'ui.upload' ) ) );
+        upBtn.appendChild( document.createTextNode( Ayni.t( 'ui.upload' ) ) );
         upBtn.addEventListener( 'click', function() { docAttachUpload( d, fnSiblings, fnRerender ); } );
 
         attach.appendChild( linkBtn );
@@ -252,7 +250,7 @@ function buildDocRow( d, fnSetType, fnRemove, fnFolder, fnRerender, fnSiblings )
 
     // A trashcan, not an "x": this deletes the document row (and its upload),
     // it does not close or clear anything. Same icon every other delete uses.
-    const removeBtn = iconBtn( 'icon-btn danger', T( 'trips.remove' ), ICON_TRASH, 15, fnRemove );
+    const removeBtn = iconBtn( 'btn danger', T( 'trips.remove' ), ICON_TRASH, 15, fnRemove );
 
     row.appendChild( typeSelect );
     row.appendChild( attach );

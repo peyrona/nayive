@@ -18,7 +18,7 @@ const s = await server( { test: "test", beto: "bbb" } );
 fs.writeFileSync( `${s.run}/apps/outer.html`, `<!doctype html><meta charset=utf-8><title>outer</title>
 <iframe id="f" src="/nayive/inner.html"></iframe>` );
 fs.writeFileSync( `${s.run}/apps/inner.html`, `<!doctype html><meta charset=utf-8><title>inner</title>
-<div id="toast" class="toast"></div><script src="shared/i18n.js"></script><script src="shared/ui.js"></script>` );
+<div id="toast" class="toast"></div><script src="shared/i18n.js"></script><script src="shared/ayni/ayni-i18n.js" data-dict="shared/i18n/" data-langs="es en pt fr de"></script><script src="shared/ayni/ayni-icons.js"></script><script src="shared/ayni/ayni-base.js"></script><script src="shared/ayni/ayni-buttons.js"></script><script src="shared/ui.js"></script>` );
 const c = await browser( s );
 const phone = await s.client();
 

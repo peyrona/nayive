@@ -26,12 +26,12 @@
 "use strict";
 
 var S;                                       // window.NayiveSalon, when open() runs
-function t( k ) { return window.NayiveI18n ? NayiveI18n.t( k ) : k; }
+function t( k ) { return window.Ayni ? Ayni.t( k ) : k; }
 
 function el( tag, cls, text, parent ) { return S.engine.el( tag, cls, text, parent ); }   // only once open() has S
 
 // Layout only: every control is a shared one (select, input, .switch,
-// .icon-btn, .pill, the browser's own tick-box).
+// .btn, .pill, the browser's own tick-box).
 var STYLE =
 ".salon-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }" +
 ".salon-pane { min-height: 330px; }" +
@@ -46,8 +46,7 @@ var STYLE =
 ".salon-grid th:first-child, .salon-grid td:first-child { text-align: left; padding-left: 0; }" +
 ".salon-grid td { padding: 5px 6px; text-align: center; border-top: 1px solid var(--line); }" +
 ".salon-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; }" +
-".salon-check { display: flex; align-items: center; gap: 8px; min-height: 30px; font-size: 0.92rem; cursor: pointer; }" +
-".salon-check input { flex: none; }" +
+".salon-check { min-height: 30px; font-size: 0.92rem; }" +
 ".salon-two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }" +
 ".salon-preview { margin-top: 8px; padding: 12px 14px; border-radius: var(--radius-s); background: #0e0c0a; color: #F6F1E7; }" +
 ".salon-preview .big { font-size: 2rem; line-height: 1.1; }" +
@@ -93,10 +92,7 @@ function open( kind )
     }
 
     var actions = el( "div", "sheet-actions", null, sheet );
-    var bClose = el( "button", null, null, actions );
-    bClose.type = "button";
-    bClose.setAttribute( "data-act", "close" );
-    bClose.title = t( "ui.close" );
+    var bClose = actions.appendChild( NayiveUI.sheetButton( "close", t( "ui.close" ) ) );
     bClose.addEventListener( "click", function () { ui.close(); } );
     NayiveUI.onSheetClose( ui.back, save );
 
@@ -120,7 +116,7 @@ function open( kind )
         cfg = JSON.parse( JSON.stringify( e && e.local || A.normalise( null ) ) );
         drawAll();
         [].forEach.call( sheet.querySelectorAll( ".salon-pane input, .salon-pane select, .salon-pane button" ),
-                         function ( x ) { x.disabled = true; } );
+                         function ( x ) { if( x.matches( ".btn" ) ) x.ariaDisabled = true; else x.disabled = true; } );
         var msg = el( "p", "salon-note", t( "salon.readFail" ), null );
         msg.setAttribute( "role", "status" );
         sheet.insertBefore( msg, tabs );
@@ -139,7 +135,7 @@ function open( kind )
 
     function check( parent, label, checked, onChange )
     {
-        var l = el( "label", "salon-check", null, parent );
+        var l = el( "label", "choice salon-check", null, parent );
         var i = el( "input", null, null, l );
         i.type = "checkbox";
         i.checked = !! checked;
@@ -151,11 +147,11 @@ function open( kind )
     {
         var r = el( "label", "salon-row", null, parent );
         el( "span", "grow", label, r );
-        var sw = el( "span", "switch sm", null, r );
+        var sw = el( "span", "switch", null, r );
         var i = el( "input", null, null, sw );
         i.type = "checkbox";
+        i.setAttribute( "role", "switch" );
         i.checked = !! checked;
-        el( "span", "track", null, sw );
         i.addEventListener( "change", function () { onChange( i.checked ); } );
         return i;
     }
@@ -178,10 +174,10 @@ function open( kind )
     }
     function iconBtn( parent, icon, title, onClick )
     {
-        var b = el( "button", "icon-btn sm", null, parent );
+        var b = el( "button", "btn sm", null, parent );
         b.type = "button";
-        b.innerHTML = NayiveUI.icon( icon );
-        b.title = title;
+        b.innerHTML = Ayni.icon( icon );
+        Ayni.setTip( b, title );
         b.setAttribute( "aria-label", title );
         b.addEventListener( "click", onClick );
         return b;
@@ -215,10 +211,10 @@ function open( kind )
                 drawLangs();
             } );
             var k = cfg.langs.indexOf( l );
-            var up = iconBtn( r, "up", t( "salon.up" ), function () { move( l, -1 ); } );
-            var dn = iconBtn( r, "down", t( "salon.down" ), function () { move( l, 1 ); } );
-            up.disabled = ! mine || k === 0;
-            dn.disabled = ! mine || k === cfg.langs.length - 1;
+            var up = iconBtn( r, "chev-up", t( "salon.up" ), function () { move( l, -1 ); } );
+            var dn = iconBtn( r, "chev-down", t( "salon.down" ), function () { move( l, 1 ); } );
+            up.ariaDisabled = ! mine || k === 0;
+            dn.ariaDisabled = ! mine || k === cfg.langs.length - 1;
         } );
 
         el( "div", "salon-h", t( "salon.perBox" ), p );
@@ -387,13 +383,13 @@ function open( kind )
 
         // Where the weather is for.
         el( "div", "salon-h", t( "salon.place" ), p );
-        var geoRow = el( "label", "salon-check", null, p );
+        var geoRow = el( "label", "choice salon-check", null, p );
         var geo = el( "input", null, null, geoRow );
         geo.type = "radio"; geo.name = "salonPlace"; geo.checked = cfg.place === "geo";
         el( "span", null, t( "salon.placeGeo" ), geoRow );
         var geoMsg = el( "p", "salon-note", "", p );
         geoMsg.hidden = true;
-        var cityRow = el( "label", "salon-check", null, p );
+        var cityRow = el( "label", "choice salon-check", null, p );
         var city = el( "input", null, null, cityRow );
         city.type = "radio"; city.name = "salonPlace"; city.checked = cfg.place === "city";
         el( "span", null, t( "salon.placeCity" ), cityRow );

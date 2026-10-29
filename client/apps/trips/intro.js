@@ -1,8 +1,8 @@
 /* intro.js - the two help cards (trip list, open trip). */
 
-NayiveI18n.ready.then( function () {
+Ayni.i18n.ready.then( function () {
     if( ! window.NayiveUI ) return;
-    var T = function ( k ) { return NayiveUI.t( k ); };
+    var T = function ( k ) { return Ayni.t( k ); };
 
     // TWO help cards, like Split: the trip list and one open trip (its stages).
     // renderHeader() calls NayiveUI.setIntro with the card for the screen you
@@ -12,7 +12,7 @@ NayiveI18n.ready.then( function () {
     // screen you are on ('buttons'). On a trip each stage row lights the first
     // stage's own button, found by its label; with no stage yet, the
     // itinerary heading stands in as a ghost.
-    var STAGE = function ( key ) { return '.stage-actions .icon-btn[title="' + T( key ) + '"]'; };
+    var STAGE = function ( key ) { return '.stage-actions .btn[data-tip="' + T( key ) + '"]'; };
     var NO_STAGE = '.timeline, .detail-section .empty-note, #tripContent';
     var stages = {
         app:   'trips',
@@ -20,11 +20,15 @@ NayiveI18n.ready.then( function () {
         tour:  [ 'buttons' ],
         buttons: [
             { icon: 'search', name: T( 'ui.search' ),           text: T( 'ui.tour.search' ), tour: { sel: '#searchBtn' } },
+            { icon: 'folder', name: T( 'trips.openPhotoFolder' ), text: T( 'trips.introPhotoOpen' ),
+              tour: { sel: '.photos-row .btn[aria-label="' + T( 'trips.openPhotoFolder' ) + '"]', ghost: '.photos-row' } },
+            { icon: 'edit',   name: T( 'trips.pickPhotoFolder' ), text: T( 'trips.introPhotoEdit' ),
+              tour: { sel: '.photos-row .btn[aria-label="' + T( 'trips.pickPhotoFolder' ) + '"]' } },
             { icon: 'plus',   name: T( 'trips.addStage' ),      text: T( 'trips.introStage' ),
-              tour: { sel: '.detail-heading-row .icon-btn[aria-label="' + T( 'trips.addStage' ) + '"]' } },
+              tour: { sel: '.detail-heading-row .btn[aria-label="' + T( 'trips.addStage' ) + '"]' } },
             { icon: 'compass', name: T( 'trips.disc.btn' ),      text: T( 'trips.introDiscover' ), tour: { sel: STAGE( 'trips.disc.btn' ), ghost: NO_STAGE } },
             { icon: 'edit',   name: T( 'trips.editStage' ),     text: T( 'trips.introEditStage' ), tour: { sel: STAGE( 'trips.editStage' ), ghost: NO_STAGE } },
-            { icon: 'eyeoff', name: T( 'trips.toggleStage' ),   text: T( 'trips.introToggleStage' ),
+            { icon: 'eye-off', name: T( 'trips.toggleStage' ),   text: T( 'trips.introToggleStage' ),
               tour: { sel: STAGE( 'trips.disableStage' ) + ', ' + STAGE( 'trips.enableStage' ), ghost: NO_STAGE } },
             { icon: 'trash',  name: T( 'trips.deleteStage' ),   text: T( 'trips.introDeleteStage' ), tour: { sel: STAGE( 'trips.deleteStage' ), ghost: NO_STAGE } },
             { icon: 'grip',   name: T( 'trips.introDragName' ), text: T( 'trips.introDrag' ), tour: { sel: '.stage-drag', ghost: NO_STAGE } }
@@ -35,16 +39,16 @@ NayiveI18n.ready.then( function () {
     var home = {
         app:   'trips',
         title: 'Trips',
-        lead:  NayiveUI.t( 'trips.introLead' ),
+        lead:  Ayni.t( 'trips.introLead' ),
         buttons: [
-            { sel: '.trip-header-actions #searchBtn', text: NayiveUI.t( 'ui.tour.search' ) },
-            { sel: '.trip-header-actions #addTripBtn', text: NayiveUI.t( 'trips.introAdd' ) },
-            { sel: '.trip-header-actions #settingsBtn', text: NayiveUI.t( 'trips.introSettings' ) },
+            { sel: '.trip-header-actions #searchBtn', text: Ayni.t( 'ui.tour.search' ) },
+            { sel: '.trip-header-actions #addTripBtn', text: Ayni.t( 'trips.introAdd' ) },
+            { sel: '.trip-header-actions #settingsBtn', text: Ayni.t( 'trips.introSettings' ) },
             // Export and Share are on each trip card, so they show once the list has a trip.
-            { sel: '.trip-card-actions .trip-pdf-btn',   text: NayiveUI.t( 'trips.introExport' ), tour: { ghost: '.trip-card, .empty-list-note, #tripContent' } },
-            { sel: '.trip-card-actions .trip-share-btn', text: NayiveUI.t( 'trips.introShare' ), tour: { ghost: '.trip-card, .empty-list-note, #tripContent' } }
+            { sel: '.trip-card-actions .trip-pdf-btn',   text: Ayni.t( 'trips.introExport' ), tour: { ghost: '.trip-card, .empty-list-note, #tripContent' } },
+            { sel: '.trip-card-actions .trip-share-btn', text: Ayni.t( 'trips.introShare' ), tour: { ghost: '.trip-card, .empty-list-note, #tripContent' } }
         ],
-        tour: [ { sel: '.trip-card', ghost: '.empty-list-note, #tripContent', icon: 'forward', text: NayiveUI.t( 'trips.tourOpen' ) }, 'buttons' ]
+        tour: [ { sel: '.trip-card', ghost: '.empty-list-note, #tripContent', icon: 'forward', text: Ayni.t( 'trips.tourOpen' ) }, 'buttons' ]
     };
 
     window.TRIPS_INTRO = { home: home, stages: stages };

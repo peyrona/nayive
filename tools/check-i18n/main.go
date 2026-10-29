@@ -44,7 +44,7 @@ var langs = []string{"es", "en", "pt", "fr", "de"}
 // reference must carry the same word in every language.
 var appNames = []string{"Nayive", "Drive", "Planner", "Calendar", "Tasks", "Contacts",
 	"Write", "Calc", "Text", "Photos", "Music", "Movies", "Trips",
-	"Split", "Habits", "Games", "Chat", "Bookmarks"}
+	"Split", "Habits", "Games", "Chat", "Bookmarks", "Calculator"}
 
 var placeholder = regexp.MustCompile(`\{([\p{L}\p{N}_]+)\}`)
 

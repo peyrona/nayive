@@ -149,7 +149,7 @@
         if( bin )     // a red bin, as every "delete" in Nayive; its name in the tooltip
         {
             var tip = E.T( bin === "spam" ? "mail.emptySpam" : "mail.emptyTrash" );
-            E.$( "emptyTrashBtn" ).title = tip;
+            Ayni.setTip( E.$( "emptyTrashBtn" ), tip );
             E.$( "emptyTrashBtn" ).setAttribute( "aria-label", tip );
         }
 
@@ -248,9 +248,10 @@
 
     E.showEmpty = function ()
     {
-        var empty = ! S.items.length && E.$( "acctProblem" ).hidden;
+        var veiled = S.items.length > 0 && S.items.every( E.veiled );      // all of it behind a closed eye
+        var empty = ( ! S.items.length || veiled ) && E.$( "acctProblem" ).hidden;
         E.$( "listEmpty" ).hidden = ! empty;
-        E.$( "listEmptyText" ).textContent = E.T( S.label ? "mail.labelEmpty" : S.query || S.adv ? "mail.noResults" : "mail.empty" );
+        E.$( "listEmptyText" ).textContent = E.T( veiled ? "mail.allHidden" : S.label ? "mail.labelEmpty" : S.query || S.adv ? "mail.noResults" : "mail.empty" );
     };
 
     var rowSeq = 0;
@@ -284,7 +285,7 @@
                     h( "div", { class: "when", text: E.shortDate( m.date ), attrs: { title: E.longDate( m.date ) } } ),
                     subj,
                     m.snippet ? h( "div", { class: "snip", text: m.snippet } ) : null );
-        if( S.only && ! S.only.has( m ) ) el.hidden = true;
+        if( ( S.only && ! S.only.has( m ) ) || E.veiled( m ) ) el.hidden = true;
         m._row = el;
         return el;
     }

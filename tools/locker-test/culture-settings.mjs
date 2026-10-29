@@ -76,7 +76,7 @@ try
     ok( await p.evaluate( "getComputedStyle(document.querySelector('.salon-preview .big')).fontFamily.includes('Atkinson')" ), "the sample shows the chosen letters" );
 
     // Close-only (no ✓): Escape closes it, and closing saves.
-    ok( await p.evaluate( "!document.querySelector('#salonSettings .btn-primary') && !document.querySelector('#salonSettings .sheet-actions')" ), "no ✓, only the corner ×" );
+    ok( await p.evaluate( "!document.querySelector('#salonSettings .btn.primary') && !document.querySelector('#salonSettings .sheet-actions')" ), "no ✓, only the corner ×" );
     await p.evaluate( "document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));1" );
     await sleep( 1500 );
     ok( await p.evaluate( "!document.querySelector('#salonSettings')" ), "Escape closed it" );

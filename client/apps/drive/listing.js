@@ -39,9 +39,9 @@ async function runSearch()
     try
     {
         const r = bigMode   ? await GumApi.biggest( BIG_COUNT )
-                : advSearch ? await GumApi.search( advSearch.spec )
-                : asked.spec ? await GumApi.search( asked.spec )
-                :             await GumApi.find( asked.glob );
+                : advSearch ? await GumApi.search( advSearch.spec, true )
+                : asked.spec ? await GumApi.search( asked.spec, true )
+                :             await GumApi.find( asked.glob, true );
         if( seq !== searchSeq ) return;          // a newer query already went out
         searchHits      = pruneNodes( r.nodes || [] );
         searchTruncated = !! r.truncated;
@@ -87,15 +87,57 @@ function bigFilesCrumbs( host, info )
 
 // Rows live in a .list-rows wrapper so the wrapper can grow to the widest
 // row (width: max-content) and the #listing box scrolls it horizontally,
-// while every row's hover / border still spans the full width.
-function listRowsHost()
+// while every row's hover / border still spans the full width. `grid`: the
+// same rows, drawn as icons in a grid instead (drive.css .is-grid).
+function listRowsHost( grid )
 {
     const host = document.getElementById( 'listing' );
     host.innerHTML = '';
     const rows = document.createElement( 'div' );
-    rows.className = 'list-rows';
+    rows.className = 'list-rows' + ( grid ? ' is-grid' : '' );
     host.appendChild( rows );
     return rows;
+}
+
+// "Shared with me" (server/go/shares.go): a virtual folder beside Home.
+// With no folder tree to hang it on, it is the first thing in Home - not a
+// pickable row (nothing can be done TO it), only a way in.
+function sharedEntry()
+{
+    const row = document.createElement( 'div' );
+    row.className = 'row row-virtual';
+    row.tabIndex  = 0;
+    row.setAttribute( 'role', 'link' );
+
+    const ic = document.createElement( 'span' );
+    ic.className = 'row-ic ic-shared';
+    ic.innerHTML = SVG_SHARED;
+    const label = document.createElement( 'span' );
+    label.className   = 'row-name';
+    label.textContent = T( 'drive.sharedWithMe' );
+    const meta = document.createElement( 'span' );
+    meta.className = 'row-meta';
+
+    row.appendChild( ic );
+    row.appendChild( label );
+    row.appendChild( meta );
+    row.addEventListener( 'click', function() { navigateTo( 'shared' ); } );
+    row.addEventListener( 'keydown', function( e )
+    {
+        if( e.key !== 'Enter' && e.key !== ' ' ) return;
+        e.preventDefault();
+        e.stopPropagation();
+        navigateTo( 'shared' );
+    } );
+    return row;
+}
+
+// Home shows it while the server has the folder, and the listing has not
+// got it already (an admin's real root lists it as it is).
+function showsSharedEntry()
+{
+    return currentFolder === FS_ROOT && !! findNode( 'shared' ) &&
+         ! curListing.nodes.some( function( n ) { return n.path === 'shared'; } );
 }
 
 function renderListing()
@@ -131,7 +173,7 @@ function renderListing()
             return;
         }
 
-        const host = listRowsHost();
+        const host = listRowsHost( viewMode === 'grid' && ! bigMode );   // "Biggest files" is about the sizes: a list
         if( bigMode )
         {
             const note = document.createElement( 'div' );
@@ -146,7 +188,13 @@ function renderListing()
             note.textContent = TF( 'drive.tooManyResults', { n: hits.length } );
             box.insertBefore( note, host );
         }
-        hits.forEach( function( child ) { host.appendChild( buildListRow( child, true ) ); } );
+        const grid = viewMode === 'grid' && ! bigMode;
+        hits.forEach( function( child )
+        {
+            const row = buildListRow( child, true );
+            if( grid ) addThumb( row, child );
+            host.appendChild( row );
+        } );
         return;
     }
 
@@ -158,21 +206,26 @@ function renderListing()
 
     const kids = curListing.nodes.slice().sort( function( a, b )
     {
-        const da = isDir( a ), db = isDir( b );
+        const da = dirLike( a ), db = dirLike( b );
         if( da !== db ) return da ? -1 : 1;                 // folders first
-        return displayName( a ).localeCompare( displayName( b ), NayiveUI.lang(), { sensitivity: 'base', numeric: true } );
+        return displayName( a ).localeCompare( displayName( b ), Ayni.i18n.lang(), { sensitivity: 'base', numeric: true } );
     });
 
-    if( ! kids.length )
+    const shared = showsSharedEntry();
+    if( ! kids.length && ! shared )
     {
         box.innerHTML = '<div class="empty-hint" data-i18n="drive.emptyFolderHint"></div>';
         return;
     }
 
-    const host = listRowsHost();
+    const grid = viewMode === 'grid';
+    const host = listRowsHost( grid );
+    if( shared ) host.appendChild( sharedEntry() );
     kids.forEach( function( child )
     {
-        host.appendChild( buildListRow( child ) );
+        const row = buildListRow( child );
+        if( grid ) addThumb( row, child );      // a picture shows itself (thumbs.js)
+        host.appendChild( row );
     });
 }
 
@@ -188,17 +241,21 @@ function driveGlyph( svg, size )
     return size ? svg.replace( '<svg ', '<svg width="' + size + '" height="' + size + '" ' ) : svg;
 }
 const SVG_FOLDER = driveGlyph( NayiveUI.glyph( 'folder' ), 18 );
+// "Shared with me": the folder, with a person in it.
+const SVG_SHARED = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><circle cx="12" cy="11.6" r="1.7"></circle><path d="M8.9 17.2a3.1 3.1 0 0 1 6.2 0"></path></svg>';
 // Trash-view action glyphs: close, restore, permanent delete.
 const SVG_RESTORE = driveGlyph( NayiveUI.glyph( 'restore' ) );
 const SVG_TRASH   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>';
 const SVG_FILE   = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
-const SVG_DOC    = driveGlyph( NayiveUI.icon( 'write' ), 18 );
-const SVG_SHEET  = driveGlyph( NayiveUI.icon( 'calc' ), 18 );
+const SVG_DOC    = driveGlyph( Ayni.icon( 'write' ), 18 );
+const SVG_SHEET  = driveGlyph( Ayni.icon( 'calc' ), 18 );
 const SVG_PDF    = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><text x="12" y="18.5" font-size="7" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none">PDF</text></svg>';
 // An archive (ARCHIVE_EXT): the page with a zipper down it and its pull tab.
 const SVG_ZIP    = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M11 3.5h1M10 6h1M11 8.5h1M10 11h1"></path><rect x="8.5" y="13.5" width="5" height="5" rx="1"></rect></svg>';
-const SVG_CODE   = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>';
+const SVG_CODE   = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline><line x1="14" y1="4" x2="10" y2="20"></line></svg>';
 const SVG_IMAGE  = driveGlyph( NayiveUI.glyph( 'image' ), 18 );
+// A shortcut's arrow, laid over the corner of its icon (drive.css .link-arrow).
+const SVG_LINK_ARROW = '<svg class="link-arrow" viewBox="0 0 12 12" aria-hidden="true"><rect x="0.5" y="0.5" width="11" height="11" rx="2.5"></rect><path d="M4 8.5 8.5 4M5 4h3.5v3.5"></path></svg>';
 const SVG_VIDEO  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="14" height="16" rx="2"></rect><polygon points="22 7 16 11 16 13 22 17"></polygon><polygon points="7 9 11 12 7 15" fill="currentColor" stroke="none"></polygon></svg>';
 const SVG_AUDIO  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>';
 // Only used inside "Compartido conmigo": the Photos and Trips launcher
@@ -240,7 +297,7 @@ const TEXT_IMPORT  =
 // Raster images → an image opener. '.svg' is deliberately absent: it is
 // text (the server sends it as image/svg+xml), so it stays in TEXT_IMPORT
 // and opens in the Text editor.
-//   IMAGE_EDIT  the formats the TOAST UI Image Editor can load AND re-encode
+//   IMAGE_EDIT  the formats the photo editor can load AND re-encode
 //               (canvas.toDataURL) → they open in Image (apps/image).
 //   IMAGE_VIEW  every other raster type → the plain lightbox (view only), and
 //               it also stays the superset used for the file-row icon.
@@ -290,8 +347,15 @@ function typeExt( node )
     return extOf( node && node.shared ? ( node.shared.title || '' ) : nameOf( node ) );
 }
 
+// A folder, or a shortcut to one: sorted with the folders.
+function dirLike( node ) { return isDir( node ) || ( isLink( node ) && !! node.link.dir ); }
+
 function listIcon( node )
 {
+    // A shortcut wears what it leads to (its arrow: buildListRow).
+    if( isLink( node ) && ! linkBroken( node ) ) return listIcon( linkTarget( node ) );
+    if( isLink( node ) ) return node.link.dir ? { cls: '', svg: SVG_FOLDER } : { cls: '', svg: SVG_FILE };
+
     // A shared album / trip shows ITS app's glyph, not a plain folder.
     const app = sharedApp( node );
     if( app === 'photos' ) return { cls: ' ic-photos', svg: SVG_PHOTOS };
@@ -334,19 +398,29 @@ function buildListRow( node, showPath )
     const ic   = document.createElement( 'span' );
     ic.className = 'row-ic' + icon.cls;
     ic.innerHTML = icon.svg;
+
+    // A shortcut: the icon of what it leads to, with an arrow in its corner;
+    // a broken one is dimmed (drive.css .is-link, .is-broken).
+    if( isLink( node ) )
+    {
+        row.classList.add( 'is-link' );
+        if( linkBroken( node ) ) row.classList.add( 'is-broken' );
+        ic.insertAdjacentHTML( 'beforeend', SVG_LINK_ARROW );
+    }
     if( node.shared )
         ic.title = node.shared.by ? TF( 'drive.sharedByWho', { who: node.shared.by } ) : T( 'drive.sharedWithYou' );
 
     const label = document.createElement( 'span' );
     label.className   = 'row-name';
     label.textContent = name;
+    label.title       = name;        // an icon cuts a long name after two lines
 
     const meta = document.createElement( 'span' );
     meta.className = 'row-meta';
 
     if( showPath )
     {
-        meta.textContent = fsRel( NayiveMedia.dirOf( node.path ) ) || 'Drive';
+        meta.textContent = fsRel( NayiveMedia.dirOf( node.path ) ) || homeName();
         meta.title       = node.path;
 
         // The "Biggest files" list leads with the size - the one thing it is
@@ -362,6 +436,16 @@ function buildListRow( node, showPath )
             meta.appendChild( size );
             meta.appendChild( where );
             meta.classList.add( 'row-meta--big' );
+        }
+    }
+    else if( isLink( node ) )
+    {
+        // Where the original is, not the shortcut's own size and date.
+        if( linkBroken( node ) ) meta.textContent = T( 'drive.shortcutBroken' );
+        else
+        {
+            meta.textContent = '→ ' + ( fsRel( NayiveMedia.dirOf( node.link.to ) ) || homeName() );
+            meta.title       = TF( 'drive.shortcutTo', { path: fsRel( node.link.to ) } );
         }
     }
     else

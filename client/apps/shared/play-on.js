@@ -33,7 +33,7 @@ var NayivePlayOn = ( function ()
         }
         if( canCast )
         {
-            var mark = function () { btn.classList.toggle( "is-active", media.remote.state !== "disconnected" ); };
+            var mark = function () { btn.setAttribute( "aria-pressed", media.remote.state !== "disconnected" ); };
             media.remote.addEventListener( "connect", mark );
             media.remote.addEventListener( "disconnect", mark );
             // Unknown (null) when the browser cannot watch: the row then stays on.
@@ -42,7 +42,7 @@ var NayivePlayOn = ( function ()
 
         async function openMenu( keyboard )
         {
-            var T = NayiveUI.t, items = [];
+            var T = Ayni.t, items = [];
             if( canSink )
             {
                 var outs = [];
@@ -75,7 +75,7 @@ var NayivePlayOn = ( function ()
             media.setSinkId( id ).then( function ()
             {
                 try { if( id ) localStorage.setItem( SINK_KEY, id ); else localStorage.removeItem( SINK_KEY ); } catch( e ) {}
-            } ).catch( function () { NayiveUI.toast( NayiveUI.t( "media.outFail" ) ); } );
+            } ).catch( function () { NayiveUI.toast( Ayni.t( "media.outFail" ) ); } );
         }
 
         // Names come only with the microphone permission: ask, drop the stream
@@ -86,7 +86,7 @@ var NayivePlayOn = ( function ()
             {
                 s.getTracks().forEach( function ( t ) { t.stop(); } );
                 openMenu();
-            } ).catch( function () { NayiveUI.toast( NayiveUI.t( "media.outFail" ) ); } );
+            } ).catch( function () { NayiveUI.toast( Ayni.t( "media.outFail" ) ); } );
         }
 
         // Chrome answers "dismissed" at once when it has nothing to offer, the
@@ -98,7 +98,7 @@ var NayivePlayOn = ( function ()
             media.remote.prompt().catch( function ( e )
             {
                 if( e && e.name === "NotAllowedError" && Date.now() - t0 > 700 ) return;   // the person closed the picker
-                NayiveUI.toast( NayiveUI.t( "media.outNone" ) );
+                NayiveUI.toast( Ayni.t( "media.outNone" ) );
             } );
         }
 

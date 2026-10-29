@@ -5,7 +5,7 @@
  * (&title=) - what the "Save from any page" browser button sends - opens
  * the new-bookmark sheet with it.
  */
-await NayiveI18n.ready;
+await Ayni.i18n.ready;
 
 loadUi();
 applyTreeWidth();

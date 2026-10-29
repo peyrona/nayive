@@ -107,7 +107,7 @@ section( "L6 · SIGN-OUT WITH A LIST SAVE ONLY ITS APP CAN MERGE" );
     await L.evaluate( "window.asks = []; NayiveUI.confirm = o => new Promise( r => asks.push( { body: o.body, r } ) ); true" );
     await L.evaluate( "document.getElementById( 'logoutBtn' ).click(), true" );
     ok( await L.until( "asks.length === 1", 20000 ), "Sign out asks about the save still here" );
-    const want = await L.evaluate( "NayiveUI.tf( 'launcher.unsavedBodyApps', { n: 1, apps: 'Planner \u203a Tasks' } )" );
+    const want = await L.evaluate( "Ayni.tf( 'launcher.unsavedBodyApps', { n: 1, apps: 'Planner \u203a Tasks' } )" );
     const body = await L.evaluate( "asks[ 0 ].body" );
     ok( body === want, "it says to open Tasks to finish saving it (not \"go online\")", body );
     await L.evaluate( "asks[ 0 ].r( false ), true" );                       // "Stay"

@@ -38,7 +38,7 @@ function wireHeader()
     $( 'listBtn' ).addEventListener( 'click', function() { setMode( 'list' ); } );
 
     // Icons the markup leaves empty: one glyph per meaning, from ui.js.
-    $( 'upBtn' ).innerHTML = NayiveUI.icon( 'back' );
+    $( 'upBtn' ).innerHTML = Ayni.icon( 'back' );
     $( 'treeBtn' ).addEventListener( 'click', function() { treeView.openSheet(); } );
 }
 
@@ -102,6 +102,7 @@ function wireTree()
         current: function() { return filter === 'all' && ! query ? curFolder : null; },
         go:      function( id ) { goFolder( id ); },
         menu:    function( id, x, y, anchor ) { NayiveUI.menuAt( x, y, browse.items( [ id ] ), { anchor: anchor } ); },
+        keys:    true,                          // F2, Del... on the folder, as its menu
         drag:    function( id ) { return [ id ]; },
         drop:    { can: treeCan, drop: dropInto }
     } );
@@ -149,17 +150,18 @@ function actionList() { return [
       run: function( ids ) { copyLink( ids[ 0 ] ); } },
     { id: 'move', label: T( 'bookmarks.moveTo' ), icon: 'move', rank: 3, group: 2,
       run: openMoveSheet },
-    { id: 'subfolder', label: T( 'bookmarks.newSubfolder' ), icon: 'folderplus', rank: 8, hideOff: true, group: 2,
+    { id: 'subfolder', label: T( 'bookmarks.newSubfolder' ), icon: 'folder-plus', rank: 8, hideOff: true, group: 2,
       when: function( ids ) { return one( ids ) && isFolder( node( ids[ 0 ] ) ); },
       run: function( ids ) { openFolderSheet( null, ids[ 0 ] ); } },
-    { id: 'delete', label: T( 'ui.delete' ), icon: 'trash', key: [ 'Del', 'Backspace' ], rank: 1, group: 3, danger: true,
+    // Never a bare ⌫ (Drive's rule): ⌘⌫ on a Mac, Del elsewhere.
+    { id: 'delete', label: T( 'ui.delete' ), icon: 'trash', key: NayiveUI.isMac ? [ 'Del', 'Ctrl+Backspace' ] : 'Del', rank: 1, group: 3, danger: true,
       run: deleteNodes }
 ]; }
 
 // Right-click on empty space: what you make here.
 function areaList() { return [
     { id: 'add', label: T( 'bookmarks.newBookmark' ), icon: 'plus', run: function() { openBookmarkSheet( null ); } },
-    { id: 'newFolder', label: T( 'ui.newFolder' ), icon: 'folderplus', key: 'Alt+N', run: function() { openFolderSheet( null ); } }
+    { id: 'newFolder', label: T( 'ui.newFolder' ), icon: 'folder-plus', key: 'Alt+N', run: function() { openFolderSheet( null ); } }
 ]; }
 
 function wireItems()
@@ -315,6 +317,7 @@ function wireSheets()
     bmlet.addEventListener( 'click', function( e ) { e.preventDefault(); } );
 
     $( 'importDeviceBtn' ).addEventListener( 'click', importFromDevice );
+    $( 'importNayiveBtn' ).insertAdjacentHTML( 'afterbegin', Ayni.icon( 'nayive' ) );
     $( 'importNayiveBtn' ).addEventListener( 'click', importFromNayive );
     $( 'importInput' ).addEventListener( 'change', function( e )
     {

@@ -61,7 +61,7 @@ section( "C5 · A SAVE OVER THE PHONE'S: MERGED BY THE STORE, NEVER SENT BLIND" 
     const puts = await c.evaluate( "window.__puts" );
     ok( puts.some( p => p.st === 412 ), "(the save met the phone's: 412)", puts );
     ok( puts.length && puts.every( p => p.im || p.inm ), "every save of the file carried its version - the merged one too", puts );
-    ok( await c.until( "!! node( 'p' ) && window.__toasts.some( function ( t ) { return t.indexOf( NayiveUI.t( 'bookmarks.merged' ) ) !== -1; } )" ),
+    ok( await c.until( "!! node( 'p' ) && window.__toasts.some( function ( t ) { return t.indexOf( Ayni.t( 'bookmarks.merged' ) ) !== -1; } )" ),
         "the screen shows the phone's bookmark, and says \"Merged\"", await c.toasts() );
 }
 
@@ -78,7 +78,7 @@ section( "ITEM 8 · \"MERGED\" WAITS FOR A PENDING UNDO" );
     ok( await c.evaluate( "!! document.querySelector( '#toast .toast-undo' )" ), "the delete's Undo is still there" );
     await c.evaluate( "( document.querySelector( '#toast .toast-undo' ) || { click: function () {} } ).click(), true" );
     ok( await disk( () => titles() === "Phone again,X,Y" ), "Undo: Y is back (and the phone's stays)", titles() );
-    ok( await c.until( "window.__toasts.some( function ( t ) { return t.indexOf( NayiveUI.t( 'bookmarks.merged' ) ) !== -1; } )" ),
+    ok( await c.until( "window.__toasts.some( function ( t ) { return t.indexOf( Ayni.t( 'bookmarks.merged' ) ) !== -1; } )" ),
         "\"Merged\" is said once the Undo is gone", await c.toasts() );
 }
 

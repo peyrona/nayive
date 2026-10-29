@@ -113,9 +113,9 @@ function renderMapSheet()
 
     const closeBtn = document.createElement( 'button' );
     closeBtn.type      = 'button';
-    closeBtn.className = 'icon-btn sm';
-    closeBtn.title     = NayiveUI.t( 'ui.close' );
-    closeBtn.setAttribute( 'aria-label', closeBtn.title );
+    closeBtn.className = 'btn sm';
+    Ayni.setTip( closeBtn, Ayni.t( 'ui.close' ) );
+    closeBtn.setAttribute( 'aria-label', closeBtn.dataset.tip );
     closeBtn.appendChild( svgIcon( ICON_X, 16 ) );
     closeBtn.addEventListener( 'click', closeMapSheet );
     mode.appendChild( closeBtn );
@@ -175,7 +175,7 @@ function openSettings()
 // (/api/files?tripdays=), saved on change. 0 = no reminder.
 function reminderSection()
 {
-    const t = NayiveUI.t;
+    const t = Ayni.t;
 
     const box = document.createElement( 'div' );
 
@@ -225,7 +225,7 @@ function reminderSection()
             let d = {};
             try { d = JSON.parse( text ) || {}; } catch( _ ) {}
             saved = d.days; input.value = d.days;
-            say( d.days > 0 ? NayiveUI.tf( 'acct.tripMsg', { n: d.days } ) : t( 'acct.tripNone' ) );
+            say( d.days > 0 ? Ayni.tf( 'acct.tripMsg', { n: d.days } ) : t( 'acct.tripNone' ) );
         }
         catch( e ) { input.value = ( saved == null ? '' : saved ); say( e && e.status ? t( 'ui.saveFailed' ) : t( 'login.noServer' ) ); }
         input.disabled = false;
@@ -251,10 +251,7 @@ function buildSheetHeader( title, backdropId, sheet )
     const actions = document.createElement( 'div' );
     actions.className = 'sheet-actions';
 
-    const closeBtn = document.createElement( 'button' );
-    closeBtn.type = 'button';
-    closeBtn.setAttribute( 'data-act', 'close' );
-    closeBtn.title = NayiveUI.t( 'ui.close' );
+    const closeBtn = NayiveUI.sheetButton( 'close', Ayni.t( 'ui.close' ) );
     closeBtn.addEventListener( 'click', function() { closeSheet( backdropId ); } );
     actions.appendChild( closeBtn );
     sheet.appendChild( actions );

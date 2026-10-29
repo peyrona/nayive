@@ -1,7 +1,7 @@
 // photos.mjs - Photos on the shared item browser: a mouse picks tiles, a
 // double-click opens the photo full screen, one menu, the keys, the bin with
-// Undo and no question, "Move to album…" / "Copy to album…" with the albums
-// tree, a drag onto an album, the album menu (new, rename, bin, the open
+// Undo and no question, "Move to…" / "Copy to…" with the Drive's folders
+// (the albums and any other), a drag onto an album, Info, the album menu (new, rename, bin, the open
 // album with its Undo carried along); then a phone: tap opens, long-press
 // picks, the tree slides in. Every change is checked on disk, notes too.
 //
@@ -21,6 +21,7 @@ const s = await server();
 seed( s, { "data/photos/config.json": JSON.stringify( { folder: "files/Pics" } ),
            "files/Pics/Lisbon/a.png": pic( 1 ), "files/Pics/Lisbon/b.png": pic( 2 ), "files/Pics/Lisbon/c.png": pic( 3 ),
            "files/Pics/Lisbon/Tiles": null, "files/Pics/Granada/x.png": pic( 4 ), "files/Pics/Old/o.png": pic( 5 ),
+           "files/Other": null,
            [ NOTES ]: JSON.stringify( { "files/Pics/Lisbon/a.png": "note a", "files/Pics/Lisbon/b.png": "note b", "files/Pics/Lisbon/c.png": "note c" } ) } );
 const notes = () => { try { return JSON.parse( onDisk( s, NOTES ) ) || {}; } catch { return {}; } };
 
@@ -83,7 +84,7 @@ await key( c, "Escape" );
 section( "PHOTOS · ONE MENU" );
 await mouse( c, TILE( "Lisbon/c.png" ), { button: "right" } );
 let rows = await menuRows( c );
-ok( await sel() === L( "c.png" ) && rows && [ "open", "edit", "share", "download", "move", "copyTo", "map", "bin" ].every( a => rows.some( r => r.act === a ) ),
+ok( await sel() === L( "c.png" ) && rows && [ "open", "edit", "share", "download", "move", "copyTo", "info", "map", "bin" ].every( a => rows.some( r => r.act === a ) ),
     "right-click picks that tile and opens the menu with every action", rows && rows.map( r => r.act ) );
 ok( rows && rows.find( r => r.act === "map" ).off, "…Show on map is grey (no place)" );
 ok( await c.evaluate( "[ ...document.querySelectorAll('.item-menu .mi-key') ].some( k => k.textContent === 'Del' )" ), "…with the keys beside them" );
@@ -92,7 +93,7 @@ await key( c, "Escape" );
 ok( await c.evaluate( "document.querySelector('.item-menu').hidden" ), "Esc closes the menu" );
 ok( await c.evaluate( "! document.querySelector('#grid [data-more], #tree [data-more], #selActions [data-sel=menu]')" ), "no tile ⋮, no tree ⋮, no ⋮ in the selection group" );
 let fb = await fitState( c );
-ok( fb.acts.join() === "edit,share,download,move,copyTo,bin" && ! fb.out.length && ! fb.more && ! fb.crowded,
+ok( fb.acts.join() === "edit,share,download,move,copyTo,info,bin" && ! fb.out.length && ! fb.more && ! fb.crowded,
     "wide: every action is a button, in menu order (no See on map without a place); no ⋮", fb );
 await c.evaluate( "browse.clear(); true" );
 await mouse( c, "#grid", { dx: 20, button: "right" } );
@@ -115,10 +116,10 @@ ok( notes()[ L( "c.png" ) ] === "note c", "…its note is kept for a restore", n
 ok( await undo(), "Undo pressed" );
 ok( await c.until( "!! document.querySelector( '" + TILE( "Lisbon/c.png" ) + "' )" ) && exists( s, L( "c.png" ) ) && notes()[ L( "c.png" ) ] === "note c", "Undo brings it back, with its note" );
 
-section( "PHOTOS · MOVE / COPY TO ALBUM, AND DRAG" );
+section( "PHOTOS · MOVE / COPY TO…, AND DRAG" );
 await mouse( c, TILE( "Lisbon/a.png" ) );
 await c.evaluate( "browse.run( 'move' ); true" );
-ok( await c.until( "!! document.querySelector( '.sheet-backdrop.open .pick-tree .tree-row' )" ), "Move to album… shows the albums tree" );
+ok( await c.until( "!! document.querySelector( '.sheet-backdrop.open .pick-tree .tree-row' )" ), "Move to… shows the folders tree" );
 ok( await c.evaluate( "document.querySelector( '.sheet-backdrop.open .pick-tree .tree-row[data-id=\"files/Pics/Lisbon\"]' ).classList.contains( 'is-off' )" ), "…the album it is in is off" );
 await shot( "desktop-move" );
 ok( await pickIn( "files/Pics/Granada" ), "Granada picked" );
@@ -133,7 +134,7 @@ await c.evaluate( "browse.run( 'copyTo' ); true" );
 await c.until( "!! document.querySelector( '.sheet-backdrop.open .pick-tree .tree-row[data-id=\"files/Pics/Lisbon/Tiles\"]' ) || !! document.querySelector( '.sheet-backdrop.open .pick-tree .tree-row[data-id=\"files/Pics/Lisbon\"]' )" );
 await c.evaluate( `( () => { const r = document.querySelector( '.sheet-backdrop.open .pick-tree .tree-row[data-id="files/Pics/Lisbon"]' );
     if( r && r.getAttribute( 'aria-expanded' ) !== 'true' ) r.querySelector( '[data-twisty]' ).click(); return true; } )()` );
-ok( await pickIn( "files/Pics/Lisbon/Tiles" ), "Copy to album…: Tiles picked" );
+ok( await pickIn( "files/Pics/Lisbon/Tiles" ), "Copy to…: Tiles picked" );
 ok( await c.until( "( window.__toasts || [] ).some( t => /copied/.test( t ) )" ) && exists( s, "files/Pics/Lisbon/Tiles/b.png" ) && exists( s, L( "b.png" ) ), "…a copy is there, the photo stays" );
 
 await c.until( "! document.querySelector( '.sheet-backdrop.open' )" );
@@ -141,6 +142,26 @@ const lit = await drag( c, TILE( "Lisbon/b.png" ), TREE( "Granada" ) );
 ok( lit === true && await c.until( "! document.querySelector( '" + TILE( "Lisbon/b.png" ) + "' )" ) && exists( s, "files/Pics/Granada/b.png" ) && ! exists( s, L( "b.png" ) ),
     "a tile dragged onto an album moves it (album lit)", lit );
 ok( notes()[ "files/Pics/Granada/b.png" ] === "note b" && ! notes()[ L( "b.png" ) ], "…its note followed it", notes() );
+
+section( "PHOTOS · INFO, MOVE OUT OF THE ALBUMS" );
+const pngSize = rel => { const b = fs.readFileSync( path.join( s.home(), rel ) ); return b.readUInt32BE( 16 ) + "x" + b.readUInt32BE( 20 ); };
+const W0 = pngSize( L( "a.png" ) ).split( "x" ).map( Number );
+await mouse( c, TILE( "Lisbon/a.png" ) );
+await c.evaluate( "browse.run( 'info' ); true" );
+ok( await c.until( "( () => { const d = document.querySelector( '.sheet-backdrop.open .props' ); return !! d && /a\\.png/.test( d.textContent ) && d.textContent.indexOf( '" + W0[ 0 ] + " × " + W0[ 1 ] + " px' ) !== -1 && /note a/.test( d.textContent ); } )()" ),
+    "Info: name, pixel size and note", await c.evaluate( "( document.querySelector( '.sheet-backdrop.open .props' ) || {} ).textContent" ) );
+await shot( "desktop-info" );
+await key( c, "Escape" );
+ok( await c.until( "! document.querySelector( '.sheet-backdrop.open' )" ), "…Esc closes it" );
+
+await mouse( c, TILE( "Lisbon/c.png" ) );
+await c.evaluate( "browse.run( 'move' ); true" );
+ok( await c.until( "!! document.querySelector( '.sheet-backdrop.open .pick-tree .tree-row[data-id=\"files/Other\"]' )" ), "Move to… shows folders outside the albums too" );
+ok( await pickIn( "files/Other" ), "files/Other picked" );
+ok( await c.until( "! document.querySelector( '" + TILE( "Lisbon/c.png" ) + "' )" ) && exists( s, "files/Other/c.png" ) && ! exists( s, L( "c.png" ) ), "…and moved there" );
+ok( notes()[ "files/Other/c.png" ] === "note c", "…its note followed it", notes() );
+ok( await undo(), "Undo pressed" );
+ok( await c.until( "!! document.querySelector( '" + TILE( "Lisbon/c.png" ) + "' )" ) && exists( s, L( "c.png" ) ) && notes()[ L( "c.png" ) ] === "note c", "Undo moves it back, with its note" );
 
 section( "PHOTOS · THE ALBUMS TREE" );
 ok( await c.evaluate( "document.querySelector( '" + TREE( "Lisbon" ) + "' ).classList.contains( 'is-active' )" ), "the open album is lit in the tree" );
@@ -220,9 +241,9 @@ ok( await c.until( "browse.ids().join() === " + JSON.stringify( L( "a.png" ) ) )
 await finger( c, TILE( "Lisbon/c.png" ) );
 ok( await sel() === [ "a.png", "c.png" ].map( L ).join(), "…then a tap adds", await sel() );
 fb = await fitState( c );
-ok( ! fb.crowded && fb.more && [ "share", "bin" ].every( a => fb.acts.includes( a ) ) && ! fb.tools.includes( "reloadBtn" ),
+ok( ! fb.crowded && fb.more && fb.acts.includes( "bin" ) && ! fb.tools.includes( "reloadBtn" ),   // 8 px touch gaps: only the top rank fits at 390
     "phone header: one row; the top ranks stay, the tools leave first, the ⋮ shows", fb );
-ok( fb.out.length && fb.rows.filter( r => r !== "all" ).slice( 0, fb.out.length ).join() === fb.out.join() && fb.out.join() === [ "edit", "share", "download", "move", "copyTo", "bin" ].filter( a => fb.out.includes( a ) ).join(),
+ok( fb.out.length && fb.rows.filter( r => r !== "all" ).slice( 0, fb.out.length ).join() === fb.out.join() && fb.out.join() === [ "edit", "share", "download", "move", "copyTo", "info", "bin" ].filter( a => fb.out.includes( a ) ).join(),
     "…its ⋮ lists the hidden actions in toolbar order (Select all first, when hidden), then the hidden tools", fb );
 await finger( c, ".topbar .fit-more" );
 const mrows = await menuRows( c );

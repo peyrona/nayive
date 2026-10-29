@@ -138,8 +138,9 @@ type ChatContact struct {
 	ID      string    `json:"id"`
 	Name    string    `json:"name"`
 	Token   string    `json:"token,omitempty"`
-	User    string    `json:"user,omitempty"` // a Nayive account: no link, their own Chat reads it (via)
-	Card    string    `json:"card,omitempty"` // the Contacts app's card they were picked from (its UID)
+	User    string    `json:"user,omitempty"`  // a Nayive account: no link, their own Chat reads it (via)
+	Card    string    `json:"card,omitempty"`  // the Contacts app's card they were picked from (its UID)
+	Group   bool      `json:"group,omitempty"` // a Nayive account in groups only: no 1:1 here (a 1:1 clears it)
 	Created int64     `json:"created"`
 	Opened  int64     `json:"opened,omitempty"` // first time their link was used (unix s)
 	Photo   int64     `json:"photo,omitempty"`  // their picture's version (avatars/<id>.jpg); 0 = none
@@ -789,7 +790,7 @@ func (o *chatOwner) group(id string) *ChatGroup {
 func (o *chatOwner) members(conv string) []string {
 	switch {
 	case strings.HasPrefix(conv, "d-"):
-		if c := o.contact(conv[2:]); c != nil && !c.Deleted {
+		if c := o.contact(conv[2:]); c != nil && !c.Deleted && !c.Group {
 			return []string{"o", c.ID}
 		}
 	case strings.HasPrefix(conv, "g-"):
@@ -848,7 +849,7 @@ func (o *chatOwner) avatarsFor(pid string) map[string]int64 {
 func (o *chatOwner) visible(pid string) []string {
 	var out []string
 	for _, c := range o.data.Contacts {
-		if !c.Deleted && (pid == "o" || pid == c.ID) {
+		if !c.Deleted && !c.Group && (pid == "o" || pid == c.ID) {
 			out = append(out, "d-"+c.ID)
 		}
 	}

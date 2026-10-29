@@ -21,7 +21,7 @@
     function ago( epoch )
     {
         var secs = Math.max( 0, Date.now() / 1000 - epoch );
-        var rtf  = new Intl.RelativeTimeFormat( NayiveUI.locale(), { numeric: "auto" } );
+        var rtf  = new Intl.RelativeTimeFormat( Ayni.i18n.lang(), { numeric: "auto" } );
         if( secs < 3600 )  return rtf.format( -Math.max( 1, Math.round( secs / 60 ) ), "minute" );
         if( secs < 86400 ) return rtf.format( -Math.round( secs / 3600 ), "hour" );
         return rtf.format( -Math.round( secs / 86400 ), "day" );
@@ -30,7 +30,7 @@
     // now.source: "photo", "plan", or a location app (every app said the same way).
     function nowText( now )
     {
-        var TF = NayiveUI.tf;
+        var TF = Ayni.tf;
         if( now.source === "plan" ) return TF( "trips.pub.nowPlan", { place: now.place || "" } );
         var a = ago( now.at );
         if( now.source === "photo" )
@@ -104,7 +104,7 @@
         j.spots.forEach( function ( s )
         {
             var pin = L.marker( [ s.lat, s.lon ], { icon: photoIcon } )
-                .bindTooltip( NayiveUI.tf( "trips.pub.photoCount", { n: s.photos.length } ), { direction: "top" } );
+                .bindTooltip( Ayni.tf( "trips.pub.photoCount", { n: s.photos.length } ), { direction: "top" } );
             o.pin( pin, s );
             pin.addTo( map );
         } );

@@ -14,12 +14,14 @@
  * saying so - what was written is never thrown away. The bin discards, with
  * Undo: the draft is deleted only when the Undo is gone (or the page closes).
  *
- * SENDING, with Undo: the draft is saved first, then the writer closes and
- * the mail waits for its Undo ("Sending…"). It goes out when the Undo is
- * gone; Undo - or opening its draft in the Drafts tray meanwhile - brings
- * the writer back as it was. A page closed before that sends NOTHING: the
- * mail stays in Drafts. When the draft cannot be saved first (offline, a
- * change typed during that save), it is sent at once, as before, no Undo.
+ * SENDING, with Undo: the writer closes at once; its draft is saved in the
+ * background (its words kept on this device meanwhile), then the mail waits
+ * for its Undo ("Sending…"). It goes out when the Undo is gone; Undo - or
+ * opening its draft in the Drafts tray meanwhile - brings the writer back as
+ * it was. A page closed before that sends NOTHING: the mail stays in Drafts
+ * (or comes back from this device). When the draft cannot be saved first
+ * (offline, refused), it is sent at once, no Undo. Anything failing brings
+ * the writer back, saying why.
  * One draft goes once: a Send again of it in the next minutes (its answer
  * lost on the way) is refused by the server ("sent"); sent with no copy in
  * Sent, its draft stays and a toast says so (data-safety I5, I6).
@@ -163,7 +165,7 @@
         if( w && w.mine.draftAcct === acct && ( w.mine.draftRef === m.ref || ( m.mid && m.mid === w.mine.mid ) ) )
         {
             w.off = true;
-            NayiveUI.undoSettle();          // its toast goes; its onExpire sends nothing
+            if( w.toast ) NayiveUI.undoSettle();    // its toast goes; its onExpire sends nothing
             reopen( w.mine, w.fields );
             return;
         }
@@ -336,8 +338,7 @@
         document.querySelectorAll( "#cFormat [aria-pressed]" ).forEach( function ( b )
         {
             var v = !! on[ b.getAttribute( "data-fmt" ) ];
-            b.classList.toggle( "is-active", v );
-            b.setAttribute( "aria-pressed", v ? "true" : "false" );
+            b.setAttribute( "aria-pressed", v );
         } );
     }
 
@@ -472,7 +473,7 @@
         box.textContent = "";
         C.files.forEach( function ( f, i )
         {
-            var x = h( "button", { class: "icon-btn sm", html: NayiveUI.icon( "x" ),
+            var x = h( "button", { class: "btn sm", html: Ayni.icon( "close" ),
                                    attrs: { type: "button", title: E.T( "mail.removeFile" ), "aria-label": E.T( "mail.removeFile" ) },
                                    on: { click: function () { C.files.splice( i, 1 ); renderFiles(); changed(); } } } );
             box.appendChild( h( "span", { class: "mail-part mail-cfile", html: E.icon( "file" ) },
@@ -512,9 +513,9 @@
         if( ! C ) return;
         var ic = function ( name ) { var t = document.createElement( "template" ); t.innerHTML = E.icon( name ); return t.content.firstChild; };
         attach = NayiveUI.attachPanel( [
-            { icon: ic( "file" ),   label: E.T( "chat.localDoc" ),  color: 4, act: function () { pickDevice( false ); } },
-            { icon: ic( "folder" ), label: E.T( "chat.nayiveDoc" ), color: 3, act: pickNayive },
-            { icon: ic( "image" ),  label: E.T( "chat.gallery" ),   color: 1, act: function () { pickDevice( true ); } }
+            { icon: ic( "file" ),   label: E.T( "chat.localDoc" ),  color: 1, act: function () { pickDevice( false ); } },
+            { icon: ic( "nayive" ), label: E.T( "chat.nayiveDoc" ), color: 0, act: pickNayive },
+            { icon: ic( "image" ),  label: E.T( "chat.gallery" ),   color: 6, act: function () { pickDevice( true ); } }
         ], closeAttach );
         attach.classList.add( "mail-attach" );
         document.body.appendChild( attach );
@@ -662,7 +663,7 @@
 
     function stamp( key )
     {
-        var t = new Date().toLocaleTimeString( NayiveUI.locale(), { hour: "2-digit", minute: "2-digit" } );
+        var t = new Date().toLocaleTimeString( Ayni.i18n.lang(), { hour: "2-digit", minute: "2-digit" } );
         E.$( "cStatus" ).textContent = E.TF( key, { time: t } );
     }
 
@@ -754,7 +755,7 @@
         return E.api( "POST", encodeURIComponent( acct ) + "/draft/delete", { ref: ref } ).catch( function () {} );
     }
 
-    // ← (or Back): keep what was written as a draft, then back to the list.
+    // ← (or Back, or the × Close): keep what was written as a draft, then back to the list.
     // A save that fails keeps the writer open - nothing written is lost.
     E.closeCompose = async function ( fromCode )
     {
@@ -844,13 +845,15 @@
         } } );
     }
 
-    // Send: the draft is saved first - it is what a page closed during the
-    // Undo leaves - then the mail leaves the writer and waits for its Undo
-    // (later). A draft that could not be saved: sent at once, no Undo.
+    // Send: the writer closes at once. Its words stay on this device (and
+    // its lock held) while the draft is saved in the background - it is what
+    // a page closed during the Undo leaves -, then the mail waits for its
+    // Undo (later). A draft that could not be saved: sent at once, no Undo
+    // (sendDirect).
     async function send()
     {
         if( ! C ) return;
-        var mine = C, btn = E.$( "cSend" );
+        var mine = C;
         if( ! E.$( "cTo" ).value.trim() && ! E.$( "cCc" ).value.trim() && ! E.$( "cBcc" ).value.trim() )
         {
             NayiveUI.toast( E.T( "mail.err.norcpt" ), { ms: 3000 } );
@@ -859,24 +862,77 @@
         }
         clearTimeout( mine.timer );
         mine.sending = true;
-        btn.disabled = true;
-        E.plug( "saving" );
         mine.dirty = mine.dirty || ! mine.draftRef;
-        await saveDraft();
-        while( mine.saving ) await mine.saving;
-        // left meanwhile (←: it stays a draft; the bin, even undone): not sent
-        if( C !== mine || ! mine.sending ) { mine.sending = false; btn.disabled = false; E.plug( "synced" ); return; }
+        var fields = fieldsNow();
+        var w = { mine: mine, fields: fields, off: false };
+        waiting = w;                    // its draft opened from the tray meanwhile: that is its Undo
+        localNow( mine );               // the words here, until the server has them
+        var saving = saveDraft();       // reads the fields now, before they go
+        detach();
+        E.plug( "saving" );
+        E.busy( true );
+        try { await saving; while( mine.saving ) await mine.saving; }
+        finally { E.busy( false ); }
+        if( w.off ) return;             // brought back meanwhile: it is a writer again
         if( ! mine.dirty && mine.draftRef && mine.draftAcct === mine.acct && ! mine.staleDraft )
         {
-            btn.disabled = false;
-            later( mine );
+            later( w );
             return;
         }
-        // not saved (offline, refused, or typed during the save): as before
-        E.$( "cStatus" ).textContent = E.T( "mail.sending" );
+        if( waiting === w ) waiting = null;
+        sendDirect( mine, fields );
+    }
+
+    // Out of the writer at once (Send): unlike leave, its copy on this device
+    // and its lock stay - the mail is still on its way (dropped by sentOk, or
+    // the writer back through reopen).
+    function detach()
+    {
+        closeAttach();
+        clearTimeout( C.timer );
+        C = null;
+        hideSuggest();
+        setWriting( false );
+        E.syncBar();
+        try { if( history.state && history.state.mailWrite ) history.back(); } catch( e ) {}
+    }
+
+    // Gone for good: the copy here and the lock go.
+    function sentOk( mine )
+    {
+        localDrop( mine );
+        dropLid( mine );
+        if( ! C && ! S.label && ( S.tray === "drafts" || S.tray === "sent" ) && E.listShown() && ! E.picking() ) E.loadList( false );
+    }
+
+    // A send that failed: the writer comes back saying why - or, while
+    // another one is being written, a toast says so (its words are in
+    // Drafts, or on this device: they come back the next time eMail opens).
+    function sendFailed( mine, fields, err )
+    {
+        mine.sending = false;
+        E.plug( err.code === "offline" ? "offline" : "synced" );
+        if( C )
+        {
+            dropLid( mine );
+            var inDrafts = ! mine.dirty && mine.draftRef && mine.draftAcct === mine.acct;
+            NayiveUI.toast( E.T( inDrafts ? "mail.notSent" : "mail.notSentHere" ) + " " + E.errText( err ), { ms: 6000 } );
+            return;
+        }
+        reopen( mine, fields );
+        E.$( "cStatus" ).textContent = E.errText( err );
+        NayiveUI.toast( E.T( "mail.sendFailed" ) + " " + E.errText( err ), { ms: 6000 } );
+    }
+
+    // Not saved first (offline, refused, a "From" changed): sent at once.
+    async function sendDirect( mine, fields )
+    {
+        E.plug( "saving" );
+        E.busy( true );
         try
         {
-            var r = await post( mine.acct, "send", form( mine.acct, mine ) );
+            var r = await post( mine.acct, "send", form( mine.acct, mine, fields ) );
+            mine.sending = false;
             E.plug( "synced" );
             if( r && r.noCopy )
             {
@@ -888,42 +944,34 @@
                 if( ! mine.dirty && mine.draftRef && mine.draftAcct === mine.acct )
                 {
                     NayiveUI.toast( E.T( "mail.sentNoCopy" ), { ms: 8000 } );
-                    leave( true );
+                    sentOk( mine );
                     return;
                 }
                 mine.dirty = true;
-                localNow( mine );
+                localNow( mine, fields );
                 NayiveUI.toast( E.T( "mail.sentNoCopyHere" ), { ms: 10000 } );
-                leave( true, true );
+                dropLid( mine );
                 return;
             }
             if( mine.draftAcct && mine.draftAcct !== mine.acct ) dropDraft( mine.draftAcct, mine.draftRef );   // written in the other account
             if( mine.staleDraft ) dropDraft( mine.staleDraft.acct, mine.staleDraft.ref );
             NayiveUI.toast( E.T( "mail.sent" ) );
-            leave( true );
+            sentOk( mine );
         }
-        catch( err )
-        {
-            E.plug( err.code === "offline" ? "offline" : "synced" );
-            E.$( "cStatus" ).textContent = E.errText( err );
-            NayiveUI.toast( E.errText( err ), { ms: 4000 } );
-            mine.sending = false;
-            if( C === mine && mine.dirty ) schedule();      // what was typed meanwhile
-        }
-        finally { btn.disabled = false; mine.sending = false; }
+        catch( err ) { sendFailed( mine, fields, err ); }
+        finally { E.busy( false ); }
     }
 
-    // Its draft saved, the mail leaves the writer and waits for its Undo. It
-    // goes out when the Undo is gone; a page closed first sends nothing
-    // (keepOnLeave): the draft keeps it. The toast says "Sending…", not
-    // "Sent" - until then it is not.
-    function later( mine )
+    // Its draft saved, the mail waits for its Undo. It goes out when the
+    // Undo is gone; a page closed first sends nothing (keepOnLeave): the
+    // draft keeps it. The toast says "Sending…", not "Sent" - until then it
+    // is not.
+    function later( w )
     {
-        var fields = fieldsNow();
-        var w = { mine: mine, fields: fields, off: false };
-        waiting = w;
+        var mine = w.mine, fields = w.fields;
+        dropLid( mine );                // its words are in Drafts now
         E.plug( "synced" );
-        leave( true );
+        w.toast = true;
         NayiveUI.undoToast( E.T( "mail.sending" ), function ()
         {
             if( waiting === w ) waiting = null;
@@ -946,21 +994,14 @@
     function sendNow( mine, fields )
     {
         E.plug( "saving" );
+        E.busy( true );
         post( mine.acct, "send", form( mine.acct, mine, fields ) ).then( function ( r )
         {
             mine.sending = false;
             E.plug( "synced" );
             if( r && r.noCopy ) NayiveUI.toast( E.T( "mail.sentNoCopy" ), { ms: 8000 } );
-            if( ! C && ! S.label && ( S.tray === "drafts" || S.tray === "sent" ) && E.listShown() && ! E.picking() ) E.loadList( false );
-        }, function ( err )
-        {
-            mine.sending = false;
-            E.plug( err.code === "offline" ? "offline" : "synced" );
-            if( C ) { NayiveUI.toast( E.T( "mail.notSent" ) + " " + E.errText( err ), { ms: 5000 } ); return; }
-            reopen( mine, fields );
-            E.$( "cStatus" ).textContent = E.errText( err );
-            NayiveUI.toast( E.errText( err ), { ms: 4000 } );
-        } );
+            sentOk( mine );
+        }, function ( err ) { sendFailed( mine, fields, err ); } ).finally( function () { E.busy( false ); } );
     }
 
     // Another "From": the draft moves to that account (the old one goes after
@@ -1033,19 +1074,20 @@
     }
 
     // The writer on screen, as it is now (only that one: its words are read
-    // from the fields).
+    // from the fields) - or, given `fl`, one no longer on screen with those
+    // words (a mail sent with no copy anywhere: data-safety I5).
     var whoAsked = null;
-    function localNow( mine )
+    function localNow( mine, fl )
     {
         if( ! mine ) return;
         clearTimeout( mine.ltimer );
         mine.lsince = 0;
-        if( mine !== C || ! pending( mine ) || empty() ) return;
+        if( ! fl && ( mine !== C || ! pending( mine ) || empty() ) ) return;
         // whose is not known yet (a start with no answer): asked, and the
         // copy written again once it is - one with no owner is never offered back
         if( ! S.user && ! whoAsked )
             whoAsked = E.whoami().then( function ( u ) { whoAsked = null; if( u && C === mine ) localSoon( mine ); } );
-        var f = fieldsNow();
+        var f = fl || fieldsNow();
         var rec = {
             app: localKey( mine.lid ), who: S.user || "", at: Date.now(), lid: mine.lid,
             acct: mine.acct, mid: mine.mid, draftRef: mine.draftRef, draftAcct: mine.draftAcct, staleDraft: mine.staleDraft,
@@ -1527,6 +1569,7 @@
         E.$( "composeBtn" ).addEventListener( "click", function () { E.compose( { mode: "new" } ); } );
         E.$( "cSend" ).addEventListener( "click", send );
         E.$( "cDiscard" ).addEventListener( "click", discard );
+        E.$( "cClose" ).addEventListener( "click", function () { E.closeCompose( true ); } );
         E.$( "cAttach" ).addEventListener( "click", function ( e ) { e.stopPropagation(); toggleAttach(); } );
         E.$( "cFileInput" ).addEventListener( "change", function ( e )
         {

@@ -42,60 +42,58 @@
     }
     catch( e ) {}
     </script>
-    <!-- The interface language. First of all: it hides the page until the
-         dictionary is in, and every inline script below may call it. -->
+    <!-- Nayive's first script (old settings, whose page, error reports), then
+         Ayni's language layer: it hides the page until the texts are in, and
+         every inline script below may call Ayni.t(). -->
     <script src="shared/i18n.js"></script>
+    <script src="shared/ayni/ayni-i18n.js" data-dict="shared/i18n/" data-langs="es en pt fr de"></script>
     <title>Apps</title>
     <link rel="icon" type="image/png" href="icons/icon-192.png">
 
-    <!-- Shared colour scheme (shared/theme.js: the account's dark / light schemes) — same as every other Nayive app. -->
+    <!-- Colours and light / dark: Ayni's base (shared/ayni/), with the user's own schemes - same as every other Nayive app. -->
     <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="shared/ayni/ayni-base.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="shared/theme.css">
     <link rel="stylesheet" href="shared/app.css">
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script src="shared/ayni/ayni-icons.js" defer></script>
+    <script src="shared/ayni/ayni-base.js" defer></script>
+    <script src="shared/ayni/ayni-buttons.js" defer></script>
     <script src="shared/ui.js" defer></script>
     <script src="shared/store.js" defer></script>
     <script>
-    NayiveI18n.ready.then( function () {
+    Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
         NayiveUI.firstRun( {
             app:   'launcher',
-            title: NayiveUI.t( 'launcher.introTitle' ),
-            lead:  NayiveUI.t( 'launcher.introLead' ),
+            title: Ayni.t( 'launcher.introTitle' ),
+            lead:  Ayni.t( 'launcher.introLead' ),
             autoShow:    true,
             dismissible: true,
             buttons: [
-                { sel: '#chatBtn',           name: 'Chat', text: NayiveUI.t( 'launcher.introChat' ) },
-                { sel: '#mailBtn',           name: 'eMail', text: NayiveUI.t( 'launcher.introMail' ) },
-                { sel: '#findBtn',           name: NayiveUI.t( 'find.title' ), text: NayiveUI.t( 'launcher.introFind' ) },
+                { sel: '#plannerBtn',        name: 'Planner', text: Ayni.t( 'launcher.introPlanner' ) },
+                { sel: '#chatBtn',           name: 'Chat', text: Ayni.t( 'launcher.introChat' ) },
+                { sel: '#mailBtn',           name: 'eMail', text: Ayni.t( 'launcher.introMail' ) },
+                { sel: '#findBtn',           name: Ayni.t( 'find.title' ), text: Ayni.t( 'launcher.introFind' ), tour: { open: '#moreBtn' } },
                 // The plug of every app, explained once here: it only shows when saving
                 // has trouble, so the app helps can't point at it. Drawn unplugged.
                 { svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 5h2a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-2"></path><rect x="1" y="6" width="6" height="12" rx="2" fill="currentColor" stroke="none"></rect><path d="M7 10h3"></path><path d="M7 14h3"></path></svg>',
-                  name: NayiveUI.t( 'ui.syncName' ), text: NayiveUI.t( 'launcher.introSync' ), tour: false },
-                { section: NayiveUI.t( 'launcher.introSettings' ) },
-                { sel: '#gearBtn',           text: NayiveUI.t( 'launcher.introGear' ) },
-                { sel: '[data-theme-toggle]', name: NayiveUI.t( 'ui.theme' ), text: NayiveUI.t( 'launcher.introTheme' ), tour: { open: '#gearBtn' } },
-                { sel: '#accountBtn',        text: NayiveUI.t( 'launcher.introAccount' ), tour: { open: '#gearBtn' } },
-                { sel: '#installBtn',        text: NayiveUI.t( 'launcher.introInstall' ), tour: { open: '#gearBtn' } },
-                { sel: '#logoutBtn',         text: NayiveUI.t( 'launcher.introLogout' ), tour: { open: '#gearBtn' } }
+                  name: Ayni.t( 'ui.syncName' ), text: Ayni.t( 'launcher.introSync' ), tour: false },
+                { section: Ayni.t( 'launcher.introSettings' ) },
+                { sel: '#gearBtn',           text: Ayni.t( 'launcher.introGear' ) },
+                { sel: '[data-theme-toggle]', name: Ayni.t( 'ui.theme' ), text: Ayni.t( 'launcher.introTheme' ), tour: { open: '#gearBtn' } },
+                { sel: '#accountBtn',        text: Ayni.t( 'launcher.introAccount' ), tour: { open: '#gearBtn' } },
+                { sel: '#installBtn',        text: Ayni.t( 'launcher.introInstall' ), tour: { open: '#gearBtn' } },
+                { sel: '#logoutBtn',         text: Ayni.t( 'launcher.introLogout' ), tour: { open: '#gearBtn' } }
             ],
-            tip: NayiveUI.t( 'launcher.introTip' ),
+            tip: Ayni.t( 'launcher.introTip' ),
             // The guided tour ("Ver el tour" in the card): the app tiles, then the
             // card's buttons. The plug row stays out: it only shows on trouble.
-            tour: [ { sel: '.grid, .apps, #apps', text: NayiveUI.t( 'launcher.tourApps' ) }, 'buttons' ]
+            tour: [ { sel: '.grid, .apps, #apps', text: Ayni.t( 'launcher.tourApps' ) }, 'buttons' ]
         } );
     } );
     </script>
-    <script>try{
-        var _r = document.documentElement;
-        if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) _r.setAttribute( 'data-theme', 'light' );
-        var _d = JSON.parse( localStorage.getItem( 'balata-schemes' ) || 'null' );
-        if( _d && _d.schemes ){
-            var _id = _r.getAttribute( 'data-theme' ) === 'light' ? _d.activeLight : _d.activeDark, _s = null;
-            for( var _i = 0; _i < _d.schemes.length; _i++ ) if( _d.schemes[ _i ].id === _id ) _s = _d.schemes[ _i ];
-            if( _s && _s.tokens ) [ '--bg', '--card', '--card2', '--line', '--accent', '--on-accent' ].forEach( function ( k ){ if( _s.tokens[ k ] ) _r.style.setProperty( k, _s.tokens[ k ] ); } );
-        }
-    }catch( e ){}</script>
-    <script src="shared/theme.js" defer></script>
     <script src="shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL.
@@ -129,7 +127,7 @@
         // hand (ignores the snooze), so installing is never lost after "No mostrar
         // más". Already installed -> the button leaves the DOM, and with it the
         // help list's row for it.
-        NayiveI18n.ready.then( function () {
+        Ayni.i18n.ready.then( function () {
             var b = document.getElementById( 'installBtn' );
             if( ! b ) return;
             if( window.NayiveUI && NayiveUI.isStandalone() ) { b.remove(); return; }
@@ -215,7 +213,7 @@
 
         .tile
         {
-            position: relative;               /* holds Chat's and eMail's unread badges */
+            position: relative;               /* holds Planner's, Chat's and eMail's count badges */
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -248,14 +246,15 @@
         .tile.has-popup         { --pad-top: 16px; }
         #officeBtn              { --icon-base: 36.5px; }
         #recordsBtn             { --icon-base: 38.2px; }
+        #moreBtn                { --icon-base: 37.3px; }
         .tile.has-popup::after  { right: auto; bottom: auto; left: calc(50% + 20px);
                                   top: calc(var(--pad-top) + var(--icon-base)); }
         /* The desktop's menu: a bit bigger than the toolbar's. */
         :root.in-desktop .tile.has-popup::after { border-width: 4px 4px 0; }
 
-        /* The settings row and "Buscar mi móvil" are shared .icon-btn buttons;
-           only their size is local - the row's geometry is built on 42px. */
-        .tools .icon-btn, .find-btn { width: 42px; height: 42px; }
+        /* The settings row's buttons are shared .btn buttons; only their
+           size is local - the row's geometry is built on 42px. */
+        .tools .btn { width: 42px; height: 42px; }
 
         /* Settings row: the gear sits dead-centre on its own. Pressing it rolls the gear
            along to the left border - it spins the whole way - while the other tool
@@ -303,7 +302,7 @@
         .tools.open #gearBtn { transform: translateX(0) translateY(-50%); }   /* at the left edge */
 
         /* Inset ring so .tools' overflow:hidden can't swallow the keyboard focus outline. */
-        .tools .icon-btn:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
+        .tools .btn:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
 
         /* Each extra button is a zero-width slot until the row opens, then it widens in.
            Staggered delays make them arrive (and, on close, leave) one after another. */
@@ -347,7 +346,8 @@
         .tool-extra svg { width: 20px; height: 20px; }
 
         /* Chat's and eMail's unread counts: a disc on the tile's icon, top-right.
-           Chat red, eMail blue - the desktop bar's mail dot colour (2026-10-09). */
+           Chat red, eMail blue - the desktop bar's mail dot colour (2026-10-09).
+           Planner green: today's events still to come (2026-10-28). */
         .chat-badge
         {
             position: absolute; top: 6px; right: calc(50% - 32px);
@@ -357,28 +357,24 @@
             color: var(--on-accent); background: var(--danger); border: 2px solid var(--card);
         }
         #mailBtn .chat-badge { background: var(--busy); }
+        #plannerBtn .chat-badge { background: var(--ok); }
 
 
         /* Office and Records are <button> tiles (they open a popup, not a page). */
         button.tile { border: 0; background: none; font: inherit; cursor: pointer; }
-        #passwordsTile { cursor: pointer; }   /* no href: no app yet, see its click */
 
-        /* "Buscar mi móvil" (2026-09-21, his ask: the panel's bottom-right corner).
-           The settings row's own round .icon-btn, on that row's line at the right
-           edge - not a floating button over the content. Always there since
-           2026-09-23, but disabled - dimmed and deaf, like the shared
-           .icon-btn:disabled - until there is something to find (a phone with the
-           Android app, or a last known position). It steps aside while the
-           settings row is open: the row's buttons need that end of the line. */
-        .find-btn { position: absolute; right: 30px; bottom: 26px; transition: opacity .2s ease, visibility .2s; }
-        .find-btn svg { width: 20px; height: 20px; }
-        .panel:has(.tools.open) .find-btn { opacity: 0; visibility: hidden; }
+        /* A tile with nothing to open yet (Find my devices, until there is a
+           phone or a last known position): dimmed and deaf. */
+        button.tile:disabled { opacity: .4; cursor: default; }
+        button.tile:disabled:hover { background: none; }
+        button.tile:disabled:active { transform: none; }
 
         /* Office's and Records' popups: the shared .top-menu card, laid out as ONE
            row of tiles the size of the grid's (the ids outweigh the phone rule's
-           width: 100%). */
-        #officeMenu, #recordsMenu           { flex-direction: row; gap: 4px; min-width: 0; }
-        #officeMenu .tile, #recordsMenu .tile { width: clamp(88px, 27vw, 110px); }
+           width: 100%). Tools has four: two by two. */
+        #officeMenu, #recordsMenu, #moreMenu  { flex-direction: row; gap: 4px; min-width: 0; }
+        #officeMenu .tile, #recordsMenu .tile, #moreMenu .tile { width: clamp(88px, 27vw, 110px); }
+        #moreMenu { flex-wrap: wrap; justify-content: center; max-width: calc(2 * clamp(88px, 27vw, 110px) + 1 * 4px + 2 * 6px + 2px); }
 
         /* Its dialog, and Mi cuenta's list of phones: rows like .scm-row, not buttons. */
         .find-row
@@ -410,7 +406,6 @@
             :root:not(.in-desktop) .grid     { width: 100%; gap: 8px 4px; justify-items: center; }
             :root:not(.in-desktop) .tile     { width: 100%; max-width: 110px; padding: 12px 4px 10px; }
             :root:not(.in-desktop) .tile.has-popup { --pad-top: 12px; }
-            :root:not(.in-desktop) .find-btn { right: 12px; }
         }
 
         /* ---- eye toggle inside a password field (Mi cuenta dialog; the eye:
@@ -504,28 +499,13 @@
       <div class="panel">
 
         <div class="grid">
-            <!-- 4 rows of 3 (2026-09-24): Drive+Planner+Office / eMail+Chat+Records / Photos+Music+Movies /
-                 Trips+Split+Games -->
-            <a class="tile" href="drive/index.html">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"></path></svg>
-                <span>Drive</span>
-            </a>
-            <a class="tile" href="planner/index.html">
+            <!-- 4 rows of 3 (2026-10-28): Planner+Chat+eMail / Office+Records+Tools / Photos+Music+Movies /
+                 Trips+Drive+Games -->
+            <!-- Calendar and Tasks have no tile of their own (2026-09-06): both open inside Planner. -->
+            <!-- Planner: today's events still to come ride on its icon (2026-10-28). -->
+            <a class="tile" id="plannerBtn" href="planner/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                 <span>Planner</span>
-            </a>
-            <!-- Calendar and Tasks have no tile of their own (2026-09-06): both open inside Planner. -->
-            <!-- Office (2026-09-23): Write, Calc and Text in a popup (#officeMenu, under the grid). -->
-            <button class="tile has-popup" id="officeBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="officeMenu">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
-                <span>Office</span>
-            </button>
-
-            <!-- eMail (2026-09-26): the unread count of every account's Inbox rides on
-                 its icon, like Chat's. The admin has no mail: hidden, slot kept. -->
-            <a class="tile" id="mailBtn" href="email/index.html">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><polyline points="22 6 12 13 2 6"></polyline></svg>
-                <span>eMail</span>
                 <b class="chat-badge" hidden></b>
             </a>
             <!-- Chat (2026-09-19): the unread count rides on its icon. The admin has
@@ -535,10 +515,29 @@
                 <span>Chat</span>
                 <b class="chat-badge" hidden></b>
             </a>
+            <!-- eMail (2026-09-26): the unread count of every account's Inbox rides on
+                 its icon, like Chat's. The admin has no mail: hidden, slot kept. -->
+            <a class="tile" id="mailBtn" href="email/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><polyline points="22 6 12 13 2 6"></polyline></svg>
+                <span>eMail</span>
+                <b class="chat-badge" hidden></b>
+            </a>
+
+            <!-- Office (2026-09-23): Write, Calc and Text in a popup (#officeMenu, under the grid). -->
+            <button class="tile" id="officeBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="officeMenu">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+                <span>Office</span>
+            </button>
             <!-- Records (2026-09-23): Contacts, Bookmarks and Passwords in a popup (#recordsMenu, under the grid). -->
-            <button class="tile has-popup" id="recordsBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="recordsMenu">
+            <button class="tile" id="recordsBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="recordsMenu">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="10" y1="7" x2="14" y2="7"></line><line x1="10" y1="17" x2="14" y2="17"></line></svg>
                 <span>Records</span>
+            </button>
+            <!-- Tools (2026-10-28): Find my devices, Split, Language and Calculator
+                 in a popup (#moreMenu, under the grid). -->
+            <button class="tile" id="moreBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="moreMenu">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+                <span>Tools</span>
             </button>
 
             <a class="tile" href="photos/index.html">
@@ -558,9 +557,9 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="5.5" cy="9" rx="2" ry="2.5"></ellipse><ellipse cx="12" cy="6" rx="2.1" ry="2.6"></ellipse><ellipse cx="18.5" cy="9" rx="2" ry="2.5"></ellipse><path d="M12 12c-4.5 0-7.8 2-7.8 4.4 0 2 2.55 3.3 5.4 2.9 1.35-.2 1.5-.7 2.4-.7s1.05.5 2.4.7c2.85.4 5.4-.9 5.4-2.9C19.8 14 16.5 12 12 12z"></path></svg>
                 <span>Trips</span>
             </a>
-            <a class="tile" href="split/index.html">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 7A7 7 0 1 0 16.5 17"></path><line x1="3" y1="10.2" x2="13.5" y2="10.2"></line><line x1="3" y1="13.8" x2="13.5" y2="13.8"></line></svg>
-                <span>Split</span>
+            <a class="tile" href="drive/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"></path></svg>
+                <span>Drive</span>
             </a>
             <!-- Habits has no tile (2026-09-06): it opens inside Planner. -->
             <a class="tile" href="games/index.html">
@@ -596,25 +595,46 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
                 <span>Bookmarks</span>
             </a>
-            <a class="tile" role="menuitem" id="passwordsTile">
+            <a class="tile" role="menuitem" href="passwords/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="M10.7 12.3 21 2"></path><path d="m15.5 7.5 3 3"></path><path d="m18 5 2.5 2.5"></path></svg>
                 <span>Passwords</span>
             </a>
         </div>
 
+        <!-- Tools' popup (2026-10-28). -->
+        <div class="top-menu" id="moreMenu" role="menu" hidden>
+            <!-- Find my devices: disabled until the script below finds a phone or a last known position. -->
+            <button class="tile" role="menuitem" id="findBtn" type="button" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v5"></path><line x1="9.5" y1="18" x2="9.51" y2="18"></line><circle cx="16.5" cy="14.5" r="3.5"></circle><line x1="19" y1="17" x2="22" y2="20"></line></svg>
+                <span data-i18n="find.title"></span>
+            </button>
+            <a class="tile" role="menuitem" href="split/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 7A7 7 0 1 0 16.5 17"></path><line x1="3" y1="10.2" x2="13.5" y2="10.2"></line><line x1="3" y1="13.8" x2="13.5" y2="13.8"></line></svg>
+                <span>Split</span>
+            </a>
+            <a class="tile" role="menuitem" href="language/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="6.5"></circle><ellipse cx="9" cy="9" rx="2.8" ry="6.5"></ellipse><path d="M2.5 9h13"></path><path d="M15 14h5.5a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3l-2.5 2.2v-2.2a1.5 1.5 0 0 1-1.5-1.5v-3a1.5 1.5 0 0 1 1.5-1.5z"></path></svg>
+                <span>Language</span>
+            </a>
+            <a class="tile" role="menuitem" href="calculator/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"></path></svg>
+                <span>Calculator</span>
+            </a>
+        </div>
+
         <div class="tools" id="tools">
 
-            <button class="icon-btn" id="gearBtn" type="button" aria-expanded="false"
-                    aria-controls="tools" data-i18n-attr="title:ui.settings, aria-label:ui.settings">
+            <button class="btn" id="gearBtn" type="button" aria-expanded="false"
+                    aria-controls="tools" data-i18n-attr="data-tip:ui.settings, aria-label:ui.settings">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="3"></circle>
                     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                 </svg>
             </button>
 
-            <button class="icon-btn tool-extra" data-theme-toggle type="button" data-i18n-attr="title:ui.theme, aria-label:ui.themeToggle"></button>
+            <button class="btn tool-extra" data-theme-toggle type="button" data-i18n-attr="data-tip:ui.theme, aria-label:ui.themeToggle"><span class="icon" data-icon="moon"></span></button>
 
-            <button class="icon-btn tool-extra" id="accountBtn" type="button" data-i18n-attr="title:ui.account, aria-label:ui.account">
+            <button class="btn tool-extra" id="accountBtn" type="button" data-i18n-attr="data-tip:ui.account, aria-label:ui.account">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                     <circle cx="12" cy="7" r="4"></circle>
@@ -622,7 +642,7 @@
             </button>
             <!-- Removed from the DOM by the script below when Nayive already runs
                  installed (so it also drops out of the help list). -->
-            <button class="icon-btn tool-extra" id="installBtn" type="button" data-i18n-attr="title:launcher.installApp, aria-label:launcher.installApp">
+            <button class="btn tool-extra" id="installBtn" type="button" data-i18n-attr="data-tip:launcher.installApp, aria-label:launcher.installApp">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                     <polyline points="7 10 12 15 17 10"></polyline>
@@ -630,17 +650,12 @@
                 </svg>
             </button>
 
-            <a class="icon-btn tool-extra" id="logoutBtn" href="#" data-i18n-attr="title:launcher.logout, aria-label:launcher.logout">
+            <a class="btn tool-extra" id="logoutBtn" href="#" data-i18n-attr="data-tip:launcher.logout, aria-label:launcher.logout">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
             </a>
 
         </div>
 
-        <!-- "Buscar mi móvil": the panel's bottom-right corner; disabled until the
-             script below finds a phone or a last known position. -->
-        <button class="icon-btn find-btn" id="findBtn" type="button" disabled data-i18n-attr="title:find.title, aria-label:find.title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"></rect><line x1="12" y1="17" x2="12.01" y2="17"></line><path d="M20.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M3.5 9a4.5 4.5 0 0 0 0 6"></path></svg>
-        </button>
 
       </div>
 
@@ -653,7 +668,7 @@
                  moves the lone × of the bottom row here, after the palette). -->
             <div class="sheet-header">
                 <h2 data-i18n="ui.account"></h2>
-                <button class="sheet-tool" id="schemesBtn" type="button" data-i18n-attr="title:ui.colorSchemes, aria-label:ui.colorSchemes">
+                <button class="btn sheet-tool" id="schemesBtn" type="button" data-i18n-attr="data-tip:ui.colorSchemes, aria-label:ui.colorSchemes">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="13.5" cy="6.5" r="1.1" fill="currentColor" stroke="none"></circle>
                         <circle cx="17" cy="10.5" r="1.1" fill="currentColor" stroke="none"></circle>
@@ -669,7 +684,7 @@
                  the one thing that needs a ✓, has its own small dialog below. -->
             <div class="scm-assign">
                 <span data-i18n="lock.password"></span>
-                <button id="pwChangeBtn" type="button" class="text-btn ghost small" data-i18n="acct.changePwBtn"></button>
+                <button id="pwChangeBtn" type="button" class="btn text bordered sm" data-i18n="acct.changePwBtn"></button>
             </div>
 
             <label class="scm-assign" for="langSel">
@@ -703,7 +718,7 @@
             <div class="scm-check-row" id="autoThemeWrap">
                 <label class="scm-check" for="autoThemeChk"><span data-i18n="acct.themeAuto"></span></label>
                 <button class="info-dot" data-i18n-attr="data-info:acct.themeAutoInfo"></button>
-                <label class="switch sm"><input type="checkbox" id="autoThemeChk"><span class="track"></span></label>
+                <label class="switch"><input role="switch" type="checkbox" id="autoThemeChk"></label>
             </div>
             <p class="scm-msg" id="autoThemeMsg" hidden></p>
 
@@ -722,7 +737,7 @@
             <div class="scm-check-row" id="pushChkWrap">
                 <label class="scm-check" for="pushChk"><span data-i18n="acct.notifsOff"></span></label>
                 <button class="info-dot" data-i18n-attr="data-info:acct.notifsInfo"></button>
-                <label class="switch sm"><input type="checkbox" id="pushChk"><span class="track"></span></label>
+                <label class="switch"><input role="switch" type="checkbox" id="pushChk"></label>
             </div>
             <!-- "Remind me N min before" lives in Planner › Settings (2026-09-27):
                  only events use it. -->
@@ -735,7 +750,7 @@
             </div>
 
             <div class="sheet-actions">
-                <button id="acctClose" type="button" data-act="close" data-i18n-attr="title:ui.close"></button>
+                <button class="btn" id="acctClose" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
             </div>
         </div>
     </div>
@@ -760,8 +775,8 @@
             <p class="scm-msg" id="pwMsg" hidden></p>
 
             <div class="sheet-actions">
-                <button id="pwCancel" type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
-                <button id="pwSave"   type="button" data-act="primary" data-i18n-attr="title:ui.save"></button>
+                <button class="btn" id="pwCancel" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="pwSave"   type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
             </div>
         </div>
     </div>
@@ -791,9 +806,9 @@
             </div>
             <p class="scm-msg" id="scmAccentMsg" hidden></p>
             <div class="sheet-actions">
-                <button id="scmDelete"  class="sheet-actions-left" type="button" data-act="danger" data-i18n-attr="title:scm.deleteThis"></button>
-                <button id="scmSaveNew" type="button" data-act="secondary:saveas" data-i18n-attr="title:scm.saveAsNew"></button>
-                <button id="scmSave"    type="button" data-act="primary" data-i18n-attr="title:scm.saveChanges"></button>
+                <button id="scmDelete"  class="btn danger sheet-actions-left" type="button" data-i18n-attr="data-tip:scm.deleteThis"><span class="icon" data-icon="trash"></span></button>
+                <button class="btn" id="scmSaveNew" type="button" data-i18n-attr="data-tip:scm.saveAsNew"><span class="icon" data-icon="save-as"></span></button>
+                <button class="btn primary" id="scmSave"    type="button" data-i18n-attr="data-tip:scm.saveChanges"><span class="icon" data-icon="check"></span></button>
             </div>
             <p class="scm-msg" id="scmMsg" hidden></p>
 
@@ -804,7 +819,7 @@
             </div>
 
             <div class="sheet-actions">
-                <button id="scmCloseBtn" type="button" data-act="close" data-i18n-attr="title:ui.close"></button>
+                <button class="btn" id="scmCloseBtn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
             </div>
         </div>
     </div>
@@ -827,7 +842,7 @@
                 <p class="find-note" data-i18n="find.iphone"></p>
             </div>
             <div class="sheet-actions">
-                <button id="findClose" type="button" data-act="close" data-i18n-attr="title:ui.close"></button>
+                <button class="btn" id="findClose" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
             </div>
         </div>
     </div>
@@ -849,8 +864,8 @@
                 try { if( sessionStorage.getItem( 'nayive-must-set' ) === '1' ) return; } catch( e ) {}
                 if( ! fine.matches || ! window.NayiveUI || location.search || location.hash ||
                     nayiveDeskMode() !== 'auto' || ! nayiveWantDesk( 'auto' ) ) return;
-                NayiveUI.undoToast( NayiveUI.t( 'desktop.toDeskAsk' ), function () { location.replace( 'desktop/' ); },
-                                    { label: NayiveUI.t( 'desktop.toDeskGo' ), ms: 10000 } );
+                NayiveUI.undoToast( Ayni.t( 'desktop.toDeskAsk' ), function () { location.replace( 'desktop/' ); },
+                                    { label: Ayni.t( 'desktop.toDeskGo' ), ms: 10000 } );
             }
             if( fine.addEventListener ) fine.addEventListener( 'change', onChange );
         } )();
@@ -858,8 +873,13 @@
         // The Chat and eMail tiles' unread counts (Chat: all chats not muted;
         // eMail: every account's Inbox), now and whenever the launcher comes
         // back on screen. The admin has neither: the tile goes invisible but
-        // keeps its slot, so the grid does not shift.
-        [ [ 'chatBtn', '/api/chat/unread' ], [ 'mailBtn', '/api/mail/unread' ] ].forEach( function ( tile )
+        // keeps its slot, so the grid does not shift. Planner's is today's
+        // events still to come on this device's clock (2026-10-28): it also
+        // asks every minute, as events go by; the admin just gets 0.
+        var zone = '';
+        try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch( e ) {}
+        [ [ 'chatBtn', '/api/chat/unread' ], [ 'mailBtn', '/api/mail/unread' ],
+          [ 'plannerBtn', '/api/calendar/today?tz=' + encodeURIComponent( zone ) ] ].forEach( function ( tile )
         {
             var btn = document.getElementById( tile[ 0 ] );
             if( ! btn ) return;
@@ -890,6 +910,11 @@
             }
             refresh();
             document.addEventListener( 'visibilitychange', function () { if( ! document.hidden ) refresh(); } );
+            if( tile[ 0 ] === 'plannerBtn' )
+            {
+                setInterval( function () { if( ! document.hidden ) refresh(); }, 60000 );
+                return;
+            }
             // a push while the launcher is on screen (sw.js: { chat: "new" } / { mail: "new" })
             var kind = tile[ 0 ] === 'mailBtn' ? 'mail' : 'chat';
             if( navigator.serviceWorker )
@@ -898,31 +923,35 @@
     </script>
 
     <script>
-        // Office's and Records' popups (2026-09-23): Write / Calc / Text and
-        // Contacts / Bookmarks / Passwords, on the shared "more" menu
+        // Office's, Records' and Tools' popups (2026-09-23; Tools 2026-10-28):
+        // Write / Calc / Text, Contacts / Bookmarks / Passwords and Find my
+        // devices / Split / Language / Calculator, on the shared "more" menu
         // (NayiveUI.wireMenu). Two clicks never reach that one's closing, so
         // they close a card here, on the window, in the capture phase (before
         // anybody can stop them): a pick in the card - it closes itself on a
         // <button> only, these are links, and the desktop's menu
         // (desktop/index.html) stops link clicks on the document - and a press
         // on the OTHER popup's tile, whose button stops its own click.
-        NayiveI18n.ready.then( function ()
+        Ayni.i18n.ready.then( function ()
         {
             if( ! window.NayiveUI ) return;
-            var pops = [ [ 'officeBtn', 'officeMenu' ], [ 'recordsBtn', 'recordsMenu' ] ].map( function ( ids )
+            var pops = [ [ 'officeBtn', 'officeMenu' ], [ 'recordsBtn', 'recordsMenu' ], [ 'moreBtn', 'moreMenu' ] ].map( function ( ids )
             {
                 return { btn:  document.getElementById( ids[ 0 ] ),
                          card: document.getElementById( ids[ 1 ] ),
                          menu: NayiveUI.wireMenu( { btn: ids[ 0 ], menu: ids[ 1 ] } ) };
             } ).filter( function ( p ) { return p.menu; } );
 
-            // Passwords: no app yet, so a note instead. No href (the desktop
-            // would open it as an app), so it closes its card itself.
-            var pwTile = document.getElementById( 'passwordsTile' );
-            if( pwTile ) pwTile.addEventListener( 'click', function ()
+            // A card that would run off the bottom (Tools, on the last row) opens
+            // above its tile instead. Runs after wireMenu's own click has placed it.
+            pops.forEach( function ( p )
             {
-                pops.forEach( function ( p ) { p.menu.close(); } );
-                NayiveUI.alert( { title: NayiveUI.t( 'launcher.notYet' ) } );
+                p.btn.addEventListener( 'click', function ()
+                {
+                    if( p.card.hidden ) return;
+                    var b = p.btn.getBoundingClientRect(), r = p.card.getBoundingClientRect();
+                    if( r.bottom > window.innerHeight - 6 && b.top - r.height - 4 >= 6 ) p.card.style.top = ( b.top - r.height - 4 ) + 'px';
+                } );
             } );
 
             window.addEventListener( 'click', function ( e )
@@ -1003,7 +1032,7 @@
             } );
 
             /* ---- "Esquemas de color" ---------------------------------- */
-            var KEY   = 'balata-schemes';
+            var KEY   = 'ayni-schemes';
             var NKEYS = [ '--bg', '--card', '--card2', '--line', '--accent' ];   // what the dialog edits
             // The highlight colour: theme.css's accent per mode, used when a scheme has
             // none of its own. Its text colour (--on-accent) is never typed - onAccent()
@@ -1150,8 +1179,7 @@
             // Paint the draft on :root so the whole launcher previews it live.
             function previewDraft()
             {
-                if( draft.kind === 'light' ) root.setAttribute( 'data-theme', 'light' );
-                else                         root.removeAttribute( 'data-theme' );
+                root.setAttribute( 'data-theme', draft.kind === 'light' ? 'light' : 'dark' );
                 NKEYS.forEach( function ( k ){ root.style.setProperty( k, draft.tokens[ k ] ); } );
                 root.style.setProperty( '--on-accent', onAccent( draft.tokens[ '--accent' ] ) );
             }
@@ -1171,7 +1199,7 @@
                     b.innerHTML =
                         '<span class="scm-sw">' + NKEYS.map( function ( k ){ return '<i style="background:' + st[ k ] + '"></i>'; } ).join( '' ) + '</span>' +
                         '<span class="scm-name"></span>' +
-                        '<span class="scm-kind">' + ( s.kind === 'dark' ? NayiveUI.t( 'scm.darkWord' ) : NayiveUI.t( 'scm.lightWord' ) ) + '</span>' +
+                        '<span class="scm-kind">' + ( s.kind === 'dark' ? Ayni.t( 'scm.darkWord' ) : Ayni.t( 'scm.lightWord' ) ) + '</span>' +
                         ( isActive ? '<span class="scm-badge" data-i18n="scm.activeBadge"></span>' : '' );
                     b.querySelector( '.scm-name' ).textContent = s.name;
                     listEl.appendChild( b );
@@ -1182,7 +1210,7 @@
                 // Its data-i18n goes, so a later translation pass keeps the name.
                 var titleSpan = titleEl.querySelector( 'span' );
                 titleSpan.removeAttribute( 'data-i18n' );
-                titleSpan.textContent = NayiveUI.tf( 'scm.editing', { name: draft.name || NayiveUI.t( 'scm.unnamed' ) } );
+                titleSpan.textContent = Ayni.tf( 'scm.editing', { name: draft.name || Ayni.t( 'scm.unnamed' ) } );
                 kindDark.setAttribute( 'aria-pressed', draft.kind === 'dark'  ? 'true' : 'false' );
                 kindLite.setAttribute( 'aria-pressed', draft.kind === 'light' ? 'true' : 'false' );
                 kindDark.classList.toggle( 'is-active', draft.kind === 'dark' );
@@ -1194,14 +1222,14 @@
                     if( document.activeElement !== hex[ k ] ) { hex[ k ].value = draft.tokens[ k ].toUpperCase(); hex[ k ].classList.remove( 'bad' ); }
                 } );
 
-                delBtn.disabled = countKind( find( editingId ).kind, editingId ) === 0;
+                delBtn.ariaDisabled = countKind( find( editingId ).kind, editingId ) === 0;
 
                 // Warn (never block) when the highlight is hard to see on the scheme's tones.
                 var worst = Math.min( contrast( draft.tokens[ '--accent' ], draft.tokens[ '--bg' ] ),
                                       contrast( draft.tokens[ '--accent' ], draft.tokens[ '--card' ] ),
                                       contrast( draft.tokens[ '--accent' ], draft.tokens[ '--card2' ] ) );
                 accentMsg.hidden = worst >= LOW_ACCENT;
-                if( ! accentMsg.hidden ) accentMsg.textContent = NayiveUI.tf( 'scm.accentLow', { ratio: worst.toFixed( 1 ) } );
+                if( ! accentMsg.hidden ) accentMsg.textContent = Ayni.tf( 'scm.accentLow', { ratio: worst.toFixed( 1 ) } );
 
                 fillSelect( selDark, 'dark', data.activeDark );
                 fillSelect( selLite, 'light', data.activeLight );
@@ -1238,7 +1266,7 @@
                 if( scmBack.classList.contains( 'open' ) ) return;
                 NKEYS.forEach( function ( k ){ root.style.removeProperty( k ); } );
                 root.style.removeProperty( '--on-accent' );
-                if( window.BalataTheme ) window.BalataTheme.refresh();
+                if( window.Ayni ) Ayni.setTheme( Ayni.theme.mode() );   // re-applies the stored schemes
             } ).observe( scmBack, { attributes: true, attributeFilter: [ 'class' ] } );
 
             openBtn.addEventListener( 'click', openDialog );
@@ -1265,7 +1293,7 @@
                     var savedKind = find( editingId ).kind;
                     if( savedKind !== k && countKind( savedKind, editingId ) === 0 )
                     {
-                        showMsg( NayiveUI.tf( 'scm.needOne', { kind: savedKind === 'dark' ? NayiveUI.t( 'scm.darkWord' ) : NayiveUI.t( 'scm.lightWord' ) } ) );
+                        showMsg( Ayni.tf( 'scm.needOne', { kind: savedKind === 'dark' ? Ayni.t( 'scm.darkWord' ) : Ayni.t( 'scm.lightWord' ) } ) );
                         return;
                     }
                     // Keep the default accent right for the new mode; a chosen colour stays.
@@ -1296,7 +1324,7 @@
                 s.tokens = toStore( draft.tokens );
                 reconcile();
                 loadDraft();
-                persist(); clearMsg(); flash( NayiveUI.t( 'ui.saved' ) ); render();
+                persist(); clearMsg(); flash( Ayni.t( 'ui.saved' ) ); render();
             } );
 
             newBtn.addEventListener( 'click', function ()
@@ -1304,18 +1332,18 @@
                 var id = 's' + Date.now().toString( 36 ) + Math.random().toString( 36 ).slice( 2, 5 );
                 data.schemes.push( {
                     id: id,
-                    name: draft.name.trim() || NayiveUI.t( 'scm.newScheme' ),
+                    name: draft.name.trim() || Ayni.t( 'scm.newScheme' ),
                     kind: draft.kind,
                     tokens: toStore( draft.tokens )
                 } );
                 editingId = id;
                 loadDraft();
-                persist(); clearMsg(); flash( NayiveUI.t( 'scm.created' ) ); render();
+                persist(); clearMsg(); flash( Ayni.t( 'scm.created' ) ); render();
             } );
 
             delBtn.addEventListener( 'click', function ()
             {
-                if( delBtn.disabled ) return;
+                if( delBtn.ariaDisabled === 'true' ) return;
                 var s = find( editingId );
                 var at = data.schemes.indexOf( s ), wasDark = data.activeDark === s.id, wasLight = data.activeLight === s.id;
                 data.schemes = data.schemes.filter( function ( x ){ return x.id !== s.id; } );
@@ -1324,14 +1352,14 @@
                 loadDraft();
                 persist(); clearMsg(); render();
                 // Undo: the scheme back in its place, and in use again if it was.
-                NayiveUI.undoToast( NayiveUI.t( 'ui.toast.deleted' ), function ()
+                NayiveUI.undoToast( Ayni.t( 'ui.toast.deleted' ), function ()
                 {
                     if( find( s.id ) ) return;
                     data.schemes.splice( Math.min( at, data.schemes.length ), 0, s );
                     if( wasDark )  data.activeDark  = s.id;
                     if( wasLight ) data.activeLight = s.id;
                     persist();
-                    if( ! scmBack.classList.contains( 'open' ) ) { if( window.BalataTheme ) window.BalataTheme.refresh(); return; }
+                    if( ! scmBack.classList.contains( 'open' ) ) { if( window.Ayni ) Ayni.setTheme( Ayni.theme.mode() ); return; }   // re-applies the stored schemes
                     editingId = s.id;
                     loadDraft(); clearMsg(); render();
                 } );
@@ -1387,15 +1415,15 @@
             // Interface language. It belongs to the ACCOUNT (POST /api/lang), so
             // a choice made on the phone reaches the PC; shared/i18n.js keeps a
             // copy on this device to paint with, and reloads so every string
-            // re-renders. See NayiveI18n.adopt and server/go/users.go UserLang.
-            if( langSel && window.NayiveI18n )
+            // re-renders. See Ayni.i18n.setLang and server/go/users.go UserLang.
+            if( langSel && window.Ayni )
             {
                 // The CHOICE, not the language in use: with nothing stored the
                 // box sits on "por defecto" even though the UI is in some
                 // language. Picking it again clears the choice. By the time the
                 // dialog opens the boot probe has already copied the account's
                 // language down here, so this shows the account's answer.
-                langSel.value = NayiveI18n.saved() || '';
+                langSel.value = Ayni.i18n.saved() || '';
             }
 
             // The SERVER first (NayiveUI.autoSave: the box is off while it
@@ -1420,7 +1448,7 @@
                 // is reloading after all - it would pop the dialog open on some
                 // unrelated reload later.
                 try { sessionStorage.setItem( REOPEN_KEY, '1' ); } catch ( e ) {}
-                if( ! NayiveI18n.setLang( code ) )
+                if( ! Ayni.i18n.setLang( code ) )
                     try { sessionStorage.removeItem( REOPEN_KEY ); } catch ( e ) {}
             }
 
@@ -1436,7 +1464,7 @@
 
                 // Language and time zone save themselves (shared/ui.js is
                 // deferred: here it is there).
-                if( langSel && window.NayiveI18n )
+                if( langSel && window.Ayni )
                     NayiveUI.autoSave( langSel, saveLang, { msg: langMsg, fail: 'acct.langFailed', done: langSaved } );
                 tzCtl = NayiveUI.autoSave( tzSel, saveTz, { msg: tzMsg, fail: 'acct.tzFailed', done: tzDone } );
             } );
@@ -1520,32 +1548,32 @@
             // ticking the box is - so it is asked for here and nowhere else.
             function autoState()
             {
-                if( ! window.BalataTheme || ! window.BalataTheme.isAuto() ) return '';
-                return window.BalataTheme.hasGeo() ? 'acct.themeAutoGeo' : 'acct.themeAutoNoGeo';
+                if( ! window.Ayni || Ayni.theme.mode() !== 'sun' ) return '';
+                return Ayni.theme.hasPlace() ? 'acct.themeAutoGeo' : 'acct.themeAutoNoGeo';
             }
 
             function askGeo()
             {
                 if( ! navigator.geolocation )
                 {
-                    say( autoMsg, NayiveUI.t( 'acct.themeAutoNoGeo' ), false );
+                    say( autoMsg, Ayni.t( 'acct.themeAutoNoGeo' ), false );
                     return;
                 }
 
-                say( autoMsg, NayiveUI.t( 'acct.themeAutoLocating' ), true );
+                say( autoMsg, Ayni.t( 'acct.themeAutoLocating' ), true );
 
                 navigator.geolocation.getCurrentPosition(
                     function ( pos )
                     {
-                        window.BalataTheme.setGeo( pos.coords.latitude, pos.coords.longitude );
-                        say( autoMsg, NayiveUI.t( 'acct.themeAutoGeo' ), true );
+                        Ayni.theme.setPlace( pos.coords.latitude, pos.coords.longitude );
+                        say( autoMsg, Ayni.t( 'acct.themeAutoGeo' ), true );
                     },
                     function ()
                     {
                         // Refused, or the device simply does not know where it
                         // is. Auto mode stays ON: theme.js falls back to the
                         // sun of the time zone's main city.
-                        say( autoMsg, NayiveUI.t( 'acct.themeAutoNoGeo' ), false );
+                        say( autoMsg, Ayni.t( 'acct.themeAutoNoGeo' ), false );
                     },
                     { timeout: 10000, maximumAge: 24 * 3600 * 1000 } );
             }
@@ -1563,52 +1591,40 @@
                     if( st.state !== 'granted' ) return;
 
                     navigator.geolocation.getCurrentPosition(
-                        function ( pos ) { window.BalataTheme.setGeo( pos.coords.latitude, pos.coords.longitude ); },
+                        function ( pos ) { Ayni.theme.setPlace( pos.coords.latitude, pos.coords.longitude ); },
                         function () { /* keep what we had */ },
                         { timeout: 10000, maximumAge: 6 * 3600 * 1000 } );
                 } ).catch( function () { /* browser without the geolocation permission name */ } );
             }
 
-            // The first time this device opens the dialog, automatic starts ON
-            // (his call, 2026-09-19). No location prompt for that: it needs a
-            // tick on the box, so until then the time zone's sun drives it.
-            var AUTO_OFFERED = 'balata-theme-auto-offered';
-
+            // Automatic (Ayni's Sun mode) is only ever turned on by its tick: new
+            // users follow the system's light / dark (his call, 2026-10-28, which
+            // replaced "automatic starts ON the first time", 2026-09-19).
             function loadAuto()
             {
-                if( ! window.BalataTheme ) { autoWrap().hidden = true; return; }
+                if( ! window.Ayni ) { autoWrap().hidden = true; return; }
 
-                var first = false;
-                try
-                {
-                    first = localStorage.getItem( AUTO_OFFERED ) !== '1';
-                    localStorage.setItem( AUTO_OFFERED, '1' );
-                }
-                catch ( e ) { /* no storage: leave the mode as it is */ }
-                if( first && ! window.BalataTheme.isAuto() ) window.BalataTheme.setAuto( true );
-
-                var on = window.BalataTheme.isAuto();
+                var on = Ayni.theme.mode() === 'sun';
                 autoChk.checked = on;
 
-                // Turned on by us just now: the time-zone fallback is the
-                // expected state, not a failure, so it is not shown in red.
                 var key = autoState();
-                say( autoMsg, key ? NayiveUI.t( key ) : '', key === 'acct.themeAutoGeo' || first );
+                say( autoMsg, key ? Ayni.t( key ) : '', key === 'acct.themeAutoGeo' );
 
-                if( on && window.BalataTheme.hasGeo() ) refreshGeoQuietly();
+                if( on && Ayni.theme.hasPlace() ) refreshGeoQuietly();
             }
 
             function autoWrap() { return document.getElementById( 'autoThemeWrap' ); }
 
             autoChk.addEventListener( 'change', function ()
             {
-                if( ! window.BalataTheme ) return;
+                if( ! window.Ayni ) return;
 
-                if( ! autoChk.checked ) { window.BalataTheme.setAuto( false ); say( autoMsg, '' ); return; }
+                // Off keeps what shows now, as a choice by hand.
+                if( ! autoChk.checked ) { Ayni.setTheme( Ayni.isDark() ? 'dark' : 'light' ); say( autoMsg, '' ); return; }
 
                 // On FIRST, so the theme is already following the fallback
                 // window even if the location request is refused or times out.
-                window.BalataTheme.setAuto( true );
+                Ayni.setTheme( 'sun' );
                 askGeo();
             } );
 
@@ -1644,7 +1660,7 @@
                     // No window_minutes: Planner › Settings owns it; the server keeps it.
                     // tz: a floating event rings at THIS device's clock (reminders.go).
                     body: JSON.stringify( { subscription:    sub.toJSON(),
-                                            lang:  ( NayiveUI.lang ? NayiveUI.lang() : 'es' ),
+                                            lang:  Ayni.i18n.lang(),
                                             label: navigator.platform || '',
                                             tz:    NayiveUI.viewerTz() } )
                 } );
@@ -1672,7 +1688,7 @@
                     if( ! sub ) { localStorage.removeItem( PUSH_NOTE ); return; }
                     localStorage.setItem( PUSH_NOTE, JSON.stringify( {
                         ep:   sub.endpoint,
-                        lang: NayiveUI.lang ? NayiveUI.lang() : 'es',
+                        lang: Ayni.i18n.lang(),
                         tz:   NayiveUI.viewerTz(),
                         who:  ( window.NayiveStore && NayiveStore.me ) || '' } ) );
                 }
@@ -1693,7 +1709,7 @@
                 {
                     var note = JSON.parse( localStorage.getItem( PUSH_NOTE ) || 'null' );
                     var who  = ( window.NayiveStore && NayiveStore.me ) || '';
-                    var lang = NayiveUI.lang ? NayiveUI.lang() : 'es';
+                    var lang = Ayni.i18n.lang();
                     var reg  = await navigator.serviceWorker.getRegistration();
                     if( ! reg || ! reg.pushManager ) return;
                     var sub  = await reg.pushManager.getSubscription();
@@ -1732,7 +1748,7 @@
                     if( ! first.ok )
                     {
                         pushState.vapid = '';
-                        pushState.why   = NayiveUI.t( 'ui.loadFailed' );
+                        pushState.why   = Ayni.t( 'ui.loadFailed' );
                         say( pushMsgEl, pushState.why );
                         renderPush();
                         return;
@@ -1749,7 +1765,7 @@
                         try { await sub.unsubscribe(); } catch ( e ) {}
                         pushState.sub = null;
                         pushState.subscribed = false;
-                        say( pushMsgEl, NayiveUI.t( 'acct.notifsStale' ) );
+                        say( pushMsgEl, Ayni.t( 'acct.notifsStale' ) );
                     }
                     else
                     {
@@ -1775,7 +1791,7 @@
                 if( NayiveUI.installMode && NayiveUI.installMode() === 'ios' )
                 {
                     if( pushWrap ) pushWrap.hidden = true;
-                    say( pushMsgEl, NayiveUI.t( 'acct.notifsIos' ) );
+                    say( pushMsgEl, Ayni.t( 'acct.notifsIos' ) );
                     return;
                 }
 
@@ -1783,14 +1799,14 @@
                 {
                     // Hide the whole label - hiding only the box leaves its text stranded.
                     if( pushWrap ) pushWrap.hidden = true;
-                    say( pushMsgEl, NayiveUI.t( 'acct.notifsUnsupported' ) );
+                    say( pushMsgEl, Ayni.t( 'acct.notifsUnsupported' ) );
                     return;
                 }
                 var blocked = ( Notification.permission === 'denied' );
                 if( pushWrap ) pushWrap.hidden = false;
                 pushChk.disabled = blocked;
                 pushChk.checked  = pushState.subscribed;
-                if( blocked ) say( pushMsgEl, NayiveUI.t( 'acct.notifsBlocked' ) );
+                if( blocked ) say( pushMsgEl, Ayni.t( 'acct.notifsBlocked' ) );
             }
 
             // The click handler. The order of the first steps is NOT negotiable.
@@ -1805,17 +1821,17 @@
                 // returns "ios" only when we are on iOS and NOT installed.
                 if( NayiveUI.installMode && NayiveUI.installMode() === 'ios' )
                 {
-                    say( pushMsgEl, NayiveUI.t( 'acct.notifsIos' ) );
+                    say( pushMsgEl, Ayni.t( 'acct.notifsIos' ) );
                     renderPush();
                     if( NayiveUI.offerInstall ) NayiveUI.offerInstall( { manual: true } );
                     return;
                 }
                 if( ! pushState.supported )
-                    { say( pushMsgEl, NayiveUI.t( 'acct.notifsUnsupported' ) ); renderPush(); return; }
+                    { say( pushMsgEl, Ayni.t( 'acct.notifsUnsupported' ) ); renderPush(); return; }
                 if( Notification.permission === 'denied' )
                     { renderPush(); return; }
                 if( ! pushState.vapid )
-                    { say( pushMsgEl, pushState.why || NayiveUI.t( 'ui.saveFailed' ) ); renderPush(); return; }
+                    { say( pushMsgEl, pushState.why || Ayni.t( 'ui.saveFailed' ) ); renderPush(); return; }
 
                 // requestPermission MUST be the first await in this handler. Any
                 // await before it spends the user activation and the browser
@@ -1835,7 +1851,7 @@
                     {
                         try { await sub.unsubscribe(); } catch ( e ) {}   // leave no orphan
                         pushState.subscribed = false;
-                        say( pushMsgEl, NayiveUI.t( 'ui.saveFailed' ) );
+                        say( pushMsgEl, Ayni.t( 'ui.saveFailed' ) );
                     }
                 }
                 // Say what the browser said: "No se pudo guardar." alone left
@@ -1843,7 +1859,7 @@
                 catch ( e )
                 {
                     var why = e && e.name ? ' (' + e.name + ( e.message ? ': ' + e.message : '' ) + ')' : '';
-                    say( pushMsgEl, NayiveUI.t( 'ui.saveFailed' ) + why );
+                    say( pushMsgEl, Ayni.t( 'ui.saveFailed' ) + why );
                 }
                 renderPush();
             }
@@ -1921,11 +1937,11 @@
             {
                 mandatory = !! must;
                 curEl.value = ''; newEl.value = '';
-                say( msgEl, mandatory ? NayiveUI.t( 'acct.mustSet' ) : '', mandatory );
+                say( msgEl, mandatory ? Ayni.t( 'acct.mustSet' ) : '', mandatory );
                 // The key too: shared/i18n.js may paint the page after this.
                 var title = document.getElementById( 'pwChangeTitle' );
                 title.setAttribute( 'data-i18n', mandatory ? 'acct.createPw' : 'acct.changePw' );
-                title.textContent = NayiveUI.t( title.getAttribute( 'data-i18n' ) );
+                title.textContent = Ayni.t( title.getAttribute( 'data-i18n' ) );
                 curWrap.hidden = mandatory;
                 cancel.hidden  = mandatory;
 
@@ -1939,8 +1955,8 @@
                 // Opened at boot the page may still be hidden until its words
                 // are in (shared/i18n.js), and a hidden field takes no focus:
                 // give it once the page shows.
-                if( document.activeElement !== el && window.NayiveI18n && NayiveI18n.ready )
-                    NayiveI18n.ready.then( function ()
+                if( document.activeElement !== el && window.Ayni )
+                    Ayni.i18n.ready.then( function ()
                     {
                         if( sheetBack.classList.contains( 'open' ) && ! sheetBack.contains( document.activeElement ) )
                             el.focus();
@@ -2022,7 +2038,7 @@
                 open( { focus: pushChk } );
                 // After open(): loadPush clears this line on its way in, but it
                 // clears it synchronously, before its first await.
-                say( pushMsgEl, NayiveUI.t( 'acct.notifsAsk' ), true );
+                say( pushMsgEl, Ayni.t( 'acct.notifsAsk' ), true );
             }
 
             // ---- after each login: are notifications on HERE? ------------//
@@ -2075,10 +2091,10 @@
                         clearJustIn();
                         if( pushState.subscribed ) return;
                         var go = await NayiveUI.confirm( {
-                            title:   NayiveUI.t( 'acct.pushOffTitle' ),
-                            body:    NayiveUI.t( 'acct.pushOffBody' ),
-                            confirm: NayiveUI.t( 'ui.account' ),
-                            cancel:  NayiveUI.t( 'ui.notNow' ) } );
+                            title:   Ayni.t( 'acct.pushOffTitle' ),
+                            body:    Ayni.t( 'acct.pushOffBody' ),
+                            confirm: Ayni.t( 'ui.account' ),
+                            cancel:  Ayni.t( 'ui.notNow' ) } );
                         if( go ) open( { focus: pushChk } );
                     } );
                 } );
@@ -2101,14 +2117,14 @@
             saveBtn.addEventListener( 'click', async function ()
             {
                 // The only ✓ left in My account: everything else saves itself.
-                saveBtn.disabled = true;
+                Ayni.setBusy( saveBtn, Ayni.t( 'ui.sync.saving' ) );
 
                 if( ! mandatory && ! curEl.value )
-                    { say( msgEl, NayiveUI.t( 'acct.fillBoth' ) ); saveBtn.disabled = false; return; }
+                    { say( msgEl, Ayni.t( 'acct.fillBoth' ) ); Ayni.setBusy( saveBtn, false ); return; }
                 if( ! newEl.value )
-                    { say( msgEl, mandatory ? NayiveUI.t( 'acct.typePassword' ) : NayiveUI.t( 'acct.fillBoth' ) ); saveBtn.disabled = false; return; }
+                    { say( msgEl, mandatory ? Ayni.t( 'acct.typePassword' ) : Ayni.t( 'acct.fillBoth' ) ); Ayni.setBusy( saveBtn, false ); return; }
                 if( newEl.value.length < 4 )
-                    { say( msgEl, NayiveUI.t( 'acct.tooShort' ) ); saveBtn.disabled = false; return; }
+                    { say( msgEl, Ayni.t( 'acct.tooShort' ) ); Ayni.setBusy( saveBtn, false ); return; }
                 try
                 {
                     var res = await fetch( '/api/password',
@@ -2122,12 +2138,12 @@
                     if( ! res.ok )
                     {
                         // The server's own words are Spanish: say it in the user's language.
-                        say( msgEl, NayiveUI.t( res.status === 401 ? 'acct.curWrong'
+                        say( msgEl, Ayni.t( res.status === 401 ? 'acct.curWrong'
                                        : res.status === 400 ? 'acct.tooShort' : 'acct.changeFailed' ) );
-                        saveBtn.disabled = false;
+                        Ayni.setBusy( saveBtn, false );
                         return;
                     }
-                    if( window.NayiveUI ) NayiveUI.toast( mandatory ? NayiveUI.t( 'acct.created' ) : NayiveUI.t( 'acct.updated' ) );
+                    if( window.NayiveUI ) NayiveUI.toast( mandatory ? Ayni.t( 'acct.created' ) : Ayni.t( 'acct.updated' ) );
                     // The server dropped every push device of the account (a
                     // possible intruder's too): register this one again now.
                     pushNote( null );
@@ -2140,9 +2156,9 @@
                     curWrap.hidden = false;
                     cancel.hidden  = false;
                 }
-                catch ( e ) { say( msgEl, NayiveUI.t( 'login.noServer' ) ); saveBtn.disabled = false; return; }
+                catch ( e ) { say( msgEl, Ayni.t( 'login.noServer' ) ); Ayni.setBusy( saveBtn, false ); return; }
 
-                saveBtn.disabled = false;
+                Ayni.setBusy( saveBtn, false );
                 close();
             } );
         } )();
@@ -2180,14 +2196,16 @@
                 // The ACCOUNT's language beats this device's, so a language
                 // picked on the phone lands here. adopt() reloads when it
                 // changes anything - then there is nothing else worth doing on
-                // a page that is on its way out. See NayiveI18n.adopt.
-                if( window.NayiveI18n && NayiveI18n.adopt && NayiveI18n.adopt( me.lang ) ) return;
+                // a page that is on its way out. See Ayni.i18n.setLang.
+                if( window.Ayni && Ayni.i18n.setLang( me.lang ) ) return;
 
                 // What an editor closed meanwhile left parked on this device
-                // goes up now (shared/store.js PARKED SAVES).
-                if( window.NayiveStore && NayiveStore.sendLeft ) NayiveStore.sendLeft();
+                // goes up now (shared/store.js PARKED SAVES; deferred: whoami
+                // can answer before it has run).
+                var sendLeft = function () { if( window.NayiveStore && NayiveStore.sendLeft ) NayiveStore.sendLeft(); };
+                if( window.NayiveStore ) sendLeft(); else document.addEventListener( 'DOMContentLoaded', sendLeft );
 
-                document.getElementById( 'logoutBtn' ).title = NayiveUI.tf( 'launcher.logoutUser', { user: me.user } );
+                Ayni.setTip( document.getElementById( 'logoutBtn' ), Ayni.tf( 'launcher.logoutUser', { user: me.user } ) );
 
                 // No timezone on this account yet: adopt THIS browser's, once.
                 // The browser knows the real answer (the OS zone) - an IP lookup
@@ -2266,8 +2284,8 @@
         // 4. Mi cuenta's list of phones (NayiveDevices.loadAccount).
         ( function ()
         {
-            function T( k )     { return window.NayiveUI ? NayiveUI.t( k ) : k; }
-            function TF( k, o ) { return window.NayiveUI ? NayiveUI.tf( k, o ) : k; }
+            function T( k )     { return window.NayiveUI ? Ayni.t( k ) : k; }
+            function TF( k, o ) { return window.NayiveUI ? Ayni.tf( k, o ) : k; }
             function esc( v )   { return window.NayiveUI ? NayiveUI.escapeHtml( String( v ) ) : String( v ); }
             function toast( m, ms ) { if( window.NayiveUI ) NayiveUI.toast( m, { ms: ms || 2500 } ); }
             function get( k )    { try { return localStorage.getItem( k ); } catch ( e ) { return null; } }
@@ -2429,13 +2447,13 @@
             function mapLink( p )
             {
                 var u = 'https://www.openstreetmap.org/?mlat=' + p.lat + '&mlon=' + p.lon + '#map=17/' + p.lat + '/' + p.lon;
-                return '<a class="icon-btn" target="_blank" rel="noopener noreferrer" href="' + esc( u ) +
-                       '" title="' + esc( T( 'find.map' ) ) + '" aria-label="' + esc( T( 'find.map' ) ) + '">' + ICON.map + '</a>';
+                return '<a class="btn" target="_blank" rel="noopener noreferrer" href="' + esc( u ) +
+                       '" data-tip="' + esc( T( 'find.map' ) ) + '" aria-label="' + esc( T( 'find.map' ) ) + '">' + ICON.map + '</a>';
             }
             function btn( act, id, icon, label, danger )
             {
-                return '<button type="button" class="icon-btn' + ( danger ? ' danger' : '' ) + '" data-act-find="' + act +
-                       '" data-id="' + esc( id ) + '" title="' + esc( label ) + '" aria-label="' + esc( label ) + '">' + icon + '</button>';
+                return '<button type="button" class="btn' + ( danger ? ' danger' : '' ) + '" data-act-find="' + act +
+                       '" data-id="' + esc( id ) + '" data-tip="' + esc( label ) + '" aria-label="' + esc( label ) + '">' + icon + '</button>';
             }
             function row( title, lines, actions )
             {
@@ -2557,7 +2575,7 @@
                 var b = e.target.closest( '[data-act-find]' );
                 if( ! b ) return;
                 var act = b.getAttribute( 'data-act-find' ), id = b.getAttribute( 'data-id' );
-                b.disabled = true;
+                Ayni.setBusy( b, T( 'ui.wait' ) );
                 var req = act === 'ring' ? api( 'POST', '/find', { id: id } )
                         : act === 'stop' ? api( 'POST', '/find/' + encodeURIComponent( id ) + '/stop' )
                         : myEndpoint().then( function ( ep ) { return api( 'POST', '/find', { ask: true, endpoint: ep } ); } );
@@ -2566,7 +2584,7 @@
                     if( act === 'ask' && j._status === 200 && ! j.asked ) toast( T( 'find.askedNone' ), 3500 );
                     else if( j._status !== 200 ) toast( T( 'ui.saveFailed' ) );
                     poll();
-                } ).catch( function () { toast( T( 'login.noServer' ) ); b.disabled = false; } );
+                } ).catch( function () { toast( T( 'login.noServer' ) ); Ayni.setBusy( b, false ); } );
             } );
 
             // ---- 4. Mi cuenta ----------------------------------------------
@@ -2587,7 +2605,7 @@
                 devWrap.hidden = ! ds.length;
                 devList.innerHTML = ds.map( function ( d )
                 {
-                    return row( d.name, [ { t: seenLine( d ) } ], btn( 'remove', d.id, NayiveUI.icon( 'trash' ), T( 'dev.remove' ), true ) ) +
+                    return row( d.name, [ { t: seenLine( d ) } ], btn( 'remove', d.id, Ayni.icon( 'trash' ), T( 'dev.remove' ), true ) ) +
                            mediaRow( d );
                 } ).join( '' );
             }
@@ -2600,12 +2618,12 @@
                        '<div class="scm-check-row">' +
                            '<label class="scm-check" for="' + esc( id ) + '"><span>' + esc( T( 'dev.media' ) ) + '</span></label>' +
                            '<button class="info-dot" type="button" data-info="' + esc( T( 'dev.mediaInfo' ) ) + '"></button>' +
-                           '<label class="switch sm"><input type="checkbox" id="' + esc( id ) + '" data-dev-media="' + esc( d.id ) + '"' +
-                               ( d.media ? ' checked' : '' ) + '><span class="track"></span></label>' +
+                           '<label class="switch"><input role="switch" type="checkbox" id="' + esc( id ) + '" data-dev-media="' + esc( d.id ) + '"' +
+                               ( d.media ? ' checked' : '' ) + '></label>' +
                        '</div>' +
-                       '<button type="button" class="folder-pick" data-dev-dir="' + esc( d.id ) + '" title="' + esc( T( 'dev.mediaDir' ) ) +
+                       '<button type="button" class="folder-pick" data-dev-dir="' + esc( d.id ) + '" data-tip="' + esc( T( 'dev.mediaDir' ) ) +
                            '" aria-label="' + esc( T( 'dev.mediaDir' ) ) + '"' + ( d.media ? '' : ' hidden' ) + '>' +
-                           '<span class="fp-btn-ic">' + NayiveUI.icon( 'folder' ) + '</span>' +
+                           '<span class="fp-btn-ic">' + Ayni.icon( 'folder' ) + '</span>' +
                            '<span class="fp-btn-nm">' + esc( dirLabel( d.mediaDir ) ) + '</span></button>' +
                        '</div>';
             }
@@ -2709,7 +2727,7 @@
             };
 
             // ---- start -----------------------------------------------------
-            ( window.NayiveI18n ? NayiveI18n.ready : Promise.resolve() ).then( function ()
+            Ayni.i18n.ready.then( function ()
             {
                 enrol();
                 answerHere();

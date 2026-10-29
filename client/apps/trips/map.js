@@ -247,7 +247,7 @@ function buildRouteMapBlock( trip, sWhich, parentEl )
     if( unresolved.length )
     {
         const warn = document.createElement( 'p' );
-        warn.className = 'calc-warn';
+        warn.className = 'warn-box';
         warn.textContent = TF( 'trips.cantLocate', { places: unresolved.map( function( st ) { return st.location; } ).join( ', ' ) } );
         wrap.appendChild( warn );
     }

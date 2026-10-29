@@ -28,7 +28,7 @@ const c = await browser( s, { width: 1280, height: 900 } );
 section( "F6 · LOCKER SETTINGS: THE PHONE SAVES BETWEEN CLOSE'S READ AND ITS WRITE" );
 {
     ok( await c.open( "/nayive/desktop/index.html" ), "desktop page opens" );
-    ok( await c.until( "typeof NayiveUI !== 'undefined' && typeof NayiveLock !== 'undefined' && typeof NayiveI18n !== 'undefined'" ), "ready" );
+    ok( await c.until( "typeof NayiveUI !== 'undefined' && typeof NayiveLock !== 'undefined' && typeof NayiveWho !== 'undefined'" ), "ready" );
     ok( await c.evaluate( `( async () => {
         const load = src => new Promise( ( ok, no ) => { const sc = document.createElement( 'script' ); sc.src = src; sc.onload = ok; sc.onerror = no; document.head.appendChild( sc ); } );
         await load( '../shared/lockers/culture.js' ); await load( '../shared/lockers/science.js' ); await load( '../shared/lockers/culture-settings.js' );
@@ -37,11 +37,11 @@ section( "F6 · LOCKER SETTINGS: THE PHONE SAVES BETWEEN CLOSE'S READ AND ITS WR
     await c.evaluate( "NayiveSalonSettings.open(); true" );
     ok( await c.until( "!! document.querySelector( '#salonSettings .salon-pane .salon-row' )" ), "dialog drawn (a good read)" );
     await c.evaluate( `( () => {
-        const f = [ ...document.querySelectorAll( '#salonSettings .field' ) ].find( x => x.querySelector( 'label' ) && x.querySelector( 'label' ).textContent === NayiveI18n.t( 'salon.contrast' ) );
+        const f = [ ...document.querySelectorAll( '#salonSettings .field' ) ].find( x => x.querySelector( 'label' ) && x.querySelector( 'label' ).textContent === Ayni.t( 'salon.contrast' ) );
         const sel = f.querySelector( 'select' ); sel.value = 'high'; sel.dispatchEvent( new Event( 'change' ) ); return true; } )()` );
     await arm( c, SALON, add( { units: "c" } ) );
     // close-only (no ✓): closing saves
-    await c.evaluate( "document.querySelector( '#salonSettings [data-act=close], #salonSettings .sheet-close' ).click(); true" );
+    await c.evaluate( "document.querySelector( '#salonSettings [data-close]' ).click(); true" );
     ok( await raced( c ), "the phone set °C in between" );
     ok( await c.until( "! document.querySelector( '#salonSettings' )" ), "closed" );
     ok( await disk( () => ( json( SALON ) || {} ).contrast === "high" ), "the save landed" );
@@ -61,7 +61,7 @@ section( "SHARE TO NAYIVE: \"REMEMBER THIS ALBUM\" KEEPS A SETTING SAVED IN BETW
         await cache.put( new URL( 'inbox/0', location.href ).toString(), new Response( new Blob( [ 'THE SHARED PHOTO' ], { type: 'image/jpeg' } ) ) );
         return true; } )()` ), "one photo waits in the inbox" );
     await c.open( PAGE + "?n=1", PAGE );
-    ok( await c.until( "ITEMS.length === 1 && DEST === 'files/Album' && ! document.getElementById('goBtn').disabled" ), "the page shows it, album chosen" );
+    ok( await c.until( "ITEMS.length === 1 && DEST === 'files/Album' && document.getElementById('goBtn').ariaDisabled !== 'true'" ), "the page shows it, album chosen" );
     await installRace( c );
     await arm( c, CFG, add( { sort: "phone's" } ) );
     await c.evaluate( "document.getElementById('goBtn').click(); true" );
@@ -92,7 +92,7 @@ section( "A5 · WRITE: A WORD ADDED IN ANOTHER WINDOW BETWEEN THE READ AND THE W
     await c.send( "Input.dispatchMouseEvent", { type: "mouseMoved", x: at.x, y: at.y } );
     await c.send( "Input.dispatchMouseEvent", { type: "mousePressed", x: at.x, y: at.y, button: "right", buttons: 2, clickCount: 1 } );
     await c.send( "Input.dispatchMouseEvent", { type: "mouseReleased", x: at.x, y: at.y, button: "right", buttons: 0, clickCount: 1 } );
-    const addText = await c.evaluate( `NayiveUI.tf( 'write.addToDict', { word: ${JSON.stringify( WORD )} } )` );
+    const addText = await c.evaluate( `Ayni.tf( 'write.addToDict', { word: ${JSON.stringify( WORD )} } )` );
     const ITEM = `Array.prototype.find.call( document.querySelectorAll( 'button.menu-item' ), function ( e ) { return e.offsetParent && e.textContent.indexOf( ${JSON.stringify( addText )} ) !== -1; } )`;
     ok( await c.until( ITEM, 10000 ), "its menu offers \"" + addText + "\"" );
 

@@ -82,7 +82,7 @@
             var state = have === 0 ? "" : have === picking.length ? "all" : "some";
             var dot = h( "i", { class: "mail-dot" } );
             dot.style.setProperty( "--c", l.color );
-            var mark = h( "span", { class: "mail-pick-mark", html: state === "all" ? NayiveUI.icon( "check" ) : state === "some" ? "&minus;" : "" } );
+            var mark = h( "span", { class: "mail-pick-mark", html: state === "all" ? Ayni.icon( "check" ) : state === "some" ? "&minus;" : "" } );
             box.appendChild( h( "button", { class: "card-row mail-pick" + ( state ? " is-on" : "" ), attrs: { type: "button", "aria-pressed": state === "all" ? "true" : "false" },
                                             on: { click: function () { toggle( l, state !== "all" ); } } },
                                 dot, h( "span", { class: "mail-pick-name", text: l.name } ), mark ) );
@@ -170,7 +170,7 @@
             var on = c === colour;
             var b = h( "button", { class: "mail-swatch" + ( on ? " is-on" : "" ),
                                    attrs: { type: "button", role: "radio", "aria-checked": on ? "true" : "false", title: c },
-                                   html: on ? NayiveUI.icon( "check" ) : "",
+                                   html: on ? Ayni.icon( "check" ) : "",
                                    on: { click: function () { colour = c; renderSwatches(); } } } );
             b.style.setProperty( "--c", c );
             if( light( c ) ) b.style.color = "#202124";      // a white tick on yellow would vanish

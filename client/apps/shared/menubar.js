@@ -47,7 +47,7 @@
  *                             cloned - the toolbar's own icon, so the two never
  *                             drift. An `el` entry does this for its button by
  *                             itself, unless it names an `icon` instead.
- *   { icon:'cut' }            ... or a NayiveUI.icon() name, or SVG markup -
+ *   { icon:'cut' }            ... or a Ayni.icon() name, or SVG markup -
  *                             for entries the toolbar has no button for
  *
  * Anything else on an item (check, radio, arg …) is the app's business and
@@ -120,7 +120,7 @@ const NayiveMenus = ( function ()
             if( it.el )
             {
                 const b = gid( it.el );
-                return !! b && ! b.disabled;
+                return !! b && ! b.disabled && b.ariaDisabled !== 'true';
             }
 
             if( cfg.enabled )
@@ -170,7 +170,7 @@ const NayiveMenus = ( function ()
             if( ! svg && it.icon )
             {
                 const t = document.createElement( 'template' );
-                t.innerHTML = it.icon.charAt( 0 ) === '<' ? it.icon : NayiveUI.icon( it.icon );
+                t.innerHTML = it.icon.charAt( 0 ) === '<' ? it.icon : Ayni.icon( it.icon );
                 svg = t.content.querySelector( 'svg' );
             }
 
@@ -199,7 +199,7 @@ const NayiveMenus = ( function ()
             {
                 const d = document.createElement( 'div' );
                 d.className   = 'menu-label';
-                d.textContent = NayiveUI.t( it.label );
+                d.textContent = Ayni.t( it.label );
                 return d;
             }
 
@@ -232,7 +232,7 @@ const NayiveMenus = ( function ()
 
             const lab = document.createElement( 'span' );
             lab.className   = 'mi-label';
-            lab.textContent = it.text !== undefined ? it.text : NayiveUI.t( it.key );
+            lab.textContent = it.text !== undefined ? it.text : Ayni.t( it.key );
             b.appendChild( lab );
 
             if( it.sub )
@@ -257,7 +257,7 @@ const NayiveMenus = ( function ()
                 d.className = 'info-dot';
                 d.tabIndex  = 0;
                 d.setAttribute( 'role', 'button' );
-                d.setAttribute( 'data-info', NayiveUI.t( it.info ) );
+                d.setAttribute( 'data-info', Ayni.t( it.info ) );
                 b.appendChild( d );
             }
 
@@ -408,7 +408,7 @@ const NayiveMenus = ( function ()
             if( it.el )
             {
                 const b = gid( it.el );
-                if( b && ! b.disabled ) b.click();
+                if( b && ! b.disabled && b.ariaDisabled !== 'true' ) b.click();
                 return;
             }
 
@@ -441,7 +441,7 @@ const NayiveMenus = ( function ()
                 bar.appendChild( b );
             } );
 
-            NayiveUI.applyI18n( bar );
+            Ayni.i18n.apply( bar );
         }
 
         function wire()
@@ -632,7 +632,6 @@ const NayiveMenus = ( function ()
             for( const b of document.querySelectorAll( '.chrome-btn' ) )
             {
                 const isOn = ( b.dataset.chrome === 'menus' ) === on();
-                b.classList.toggle( 'is-active', isOn );
                 b.setAttribute( 'aria-pressed', isOn ? 'true' : 'false' );
             }
 
@@ -675,7 +674,7 @@ const NayiveMenus = ( function ()
             if( mode !== 'toolbar' ) push();
         }
 
-        // The two header buttons, <button class="icon-btn chrome-btn" data-chrome="…">.
+        // The two header buttons, <button class="btn chrome-btn" data-chrome="…">.
         function wire()
         {
             for( const b of document.querySelectorAll( '.chrome-btn' ) )

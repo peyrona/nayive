@@ -376,8 +376,9 @@ type chatContactOut struct {
 	ID      string   `json:"id"`
 	Name    string   `json:"name"`
 	Token   string   `json:"token"`
-	User    string   `json:"user,omitempty"` // a Nayive account (no link)
-	Card    string   `json:"card,omitempty"` // the Contacts app's card (UID) they came from
+	User    string   `json:"user,omitempty"`  // a Nayive account (no link)
+	Card    string   `json:"card,omitempty"`  // the Contacts app's card (UID) they came from
+	Group   bool     `json:"group,omitempty"` // a Nayive account in groups only, no 1:1 here
 	Created int64    `json:"created"`
 	Opened  int64    `json:"opened,omitempty"`
 	Push    bool     `json:"push"`
@@ -695,7 +696,7 @@ func (s *Server) chatPush(w http.ResponseWriter, r *http.Request, resolve func(f
 // -----------------------------------------------------------------------------
 
 func (h *ChatHub) contactOut(o *chatOwner, c *ChatContact) chatContactOut {
-	out := chatContactOut{ID: c.ID, Name: c.Name, Token: c.Token, User: c.User, Card: c.Card, Created: c.Created,
+	out := chatContactOut{ID: c.ID, Name: c.Name, Token: c.Token, User: c.User, Card: c.Card, Group: c.Group, Created: c.Created,
 		Opened: c.Opened, Push: len(c.Subs) > 0, Groups: []string{}}
 	if c.User != "" {
 		out.Push = len(h.users.PushTargets(c.User)) > 0
@@ -716,6 +717,8 @@ func (s *Server) chatContacts(w http.ResponseWriter, r *http.Request, rest []str
 		Name string `json:"name"`
 		User string `json:"user"`
 		Card string `json:"card"` // POST: the Contacts app's card they are picked from
+		// POST {"user", "group": true}: that account as a group member only
+		Group bool `json:"group"`
 	}
 	if r.Method == http.MethodPost && len(rest) == 0 || r.Method == http.MethodPatch {
 		if !readJSONBody(w, r, &body) {
@@ -724,7 +727,7 @@ func (s *Server) chatContacts(w http.ResponseWriter, r *http.Request, rest []str
 	}
 	switch {
 	case len(rest) == 0 && r.Method == http.MethodPost && body.User != "":
-		s.chatAddUser(w, r, body.User, resolve, ownerOnly)
+		s.chatAddUser(w, r, body.User, body.Group, resolve, ownerOnly)
 
 	case len(rest) == 0 && r.Method == http.MethodPost:
 		name := cleanChatName(body.Name)
@@ -802,7 +805,10 @@ func (s *Server) chatContacts(w http.ResponseWriter, r *http.Request, rest []str
 // two already have, whichever side started it: one chat per pair. Answers
 // {"conv", "via"} ("via" = the home it lives in when that is the other one's)
 // and, when it is (now) in this home, "contact".
-func (s *Server) chatAddUser(w http.ResponseWriter, r *http.Request, user string,
+// forGroup: only a contact in this home to put in a group, no 1:1 chat - the
+// one already here, or a new group-only one (ChatContact.Group). Answers
+// {"contact"}.
+func (s *Server) chatAddUser(w http.ResponseWriter, r *http.Request, user string, forGroup bool,
 	resolve func(func(chatActor)), ownerOnly func(chatActor) bool) {
 
 	h := s.chat
@@ -818,8 +824,9 @@ func (s *Server) chatAddUser(w http.ResponseWriter, r *http.Request, user string
 			sendError(w, r, http.StatusBadRequest, "no puedes chatear contigo")
 			return
 		}
-		if c := a.o.userContact(user); c != nil {
-			sendJSON(w, r, http.StatusOK, map[string]any{"conv": "d-" + c.ID, "via": "", "contact": h.contactOut(a.o, c)})
+		mine := a.o.userContact(user)
+		if mine != nil && (forGroup || !mine.Group) {
+			sendJSON(w, r, http.StatusOK, map[string]any{"conv": "d-" + mine.ID, "via": "", "contact": h.contactOut(a.o, mine)})
 			return
 		}
 		other := h.owner(user)
@@ -827,12 +834,26 @@ func (s *Server) chatAddUser(w http.ResponseWriter, r *http.Request, user string
 			sendError(w, r, http.StatusNotFound, "no existe ese usuario")
 			return
 		}
-		if c := other.userContact(a.o.user); c != nil {
-			sendJSON(w, r, http.StatusOK, map[string]any{"conv": "d-" + c.ID, "via": user})
+		if !forGroup {
+			if c := other.userContact(a.o.user); c != nil && !c.Group {
+				sendJSON(w, r, http.StatusOK, map[string]any{"conv": "d-" + c.ID, "via": user})
+				return
+			}
+		}
+		if mine != nil { // group-only until now: its 1:1 chat starts here
+			mine.Group = false
+			if err := h.saveData(a.o); err != nil {
+				mine.Group = true
+				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+				return
+			}
+			a.o.changed(true)
+			other.changed(true)
+			sendJSON(w, r, http.StatusOK, map[string]any{"conv": "d-" + mine.ID, "via": "", "contact": h.contactOut(a.o, mine)})
 			return
 		}
 		h.ensureIndex()
-		c := &ChatContact{ID: newChatID(), Name: other.data.Me.Name, User: user, Created: time.Now().Unix()}
+		c := &ChatContact{ID: newChatID(), Name: other.data.Me.Name, User: user, Group: forGroup, Created: time.Now().Unix()}
 		a.o.data.Contacts = append(a.o.data.Contacts, c)
 		if err := h.saveData(a.o); err != nil {
 			a.o.data.Contacts = a.o.data.Contacts[:len(a.o.data.Contacts)-1]

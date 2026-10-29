@@ -68,7 +68,7 @@ await c.evaluate( `( () => { window.__lie = true; const open = XMLHttpRequest.pr
         return send.apply( this, arguments ); };
     openSaveSheet(); document.getElementById( 'playlistName' ).value = 'E'; return true; } )()` );
 await c.evaluate( "window.__toasts = []; confirmName().then( () => true )" );
-ok( await c.evaluate( "( window.__toasts || [] ).some( t => t.indexOf( NayiveUI.t( 'music.listSaveFailed' ) ) !== -1 )" ), "the failed save is said", await c.toasts() );
+ok( await c.evaluate( "( window.__toasts || [] ).some( t => t.indexOf( Ayni.t( 'music.listSaveFailed' ) ) !== -1 )" ), "the failed save is said", await c.toasts() );
 ok( await c.evaluate( "document.getElementById( 'saveBackdrop' ).classList.contains( 'open' ) && document.getElementById( 'playlistName' ).value === 'E'" ),
     "the sheet stays open, the name kept" );
 await c.evaluate( "window.__lie = false; confirmName().then( () => true )" );

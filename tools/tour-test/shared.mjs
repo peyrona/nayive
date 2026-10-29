@@ -32,7 +32,7 @@ const tk = await c.evaluate( "( () => { const b = document.querySelector( '.pick
 await mouse( c, tk );
 await c.until( "document.querySelector( '.tour-count' ).textContent.startsWith( '4' )", 3000 );
 st = await state( c );
-ok( await picked( c ) === 1 && st.n === 4 && /sel-group|icon-btn/.test( st.lit ), "the user's tap picks the row; «picked» lights the selection group", st );
+ok( await picked( c ) === 1 && st.n === 4 && /sel-group|btn/.test( st.lit ), "the user's tap picks the row; «picked» lights the selection group", st );
 await next( c );
 ok( await picked( c ) === 0, "leaving «picked» lets the row go" );
 await key( c, "Escape" ); await tourGone( c );
@@ -59,7 +59,7 @@ await p.watchToasts();
 await runSteps( p, STEPS );
 await walk( p, "phone", {
     3: s => ( s.ghost || /pick-tick/.test( s.lit ) ) || "«pick» rings a row",
-    4: s => /sel-group|icon-btn/.test( s.lit ) && ! s.ghost || "«picked» picked a row itself and lights the group" } );
+    4: s => /sel-group|btn/.test( s.lit ) && ! s.ghost || "«picked» picked a row itself and lights the group" } );
 ok( await tourGone( p ) && await picked( p ) === 0, "nothing stays picked" );
 ok( ! ( await p.toasts() ).length, "no toast on the way", await p.toasts() );
 

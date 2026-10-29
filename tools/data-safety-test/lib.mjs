@@ -165,7 +165,7 @@ export async function client( base, user, password )
 
 const MOUSE = [ "--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4" ];
 const QUIET = ( lang ) => `localStorage.setItem('balata-coach-seen','1'); localStorage.setItem('nayive-install-snooze','never');
-    localStorage.setItem('balata-intro-dismiss:launcher','1'); localStorage.setItem('balata-lang', ${JSON.stringify( lang )}); true`;
+    localStorage.setItem('balata-intro-dismiss:launcher','1'); localStorage.setItem('ayni-lang', ${JSON.stringify( lang )}); true`;
 const TOASTS = `( () => { if( window.__toastsOn ) return true; window.__toastsOn = true; window.__toasts = [];
     const t = document.getElementById('toast'); if( ! t ) return true;
     new MutationObserver( () => { if( t.classList.contains('show') ) window.__toasts.push( t.textContent ); } )

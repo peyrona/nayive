@@ -49,21 +49,21 @@ try
         if( up ) break;
         await new Promise( r => setTimeout( r, 50 ) );
     }
-    await p.evaluate( "NayiveI18n.ready" );
+    await p.evaluate( "Ayni.i18n.ready" );
 
     // Two helpers the tests drive the REAL sheets with.
     await p.evaluate( `window.pressTitled = async function ( title ) {
       for( var i = 0; i < 80; i++ ) {
         var s = document.querySelector( '.sheet-backdrop.open .sheet' );
         var b = s && Array.prototype.find.call( s.querySelectorAll( '.sheet-actions button' ),
-                  function ( x ) { return ( x.title || '' ) === title; } );
+                  function ( x ) { return ( x.dataset.tip || '' ) === title; } );
         if( b ) { b.click(); return true; }
         await new Promise( function ( r ) { setTimeout( r, 25 ); } );
       }
       return false;
     };
     window.sheetText = function () { var s = document.querySelector('.sheet-backdrop.open .sheet'); return s ? s.textContent : null; };
-    window.T = function ( k ) { return NayiveUI.t( k ); };` );
+    window.T = function ( k ) { return Ayni.t( k ); };` );
 
     console.log('\n--- crypto in the page ---');
     ok('subtle available', await p.evaluate('NayiveCrypt.available()'));
@@ -94,7 +94,7 @@ try
       return {
         plainOnServer,
         locked:      s.locked(),
-        btnActive:   document.getElementById('lockBtn').classList.contains('is-active'),
+        btnActive:   document.getElementById('lockBtn').getAttribute('aria-pressed') === 'true',
         serverHead:  new TextDecoder().decode(SRV['files/informe.docx'].slice(0,16)),
         serverPlain: new TextDecoder('utf-8',{fatal:false}).decode(SRV['files/informe.docx']).includes('secreto'),
         bakHead:     SRV['files/.bak/informe.docx'] ? new TextDecoder().decode(SRV['files/.bak/informe.docx'].slice(0,16)) : null,
@@ -207,7 +207,7 @@ try
       return {
         sealedBak,
         locked:   s.locked(),
-        btn:      document.getElementById('lockBtn').classList.contains('is-active'),
+        btn:      document.getElementById('lockBtn').getAttribute('aria-pressed') === 'true',
         server:   new TextDecoder().decode(SRV['files/a.docx']),
         bakPlain: new TextDecoder().decode(SRV['files/.bak/a.docx'])
       };

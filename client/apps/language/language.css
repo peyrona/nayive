@@ -1,0 +1,88 @@
+/* language.css - Language. Buttons, fields, switches, info dots, sheets and
+   pills all come from ../shared/app.css; only the page's own layout is here:
+   the language row, the two panes (side by side, stacked on a phone), the
+   result box, the status lines and the settings rows (also used by the
+   admin panel's Language tab, admin.html). */
+
+.lang-main          { flex: 1 1 auto; overflow: auto; width: 100%; max-width: 1000px; margin: 0 auto;
+                      padding: var(--space-4) var(--space-4) 32px; display: flex; flex-direction: column; gap: 14px; }
+
+/* LANGUAGES: from · ⇄ · to */
+.langbar            { display: flex; align-items: center; gap: 8px; }
+.langbar select     { flex: 1 1 0; min-width: 0; }
+
+/* PANES: the text and its translation. 300px each before they stack. */
+.panes              { display: flex; flex-wrap: wrap; gap: 14px; }
+.pane               { flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.pane-box           { position: relative; display: flex; flex-direction: column; border: 1px solid var(--line);
+                      border-radius: var(--radius-m, 10px); background: var(--card); }
+.pane-box:focus-within { border-color: color-mix(in srgb, var(--text) 30%, transparent); }
+.pane-box textarea  { border: 0; background: transparent; min-height: 170px; font-size: 1.08rem; line-height: 1.45;
+                      padding: 12px 14px 4px; resize: vertical; }
+.pane-box textarea:focus { outline: none; }
+.result-box         { background: color-mix(in srgb, var(--accent) 7%, var(--card)); }
+.result             { min-height: 170px; padding: 12px 14px 4px; font-size: 1.15rem; font-weight: 500; line-height: 1.45;
+                      white-space: pre-wrap; overflow-wrap: anywhere; }
+.result.placeholder { color: var(--text-dim); font-size: 0.95rem; font-weight: 400; }
+.pane-tools         { display: flex; align-items: center; justify-content: flex-end; gap: 4px; padding: 4px 6px 6px; }
+.pane-tools .count  { margin-right: auto; padding-left: 8px; font-size: 0.78rem; color: var(--text-dim);
+                      font-variant-numeric: tabular-nums; }
+.pane-tools .count.over { color: var(--danger); }
+
+/* The ✓ turns into ■ while translating; Play into ■ while speaking. */
+#go .stop-ic, #speak .stop-ic         { display: none; }
+#go.busy .go-ic, #speak.busy .go-ic   { display: none; }
+#go.busy .stop-ic, #speak.busy .stop-ic { display: block; }
+#copy.done          { color: var(--ok); }
+
+/* STATUS: engine + where, progress, the attempts that failed. */
+.lang-status        { margin: 0; min-height: 1.3em; font-size: 0.8rem; color: var(--text-dim);
+                      display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.lang-status .where { display: inline-flex; align-items: center; gap: 5px; }
+.lang-status .dot   { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+.lang-status .dot.remote { background: var(--warn, #c98a12); }
+.lang-status progress { width: 90px; height: 6px; accent-color: var(--accent); }
+.lang-status .btn.text { padding: 2px 8px; font-size: 0.78rem; min-height: 0; }
+.lang-status.error  { color: var(--danger); }
+.attempts           { margin: 0; padding-left: 18px; font-size: 0.78rem; color: var(--text-dim); }
+
+.local-row          { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; white-space: nowrap; }
+.local-row > label[for] { cursor: pointer; }
+
+/* DICTIONARY */
+/* The shared search field (app.css SEARCH FOLD), always open, full width. */
+.dic-search.search-fold { max-width: none; }
+.dict-main          { padding: 14px 0;
+                      display: flex; flex-direction: column; gap: 12px; min-height: 120px; }
+.dict-main .hint    { margin: 0; font-size: 0.9rem; color: var(--text-dim); }
+.lemma              { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.lemma b            { font-size: 1.4rem; }
+.lemma i            { font-size: 0.85rem; color: var(--text-dim); }
+.dict-main ol       { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
+.dict-main .tr      { font-weight: 600; font-size: 1.05rem; }
+.dict-main .gram    { color: var(--text-dim); font-size: 0.85rem; }
+.example            { border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 2px; font-size: 0.92rem; }
+.example .t         { color: var(--text-dim); }
+.dict-src           { font-size: 0.75rem; color: var(--text-dim); }
+
+/* SETTINGS rows: name + what it is, then its switch; a row opens to its details. */
+.cfg-sheet          { max-width: 560px; }
+.cfg-list           { list-style: none; margin: 0 0 12px; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-m, 10px); }
+.cfg-list > li      { padding: 10px 12px; }
+.cfg-list > li + li { border-top: 1px solid var(--line); }
+.cfg-row            { display: flex; align-items: center; gap: 10px; }
+.cfg-name           { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; font-weight: 500; cursor: pointer; }
+.cfg-name small     { font-size: 0.78rem; font-weight: 400; color: var(--text-dim); }
+.cfg-name small.paused { color: var(--danger); }
+.cfg-more           { padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.cfg-more .field    { margin: 0; }
+.cfg-more .field-row { display: flex; gap: 10px; }
+.cfg-more .field-row .field { flex: 1 1 0; }
+.cfg-btns           { display: flex; flex-wrap: wrap; gap: 8px; }
+.cfg-test           { font-size: 0.82rem; color: var(--text-dim); overflow-wrap: anywhere; }
+.cfg-test.bad       { color: var(--danger); }
+.cfg-list .empty    { color: var(--text-dim); font-size: 0.85rem; }
+.cfg-model          { flex: 1 1 auto; min-width: 0; }
+/* The app's gear (models) and the admin panel's Language tab (admin.html). */
+:is(.cfg-sheet, .lang-admin) > .section-label { display: block; margin: 4px 0 6px; }
+:is(.cfg-sheet, .lang-admin) > .btn.text { margin-bottom: 14px; }

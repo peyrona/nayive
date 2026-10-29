@@ -359,7 +359,7 @@
         for( var i = 0; i < ids.length; i++ ) await C.setPref( pref, ids[ i ] );
     }
 
-    // Built once the dictionary is in (C.start runs after NayiveI18n.ready).
+    // Built once the dictionary is in (C.start runs after Ayni.i18n.ready).
     function actionList()
     {
         function one( ids ) { return ids.length === 1; }
@@ -715,7 +715,7 @@
     {
         var c = userConv( u.user );
         var av = c ? C.withDot( C.avatar( c.id, u.name ), c.id ) : C.avatar( "u:" + u.user, u.name, null, null );
-        var face = h( "button", { class: "face sm", attrs: { type: "button", title: T( "chat.changePhoto" ), "aria-label": T( "chat.changePhoto" ) },
+        var face = h( "button", { class: "face sm", attrs: { type: "button", "data-tip": T( "chat.changePhoto" ), "aria-label": T( "chat.changePhoto" ) },
                                   on: { click: function () { userFace( u.user ); } } }, av, h( "span", { class: "cam" }, C.ic( "camera" ) ) );
         return h( "div", { class: "row split" }, face,
             h( "button", { class: "body", attrs: { type: "button" }, on: { click: function () { C.chatWithUser( u.user ); } } },
@@ -738,7 +738,7 @@
     // The 1:1 chat with a Nayive account, in my home or in theirs.
     function userConv( user )
     {
-        var ct = S.contacts.filter( function ( x ) { return x.user === user; } )[ 0 ];
+        var ct = S.contacts.filter( function ( x ) { return x.user === user && ! x.group; } )[ 0 ];
         if( ct ) return C.convOf( "d-" + ct.id );
         var w = S.vias[ user ];
         return w ? w.list.filter( function ( c ) { return c.kind === "d"; } )[ 0 ] || null : null;
@@ -766,12 +766,12 @@
         view.appendChild( C.sideBar( T( "chat.newPerson" ) ) );
         var pane = h( "div", { class: "pane" } );
         var input = h( "input", { attrs: { type: "text", id: "npName", maxlength: "60", autocomplete: "off" } } );
-        var create = h( "button", { class: "text-btn wide", attrs: { type: "button" }, text: T( "chat.makeLink" ) } );
+        var create = h( "button", { class: "btn text primary wide", attrs: { type: "button" }, text: T( "chat.makeLink" ) } );
         var card = null;           // the address book's card picked, or null
         var pick = null, url = ""; // a picture chosen here (a Blob and its URL)
-        var face = h( "button", { class: "face", attrs: { type: "button", title: T( "chat.changePhoto" ), "aria-label": T( "chat.changePhoto" ) },
+        var face = h( "button", { class: "face", attrs: { type: "button", "data-tip": T( "chat.changePhoto" ), "aria-label": T( "chat.changePhoto" ) },
                                   on: { click: choose } } );
-        var bin = h( "button", { class: "face-bin", attrs: { type: "button", title: T( "chat.removePhoto" ), "aria-label": T( "chat.removePhoto" ) },
+        var bin = h( "button", { class: "face-bin", attrs: { type: "button", "data-tip": T( "chat.removePhoto" ), "aria-label": T( "chat.removePhoto" ) },
                                  on: { click: function () { pick = null; showFace(); } } }, C.ic( "trash" ) );
         var cards = h( "div", { class: "rows book-rows" } );
         var form = h( "div", {},
@@ -847,7 +847,7 @@
         {
             var name = input.value.trim();
             if( ! name ) { input.focus(); return; }
-            create.disabled = true;
+            Ayni.setBusy( create, T( "ui.wait" ) );
             try
             {
                 var uid = card && card.uid || "";
@@ -866,7 +866,7 @@
                 if( url ) URL.revokeObjectURL( url );
                 C.loadSummary().catch( function () {} );
             }
-            catch( e ) { C.fail( e ); create.disabled = false; }
+            catch( e ) { C.fail( e ); Ayni.setBusy( create, false ); }
         }
         create.addEventListener( "click", go );
         input.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) go(); } );
@@ -883,8 +883,8 @@
     {
         var url = C.linkOf( ct );
         var canSend = !! navigator.share;
-        var send = canSend ? h( "button", { class: "text-btn", attrs: { type: "button" } }, C.ic( "share" ), T( "chat.send" ) ) : null;
-        var copy = h( "button", { class: "text-btn" + ( canSend ? " ghost" : "" ), attrs: { type: "button" } }, C.ic( "copy" ), T( "chat.copy" ) );
+        var send = canSend ? h( "button", { class: "btn text primary", attrs: { type: "button" } }, C.ic( "share" ), T( "chat.send" ) ) : null;
+        var copy = h( "button", { class: "btn text primary" + ( canSend ? " ghost" : "" ), attrs: { type: "button" } }, C.ic( "copy" ), T( "chat.copy" ) );
         if( send ) send.addEventListener( "click", function () { C.shareLink( ct ); } );
         copy.addEventListener( "click", function () { C.copyText( url ); } );
         var box = h( "div", {},
@@ -895,7 +895,7 @@
         var qr = C.qrCanvas( url );
         if( qr ) box.appendChild( h( "div", { class: "qr" }, qr, h( "span", { text: T( "chat.qrHint" ) } ) ) );
         box.appendChild( h( "p", { class: "hint", style: "margin-top:14px", text: C.TF( "chat.linkWarn", { name: ct.name } ) } ) );
-        box.appendChild( h( "button", { class: "text-btn ghost wide", attrs: { type: "button" }, text: T( "chat.openChat" ),
+        box.appendChild( h( "button", { class: "btn text bordered wide", attrs: { type: "button" }, text: T( "chat.openChat" ),
                                         on: { click: function () { C.openConv( "d-" + ct.id ); } } } ) );
         return box;
     };
@@ -937,11 +937,25 @@
         return cv;
     };
 
-    // "New group" / "Add people": pick people, then (new) a name.
+    // "New group" / "Add people": pick people, then (new) a name. Everybody:
+    // my people, and every Nayive account - one with no contact here yet is
+    // "u:<account>" until saved, then a group-only contact (no 1:1 chat).
     C.openNewGroup = function ( group )
     {
         var picked = group ? ( group.members || [] ).filter( function ( p ) { return p !== "o"; } ) : [];
         var view   = h( "div", { class: "view" } );
+
+        function candidates()
+        {
+            var out = S.contacts.filter( function ( ct ) { return ! ct.user; } )
+                                .map( function ( ct ) { return { id: ct.id, name: ct.name, ct: ct }; } );
+            S.users.forEach( function ( u )
+            {
+                var ct = S.contacts.filter( function ( x ) { return x.user === u.user; } )[ 0 ];
+                out.push( ct ? { id: ct.id, name: ct.name, ct: ct } : { id: "u:" + u.user, name: u.name, user: u.user } );
+            } );
+            return out.sort( byName );
+        }
 
         function render()
         {
@@ -949,25 +963,31 @@
             var go = C.btn( group ? "check" : "arrow-right", group ? "ui.save" : "chat.next", next );
             view.appendChild( C.sideBar( T( group ? "chat.addPeople" : "chat.newGroup" ),
                                          C.TF( "chat.nChosen", { n: picked.length } ), go ) );
+            var all = candidates();
             var chips = h( "div", { class: "sel-chips" } );
             picked.forEach( function ( id )
             {
-                var ct = C.contactOf( id );
-                if( ! ct ) return;
+                var p = all.filter( function ( x ) { return x.id === id; } )[ 0 ];
+                if( ! p ) return;
                 var x = h( "span", { class: "x" }, C.ic( "x" ) );
-                chips.appendChild( h( "button", { attrs: { type: "button", title: T( "chat.remove" ) },
+                chips.appendChild( h( "button", { attrs: { type: "button", "data-tip": T( "chat.remove" ) },
                                                   on: { click: function () { toggle( id ); } } },
-                    C.avatar( id, ct.name, null, null ), x, h( "span", { class: "nm", text: ct.name } ) ) );
+                    C.avatar( id, p.name, null, null ), x, h( "span", { class: "nm", text: p.name } ) ) );
             } );
             view.appendChild( chips );
             var rows = h( "div", { class: "rows" } );
-            if( ! S.contacts.length ) rows.appendChild( h( "p", { class: "list-note", text: T( "chat.noPeopleYet" ) } ) );
-            S.contacts.slice().sort( byName ).forEach( function ( ct )
+            if( ! all.length ) rows.appendChild( h( "p", { class: "list-note", text: T( "chat.noPeopleYet" ) } ) );
+            all.forEach( function ( p )
             {
-                var on  = picked.indexOf( ct.id ) >= 0;
+                var on  = picked.indexOf( p.id ) >= 0;
                 var chk = h( "span", { class: "chk" + ( on ? " on" : "" ) } );
                 if( on ) chk.appendChild( C.ic( "check" ) );
-                rows.appendChild( personRow( ct, function () { toggle( ct.id ); }, chk ) );
+                var tap = function () { toggle( p.id ); };
+                rows.appendChild( p.ct ? personRow( p.ct, tap, chk )
+                    : h( "button", { class: "row", attrs: { type: "button" }, on: { click: tap } },
+                        C.avatar( p.id, p.name, null, null ),
+                        h( "div", { class: "body" }, h( "span", { class: "name", text: p.name } ),
+                            h( "span", { class: "state", text: T( "chat.nayiveUser" ) } ) ), chk ) );
             } );
             view.appendChild( rows );
         }
@@ -977,13 +997,29 @@
             if( i >= 0 ) picked.splice( i, 1 ); else picked.push( id );
             render();
         }
+        // The picked ids, each "u:<account>" turned into its contact here.
+        async function members()
+        {
+            var out = [];
+            for( var i = 0; i < picked.length; i++ )
+            {
+                var id = picked[ i ];
+                if( id.indexOf( "u:" ) === 0 )
+                {
+                    var r = await C.api( "POST", "contacts", { user: id.slice( 2 ), group: true } );
+                    id = r.contact.id;
+                }
+                out.push( id );
+            }
+            return out;
+        }
         async function next()
         {
             if( group )
             {
                 try
                 {
-                    await C.api( "PATCH", "groups/" + group.id.slice( 2 ), { members: picked } );
+                    await C.api( "PATCH", "groups/" + group.id.slice( 2 ), { members: await members() } );
                     C.back();
                     C.loadSummary().catch( function () {} );
                 }
@@ -995,7 +1031,7 @@
             if( ! name ) return;
             try
             {
-                var g = await C.api( "POST", "groups", { name: name, members: picked } );
+                var g = await C.api( "POST", "groups", { name: name, members: await members() } );
                 await C.loadSummary();
                 C.openConv( "g-" + g.id );
             }
@@ -1026,9 +1062,9 @@
     {
         var pick = null, drop = false, url = "";
         var input = h( "input", { attrs: { type: "text", id: "myName", maxlength: "60", autocomplete: "off" }, value: S.owner || "" } );
-        var face = h( "button", { class: "face", attrs: { type: "button", title: T( "chat.changePhoto" ), "aria-label": T( "chat.changePhoto" ) },
+        var face = h( "button", { class: "face", attrs: { type: "button", "data-tip": T( "chat.changePhoto" ), "aria-label": T( "chat.changePhoto" ) },
                                   on: { click: choose } } );
-        var bin = h( "button", { class: "face-bin", attrs: { type: "button", title: T( "chat.removePhoto" ), "aria-label": T( "chat.removePhoto" ) },
+        var bin = h( "button", { class: "face-bin", attrs: { type: "button", "data-tip": T( "chat.removePhoto" ), "aria-label": T( "chat.removePhoto" ) },
                                  on: { click: function () { pick = null; drop = true; show(); } } }, C.ic( "trash" ) );
         function show()
         {
@@ -1091,7 +1127,7 @@
     {
         var prof = C.profilePane(), del = C.autoDeletePane();
         var panes = { profile: prof, autodel: del };
-        var no = h( "button", { attrs: { type: "button", "data-act": "close", title: T( "ui.close" ) } } );
+        var no = NayiveUI.sheetButton( "close", T( "ui.close" ) );
         var tabs = h( "div", { class: "set-tabs", attrs: { role: "tablist" } } );
         // Escape only while it is on top: the picture picker closes first.
         var d = NayiveUI.modal( { cls: "chat-settings", title: T( "ui.settings" ), escape: save,

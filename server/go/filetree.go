@@ -41,6 +41,7 @@ type Node struct {
 	Size   *int64    `json:"size,omitempty"`
 	MTime  *int64    `json:"mtime,omitempty"`
 	Shared *SharedBy `json:"shared,omitempty"`
+	Link   *LinkTo   `json:"link,omitempty"` // a Drive shortcut (links.go), only with &links=1
 
 	// User and Role only appear on the ROOT node of a whole-tree answer.
 	User string `json:"user,omitempty"`

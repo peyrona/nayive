@@ -19,8 +19,8 @@ let clockTimer     = null;
 // ICONS (static markup only - never interpolate user text into these)
 
 // Interface strings: every one of them lives in shared/i18n/*.json.
-const T  = k           => NayiveUI.t( k );
-const TF = ( k, vars ) => NayiveUI.tf( k, vars );
+const T  = k           => Ayni.t( k );
+const TF = ( k, vars ) => Ayni.tf( k, vars );
 
 const ICON_TRIP =
     '<ellipse cx="5.5" cy="9" rx="2" ry="2.5"></ellipse><ellipse cx="12" cy="6" rx="2.1" ry="2.6"></ellipse><ellipse cx="18.5" cy="9" rx="2" ry="2.5"></ellipse>' +

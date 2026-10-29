@@ -399,6 +399,7 @@ button.who { cursor: pointer; }
     font-size: 0.76rem; color: var(--text-dim); white-space: nowrap; cursor: pointer;
 }
 .msg.out .reac { left: auto; right: 10px; }
+.msg.in .reac .re { font-size: 1.15em; }    /* the emoji on a received message: 15% bigger */
 
 
 /* photo */
@@ -534,6 +535,7 @@ button.who { cursor: pointer; }
 }
 .composer .fmt-open svg { width: 14px; height: 14px; }
 .composer .fmt-open:hover, .composer .fmt-open:focus-visible { color: var(--text); background-color: var(--head); }
+.composer .emoji-open { left: 40px; }      /* the emoji, beside it (desktop window only) */
 .composer:has(.fmt-bar.on) .fmt-open { opacity: 0; pointer-events: none; }
 /* the format bar (B I S list): the "T" raises it from behind the box; it
    goes when the focus leaves; the clip's and the emoji panels open over it */
@@ -554,13 +556,16 @@ button.who { cursor: pointer; }
 /* its "←" (back to the "T"): smaller than the format buttons */
 .fmt-bar .fmt-close     { width: 28px; height: 28px; align-self: center; }
 .fmt-bar .fmt-close svg { width: 15px; height: 15px; }
+/* the clip, outside the box, before it */
+.composer .attach-btn     { flex: 0 0 auto; width: 42px; height: 42px; margin-bottom: 2px; }
+.composer .attach-btn svg { width: 22px; height: 22px; }
 .cbox .row1       { display: flex; align-items: flex-end; min-height: 46px; padding: 0 2px; }
-.cbox .icon-btn   { width: 42px; height: 42px; margin: 2px 0; }
-.cbox .icon-btn svg { width: 22px; height: 22px; }
+.cbox .btn   { width: 42px; height: 42px; margin: 2px 0; }
+.cbox .btn svg { width: 22px; height: 22px; }
 .cbox textarea
 {
     flex: 1 1 auto; min-width: 0; min-height: 0; max-height: 140px;
-    margin: 0; padding: 12px 4px; resize: none;
+    margin: 0; padding: 12px 4px 12px 14px; resize: none;   /* no clip inside: room on the left */
     border: none; background: transparent; outline: none;
     font-size: 1rem; line-height: 1.35;
 }
@@ -667,10 +672,10 @@ button.who { cursor: pointer; }
 .linkbox           { padding: 12px; border-radius: var(--radius-m); border: 1px solid var(--line); background: var(--card2); }
 .linkbox code      { display: block; margin: 4px 0 10px; font-family: var(--font-mono); font-size: 0.76rem; overflow-wrap: anywhere; }
 .linkbox .btns     { display: flex; gap: 8px; }
-.linkbox .btns .text-btn { flex: 1; }
+.linkbox .btns .btn.text { flex: 1; }
 .qr                { display: flex; align-items: center; gap: 14px; margin-top: 14px; font-size: 0.82rem; line-height: 1.4; color: var(--text-dim); }
 .qr canvas, .qr img { flex: 0 0 auto; width: 120px; height: 120px; padding: 6px; border-radius: var(--radius-s); background: white; image-rendering: pixelated; }
-.pane .text-btn.wide { width: 100%; margin-top: 6px; }
+.pane .btn.text.wide { width: 100%; margin-top: 6px; }
 .sel-chips         { flex: 0 0 auto; display: flex; gap: 14px; padding: 10px 16px; border-bottom: 1px solid var(--line); overflow-x: auto; }
 .sel-chips:empty   { display: none; }
 .sel-chips > button
@@ -691,9 +696,12 @@ button.who { cursor: pointer; }
 .info-wall  { flex: 1 1 auto; overflow-y: auto; background: color-mix(in srgb, var(--text) 5%, var(--head)); }
 .info-top   { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 20px 16px 14px; background: var(--head); text-align: center; }
 .info-top b     { font-size: 1.3rem; }
-/* Options (owner): the circle (.face, app.css) and the name are the buttons
-   that change them. The same circle sits on top of the "Your name" dialog
-   (.face-pick, app.css). */
+/* Options (owner): the circle's camera (.face, app.css) and the name are
+   the buttons that change them; a person's circle opens Contacts. The same
+   circle sits on top of the "Your name" dialog (.face-pick, app.css). */
+.info-top div.face           { cursor: default; }     /* the circle and its camera: two buttons */
+.info-top div.face:hover > :not(button) { filter: none; }
+.info-top .face .cam         { padding: 0; cursor: pointer; }
 .info-top .name-btn
 {
     padding: 2px 8px; border: none; border-radius: var(--radius-s); background: none;
@@ -768,6 +776,8 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
 .full .caption  { flex: 0 0 auto; padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); color: white; text-align: center; font-size: 0.9rem; background: #151515; white-space: pre-wrap; }
 .full .caption:empty { display: none; }
 .full .map-host { position: absolute; inset: 0; }
+/* Recortar: the box over the photo (.crop-box, shared app.css); outside it is dimmed. Corners are 44 px to a finger. */
+.cropper .editor-canvas { padding: 24px; touch-action: none; }
 
 .picker         { position: fixed; inset: 0; z-index: 160; display: flex; flex-direction: column; background: var(--head); }
 .picker .map-box { position: relative; flex: 1 1 auto; min-height: 0; }
@@ -784,6 +794,7 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
 .picker .me-btn svg { width: 20px; height: 20px; }
 
 /* photo preview before sending */
+.prev-tools     { display: flex; justify-content: center; gap: 16px; margin: -4px 0 12px; }
 .prev-grid      { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 12px; }
 .prev-grid img  { flex: 0 0 auto; width: 96px; height: 96px; border-radius: var(--radius-s); object-fit: cover; background: var(--card2); }
 .prev-one       { display: block; max-width: 100%; max-height: 50vh; margin: 0 auto 12px; border-radius: var(--radius-s); }
@@ -800,8 +811,8 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
 
 /* Options -> bin: each way of deleting, a wide quiet button and what it does. */
 .del-opt, .pick-opt   { margin-bottom: 14px; }
-.del-opt .text-btn,
-.pick-opt .text-btn   { width: 100%; justify-content: flex-start; }
+.del-opt .btn.text,
+.pick-opt .btn.text   { width: 100%; justify-content: flex-start; }
 .del-opt .hint        { margin: 6px 2px 0; }
 
 /* ---- a person's first visit (guest.html) ----------------------------------- */
@@ -837,7 +848,7 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
     color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--card2));
 }
 .bigbell svg     { width: 46px; height: 46px; }
-.onb .text-btn   { align-self: stretch; min-height: 48px; font-size: 1rem; margin-top: 22px; }
+.onb .btn.text   { align-self: stretch; min-height: 48px; font-size: 1rem; margin-top: 22px; }
 .onb .quiet
 {
     margin-top: 14px; padding: 6px; border: none; background: none;
@@ -885,11 +896,22 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
     position: relative; z-index: 2; margin-top: auto;
     display: flex; justify-content: center; gap: 22px; flex-wrap: wrap;
 }
-.call-screen .call-btns .icon-btn:not(.solid-ok):not(.solid-danger):not(.is-active)
+.call-screen .call-btns .btn:not(.solid-ok):not(.solid-danger):not([aria-pressed="true"])
 {
     color: #fff; background: rgba(255, 255, 255, 0.16);
 }
-.call-screen .call-btns .icon-btn:disabled { opacity: 0.4; }
+
+/* A call's own buttons, Chat only: .lg is the big round button of a call
+   screen, .solid-ok answers (a green fill), .solid-danger hangs up or declines
+   (a red fill) - the one place a phone-call convention beats Ayni's "colour in
+   the icon only" rule. */
+.btn.lg                { --btn: 60px; }
+.btn.lg .icon          { --icon: 26px; }
+.btn.solid-ok,
+.btn.solid-ok:hover:not([aria-disabled="true"])         { background: var(--ok); color: var(--on-solid); }
+.btn.solid-danger,
+.btn.solid-danger:hover:not([aria-disabled="true"])     { background: var(--danger); color: var(--on-solid); }
+.btn.solid-ok:active, .btn.solid-danger:active          { filter: brightness(0.9); }
 .call-screen .call-hear { position: relative; z-index: 2; margin-top: 24px; }
 .call-screen audio      { display: none; }
 

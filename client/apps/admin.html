@@ -1,7 +1,7 @@
 <!-- This is an admin/ops tool, not a user-facing app - it will never be
      translated into any language other than English. -->
 <!-- admin.html - Nayive admin panel: create/rename/edit/delete users, the admin
-     account and the web sites folder - one tab each. Open with no login only until an
+     account, the web sites folder and the Language app's engines - one tab each. Open with no login only until an
      admin account exists; after that it asks you to sign in as that admin.
      Talks to /api/admin.
      NO timezone here: a timezone belongs to a person, so each account picks its
@@ -11,22 +11,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- The interface language. First of all: it hides the page until the
-         dictionary is in, and every inline script below may call it. -->
+    <!-- Nayive's first script (old settings, whose page, error reports), then
+         Ayni's language layer: it hides the page until the texts are in, and
+         every inline script below may call Ayni.t(). -->
     <script src="shared/i18n.js"></script>
+    <script src="shared/ayni/ayni-i18n.js" data-dict="shared/i18n/" data-langs="es en pt fr de"></script>
     <title>Nayive · Admin</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3Cpath d='m9 12 2 2 4-4'/%3E%3C/svg%3E">
 
     <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="shared/ayni/ayni-base.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="shared/theme.css">
     <link rel="stylesheet" href="shared/app.css">
-    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
-    <script src="shared/theme.js" defer></script>
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script src="shared/ayni/ayni-icons.js" defer></script>
+    <script src="shared/ayni/ayni-base.js" defer></script>
+    <script src="shared/ayni/ayni-buttons.js" defer></script>
     <script src="shared/locker.js"></script>
     <script src="shared/ui.js" defer></script>
     <!-- Only for signing a regular account out (the 403 below): its saves
          still waiting here, as the launcher's sign-out does. -->
     <script src="shared/store.js" defer></script>
+    <!-- The Language tab: the app's own engine code, saving to the server. -->
+    <link rel="stylesheet" href="language/language.css">
+    <script src="language/admin.js" type="module"></script>
 
     <style>
         /* Base reset + fonts from ../shared/app.css. Standalone admin panel -
@@ -69,6 +78,12 @@
         {
             display: block; font-size: 0.72rem; color: var(--text-dim);
             margin: 0 0 4px 2px; text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        /* the Language tab's dictionary rows are labels too: their own look */
+        .lang-admin label.cfg-row
+        {
+            display: flex; font-size: inherit; color: inherit;
+            margin: 0; text-transform: none; letter-spacing: normal;
         }
         /* Look + focus from app.css (FORM FIELD) - the same text field as every
            other app. Only the full-row width is local. */
@@ -179,13 +194,14 @@
             <path d="m9 12 2 2 4-4"/>
         </svg>
         <h1 class="app-title">Nayive · Admin</h1>
-        <!-- Short labels, so the three fit one row on a phone; each section's own
+        <!-- Short labels, so the four fit one row on a phone; each section's own
              heading has the full name. Hidden on first run, when the admin
              account is the only section. -->
         <div class="tabs hide" id="tabs" role="tablist">
             <button class="pill" type="button" role="tab" data-tab="adminSec">Account</button>
             <button class="pill" type="button" role="tab" data-tab="sitesSec">Web sites</button>
             <button class="pill" type="button" role="tab" data-tab="usersSec">Users</button>
+            <button class="pill" type="button" role="tab" data-tab="langSec">Language</button>
         </div>
     </div>
 
@@ -237,7 +253,7 @@
             <div class="pw-wrap">
                 <input id="sitesDir" type="text" placeholder="~/web_sites"
                        autocapitalize="none" autocorrect="off" spellcheck="false">
-                <button type="button" class="pw-eye" id="sitesPick" title="Choose the folder" aria-label="Choose the folder"></button>
+                <button type="button" class="pw-eye" id="sitesPick" data-tip="Choose the folder" aria-label="Choose the folder"></button>
             </div>
         </div>
     </section>
@@ -252,7 +268,7 @@
                     <th class="col-photo">Photo&nbsp;px<button class="info-dot" data-info="Photos are the biggest thing most people store, and a phone photo is far larger than any screen can show.&#10;&#10;Give a user a number here and their browser shrinks every photo they upload so that neither side is longer than that many pixels - the shape is kept, nothing is squashed - and saves it as JPEG. 2048 is a good value: still sharp on any screen or TV, and about ten times smaller than the original.&#10;&#10;When the original is a JPEG (what every phone camera makes), its date and GPS position are carried over, so the map and the timeline keep working.&#10;&#10;Leave it empty to store the photos exactly as they come out of the camera."></button></th>
                     <th class="col-use">Usage</th>
                     <th class="col-pass">Password</th>
-                    <th class="col-act"><div class="row-acts"><button id="addUser" data-act="primary:plus" title="Add a user"></button></div></th>
+                    <th class="col-act"><div class="row-acts"><button class="btn primary" id="addUser" data-tip="Add a user"><span class="icon" data-icon="plus"></span></button></div></th>
                 </tr>
             </thead>
             <tbody id="userRows"></tbody>
@@ -270,6 +286,55 @@
            The small trash inside a password field removes that password at once: the user
            signs in with a blank one and must pick a new password.</p>
     </section>
+
+    <!-- LANGUAGE (language/admin.js) ------------------------------------- -->
+    <section id="langSec" class="hide lang-admin" role="tabpanel">
+        <h2>Language</h2>
+        <p class="hint lead">
+            The translation engines and dictionaries of the Language app, for
+            every account. Only the admin changes them; each person keeps their
+            own languages, Local mode and downloaded models.
+        </p>
+        <span class="section-label" data-i18n="language.tabEngines"></span>
+        <p class="hint lead" data-i18n="language.enginesLead"></p>
+        <ul class="cfg-list" id="engineList"></ul>
+        <button class="btn text bordered" type="button" id="addEngineBtn" data-i18n="language.addEngine"></button>
+
+        <span class="section-label" data-i18n="language.tabDicts"></span>
+        <p class="hint lead" data-i18n="language.dictsLead"></p>
+        <ul class="cfg-list" id="dictList"></ul>
+
+        <div class="cfg-btns">
+            <button class="btn text bordered danger" type="button" id="resetBtn" data-i18n="language.reset"></button>
+        </div>
+    </section>
+</div>
+
+<!-- Language: a new engine, a second server of an existing kind. -->
+<div id="addBackdrop" class="sheet-backdrop">
+    <div class="sheet" role="dialog" aria-modal="true" data-i18n-attr="aria-label:language.addEngine">
+        <h2 data-i18n="language.addEngine"></h2>
+        <div class="field">
+            <label for="addKind" data-i18n="language.engineKind"></label>
+            <select id="addKind">
+                <option value="libretranslate">LibreTranslate</option>
+                <option value="lingva">Lingva</option>
+            </select>
+        </div>
+        <div class="field">
+            <label for="addName" data-i18n="language.engineName"></label>
+            <input id="addName" type="text" autocomplete="off" maxlength="60">
+        </div>
+        <div class="field">
+            <label for="addUrl" data-i18n="language.optUrl"></label>
+            <input id="addUrl" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://">
+        </div>
+        <p id="addError" class="field-error" hidden></p>
+        <div class="sheet-actions">
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="addSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -445,7 +510,7 @@
     document.addEventListener( 'DOMContentLoaded', function ()
     {
         var btn = $( 'sitesPick' );
-        btn.innerHTML = NayiveUI.icon( 'folder' );
+        btn.innerHTML = Ayni.icon( 'folder' );
         btn.addEventListener( 'click', pickSitesDir );
     } );
 
@@ -530,7 +595,7 @@
                 var row = document.createElement( 'div' );
                 row.className = 'fp-row';
                 row.setAttribute( 'role', 'option' );
-                row.innerHTML = '<span class="fp-caret">▸</span><span class="fp-ic">' + NayiveUI.icon( 'folder' ) +
+                row.innerHTML = '<span class="fp-caret">▸</span><span class="fp-ic">' + Ayni.icon( 'folder' ) +
                                 '</span><span class="fp-name"></span>';
                 row.querySelector( '.fp-name' ).textContent = name;
                 row.addEventListener( 'click', function () { open( ( cur.path === '/' ? '' : cur.path ) + '/' + name ); } );
@@ -539,15 +604,11 @@
 
             var arow = document.createElement( 'div' );
             arow.className = 'sheet-actions';
-            var cancel = document.createElement( 'button' );
-            cancel.setAttribute( 'data-act', 'close' );
-            cancel.title = 'Cancel';
+            var cancel = NayiveUI.sheetButton( 'close', 'Cancel' );
             cancel.addEventListener( 'click', function () { d.close(); } );
             arow.appendChild( cancel );
-            var ok = document.createElement( 'button' );
-            ok.setAttribute( 'data-act', 'primary' );
-            ok.title    = 'Use this folder';
-            ok.disabled = ! cur || !! err;
+            var ok = NayiveUI.sheetButton( 'primary', 'Use this folder' );
+            ok.ariaDisabled = ! cur || !! err;
             ok.addEventListener( 'click', function ()
             {
                 if ( ! cur ) return;
@@ -805,12 +866,9 @@
 
         var acts = document.createElement( 'div' );
         acts.className = 'row-acts';
-        var btn = document.createElement( 'button' );
-        btn.setAttribute( 'data-act', act );
-        btn.title = title;
+        var btn = NayiveUI.sheetButton( act, title, act === 'danger' ? null : 'close' );
         acts.appendChild( btn );
         var tdA = cell( 'col-act', acts );
-        if ( window.NayiveUI ) NayiveUI.applySheetButtons( tdA );
 
         return { tr: tr, n: n, q: q, m: m, tdU: tdU, p: p, tdP: tdP, btn: btn };
     }
@@ -819,7 +877,7 @@
     // autosave once it has a name. Its (x) throws the row away again.
     function addNewRow()
     {
-        var c = userCells( 'close', 'Discard this row' );
+        var c = userCells( '', 'Discard this row' );
         c.n.placeholder = 'new';
         c.m.placeholder = '2048';
         c.tdU.textContent = '—';
@@ -868,10 +926,10 @@
                 pw.appendChild( p );
                 clr = document.createElement( 'button' );
                 clr.type = 'button';
-                clr.className = 'icon-btn sm danger pw-clear';
-                clr.title = 'Remove password';
-                clr.setAttribute( 'aria-label', clr.title );
-                clr.innerHTML = NayiveUI.icon( 'trash' );
+                clr.className = 'btn sm danger pw-clear';
+                Ayni.setTip( clr, 'Remove password' );
+                clr.setAttribute( 'aria-label', clr.dataset.tip );
+                clr.innerHTML = Ayni.icon( 'trash' );
                 pw.appendChild( clr );
             }
 
@@ -912,9 +970,9 @@
                         + 'trash and settings.\n\n'
                         + 'There is no way back.',
                     confirm: 'Delete', danger: true } ) ) return;
-                del.disabled = true;
+                Ayni.setBusy( del, 'Deleting…' );
                 var res = await api( { action: 'delete-user', name: ctl.name } );
-                if ( !res.ok ) { del.disabled = false; flash( $( 'saveMsg' ), await errText( res ), 'err' ); return; }
+                if ( !res.ok ) { Ayni.setBusy( del, false ); flash( $( 'saveMsg' ), await errText( res ), 'err' ); return; }
                 flash( $( 'saveMsg' ), ctl.name + ' deleted.', 'ok' );
                 refresh();
             } );
@@ -934,7 +992,7 @@
     // Wait for shared/ui.js (a deferred script) so NayiveUI.applySheetButtons is
     // there when we build the user rows.
     if ( document.readyState === 'loading' )
-        NayiveI18n.ready.then( load );
+        Ayni.i18n.ready.then( load );
     else
         load();
 } )();

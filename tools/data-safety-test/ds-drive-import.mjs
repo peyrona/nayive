@@ -64,7 +64,7 @@ section( "C1 · OFFLINE, OVER THE COPY THIS BROWSER CACHED" );
     await c.send( "Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 } );
     await c.until( "! navigator.onLine" );
     await drop( "cena.ics", CAL( VEV( "n", "Dinner", "20261002T100000Z" ) ) );
-    const offlineSaid = await c.evaluate( "NayiveUI.t( 'drive.importOffline' )" );
+    const offlineSaid = await c.evaluate( "Ayni.t( 'drive.importOffline' )" );
     ok( await c.evaluate( `window.__alerts.some( function ( b ) { return b.indexOf( ${JSON.stringify( offlineSaid )} ) !== -1; } )` ),
         "offline: refused, saying it must read the server's copy", await c.evaluate( "window.__alerts" ) );
     await c.send( "Network.emulateNetworkConditions", { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 } );
@@ -107,7 +107,7 @@ section( "C2 · AN OLD EXPORT NEVER TAKES BACK THE EDITS MADE SINCE" );
     ok( await untilNode( () => has( CALF, "SUMMARY:New one" ) ), "the new event is added" );
     ok( has( CALF, "SUMMARY:Edited title" ) && has( CALF, "DESCRIPTION:my notes" ) && ! has( CALF, "SUMMARY:Old title" ),
         "the event edited since keeps its edits (the dropped copy is older)", onDisk( s, CALF ) );
-    ok( await toasted( await c.evaluate( "NayiveUI.tf( 'drive.importKept', { n: 1 } )" ) ), "the toast says one was kept as it was", await c.toasts() );
+    ok( await toasted( await c.evaluate( "Ayni.tf( 'drive.importKept', { n: 1 } )" ) ), "the toast says one was kept as it was", await c.toasts() );
 
     await drop( "invite.ics", CAL( VEV( "e1", "Moved by the organiser", "20260901T100000Z", [ "SEQUENCE:1" ] ) ) );
     ok( await untilNode( () => has( CALF, "SUMMARY:Moved by the organiser" ) ), "a NEWER copy (a higher SEQUENCE) does replace it", onDisk( s, CALF ) );
@@ -147,7 +147,7 @@ section( "K2 · A SAVE KEPT ONLY IN THE PAGE IS NOT \"IMPORTED\"" );
     await c.evaluate( "appStore().write = function () { return Promise.resolve( { ok: false, pageOnly: true } ); }; window.__toasts = []; true" );
     await drop( "k2.ics", CAL( VEV( "k", "Kept nowhere", "20261002T100000Z" ) ) );
     ok( ( await c.evaluate( "window.__alerts" ) ).length === 1, "it is said as not imported", await c.evaluate( "window.__alerts" ) );
-    ok( ! await toasted( await c.evaluate( "NayiveUI.tf( 'drive.imported', { what: '' } ).trim()" ) ), "no \"Imported\" toast", await c.toasts() );
+    ok( ! await toasted( await c.evaluate( "Ayni.tf( 'drive.imported', { what: '' } ).trim()" ) ), "no \"Imported\" toast", await c.toasts() );
 }
 
 await done( c, s );

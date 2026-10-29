@@ -27,9 +27,9 @@
  * That is only possible when the source is itself a JPEG; a PNG or a HEIC has
  * no Exif to copy, and those photos arrive without a position.
  *
- * It also holds what the three image editors (Drive, Photos, Chat) share: the
- * editor itself (loadEditor, newEditor, dataUrlBytes), keepExif(), its words
- * in the user's language (editorLocale, localizeEditor) and the thumbnail an
+ * It also holds what the image editors (Image, Chat) share: loading and
+ * building the editor (loadEditor, newEditor - the editor itself is
+ * shared/image-editor.js), dataUrlBytes, keepExif() and the thumbnail an
  * edit leaves behind (thumbOf, dropThumb).
  */
 ( function ()
@@ -335,132 +335,42 @@
         catch ( e ) { return bytes; }
     }
 
-    /* The editor's own words are English. Its `locale` option swaps them:
-     * each English word it asks for -> our key, imgEd.<slug>. The lower-case
-     * and joined-up words (flip, addShape, RemoveWhite...) are what it writes
-     * in its History list. */
-    var EDITOR_WORDS =
-    {
-        "Crop": "crop", "Flip": "flip", "Rotate": "rotate", "Draw": "draw", "Shape": "shape",
-        "Icon": "icon", "Text": "text", "Mask": "mask", "Filter": "filter",
-        "ZoomIn": "zoomIn", "ZoomOut": "zoomOut", "Hand": "hand", "History": "history",
-        "Undo": "undo", "Redo": "redo", "Reset": "reset", "Delete": "delete", "DeleteAll": "deleteAll",
-        "Custom": "custom", "Square": "square", "Apply": "apply", "Cancel": "cancel",
-        "Flip X": "flipX", "Flip Y": "flipY", "Range": "range",
-        "Free": "free", "Straight": "straight", "Color": "color",
-        "Rectangle": "rectangle", "Circle": "circle", "Triangle": "triangle", "Fill": "fill", "Stroke": "stroke",
-        "Arrow": "arrow", "Arrow-2": "arrow2", "Arrow-3": "arrow3", "Star-1": "star1", "Star-2": "star2",
-        "Polygon": "polygon", "Location": "location", "Heart": "heart", "Bubble": "bubble", "Custom icon": "customIcon",
-        "Bold": "bold", "Italic": "italic", "Underline": "underline",
-        "Left": "left", "Center": "center", "Right": "right", "Text size": "textSize",
-        "Load Mask Image": "loadMask",
-        "Grayscale": "grayscale", "Invert": "invert", "Sepia": "sepia", "Sepia2": "sepia2", "Blur": "blur",
-        "Sharpen": "sharpen", "Emboss": "emboss", "Remove White": "removeWhite", "Distance": "distance",
-        "Brightness": "brightness", "Noise": "noise", "Pixelate": "pixelate", "Color Filter": "colorFilter",
-        "Threshold": "threshold", "Tint": "tint", "Multiply": "multiply", "Blend": "blend",
-        // History
-        "Load": "open", "Add": "added", "Remove": "removed", "Change": "changed", "All": "all",
-        "flip": "flip", "rotate": "rotate", "addShape": "shape", "addIcon": "icon", "addObject": "draw",
-        "addText": "text", "RemoveWhite": "removeWhite", "ColorFilter": "colorFilter",
-        "Diff": "diff", "Subtract": "subtract", "Screen": "screen", "Lighten": "lighten", "Darken": "darken"
-    };
-    // Written straight into the page, past the locale: the blend modes
-    // (option value -> key) and the tint's "Opacity".
-    var EDITOR_BLEND = { add: "blendAdd", diff: "diff", subtract: "subtract", multiply: "multiply",
-                         screen: "screen", lighten: "lighten", darken: "darken" };
-
-    function editorWord( slug )
-    {
-        var key = "imgEd." + slug;
-        var s = window.NayiveUI ? NayiveUI.t( key ) : key;
-        return s === key ? null : s;              // dictionary not in: keep the English
-    }
-
-    /* For `includeUI.locale` in new tui.ImageEditor(...). */
-    function editorLocale()
-    {
-        var out = {};
-        Object.keys( EDITOR_WORDS ).forEach( function ( en )
-        {
-            var s = editorWord( EDITOR_WORDS[ en ] );
-            if ( s ) out[ en ] = s;
-        } );
-        return out;
-    }
-
-    /* The few words the locale cannot reach. Call it right after
-     * new tui.ImageEditor( host, ... ) - the menus are built by then. */
-    function localizeEditor( host )
-    {
-        host.querySelectorAll( ".tui-image-editor-selectlist-wrap option, .tui-image-editor-selectlist li" ).forEach( function ( el )
-        {
-            var slug = EDITOR_BLEND[ el.value || el.getAttribute( "data-item" ) ];
-            var s = slug && editorWord( slug );
-            if ( s ) el.textContent = s;
-        } );
-        var range = host.querySelector( "#tie-filter-tint-opacity" );
-        var label = range && range.previousElementSibling;
-        var word  = editorWord( "opacity" );
-        if ( label && word ) label.textContent = word;
-    }
-
-    /* The editor's two bundles (~0.7 MB, in drive/lib - found from this
-     * file's own address, so every app asks for the same URLs), loaded once,
-     * on the first edit: tui.colorPicker must exist before the editor. A load
-     * that failed is tried again next time. */
-    var EDITOR_LIB = document.currentScript ? new URL( "../drive/lib/", document.currentScript.src ).href : "../drive/lib/";
-    var editorLib  = null;
+    /* The editor (shared/image-editor.js, on Fabric.js), loaded once, on the
+     * first edit - found from this file's own address, so every app asks for
+     * the same URLs. Fabric must be in before the editor. A load that failed
+     * is tried again next time. */
+    var HERE = document.currentScript ? new URL( "./", document.currentScript.src ).href : "../shared/";
+    var editorLib = null;
 
     function loadEditor()
     {
         if ( editorLib ) return editorLib;
 
-        function add( tag, attrs )
+        function add( src )
         {
             return new Promise( function ( ok, fail )
             {
-                var el = document.createElement( tag );
-                Object.keys( attrs ).forEach( function ( k ) { el[ k ] = attrs[ k ]; } );
+                var el = document.createElement( "script" );
+                el.src = src;
                 el.onload  = ok;
-                el.onerror = function () { fail( new Error( "load " + ( attrs.href || attrs.src ) ) ); };
+                el.onerror = function () { fail( new Error( "load " + src ) ); };
                 document.head.appendChild( el );
-                if ( tag === "link" ) ok();
             } );
         }
 
-        add( "link", { rel: "stylesheet", href: EDITOR_LIB + "tui-color-picker_v2.2.8.min.css" } );
-        add( "link", { rel: "stylesheet", href: EDITOR_LIB + "tui-image-editor_v3.15.3.min.css" } );
-        editorLib = add( "script", { src: EDITOR_LIB + "tui-color-picker_v2.2.8.min.js" } )
-            .then( function () { return add( "script", { src: EDITOR_LIB + "tui-image-editor_v3.15.3.min.js" } ); } )
+        editorLib = add( HERE + "lib/fabric_v7.4.0.min.js" )
+            .then( function () { return add( HERE + "image-editor.js" ); } )
             .catch( function ( err ) { editorLib = null; throw err; } );
         return editorLib;
     }
 
     /* A new editor in `host` on the picture at `url`, called `name`: the same
-     * menus in every app, in the user's language. Call it once loadEditor()
-     * is done. The library puts the picture between its own two 64px rows
-     * (tools below, zoom / undo above), so it gets the host minus both.
-     * Asking for the whole window left a portrait photo running off the
-     * bottom. */
-    function newEditor( host, url, name )
+     * tools in every app, in the user's language. Call it once loadEditor()
+     * is done. opts.tools / opts.head: where its tools / its undo / redo go
+     * (the app's header); opts.btnClass: their class there. */
+    function newEditor( host, url, name, opts )
     {
-        var box = host.getBoundingClientRect();
-        var ed  = new tui.ImageEditor( host, {
-            includeUI: {
-                loadImage: { path: url, name: name },
-                menu: [ "crop", "flip", "rotate", "draw", "shape", "icon", "text", "mask", "filter" ],
-                initMenu: "",
-                menuBarPosition: "bottom",
-                uiSize: { width: "100%", height: "100%" },
-                locale: editorLocale()          // its words in the user's language
-            },
-            cssMaxWidth:  Math.max( 160, box.width - 16 ),
-            cssMaxHeight: Math.max( 160, box.height - 136 ),
-            selectionStyle: { cornerSize: 18, rotatingPointOffset: 60 },
-            usageStatistics: false              // the library pings Google Analytics unless this is off
-        } );
-        localizeEditor( host );
-        return ed;
+        return NayiveImageEditor.create( host, url, name, opts );
     }
 
     /* An editor's toDataURL() as bytes to write. "data:," is a canvas with
@@ -482,13 +392,16 @@
      * it - call it BEFORE the write, while the listing still shows the old
      * file - and dropThumb() deletes it after. Best effort both: a leftover
      * only costs disk, and Photos' daily sweep would take it in the end. */
+    // The thumbnail's name: Photos and Drive both make and read it.
+    function thumbPath( size, mtime ) { return "data/photos/thumbs/" + size + "_" + mtime + ".jpg"; }
+
     async function thumbOf( path )
     {
         try
         {
             var dir = path.slice( 0, path.lastIndexOf( "/" ) );
             var n = ( ( await GumApi.listDir( dir ) ).nodes || [] ).filter( function ( x ) { return x.path === path; } )[ 0 ];
-            return n && n.size && n.mtime ? "data/photos/thumbs/" + n.size + "_" + n.mtime + ".jpg" : null;
+            return n && n.size && n.mtime ? thumbPath( n.size, n.mtime ) : null;
         }
         catch ( e ) { return null; }
     }
@@ -593,6 +506,7 @@
         newEditor:    newEditor,
         dataUrlBytes: dataUrlBytes,
         thumbOf:      thumbOf,
+        thumbPath:    thumbPath,
         dropThumb:    dropThumb,
         copyExif:     copyExif,
         exifAt:       exifAt,       // where a JPEG's Exif block is (Photos reads dates and places)

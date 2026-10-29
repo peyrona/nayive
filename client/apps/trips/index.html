@@ -4,18 +4,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- The interface language. First of all: it hides the page until the
-         dictionary is in, and every inline script below may call it. -->
+    <!-- Nayive's first script (old settings, whose page, error reports), then
+         Ayni's language layer: it hides the page until the texts are in, and
+         every inline script below may call Ayni.t(). -->
     <script src="../shared/i18n.js"></script>
+    <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
     <title>Trips</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cellipse cx='5.5' cy='9' rx='2' ry='2.5'%3E%3C/ellipse%3E%3Cellipse cx='12' cy='6' rx='2.1' ry='2.6'%3E%3C/ellipse%3E%3Cellipse cx='18.5' cy='9' rx='2' ry='2.5'%3E%3C/ellipse%3E%3Cpath d='M12 12c-4.5 0-7.8 2-7.8 4.4 0 2 2.55 3.3 5.4 2.9 1.35-.2 1.5-.7 2.4-.7s1.05.5 2.4.7c2.85.4 5.4-.9 5.4-2.9C19.8 14 16.5 12 12 12z'%3E%3C/path%3E%3C/svg%3E">
 
     <!-- Shared colour scheme (dark default, opt-in light). Toggle lives in Drive / the launcher; this page just follows the saved choice. -->
     <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
-    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
-    <script src="../shared/theme.js" defer></script>
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script src="../shared/ayni/ayni-icons.js" defer></script>
+    <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
@@ -69,6 +75,8 @@
                     </div>
                 </div>
 
+                <div id="routeResizer" class="pane-resizer route-resizer" role="separator" aria-orientation="vertical" data-i18n-attr="title:ui.dragResize"></div>
+
                 <div class="route-panel" id="routePanel">
                     <div class="trip-panel">
                         <div id="routePanelBody"></div>
@@ -99,10 +107,6 @@
         <div class="sheet" id="discoverSheet"></div>
     </div>
 
-    <div class="sheet-backdrop" id="currencySheetBackdrop">
-        <div class="sheet" id="currencySheet"></div>
-    </div>
-
     <div class="sheet-backdrop" id="filePickerSheetBackdrop">
         <div class="sheet" id="filePickerSheet"></div>
     </div>
@@ -125,7 +129,6 @@
     <script src="persistence.js"></script>
     <script src="actions.js"></script>
     <script src="drag.js"></script>
-    <script src="converter.js"></script>
     <script src="pdf.js"></script>
     <script src="render.js"></script>
     <script src="sheets.js"></script>
@@ -137,6 +140,5 @@
     <script src="my-location.js"></script>
     <script src="route.js"></script>
     <script src="discover.js"></script>
-    <script src="currency-sheet.js"></script>
 </body>
 </html>

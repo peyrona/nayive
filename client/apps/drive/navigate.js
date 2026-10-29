@@ -1,25 +1,22 @@
 /*
- * navigate.js - Drive: the folder tree and breadcrumb, navigateTo and loadListing.
+ * navigate.js - Drive: the breadcrumb, navigateTo and loadListing.
  */
 "use strict";
-
-// The shared tree (NayiveUI.tree, made in menus.js): Drive, and "Shared
-// with me" beside it. Every folder but the roots has the same actions the
-// right pane offers (right-click, ⋮, long-press) and takes dropped items.
-function renderTree() { if( treeView ) treeView.render(); }
 
 function renderBreadcrumb()
 {
     const host = document.getElementById( 'breadcrumb' );
     host.innerHTML = '';
 
-    // The "Drive" crumb doubles as the folder-tree opener on phone, so it is
-    // always shown — even in search mode.
+    // The "Home" crumb is always shown — even in search mode, where it is
+    // the way back. Every crumb but the open folder takes dropped items
+    // (menus.js): the way to move something up.
     const searching = isSearching();
     const rootCrumb = document.createElement( 'span' );
-    rootCrumb.className   = 'crumb crumb-root' + (currentFolder === FS_ROOT && ! searching ? ' current' : '');
-    rootCrumb.textContent = 'Drive';
-    rootCrumb.addEventListener( 'click', function() { isPhone() ? treeView.openSheet() : navigateTo( FS_ROOT ); } );
+    rootCrumb.className    = 'crumb crumb-root' + (currentFolder === FS_ROOT && ! searching ? ' current' : '');
+    rootCrumb.textContent  = homeName();
+    rootCrumb.dataset.path = FS_ROOT;
+    rootCrumb.addEventListener( 'click', function() { navigateTo( FS_ROOT ); } );
     host.appendChild( rootCrumb );
 
     if( searching )
@@ -56,7 +53,8 @@ function renderBreadcrumb()
         host.appendChild( sep );
 
         const crumb = document.createElement( 'span' );
-        crumb.className   = 'crumb' + (i === segs.length - 1 ? ' current' : '');
+        crumb.className    = 'crumb' + (i === segs.length - 1 ? ' current' : '');
+        crumb.dataset.path = path;
         // "shared" -> its Spanish name; "shared/<slug>" -> the grant's real
         // title ("le-nord" -> "Le Nord"); anything deeper is a real folder
         // name already.
@@ -91,10 +89,8 @@ function refreshCanAdd( path )
 function navigateTo( path )
 {
     currentFolder = path;
-    expandedFolders.add( path );
     clearSel();
     clearSearch();
-    if( isPhone() ) treeView.closeSheet();
     loadListing( path );                // renders now, and again when the folder arrives
 }
 
@@ -110,7 +106,7 @@ async function loadListing( path )
 
     try
     {
-        const r = await GumApi.listDir( path );
+        const r = await GumApi.listDir( path, true );      // shortcuts too (tree.js isLink)
         if( seq !== listingSeq ) return;
         curListing     = { path: path, nodes: pruneNodes( r.nodes || [] ) };
         listingLoading = false;

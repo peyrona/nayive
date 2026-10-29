@@ -1,0 +1,122 @@
+/* Ayni library 0.1.0, buttons family: the look of round buttons, toggles, the second action, busy and disabled
+   buttons, buttons over pictures, text buttons, switches, check boxes and radio buttons. Plain CSS, no build step,
+   evergreen browsers 2024+. Load it after ayni-base.css. The rules are chapters 3 and 5 of the guidelines. */
+/* ---------- Round buttons ---------- */
+/* Buttons are always round, icon only, and carry a tooltip (data-tip) plus an aria-label.
+   RULE: at rest a button has no border and no fill and its icon is Text dim; hover brings a grey tint and the full Text
+   colour, a press a stronger tint and 1 px down. Accent never means hover. .bordered is the option for a button alone
+   on a plain surface: a Card disc, a thin border, a full-colour icon. */
+.btn { --btn: 36px; font: inherit; color: var(--text-dim); background: transparent; border: 1px solid transparent; border-radius: 50%;
+  width: var(--btn); height: var(--btn); padding: 0; flex: none; cursor: pointer; display: inline-grid; place-items: center;
+  transition: background-color var(--tr-fast), color var(--tr-fast); }
+.btn:hover:not([aria-disabled="true"]) { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+.btn:active:not([aria-disabled="true"]) { background: color-mix(in srgb, var(--text) 15%, transparent); transform: translateY(1px); }
+.btn.bordered { background: var(--card); border-color: var(--line); color: var(--text); }
+.btn.bordered:hover:not([aria-disabled="true"]) { background: var(--card-head); border-color: var(--text-dim); }
+.btn.sm { --btn: 30px; } .btn.sm .icon { --icon: 15px; }
+/* Fill says only "default button or not": an Accent disc with the icon in On accent */
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.btn.primary:hover:not([aria-disabled="true"]) { background: var(--accent); color: var(--on-accent); filter: brightness(1.08); }
+/* Meaning (danger, success, warning) is carried by the icon colour, at rest too */
+.btn.danger { color: var(--danger); } .btn.ok { color: var(--ok); } .btn.warn { color: var(--warn); }
+.btn.danger:hover:not([aria-disabled="true"]) { color: var(--danger); } .btn.ok:hover:not([aria-disabled="true"]) { color: var(--ok); }
+.btn.warn:hover:not([aria-disabled="true"]) { color: var(--warn); }
+.btn.primary.ok, .btn.primary.warn { color: var(--on-accent); } /* a default button keeps a legible icon */
+/* Rule: a danger button is never the default. If markup breaks it, show it as a plain danger button */
+.btn.primary.danger { background: transparent; border-color: transparent; color: var(--danger); }
+/* A toggle that is on: a soft Accent tint behind an Accent icon, never a fill (a fill means the default button). A round
+   button that is a tab (role="tab") shows its chosen state the same way. */
+.btn[aria-pressed="true"], .btn[role="tab"][aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+.btn[aria-pressed="true"]:hover:not([aria-disabled="true"]), .btn[role="tab"][aria-selected="true"]:hover:not([aria-disabled="true"]) {
+  background: color-mix(in oklab, var(--accent) 24%, var(--card)); color: var(--accent); }
+/* RULE: a disabled button uses aria-disabled="true" (not the disabled attribute): faded, ignores clicks and Enter,
+   but stays focusable and shows its tooltip, which can say why it is unavailable */
+.btn[aria-disabled="true"] { opacity: .45; cursor: default; }
+/* RULE: a filter button's icon is grey with no filter, and accent while a filter is active */
+.btn.filter-btn { color: var(--text-dim); } .btn.filter-btn.is-active { color: var(--accent); }
+/* RULE: a busy button swaps its icon for a small spinner in the same circle (no size change), ignores clicks and its
+   tooltip says what is happening ("Saving…"). Set with one line: setBusy(button, 'Saving…') and setBusy(button, false). */
+.btn[aria-busy="true"] { cursor: progress; }
+.btn[aria-busy="true"] > .icon { display: none; }
+.btn-spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid color-mix(in srgb, currentColor 30%, transparent); border-top-color: currentColor; animation: spin .8s linear infinite; }
+.btn .icon { --icon: 18px; }
+/* Second action (double-click, long tap on touch, Shift+Enter): always marked with a dot, on every device */
+.btn[data-alt] { position: relative; touch-action: manipulation; -webkit-touch-callout: none; user-select: none; }
+.btn[data-alt]::after { content: ""; position: absolute; right: -2px; bottom: -2px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--panel-bg); }
+/* Popup button (opens a menu or popover): a small down-pointing triangle in the same corner, like a combo box. One
+   pseudo element only (a border triangle, ringed in the panel colour by drop shadows), so ::before stays free for the
+   touch hit area */
+.btn[popovertarget], .btn[aria-haspopup] { position: relative; }
+.btn[popovertarget]::after, .btn[aria-haspopup]::after { content: ""; position: absolute; right: -2px; bottom: 0; width: 0; height: 0;
+  border-style: solid; border-width: 6px 4.5px 0; border-color: var(--accent) transparent transparent; pointer-events: none;
+  filter: drop-shadow(1.5px 0 0 var(--panel-bg)) drop-shadow(-1.5px 0 0 var(--panel-bg)) drop-shadow(0 1.5px 0 var(--panel-bg)) drop-shadow(0 -1.5px 0 var(--panel-bg)); }
+/* RULE: the "more" button (⋮) shows no triangle: its three dots already say "a menu of more things" */
+.btn:is([popovertarget], [aria-haspopup]):has(> .icon[data-icon="more"])::after { content: none; }
+/* While holding on touch, the ring paints in for as long as the hold lasts (around a button, or at the finger on an area or item) */
+.hold-ring { position: fixed; z-index: 100; width: 56px; height: 56px; translate: -50% -50%; border-radius: 50%; pointer-events: none;
+  background: conic-gradient(var(--accent) calc(var(--hold) * 1turn), transparent 0);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  animation: hold var(--hold-ms, 500ms) linear forwards; }
+@property --hold { syntax: "<number>"; inherits: false; initial-value: 0; }
+.btn[data-alt].holding::before { content: ""; position: absolute; inset: -6px; border-radius: 50%; pointer-events: none;
+  background: conic-gradient(var(--accent) calc(var(--hold) * 1turn), transparent 0);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  animation: hold var(--hold-ms, 500ms) linear forwards; }
+@keyframes hold { to { --hold: 1; } }
+.choice { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.choice input { width: 16px; height: 16px; margin: 0; }
+fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+legend { font-size: .8rem; font-weight: 500; color: var(--text-dim); padding: 0; margin-bottom: 4px; }
+.switch { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+/* RULE: switch states. Off is hollow (grey outline, small grey thumb); on is filled accent with a full thumb. Disabled off
+   is a filled strong grey track, faded like every disabled control, so it never looks like an enabled off switch. */
+.switch input { appearance: none; margin: 0; width: 36px; height: 20px; border-radius: 10px; background: var(--card); box-shadow: inset 0 0 0 2px var(--text-dim); position: relative; cursor: pointer; transition: background .15s, box-shadow .15s; flex: none; }
+.switch input::after { content: ""; position: absolute; top: 4px; left: 4px; width: 12px; height: 12px; border-radius: 50%; background: var(--text-dim); transition: transform .15s, inset .15s, width .15s, height .15s; }
+.switch input:is(:checked, :disabled) { box-shadow: none; }
+.switch input:is(:checked, :disabled)::after { top: 2px; left: 2px; width: 16px; height: 16px; background: var(--on-solid); box-shadow: 0 1px 2px var(--shadow); }
+.switch input:disabled:not(:checked) { background: color-mix(in oklab, var(--text) 55%, var(--card)); }
+.switch input:checked { background: var(--accent); }
+.switch input:checked::after { transform: translateX(16px); }
+/* RULE: in a list of settings the switch sits at the end of its row, the label (and its info mark) at the start, so the
+   switches line up down the list */
+.switch.end { width: 100%; } .switch.end > input { margin-left: auto; }
+/* RULE: a switch has two uses. One-sided (.switch): one label, on or off, the same as one check box ("Visible").
+   Two-sided (.switch-pair): a label on each side, the thumb points at the chosen one, the same as two radio buttons
+   ("Dark / Light"). Inside are two radios and a track; neither side means "off", so the track keeps the accent colour.
+   Space or a click on the track flips the side, Left and Right pick a side, clicking a label picks that side. */
+.switch-pair { display: flex; align-items: center; gap: 10px; width: fit-content; }
+.switch-pair > label { position: relative; cursor: pointer; color: var(--text-dim); }
+.switch-pair > label:has(input:checked) { color: var(--text); }
+.switch-pair > label > input { position: absolute; inset: 0; opacity: 0; margin: 0; pointer-events: none; }
+.switch-pair > .track { width: 36px; height: 20px; border-radius: 10px; background: var(--accent); position: relative; cursor: pointer; flex: none; }
+.switch-pair > .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--on-solid); box-shadow: 0 1px 2px var(--shadow); transition: transform .15s; }
+.switch-pair:has(> label:last-of-type input:checked) > .track::after { transform: translateX(16px); }
+.switch-pair:has(input:focus-visible) > .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+
+/* ---------- Buttons over pictures ---------- */
+/* A dark glass disc with a white icon: readable on any photo or frame of a video, in both schemes */
+.btn.on-media { background: rgba(0, 0, 0, .42); border-color: transparent; color: #fff; }
+.btn.on-media:hover:not([aria-disabled="true"]) { background: rgba(0, 0, 0, .6); border-color: transparent; }
+
+/* ---------- Text buttons ---------- */
+/* RULE: only for a wide call to action an icon cannot say ("Extract here"); never in a toolbar or a title row. A pill with
+   a short label and an optional icon before it, with the round button's states. */
+.btn.text { width: auto; height: auto; min-height: var(--btn); border-radius: var(--radius-pill); padding: 0 16px; gap: 6px;
+  display: inline-flex; align-items: center; justify-content: center; font-weight: 600; white-space: nowrap; }
+.btn.text .icon { --icon: 16px; }
+.btn.text.dashed { border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent); color: var(--accent); width: 100%;
+  background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.btn.text.dashed:hover:not([aria-disabled="true"]) { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.btn.text.sm { --btn: 30px; padding: 0 12px; font-size: .82rem; }
+
+/* ---------- Touch ---------- */
+/* RULE: a button keeps its drawn size on touch; an invisible hit area takes it to at least 44 x 44 px (a dialog's bottom
+   row is drawn at 44 px). The hold ring of a second action takes the same place while the finger holds. */
+html.touch .btn { position: relative; }
+html.touch .btn::before { content: ""; position: absolute; inset: min(0px, calc((100% - var(--touch)) / 2)); }
+html.touch .panel > footer .btn, html.touch .panel > form > footer .btn { --btn: var(--touch); }
+html.touch .choice, html.touch .switch, html.touch .switch-pair, html.touch .switch-pair > label { min-height: var(--touch); }
+html.touch .switch-pair > label { display: flex; align-items: center; justify-content: center; min-width: var(--touch); }   /* an icon side too */
+html.touch .switch-pair > .track::before { content: ""; position: absolute; inset: -12px -4px; }

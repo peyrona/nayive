@@ -43,8 +43,8 @@ function render()
     renderCrumbs();
     renderItems();
 
-    document.getElementById( 'gridBtn' ).classList.toggle( 'is-active', ui.mode === 'grid' );
-    document.getElementById( 'listBtn' ).classList.toggle( 'is-active', ui.mode === 'list' );
+    document.getElementById( 'gridBtn' ).setAttribute( 'aria-pressed', ui.mode === 'grid' );
+    document.getElementById( 'listBtn' ).setAttribute( 'aria-pressed', ui.mode === 'list' );
 }
 
 //------------------------------------------------------------------------//
@@ -239,7 +239,7 @@ function renderEmpty( count )
     box.innerHTML = SVG.bookmark + '<p>' + esc( text ) + '</p>' +
         ( btns.length ? '<div class="empty-btns">' + btns.map( function( b, i )
         {
-            return '<button type="button" class="text-btn' + ( i ? ' ghost' : '' ) + '" data-empty="' + b[ 0 ] + '">' + esc( b[ 1 ] ) + '</button>';
+            return '<button type="button" class="btn text' + ( i ? ' bordered' : ' primary' ) + '" data-empty="' + b[ 0 ] + '">' + esc( b[ 1 ] ) + '</button>';
         } ).join( '' ) + '</div>' : '' );
     box.hidden = false;
 }

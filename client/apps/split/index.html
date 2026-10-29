@@ -7,18 +7,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- The interface language. First of all: it hides the page until the
-         dictionary is in, and every inline script below may call it. -->
+    <!-- Nayive's first script (old settings, whose page, error reports), then
+         Ayni's language layer: it hides the page until the texts are in, and
+         every inline script below may call Ayni.t(). -->
     <script src="../shared/i18n.js"></script>
+    <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
     <title>Split</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16.5 7A7 7 0 1 0 16.5 17'/%3E%3Cline x1='3' y1='10.2' x2='13.5' y2='10.2'/%3E%3Cline x1='3' y1='13.8' x2='13.5' y2='13.8'/%3E%3C/svg%3E">
 
     <!-- Shared colour scheme. Apply the saved choice before first paint to avoid a flash. -->
     <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
-    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
-    <script src="../shared/theme.js" defer></script>
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script src="../shared/ayni/ayni-icons.js" defer></script>
+    <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS (and localhost). -->
@@ -32,7 +38,7 @@
     </script>
 
     <style>
-        /* Base reset, card shell (.page/.page-inner/.card), .header, .icon-btn,
+        /* Base reset, card shell (.page/.page-inner/.card), .header, .btn,
            .pill, .card-row, .sheet and inputs all come from ../shared/app.css.
            Only what is unique to Split lives here. */
 
@@ -73,7 +79,7 @@
         .card-row[role="button"]:focus-visible  { outline: 2px solid var(--accent); outline-offset: 2px; }
         .card-row.ro         { cursor: default; }
         /* Editar + Eliminar, at the right edge of a group's row. The trash keeps
-           plain .icon-btn.danger - red at rest, as shared/app.css spells out, so
+           plain .btn.danger - red at rest, as shared/app.css spells out, so
            a delete looks the same here as it does in Trips and in a dialog. */
         .row-act             { flex: 0 0 auto; }
         .row-main            { flex: 1 1 auto; min-width: 0; }
@@ -179,7 +185,7 @@
         .field-label-row     { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
         .field-label-row label { margin-bottom: 0; }
         .field .field-label-row { margin-bottom: 5px; }
-        .field-label-row .text-btn { padding: 3px 10px; font-size: 0.8rem; }   /* "Todos": the shared quiet button, label-sized */
+        .field-label-row .btn.text { padding: 3px 10px; font-size: 0.8rem; }   /* "Todos": the shared quiet button, label-sized */
         .chips               { display: flex; flex-wrap: wrap; gap: 6px; }
         .chips .pill         { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px 4px 4px; font-size: 0.82rem; }
         .chips .pill .avatar { width: 24px; height: 24px; font-size: 0.62rem; }
@@ -260,7 +266,7 @@
                          No room: the button bar drops to the next row, the tabs stay. -->
                     <div class="header">
                         <!-- Inside a group: the way back to the list, before the app icon (as in Trips). -->
-                        <button id="backBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.backToGroups, aria-label:split.backToGroups">
+                        <button id="backBtn" class="btn" type="button" hidden data-i18n-attr="data-tip:split.backToGroups, aria-label:split.backToGroups">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
                             </svg>
@@ -294,12 +300,12 @@
                                 <div class="search-wrap">
                                     <input id="searchInput" class="search-input" type="text" autocomplete="off" enterkeyhint="search" data-i18n-attr="aria-label:ui.search">
                                 </div>
-                                <button id="searchBtn" class="icon-btn" type="button" data-i18n-attr="title:ui.search, aria-label:ui.search">
+                                <button id="searchBtn" class="btn" type="button" data-i18n-attr="data-tip:ui.search, aria-label:ui.search">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                                     </svg>
                                 </button>
-                                <button id="addBtn" class="icon-btn" type="button" data-i18n-attr="title:split.newGroup, aria-label:split.newGroup">
+                                <button id="addBtn" class="btn" type="button" data-i18n-attr="data-tip:split.newGroup, aria-label:split.newGroup">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                                         <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
                                     </svg>
@@ -309,17 +315,17 @@
                                      group somebody shared with us (read-only) hides them. -->
                                 <!-- Its own key, not split.people: that one is the members sheet's
                                      heading, where "Personas" is the right word for a title. -->
-                                <button id="peopleBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.peopleTip, aria-label:split.peopleTip">
+                                <button id="peopleBtn" class="btn" type="button" hidden data-i18n-attr="data-tip:split.peopleTip, aria-label:split.peopleTip">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                                     </svg>
                                 </button>
-                                <button id="editBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.editGroup, aria-label:split.editGroup">
+                                <button id="editBtn" class="btn" type="button" hidden data-i18n-attr="data-tip:split.editGroup, aria-label:split.editGroup">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
                                     </svg>
                                 </button>
-                                <button id="shareBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.shareGroup, aria-label:split.shareGroup">
+                                <button id="shareBtn" class="btn" type="button" hidden data-i18n-attr="data-tip:split.shareGroup, aria-label:split.shareGroup">
                                     <!-- Drive's share glyph, verbatim: the tray-with-an-arrow reads as
                                          "export a file", and this bar already has an export in the ⋮ menu. -->
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -328,27 +334,29 @@
                                 </button>
                                 <!-- Desarchivar: only on an archived group of ours. The list's row
                                      offers the bin there, so this is the one way back. -->
-                                <button id="unarchiveBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.unarchive, aria-label:split.unarchive">
+                                <button id="unarchiveBtn" class="btn" type="button" hidden data-i18n-attr="data-tip:split.unarchive, aria-label:split.unarchive">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><polyline points="9.5 15 12 12.5 14.5 15"></polyline><line x1="12" y1="12.5" x2="12" y2="18"></line>
                                     </svg>
                                 </button>
                                 <!-- Exportar PDF. It only READS the group, so a read-only one keeps it.
                                      Copiar resumen lives at the end of "Saldos" only (2026-10-01). -->
-                                <button id="pdfBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.exportPdf, aria-label:split.exportPdf">
+                                <button id="pdfBtn" class="btn" type="button" hidden data-i18n-attr="data-tip:split.exportPdf, aria-label:split.exportPdf">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>
                                     </svg>
                                 </button>
                             </div>
                             <div class="tb-group tb-sys">
-                                <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                                <button class="btn" data-intro-open type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                                         <circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>
                                     </svg>
                                 </button>
                             </div>
-                            <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.synced"></button>
+                            <!-- The save floppy (app.css .saved-at): green after an entry is saved. -->
+                            <span id="savedAt" class="saved-at"></span>
+                            <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="data-tip:ui.synced"></button>
                         </div>
                     </div>
 
@@ -392,7 +400,7 @@
                             <div id="totalsLine" class="totals"></div>
                             <div class="row-between">
                                 <div class="section-label" data-i18n="split.balances"></div>
-                                <button id="perCurBtn" class="pill" type="button" data-i18n="split.perCurrency" hidden data-i18n-attr="title:split.perCurrencyTip"></button>
+                                <button id="perCurBtn" class="pill" type="button" data-i18n="split.perCurrency" hidden data-i18n-attr="data-tip:split.perCurrencyTip"></button>
                             </div>
                             <div id="balanceList"></div>
                         </div>
@@ -428,8 +436,8 @@
                 </div>
             </div>
             <div class="sheet-actions">
-                <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
-                <button id="groupSaveBtn" type="button" data-act="primary" data-i18n-attr="title:ui.save"></button>
+                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="groupSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
             </div>
         </div>
     </div>
@@ -484,7 +492,7 @@
             <div class="field" id="amongField">
                 <div class="field-label-row">
                     <label data-i18n="split.forLabel"></label>
-                    <button id="allBtn" class="text-btn ghost" type="button" data-i18n="split.everyone"></button>
+                    <button id="allBtn" class="btn text bordered" type="button" data-i18n="split.everyone"></button>
                 </div>
                 <div id="amongChips" class="chips"></div>
             </div>
@@ -503,9 +511,9 @@
             <p id="entryHint" class="hint"></p>
 
             <div class="sheet-actions">
-                <button id="entryDelBtn" class="sheet-actions-left" type="button" data-act="danger" hidden data-i18n-attr="title:ui.delete"></button>
-                <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
-                <button id="entrySaveBtn" type="button" data-act="primary" data-i18n-attr="title:ui.save"></button>
+                <button id="entryDelBtn" class="btn danger sheet-actions-left" type="button" hidden data-i18n-attr="data-tip:ui.delete"><span class="icon" data-icon="trash"></span></button>
+                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="entrySaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
             </div>
         </div>
     </div>
@@ -516,10 +524,10 @@
             <h2 data-i18n="split.people"></h2>
             <p class="dialog-text" data-i18n="split.peopleLead"></p>
             <div id="memberRows"></div>
-            <button id="addMemberBtn" class="text-btn dashed people-add" type="button" data-i18n="split.addPerson"></button>
+            <button id="addMemberBtn" class="btn text dashed people-add" type="button" data-i18n="split.addPerson"></button>
             <div class="sheet-actions">
-                <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
-                <button id="membersSaveBtn" type="button" data-act="primary" data-i18n-attr="title:ui.save"></button>
+                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="membersSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
             </div>
         </div>
     </div>
@@ -531,9 +539,9 @@
     <!-- Shared UI helpers: sheets, toast, dialogs, i18n, sharing. -->
     <script src="../shared/ui.js" defer></script>
     <script>
-    NayiveI18n.ready.then( function () {
+    Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
-        var T = function ( k ) { return NayiveUI.t( k ); };
+        var T = function ( k ) { return Ayni.t( k ); };
 
         // TWO help cards, not one. Split is two screens under a single header
         // (the list of groups, and one open group) and its toolbar buttons are
@@ -589,7 +597,7 @@
                 { sel: '#editBtn:not([hidden])',   text: T( 'split.introEdit' ) },
                 { sel: '#shareBtn:not([hidden])',  text: T( 'split.introShare' ) },
                 { icon: 'check', name: T( 'split.introPayName' ), text: T( 'split.introPay' ),
-                  tour: { before: tab( 'balances' ), after: tab( 'entries' ), sel: '#balanceList .settle-row .icon-btn', ghost: '#balanceList, #balancesTab' } },
+                  tour: { before: tab( 'balances' ), after: tab( 'entries' ), sel: '#balanceList .settle-row .btn', ghost: '#balanceList, #balancesTab' } },
                 { name: T( 'split.perCurrency' ), text: T( 'split.introPerCur' ),
                   tour: { before: tab( 'balances' ), after: tab( 'entries' ), sel: '#perCurBtn', ghost: '#balanceList, #balancesTab' } },
                 { sel: '#pdfBtn',     text: T( 'split.introPdf' ) }
@@ -611,7 +619,7 @@
     <script type="module">
         // Nothing is drawn from JS before the dictionary is in: without an
         // in-source fallback, an early render would paint the bare keys.
-        await NayiveI18n.ready;
+        await Ayni.i18n.ready;
 
         //------------------------------------------------------------------------//
         // STATE
@@ -677,8 +685,8 @@
         } );
 
         // Interface strings: Spanish here, translatable through shared/i18n/*.json.
-        const T  = k           => NayiveUI.t( k );
-        const TF = ( k, vars ) => NayiveUI.tf( k, vars );
+        const T  = k           => Ayni.t( k );
+        const TF = ( k, vars ) => Ayni.tf( k, vars );
 
         let groups  = [];      // every group we can see: ours + shared with us (._ro)
         let current = null;    // the open group, or null on the home screen
@@ -718,7 +726,7 @@
         // amount put back in a field is written with it, and the CSV follows it.
         const DEC = ( function()
         {
-            try   { return new Intl.NumberFormat( NayiveI18n.locale() ).formatToParts( 1.5 ).find( p => p.type === 'decimal' ).value; }
+            try   { return new Intl.NumberFormat( Ayni.i18n.lang() ).formatToParts( 1.5 ).find( p => p.type === 'decimal' ).value; }
             catch( _ ) { return ','; }
         } )();
         const decText = n => String( n ).replace( '.', DEC );   // a rate as typed in this language
@@ -730,9 +738,9 @@
             euro:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 7A7 7 0 1 0 16.5 17"></path><line x1="3" y1="10.2" x2="13.5" y2="10.2"></line><line x1="3" y1="13.8" x2="13.5" y2="13.8"></line></svg>',
             eye:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>',
             archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>',
-            trash:   NayiveUI.icon( 'trash' ),
-            check:   NayiveUI.icon( 'check' ),
-            eyeoff:  NayiveUI.icon( 'eyeoff' )
+            trash:   Ayni.icon( 'trash' ),
+            check:   Ayni.icon( 'check' ),
+            eyeoff:  Ayni.icon( 'eye-off' )
         };
 
         //------------------------------------------------------------------------//
@@ -878,14 +886,14 @@
         } );
         $( 'membersSaveBtn' ).addEventListener( 'click', saveMembers );
 
-        // The × of every one of OUR sheets (shared/ui.js styles a data-act="close"
-        // button and flags it _nayiveClose; closing it is the app's job). Escape
+        // The × of every one of OUR sheets (a button marked data-close;
+        // closing it is the app's job). Escape
         // presses that × too (shared/ui.js). The shared confirm/alert and share
         // dialogs handle their own and carry no id.
         document.addEventListener( 'click', function( e )
         {
             const b = e.target.closest( 'button' );
-            if( ! b || ! b._nayiveClose ) return;
+            if( ! b || ! b.hasAttribute( 'data-close' ) ) return;
             const back = b.closest( '.sheet-backdrop' );
             if( back && back.id ) closeSheet( back.id );
         } );
@@ -1064,6 +1072,7 @@
             $( 'homeView'  ).hidden = inGroup;
             $( 'groupView' ).hidden = ! inGroup;
             $( 'backBtn'   ).hidden = ! inGroup;
+            if( ! inGroup ) delete $( 'savedAt' ).dataset.state;   // the floppy belongs to one group
 
             // Header title: "Split" on the list, the group's own name inside one.
             // setAttribute, not `.hidden =`: the app icon is an <svg>, and the
@@ -1092,8 +1101,8 @@
 
             const add = $( 'addBtn' );
             add.hidden = inGroup && current._ro;
-            add.title  = inGroup ? T( 'split.addEntry' ) : T( 'split.addGroup' );
-            add.setAttribute( 'aria-label', add.title );
+            Ayni.setTip( add, inGroup ? T( 'split.addEntry' ) : T( 'split.addGroup' ) );
+            add.setAttribute( 'aria-label', add.dataset.tip );
 
             // The "?" answers about the screen you are on (see SPLIT_INTRO).
             if( window.SPLIT_INTRO && NayiveUI.setIntro )
@@ -1218,10 +1227,10 @@
             if( ! g._ro )
             {
                 const archived = !! g.archived;
-                const act = el( 'button', 'icon-btn sm row-act' + ( archived ? ' danger' : '' ) );
+                const act = el( 'button', 'btn sm row-act' + ( archived ? ' danger' : '' ) );
                 act.type  = 'button';
-                act.title = archived ? T( 'split.deleteGroup' ) : T( 'split.archive' );
-                act.setAttribute( 'aria-label', act.title );
+                Ayni.setTip( act, archived ? T( 'split.deleteGroup' ) : T( 'split.archive' ) );
+                act.setAttribute( 'aria-label', act.dataset.tip );
                 act.innerHTML = archived ? IC.trash : IC.archive;
                 act.addEventListener( 'click', function()
                 {
@@ -1456,10 +1465,10 @@
 
                 if( ! g._ro )
                 {
-                    const b = el( 'button', 'icon-btn sm' );
+                    const b = el( 'button', 'btn sm' );
                     b.type  = 'button';
-                    b.title = T( 'split.recordPayment' );
-                    b.setAttribute( 'aria-label', b.title );
+                    Ayni.setTip( b, T( 'split.recordPayment' ) );
+                    b.setAttribute( 'aria-label', b.dataset.tip );
                     b.innerHTML = IC.check;
                     b.addEventListener( 'click', function()
                     {
@@ -1745,7 +1754,7 @@
             const hint = $( 'entryHint' );
             hint.textContent = v.hint;
             hint.classList.toggle( 'warn', !! v.hint );
-            $( 'entrySaveBtn' ).disabled = ! v.ok;
+            $( 'entrySaveBtn' ).ariaDisabled = ! v.ok;
         }
 
         function saveEntry()
@@ -1776,8 +1785,19 @@
             persist( g );
             closeSheet( 'entrySheetBackdrop' );
             renderGroup();
-            toast( isNew ? ( e.type === 'payment' ? T( 'split.paymentSaved' ) : T( 'split.expenseSaved' ) )
-                         : T( 'split.saved' ) );
+            showSaved();
+        }
+
+        // The green floppy at the end of the header (the standard, like Write's
+        // #savedAt), not a "Saved" toast. Its title says when.
+        function showSaved()
+        {
+            const el = $( 'savedAt' );
+            const d  = new Date();
+            if( ! el.firstChild ) el.innerHTML = Ayni.icon( 'save' );
+            el.dataset.state = 'saved';
+            el.title = TF( 'write.savedAt', { time: NayiveUI.pad2( d.getHours() ) + ':' + NayiveUI.pad2( d.getMinutes() ) } );
+            el.setAttribute( 'aria-label', el.title );
         }
 
         // Delete = out at once, with six seconds to change your mind.
@@ -1919,7 +1939,7 @@
                 inp.addEventListener( 'input', function() { m.name = this.value; row.firstChild.textContent = initials( this.value ); } );
                 row.appendChild( inp );
 
-                const lab = el( 'label', 'me' );
+                const lab = el( 'label', 'choice me' );
                 const r   = el( 'input' );
                 r.type = 'radio';
                 r.name = 'meRadio';
@@ -1929,23 +1949,23 @@
                 lab.appendChild( document.createTextNode( T( 'split.meWord' ) ) );
                 row.appendChild( lab );
 
-                const btn = el( 'button', 'icon-btn sm' );
+                const btn = el( 'button', 'btn sm' );
                 btn.type = 'button';
                 const shared = M.sharedOnly( view, m.id );
                 if( shared < 0 )
                 {
                     btn.innerHTML = m.hidden ? IC.eye : IC.eyeoff;
-                    btn.title = m.hidden ? T( 'split.showPerson' ) : T( 'split.hidePerson' );
+                    Ayni.setTip( btn, m.hidden ? T( 'split.showPerson' ) : T( 'split.hidePerson' ) );
                     btn.addEventListener( 'click', function() { m.hidden = ! m.hidden; renderMembersSheet(); } );
                 }
                 else
                 {
                     btn.classList.add( 'danger' );
                     btn.innerHTML = IC.trash;
-                    btn.title = shared ? TF( 'split.removeSharer', { n: shared } ) : T( 'split.removePerson' );
+                    Ayni.setTip( btn, shared ? TF( 'split.removeSharer', { n: shared } ) : T( 'split.removePerson' ) );
                     btn.addEventListener( 'click', function() { if( shared ) msGone.push( m.id ); ms.splice( i, 1 ); renderMembersSheet(); } );
                 }
-                btn.setAttribute( 'aria-label', btn.title );
+                btn.setAttribute( 'aria-label', btn.dataset.tip );
                 row.appendChild( btn );
 
                 box.appendChild( row );

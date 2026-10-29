@@ -11,7 +11,7 @@
 
 // Nothing is drawn from JS before the dictionary is in: without an
 // in-source fallback, an early render would paint the bare keys.
-await NayiveI18n.ready;
+await Ayni.i18n.ready;
 
 import
 {
@@ -64,7 +64,7 @@ let borderColorValue = '8B8E93';
 // focus, or right after signing in again). binary:true - the bodies here
 // are .xlsx/.csv bytes, not text.
 // Interface strings: every one of them lives in shared/i18n/*.json.
-const T = k => NayiveUI.t( k );
+const T = k => Ayni.t( k );
 
 // conflicts: a save over a sheet changed on another device since it was
 // opened is refused (shared/store.js, CONFLICTS).
@@ -163,7 +163,7 @@ function applyPhoneChrome()
         menus     : function() { return CHROME.on(); },
         tools     : 'fmtToolbar',
         helpBefore: 'moreToolsBtn',
-        fileClass : function( btn, phone ) { btn.className = phone ? 'icon-btn' : 'fmt-btn has-popup'; },
+        fileClass : function( btn, phone ) { btn.className = phone ? 'btn' : 'btn fmt-btn'; },
         close     : function() { return [ fileMenu, helpMenu ].concat( groups ); },
         fold      : function() { return fold; }
     } );
@@ -726,7 +726,7 @@ function refreshSelStats()
 
     if( ! filled ) { el.innerHTML = ''; return; }
 
-    // The interface language's marks (NayiveI18n.locale(), not whatever the
+    // The interface language's marks (Ayni.i18n.lang(), not whatever the
     // browser is set to) - or the one picked in Settings, as in the grid.
     const fmt  = function( n ) { return n.toLocaleString( numberLocale(), { maximumFractionDigits: 2 } ); };
     const cell = function( label, value ) { return '<span>' + label + ' <b>' + value + '</b></span>'; };
@@ -974,7 +974,7 @@ function scheduleAutosave()
 function saveNow() { session.saveNow(); }
 
 // Re-skin the grid live when the shared colour scheme is toggled (from Drive / the launcher).
-window.addEventListener( 'balata:themechange', function()
+window.addEventListener( 'ayni:theme', function()
 {
     if( ! table ) return;
     const name = htThemeName();

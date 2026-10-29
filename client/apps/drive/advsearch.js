@@ -185,10 +185,10 @@ function sbRuleRow( rule, i )
 
     const del = document.createElement( 'button' );
     del.type      = 'button';
-    del.className = 'icon-btn sm';
-    del.title     = T( 'drive.sbRemoveRule' );
+    del.className = 'btn sm';
+    Ayni.setTip( del, T( 'drive.sbRemoveRule' ) );
     del.setAttribute( 'aria-label', T( 'drive.sbRemoveRule' ) );
-    del.innerHTML = NayiveUI.icon( 'x' );
+    del.innerHTML = Ayni.icon( 'close' );
 
     sel.addEventListener( 'change', function() { rule.op = sel.value; inp.placeholder = T( 'drive.opPh.' + rule.op ); sbChanged(); } );
     inp.addEventListener( 'input',  function() { rule.text = inp.value; sbChanged(); } );
@@ -277,7 +277,7 @@ async function sbFetchCount( spec, key )
     const seq = ++sbSeq;
     try
     {
-        const r = await GumApi.search( spec );
+        const r = await GumApi.search( spec, true );
         if( seq !== sbSeq ) return;
         sbPreview = { key: key, nodes: pruneNodes( r.nodes || [] ), truncated: !! r.truncated };
         sbShowCount( sbPreview );

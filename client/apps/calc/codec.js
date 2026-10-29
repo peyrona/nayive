@@ -3,7 +3,7 @@
  * codec.js - Calc's file codecs: an .xlsx / .csv file into the workbook
  * model and back, through the vendored xlsx-format. Imported by calc.js.
  *
- * Its top level runs BEFORE calc.js's `await NayiveI18n.ready`: nothing out
+ * Its top level runs BEFORE calc.js's `await Ayni.i18n.ready`: nothing out
  * here may call T() or read another file's names - keep that inside functions.
  */
 

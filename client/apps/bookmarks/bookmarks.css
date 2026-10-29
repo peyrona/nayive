@@ -1,6 +1,6 @@
 /* bookmarks.css - Bookmarks' own layout. Every control wears the shared look
-   from ../shared/app.css (.icon-btn, .ntree, .card-row, .pill, .sheet,
-   .field, .open-crumb, .empty-hint, .pane-resizer, .text-btn);
+   from ../shared/app.css (.btn, .ntree, .card-row, .pill, .sheet,
+   .field, .open-crumb, .empty-hint, .pane-resizer, .btn.text);
    only placement and the few things no other app has live here. */
 
 /* A tool shell (like Drive): the header stays, the tree and the list scroll
@@ -92,7 +92,7 @@ html, body { height: 100%; overflow: hidden; }
 
 /* Empty screens: the shared .empty-hint, with its buttons side by side. */
 .empty-btns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 6px; }
-.empty-btns .text-btn { margin-top: 0; }
+.empty-btns .btn.text { margin-top: 0; }
 
 /* --- Sheets --------------------------------------------------------------- */
 .sheet-lead    { margin: -6px 0 14px; font-size: 0.85rem; line-height: 1.4; color: var(--text-dim); }
@@ -100,7 +100,7 @@ html, body { height: 100%; overflow: hidden; }
 .check-row     { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 0.92rem; cursor: pointer; }
 .switch-row    { justify-content: space-between; }   /* on / off: text, then the .switch at the end */
 .choice-row    { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
-.choice-row .text-btn { flex: 1 1 180px; }
+.choice-row .btn.text { flex: 1 1 180px; }
 .bm-dup-note   { margin: -8px 0 12px; font-size: 0.8rem; color: var(--warn); }
 #bmletLink     { text-decoration: none; cursor: grab; }     /* a link, dragged to the browser's bar */
 

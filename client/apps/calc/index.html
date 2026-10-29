@@ -4,18 +4,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <!-- The interface language. First of all: it hides the page until the
-         dictionary is in, and every inline script below may call it. -->
+    <!-- Nayive's first script (old settings, whose page, error reports), then
+         Ayni's language layer: it hides the page until the texts are in, and
+         every inline script below may call Ayni.t(). -->
     <script src="../shared/i18n.js"></script>
+    <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
     <title>Calc</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='%2316A085'%3E%3Cg transform='translate(-213.2 -558.1) scale(1.8891 3.2191)'%3E%3Cg transform='translate(37.3 3.7)'%3E%3Cpath d='m 159.5,210.8 v 7.2 h 25.2 v 16.5 H 159.5 V 300 h -21.5 v -65.6 h -19.9 v -16.5 h 19.9 v -5.7 q 0,-14.8 6.2,-20.5 6.2,-5.7 22.9,-5.7 h 17.7 v 16.5 h -16.8 q -4.8,0 -6.6,1.8 -1.7,1.8 -1.8,6.5 z'/%3E%3Cg transform='translate(67.4 112.5) scale(.625)'%3E%3Cpath d='m 243.4,186.2 q -9.7,17.5 -14.4,33.9 -4.7,16.4 -4.7,32.8 0,16.3 4.7,32.8 4.7,16.5 14.4,34.1 h -16.7 q -11.6,-16.9 -17.3,-33.3 -5.6,-16.5 -5.6,-33.5 0,-17 5.6,-33.5 5.7,-16.6 17.3,-33.3 z'/%3E%3Cpath d='M 329.9,218 302.2,257.2 332.3,300 H 307.2 L 291.1,272.4 275.1,300 h -25 l 30.3,-42.8 -27.9,-39.3 h 25 l 13.6,24.5 13.7,-24.5 z'/%3E%3Cpath d='m 338.9,186.2 h 16.7 q 11.6,16.7 17.2,33.3 5.7,16.5 5.7,33.5 0,17.1 -5.6,33.5 -5.6,16.4 -17.3,33.3 h -16.7 q 9.7,-17.6 14.4,-34.1 4.7,-16.6 4.7,-32.8 0,-16.4 -4.7,-32.8 -4.7,-16.4 -14.4,-33.9 z'/%3E%3C/g%3E%3C/g%3E%3C/g%3E%3C/svg%3E">
 
     <!-- Shared colour scheme (light default, opt-in dark). The toggle lives in the launcher; this page just follows the saved choice. -->
     <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
-    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
-    <script src="../shared/theme.js" defer></script>
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script src="../shared/ayni/ayni-icons.js" defer></script>
+    <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Vendored libs (all pinned, no build step). Order matters: classic scripts run before the deferred module script below. -->
@@ -39,36 +45,36 @@
     <!-- Offline-capable persistence: local cache + write outbox (see STATE). -->
     <script src="../shared/store.js" defer></script>
     <script>
-    NayiveI18n.ready.then( function () {
+    Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
         NayiveUI.firstRun( {
             app:   'calc',
             title: 'Calc',
-            lead:  NayiveUI.t( 'calc.introLead' ),
+            lead:  Ayni.t( 'calc.introLead' ),
             buttons: [
-                { sel: '#chromeMenusBtn', text: NayiveUI.t( 'calc.chromeNote' ) },
-                { sel: '#fmtBtn',       text: NayiveUI.t( 'calc.introToolbar' ) },
-                { sel: '#moreBtn',      text: NayiveUI.t( 'calc.introFileMenu' ) },
-                { sel: '#moreToolsBtn', text: NayiveUI.t( 'calc.introMoreBar' ) },
-                { sel: '#fmtBoldBtn', name: NayiveUI.t( 'calc.introFormatName' ), text: NayiveUI.t( 'calc.introFormat' ) },
-                { sel: '#fmtTableBtn',     name: NayiveUI.t( 'calc.introRowsColsName' ), text: NayiveUI.t( 'calc.introRowsCols' ) },
-                { sel: '#fmtAlignBtn',     text: NayiveUI.t( 'calc.introAlign' ) },
-                { sel: '#fmtSortBtn',      text: NayiveUI.t( 'calc.introSort' ) },
-                { sel: '#fmtFreezeGrpBtn', text: NayiveUI.t( 'calc.introFreeze' ) },
-                { sel: '#fxBtn',     text: NayiveUI.t( 'calc.introFx' ) },
-                { sel: '#undoBtn',   text: NayiveUI.t( 'calc.introUndo' ) },
-                { sel: '#redoBtn',   text: NayiveUI.t( 'calc.introRedo' ) },
-                { sel: '#newBtn',     text: NayiveUI.t( 'write.introNew' ), tour: { open: '#moreBtn' } },
-                { sel: '#openBtn',    text: NayiveUI.t( 'calc.introOpen' ), tour: { open: '#moreBtn' } },
-                { sel: '#importBtn',  text: NayiveUI.t( 'calc.introImport' ), tour: { open: '#moreBtn' } },
-                { sel: '#saveAsBtn',  text: NayiveUI.t( 'calc.introSaveAs' ), tour: { open: '#moreBtn' } },
-                { sel: '#restoreBtn', text: NayiveUI.t( 'write.introRestore' ), tour: { open: '#moreBtn' } },
-                { sel: '#lockBtn',    text: NayiveUI.t( 'write.introLock' ), tour: { open: '#moreBtn' } },
-                { sel: '#scBtn',      text: NayiveUI.t( 'write.introShortcuts' ), tour: { open: '#moreBtn' } }
+                { sel: '#chromeMenusBtn', text: Ayni.t( 'calc.chromeNote' ) },
+                { sel: '#fmtBtn',       text: Ayni.t( 'calc.introToolbar' ) },
+                { sel: '#moreBtn',      text: Ayni.t( 'calc.introFileMenu' ) },
+                { sel: '#moreToolsBtn', text: Ayni.t( 'calc.introMoreBar' ) },
+                { sel: '#fmtBoldBtn', name: Ayni.t( 'calc.introFormatName' ), text: Ayni.t( 'calc.introFormat' ) },
+                { sel: '#fmtTableBtn',     name: Ayni.t( 'calc.introRowsColsName' ), text: Ayni.t( 'calc.introRowsCols' ) },
+                { sel: '#fmtAlignBtn',     text: Ayni.t( 'calc.introAlign' ) },
+                { sel: '#fmtSortBtn',      text: Ayni.t( 'calc.introSort' ) },
+                { sel: '#fmtFreezeGrpBtn', text: Ayni.t( 'calc.introFreeze' ) },
+                { sel: '#fxBtn',     text: Ayni.t( 'calc.introFx' ) },
+                { sel: '#undoBtn',   text: Ayni.t( 'calc.introUndo' ) },
+                { sel: '#redoBtn',   text: Ayni.t( 'calc.introRedo' ) },
+                { sel: '#newBtn',     text: Ayni.t( 'write.introNew' ), tour: { open: '#moreBtn' } },
+                { sel: '#openBtn',    text: Ayni.t( 'calc.introOpen' ), tour: { open: '#moreBtn' } },
+                { sel: '#importBtn',  text: Ayni.t( 'calc.introImport' ), tour: { open: '#moreBtn' } },
+                { sel: '#saveAsBtn',  text: Ayni.t( 'calc.introSaveAs' ), tour: { open: '#moreBtn' } },
+                { sel: '#restoreBtn', text: Ayni.t( 'write.introRestore' ), tour: { open: '#moreBtn' } },
+                { sel: '#lockBtn',    text: Ayni.t( 'write.introLock' ), tour: { open: '#moreBtn' } },
+                { sel: '#scBtn',      text: Ayni.t( 'write.introShortcuts' ), tour: { open: '#moreBtn' } }
             ],
             // The guided tour (Ayuda ▸ Ver el tour): the sheet, then the card's rows;
             // `tour: { open }` lights a row inside the File menu.
-            tour: [ { sel: '#gridHost', text: NayiveUI.t( 'calc.introLead' ) }, 'buttons' ]
+            tour: [ { sel: '#gridHost', text: Ayni.t( 'calc.introLead' ) }, 'buttons' ]
         } );
     } );
     </script>
@@ -91,10 +97,10 @@
                  accent. Tooltips only - a label here would push the file name off
                  a phone. -->
             <div class="tb-modes">
-                <button id="chromeToolbarBtn" class="icon-btn chrome-btn" type="button" data-chrome="toolbar" data-i18n-attr="title:ui.chromeToolbar, aria-label:ui.chromeToolbar">
+                <button id="chromeToolbarBtn" class="btn chrome-btn" type="button" data-chrome="toolbar" data-i18n-attr="data-tip:ui.chromeToolbar, aria-label:ui.chromeToolbar">
                     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="7.5" width="19" height="9" rx="2"></rect><rect x="5.2" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect><rect x="10.4" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect><rect x="15.6" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect></svg>
                 </button>
-                <button id="chromeMenusBtn" class="icon-btn chrome-btn" type="button" data-chrome="menus" data-i18n-attr="title:ui.chromeMenus, aria-label:ui.chromeMenus">
+                <button id="chromeMenusBtn" class="btn chrome-btn" type="button" data-chrome="menus" data-i18n-attr="data-tip:ui.chromeMenus, aria-label:ui.chromeMenus">
                     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="5.5" x2="21" y2="5.5"></line><rect x="5.5" y="9.5" width="11" height="10.5" rx="1.6"></rect><line x1="8.2" y1="13.2" x2="13.8" y2="13.2" stroke-width="1.6"></line><line x1="8.2" y1="16.5" x2="13.8" y2="16.5" stroke-width="1.6"></line></svg>
                 </button>
             </div>
@@ -103,8 +109,8 @@
                  toolbar away, "⋮" holds the file buttons. wireStaticUI() moves the
                  toolbar's "?" in here too while the phone layout is on. -->
             <div id="topActions" class="topbar-actions">
-                <button id="fmtBtn" class="icon-btn" type="button" aria-expanded="true" data-i18n-attr="title:calc.toolbar, aria-label:calc.toolbar">Aa</button>
-                <button id="moreBtn" class="icon-btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.menu.file, aria-label:ui.menu.file">
+                <button id="fmtBtn" class="btn" type="button" aria-expanded="true" data-i18n-attr="data-tip:calc.toolbar, aria-label:calc.toolbar">Aa</button>
+                <button id="moreBtn" class="btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.menu.file, aria-label:ui.menu.file">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="13" y2="17"></line></svg>
                 </button>
             </div>
@@ -136,7 +142,7 @@
 
              Four runs of near-identical buttons sit in .popup cards below this
              file instead of on the bar - rows/columns, sort, alignment and
-             freeze - each behind one .has-popup button here. The buttons in
+             freeze - each behind one popup button (aria-haspopup) here. The buttons in
              those cards are the real ones: same ids, same handlers, same
              "active" light (shared/office.js, groupPopup).
 
@@ -169,27 +175,27 @@
                 <option value="36">36</option>
             </select>
             <div class="fmt-sep"></div>
-            <button id="fmtBoldBtn" class="fmt-btn fmt-keep" data-i18n-attr="title:calc.bold">
+            <button id="fmtBoldBtn" class="btn fmt-btn fmt-keep" data-i18n-attr="data-tip:calc.bold">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M7.8 19c-.3 0-.5 0-.6-.2l-.2-.5V5.7c0-.2 0-.4.2-.5l.6-.2h5c1.5 0 2.7.3 3.5 1 .7.6 1.1 1.4 1.1 2.5a3 3 0 0 1-.6 1.9c-.4.6-1 1-1.6 1.2.4.1.9.3 1.3.6s.8.7 1 1.2c.4.4.5 1 .5 1.6 0 1.3-.4 2.3-1.3 3-.8.7-2.1 1-3.8 1H7.8Zm5-8.3c.6 0 1.2-.1 1.6-.5.4-.3.6-.7.6-1.3 0-1.1-.8-1.7-2.3-1.7H9.3v3.5h3.4Zm.5 6c.7 0 1.3-.1 1.7-.4.4-.4.6-.9.6-1.5s-.2-1-.7-1.4c-.4-.3-1-.4-2-.4H9.4v3.8h4Z"/></svg>
             </button>
-            <button id="fmtItalicBtn" class="fmt-btn" data-i18n-attr="title:calc.italic">
+            <button id="fmtItalicBtn" class="btn fmt-btn" data-i18n-attr="data-tip:calc.italic">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="m16.7 4.7-.1.9h-.3c-.6 0-1 0-1.4.3-.3.3-.4.6-.5 1.1l-2.1 9.8v.6c0 .5.4.8 1.4.8h.2l-.2.8H8l.2-.8h.2c1.1 0 1.8-.5 2-1.5l2-9.8.1-.5c0-.6-.4-.8-1.4-.8h-.3l.2-.9h5.8Z"/></svg>
             </button>
-            <button id="fmtUnderlineBtn" class="fmt-btn" data-i18n-attr="title:calc.underline">
+            <button id="fmtUnderlineBtn" class="btn fmt-btn" data-i18n-attr="data-tip:calc.underline">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M16 5c.6 0 1 .4 1 1v5.5a4 4 0 0 1-.4 1.8l-1 1.4a5.3 5.3 0 0 1-5.5 1 5 5 0 0 1-1.6-1c-.5-.4-.8-.9-1.1-1.4a4 4 0 0 1-.4-1.8V6c0-.6.4-1 1-1s1 .4 1 1v5.5c0 .3 0 .6.2 1l.6.7a3.3 3.3 0 0 0 2.2.8 3.4 3.4 0 0 0 2.2-.8c.3-.2.4-.5.6-.8l.2-.9V6c0-.6.4-1 1-1ZM8 17h8c.6 0 1 .4 1 1s-.4 1-1 1H8a1 1 0 0 1 0-2Z"/></svg>
             </button>
-            <label class="fmt-color-btn" style="--fmt-bar:#E7E7E8" data-i18n-attr="title:calc.fontColor">
+            <label class="btn fmt-color-btn" style="--fmt-bar:#E7E7E8" data-i18n-attr="data-tip:calc.fontColor">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><g fill-rule="evenodd"><path class="fmt-color-bar" d="M3 18h18v3H3z"/><path d="M8.7 16h-.8a.5.5 0 0 1-.5-.6l2.7-9c.1-.3.3-.4.5-.4h2.8c.2 0 .4.1.5.4l2.7 9a.5.5 0 0 1-.5.6h-.8a.5.5 0 0 1-.4-.4l-.7-2.2c0-.3-.3-.4-.5-.4h-3.4c-.2 0-.4.1-.5.4l-.7 2.2c0 .3-.2.4-.4.4Zm2.6-7.6-.6 2a.5.5 0 0 0 .5.6h1.6a.5.5 0 0 0 .5-.6l-.6-2c0-.3-.3-.4-.5-.4h-.4c-.2 0-.4.1-.5.4Z"/></g></svg>
                 <input id="fmtFontColor" type="color" value="#e7e7e8">
             </label>
-            <button id="fmtFontColorClear" class="fmt-btn fmt-color-clear" type="button" data-i18n-attr="title:calc.noFontColor, aria-label:calc.noFontColor"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="5" y1="5" x2="19" y2="19"></line><line x1="19" y1="5" x2="5" y2="19"></line></svg></button>
-            <label class="fmt-color-btn fmt-keep" style="--fmt-bar:#202124" data-i18n-attr="title:calc.fillColor">
+            <button id="fmtFontColorClear" class="btn fmt-btn fmt-color-clear" type="button" data-i18n-attr="data-tip:calc.noFontColor, aria-label:calc.noFontColor"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="5" y1="5" x2="19" y2="19"></line><line x1="19" y1="5" x2="5" y2="19"></line></svg></button>
+            <label class="btn fmt-color-btn fmt-keep" style="--fmt-bar:#202124" data-i18n-attr="data-tip:calc.fillColor">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><g fill-rule="evenodd"><path class="fmt-color-bar" d="M3 18h18v3H3z"/><path fill-rule="nonzero" d="M7.7 16.7H3l3.3-3.3-.7-.8L10.2 8l4 4.1-4 4.2c-.2.2-.6.2-.8 0l-.6-.7-1.1 1.1zm5-7.5L11 7.4l3-2.9a2 2 0 0 1 2.6 0L18 6c.7.7.7 2 0 2.7l-2.9 2.9-1.8-1.8-.5-.6"/></g></svg>
                 <input id="fmtFillColor" type="color" value="#202124">
             </label>
-            <button id="fmtFillColorClear" class="fmt-btn fmt-color-clear" type="button" data-i18n-attr="title:calc.noFillColor, aria-label:calc.noFillColor"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="5" y1="5" x2="19" y2="19"></line><line x1="19" y1="5" x2="5" y2="19"></line></svg></button>
+            <button id="fmtFillColorClear" class="btn fmt-btn fmt-color-clear" type="button" data-i18n-attr="data-tip:calc.noFillColor, aria-label:calc.noFillColor"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="5" y1="5" x2="19" y2="19"></line><line x1="19" y1="5" x2="5" y2="19"></line></svg></button>
             <div class="fmt-sep"></div>
-            <button id="fmtAlignBtn" class="fmt-btn has-popup" type="button" data-i18n-attr="title:calc.grpAlign, aria-label:calc.grpAlign">
+            <button id="fmtAlignBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:calc.grpAlign, aria-label:calc.grpAlign" aria-haspopup="true">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M5 5h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 1 1 0-2Zm0 4h8c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 1 1 0-2Zm0 8h8c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 0 1 0-2Zm0-4h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 0 1 0-2Z"/></svg>
             </button>
             <select id="fmtNumFormat" class="tb-select fmt-select-numfmt fmt-keep" data-i18n-attr="title:calc.numFormat">
@@ -201,61 +207,61 @@
                 <option value="porcentaje" data-i18n="calc.nfPercent"></option>
                 <option value="fecha" data-i18n="calc.nfDate"></option>
             </select>
-            <button id="fmtPainterBtn" class="fmt-btn" data-i18n-attr="title:write.tb.copyFormat, aria-label:write.tb.copyFormat">
+            <button id="fmtPainterBtn" class="btn fmt-btn" data-i18n-attr="data-tip:write.tb.copyFormat, aria-label:write.tb.copyFormat">
                 <svg width="17" height="17" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M440-80q-33 0-56.5-23.5T360-160v-160H240q-33 0-56.5-23.5T160-400v-280q0-66 47-113t113-47h480v440q0 33-23.5 56.5T720-320H600v160q0 33-23.5 56.5T520-80h-80ZM240-560h480v-200h-40v160h-80v-160h-40v80h-80v-80H320q-33 0-56.5 23.5T240-680v120Zm0 160h480v-80H240v80Zm0 0v-80 80Z"></path></svg>
             </button>
-            <button id="fmtClearBtn" class="fmt-btn" data-i18n-attr="title:calc.clearFormat">
+            <button id="fmtClearBtn" class="btn fmt-btn" data-i18n-attr="data-tip:calc.clearFormat">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"></path><path d="M9 20h6"></path><path d="M12 4v16"></path><line x1="5" y1="19" x2="19" y2="5"></line></svg>
             </button>
             <div class="fmt-sep"></div>
-            <button id="addSheetBtn" class="fmt-btn" type="button" data-i18n-attr="title:calc.addSheet, aria-label:calc.addSheet">
+            <button id="addSheetBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:calc.addSheet, aria-label:calc.addSheet">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
             </button>
-            <button id="fmtTableBtn" class="fmt-btn has-popup" type="button" data-i18n-attr="title:calc.grpTable, aria-label:calc.grpTable">
+            <button id="fmtTableBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:calc.grpTable, aria-label:calc.grpTable" aria-haspopup="true">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="nonzero" d="M12 13c.5 0 1 .4 1 .9V16h2a1 1 0 0 1 .1 2H13v2a1 1 0 0 1-2 .1V18H9a1 1 0 0 1-.1-2H11v-2c0-.6.4-1 1-1Zm6 7a1 1 0 0 1 0-2h1v-6H5v6h1a1 1 0 0 1 0 2H4a1 1 0 0 1-1-1V6c0-1.1.9-2 2-2h14a2 2 0 0 1 2 2v13c0 .5-.4 1-.9 1H18ZM11 6H5v4h6V6Zm8 0h-6v4h6V6Z"/></svg>
             </button>
-            <button id="fmtMergeBtn" class="fmt-btn" data-i18n-attr="title:calc.mergeCells">
+            <button id="fmtMergeBtn" class="btn fmt-btn" data-i18n-attr="data-tip:calc.mergeCells">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8"></rect><rect x="13" y="3" width="8" height="8"></rect><rect x="3" y="13" width="18" height="8"></rect></svg>
             </button>
-            <button id="fmtSplitBtn" class="fmt-btn" data-i18n-attr="title:calc.splitCells, aria-label:calc.splitCells">
+            <button id="fmtSplitBtn" class="btn fmt-btn" data-i18n-attr="data-tip:calc.splitCells, aria-label:calc.splitCells">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16"></rect><line x1="12" y1="4" x2="12" y2="20"></line><polyline points="8 9.5 5.5 12 8 14.5"></polyline><polyline points="16 9.5 18.5 12 16 14.5"></polyline></svg>
             </button>
-            <button id="fmtBorderBtn" class="fmt-btn fmt-keep has-popup" data-i18n-attr="title:calc.borders">
+            <button id="fmtBorderBtn" class="btn fmt-btn fmt-keep" data-i18n-attr="data-tip:calc.borders" aria-haspopup="true">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
             </button>
             <div class="fmt-sep"></div>
-            <button id="fxBtn" class="fmt-btn fmt-keep" style="font-size: 1.05rem;" data-i18n-attr="title:calc.insertFx">&sum;</button>
-            <button id="fmtSortBtn" class="fmt-btn has-popup" type="button" data-i18n-attr="title:calc.grpSort, aria-label:calc.grpSort">
+            <button id="fxBtn" class="btn fmt-btn fmt-keep" style="font-size: 1.05rem;" data-i18n-attr="data-tip:calc.insertFx">&sum;</button>
+            <button id="fmtSortBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:calc.grpSort, aria-label:calc.grpSort" aria-haspopup="true">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="13" y2="6"></line><line x1="4" y1="12" x2="11" y2="12"></line><line x1="4" y1="18" x2="9" y2="18"></line><polyline points="17 8 20 5 20 19"></polyline><polyline points="17 8 20 5 23 8"></polyline></svg>
             </button>
-            <button id="fmtFreezeGrpBtn" class="fmt-btn has-popup" type="button" data-i18n-attr="title:calc.grpFreeze, aria-label:calc.grpFreeze">
+            <button id="fmtFreezeGrpBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:calc.grpFreeze, aria-label:calc.grpFreeze" aria-haspopup="true">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"></rect><line x1="9" y1="3" x2="9" y2="21" stroke-width="3"></line></svg>
             </button>
             <div class="fmt-sep"></div>
-            <button id="undoBtn" class="fmt-btn fmt-keep" data-i18n-attr="title:ui.undo">
+            <button id="undoBtn" class="btn fmt-btn fmt-keep" data-i18n-attr="data-tip:ui.undo">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M6.4 8H12c3.7 0 6.2 2 6.8 5.1.6 2.7-.4 5.6-2.3 6.8a1 1 0 0 1-1-1.8c1.1-.6 1.8-2.7 1.4-4.6-.5-2.1-2.1-3.5-4.9-3.5H6.4l3.3 3.3a1 1 0 1 1-1.4 1.4l-5-5a1 1 0 0 1 0-1.4l5-5a1 1 0 0 1 1.4 1.4L6.4 8Z" fill-rule="nonzero"/></svg>
             </button>
-            <button id="redoBtn" class="fmt-btn fmt-keep" data-i18n-attr="title:ui.redo">
+            <button id="redoBtn" class="btn fmt-btn fmt-keep" data-i18n-attr="data-tip:ui.redo">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 10H12c-2.8 0-4.4 1.4-4.9 3.5-.4 2 .3 4 1.4 4.6a1 1 0 1 1-1 1.8c-2-1.2-2.9-4.1-2.3-6.8.6-3 3-5.1 6.8-5.1h5.6l-3.3-3.3a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4l3.3-3.3Z" fill-rule="nonzero"/></svg>
             </button>
-            <button id="editBtn" class="fmt-btn has-popup" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.menu.edit, aria-label:ui.menu.edit">
+            <button id="editBtn" class="btn fmt-btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.menu.edit, aria-label:ui.menu.edit">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path></svg>
             </button>
             <div class="fmt-sep"></div>
             <!-- Settings: the gear before "?", as in every app. -->
-            <button id="settingsBtn" class="fmt-btn" type="button" data-i18n-attr="title:ui.settings, aria-label:ui.settings">
+            <button id="settingsBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:ui.settings, aria-label:ui.settings">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
             </button>
             <!-- Ayuda. Opens the three-entry menu (#helpMenu) rather than the
                  guide card: the card is one of the three entries. -->
-            <button id="helpBtn" class="fmt-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+            <button id="helpBtn" class="btn fmt-btn" data-intro-open type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
             </button>
 
             <!-- Phone only: opens the rest of the toolbar in place (see the phone
                  block in the CSS above). -->
-            <button id="moreToolsBtn" class="fmt-btn fmt-keep" type="button" aria-expanded="false" data-i18n-attr="title:ui.moreTools, aria-label:ui.moreTools">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>
+            <button id="moreToolsBtn" class="btn fmt-btn fmt-keep" type="button" aria-expanded="false" data-i18n-attr="data-tip:ui.moreTools, aria-label:ui.moreTools">
+                <span class="icon" data-icon="more"></span>
             </button>
         </div>
 
@@ -265,38 +271,38 @@
              cloned) and an entry clicks the one it came from, so there is a
              single set of handlers and the menu can never drift. -->
         <div id="fileTools" hidden>
-            <button id="newBtn" class="fmt-btn" data-i18n-attr="title:write.newDoc">
+            <button id="newBtn" class="btn fmt-btn" data-i18n-attr="data-tip:write.newDoc">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="12" x2="12" y2="18"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
             </button>
-            <button id="openBtn" class="fmt-btn" data-i18n-attr="title:ui.openDoc">
+            <button id="openBtn" class="btn fmt-btn" data-i18n-attr="data-tip:ui.openDoc">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
             </button>
-            <button id="recentBtn" class="fmt-btn" type="button" data-i18n-attr="title:ui.recent">
+            <button id="recentBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:ui.recent">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline></svg>
             </button>
-            <button id="saveBtn" class="fmt-btn" type="button" data-i18n-attr="title:ui.save">
+            <button id="saveBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:ui.save">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
             </button>
             <input id="importInput" type="file" accept=".xlsx,.csv" style="display:none">
-            <button id="importBtn" class="fmt-btn" data-i18n-attr="title:ui.importDevice">
+            <button id="importBtn" class="btn fmt-btn" data-i18n-attr="data-tip:ui.importDevice">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
             </button>
-            <button id="saveAsBtn" class="fmt-btn" data-i18n-attr="title:ui.saveAs">
+            <button id="saveAsBtn" class="btn fmt-btn" data-i18n-attr="data-tip:ui.saveAs">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 14 10 18 17 9" stroke-width="2.5"></polyline><line x1="12" y1="1" x2="12" y2="7" stroke-width="2.4"></line><line x1="9" y1="4" x2="15" y2="4" stroke-width="2.4"></line></svg>
             </button>
-            <button id="restoreBtn" class="fmt-btn" data-i18n-attr="title:write.restore">
+            <button id="restoreBtn" class="btn fmt-btn" data-i18n-attr="data-tip:write.restore">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"></path><polyline points="3 4 3 9 8 9"></polyline><polyline points="12 8 12 12 15 14"></polyline></svg>
             </button>
-            <button id="lockBtn" class="fmt-btn" data-i18n-attr="title:lock.title">
+            <button id="lockBtn" class="btn fmt-btn" data-i18n-attr="data-tip:lock.title">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="M10.7 12.3 21 2"></path><path d="m15.5 7.5 3 3"></path><path d="m18 5 2.5 2.5"></path></svg>
             </button>
-            <button id="printBtn" class="fmt-btn" type="button" data-i18n-attr="title:write.print, aria-label:write.print">
+            <button id="printBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:write.print, aria-label:write.print">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
             </button>
-            <button id="pdfBtn" class="fmt-btn" type="button" data-i18n-attr="title:write.savePdf, aria-label:write.savePdf">
+            <button id="pdfBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:write.savePdf, aria-label:write.savePdf">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><text x="12" y="19" font-size="7" font-family="sans-serif" text-anchor="middle" fill="currentColor" stroke="none">PDF</text></svg>
             </button>
-            <button id="scBtn" class="fmt-btn" type="button" data-i18n-attr="title:write.shortcuts, aria-label:write.shortcuts">
+            <button id="scBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:write.shortcuts, aria-label:write.shortcuts">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6" y2="10"></line><line x1="10" y1="10" x2="10" y2="10"></line><line x1="14" y1="10" x2="14" y2="10"></line><line x1="18" y1="10" x2="18" y2="10"></line><line x1="7" y1="14" x2="17" y2="14"></line></svg>
             </button>
         </div>
@@ -306,10 +312,10 @@
              is built FROM them, so glyph, title and handler live in one place.
              (The third entry, Atajos de teclado, is #scBtn just above.) -->
         <div id="helpTools" hidden>
-            <button id="statsBtn" class="fmt-btn" type="button" data-i18n-attr="title:write.stats, aria-label:write.stats">
+            <button id="statsBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:write.stats, aria-label:write.stats">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"></line><line x1="10" y1="20" x2="10" y2="4"></line><line x1="16" y1="20" x2="16" y2="9"></line><line x1="21" y1="20" x2="3" y2="20"></line></svg>
             </button>
-            <button id="guideBtn" class="fmt-btn" type="button" data-i18n-attr="title:ui.toolbarButtons, aria-label:ui.toolbarButtons">
+            <button id="guideBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:ui.toolbarButtons, aria-label:ui.toolbarButtons">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="8" rx="2"></rect><line x1="6" y1="9" x2="6" y2="9"></line><line x1="10" y1="9" x2="10" y2="9"></line><line x1="14" y1="9" x2="14" y2="9"></line><line x1="18" y1="9" x2="18" y2="9"></line><line x1="7" y1="18" x2="17" y2="18"></line><line x1="7" y1="21" x2="13" y2="21"></line></svg>
             </button>
         </div>
@@ -348,7 +354,7 @@
             </div>
             <div id="fxList" class="fx-list"></div>
             <div class="sheet-actions">
-                <button id="fxCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
+                <button class="btn" id="fxCloseBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
             </div>
         </div>
     </div>
@@ -391,7 +397,7 @@
             </div>
 
             <div class="sheet-actions">
-                <button id="settingsCloseBtn" type="button" data-act="close" data-i18n-attr="title:ui.close"></button>
+                <button class="btn" id="settingsCloseBtn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
             </div>
         </div>
     </div>
@@ -408,9 +414,9 @@
             <p data-i18n="calc.lossyLead"></p>
             <ul id="lossyList" class="lossy-list"></ul>
             <div class="sheet-actions">
-                <button id="lossyCancelBtn" data-act="close"             data-i18n-attr="title:calc.lossyCancel"></button>
-                <button id="lossyAnywayBtn" data-act="secondary:forward" data-i18n-attr="title:calc.lossyAnyway"></button>
-                <button id="lossyCopyBtn"   data-act="primary:saveas"    data-i18n-attr="title:calc.lossyCopy"></button>
+                <button class="btn" id="lossyCancelBtn" data-close             data-i18n-attr="data-tip:calc.lossyCancel"><span class="icon" data-icon="close"></span></button>
+                <button class="btn" id="lossyAnywayBtn" data-i18n-attr="data-tip:calc.lossyAnyway"><span class="icon" data-icon="forward"></span></button>
+                <button class="btn primary" id="lossyCopyBtn"      data-i18n-attr="data-tip:calc.lossyCopy"><span class="icon" data-icon="save-as"></span></button>
             </div>
         </div>
     </div>
@@ -421,7 +427,7 @@
          and the keys are built from FE_QUICK and FE_KEYS. -->
     <div id="fePanel" class="popup" role="group" data-i18n-attr="aria-label:calc.fe.title">
         <div id="feHead" class="fe-head" data-i18n-attr="title:calc.fe.foldTip">
-            <button id="feFoldBtn" type="button" class="icon-btn sm fe-chev" aria-expanded="true" data-i18n-attr="aria-label:calc.fe.foldTip">
+            <button id="feFoldBtn" type="button" class="btn sm fe-chev" aria-expanded="true" data-i18n-attr="aria-label:calc.fe.foldTip">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
             <span data-i18n="calc.fe.title"></span>
@@ -429,7 +435,7 @@
         <div class="fe-body">
             <div class="fe-row">
                 <div id="feResult" class="tb-input fe-result" role="status" aria-live="polite" data-i18n-attr="aria-label:calc.fe.result"></div>
-                <button id="feRangeBtn" type="button" class="pill" aria-pressed="false" data-i18n="calc.fe.range" data-i18n-attr="title:calc.fe.rangeTip"></button>
+                <button id="feRangeBtn" type="button" class="pill" aria-pressed="false" data-i18n="calc.fe.range" data-i18n-attr="data-tip:calc.fe.rangeTip"></button>
             </div>
             <div id="feFnHelp" class="fe-help" hidden></div>
             <div id="feFns" class="fe-row">
@@ -438,8 +444,8 @@
             <div id="feList" class="fe-list" hidden></div>
             <div id="feKeys"></div>
             <div class="fe-actions">
-                <button id="feCancelBtn" type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
-                <button id="feOkBtn" type="button" data-act="primary" data-i18n-attr="title:ui.accept"></button>
+                <button class="btn" id="feCancelBtn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="feOkBtn" type="button" data-i18n-attr="data-tip:ui.accept"><span class="icon" data-icon="check"></span></button>
             </div>
         </div>
     </div>
@@ -447,23 +453,23 @@
     <!-- Border picker — anchored popup, icons only (each button's label lives in its title) -->
 
     <!-- The toolbar's group cards. Same shape as #borderPopup above: one
-         .has-popup button on the bar opens one of these, and what is inside is
+         popup button (aria-haspopup) on the bar opens one of these, and what is inside is
          the REAL buttons - the bar just does not have room to show them all
          side by side (shared/office.js, groupPopup). -->
     <div id="tablePopup" class="popup" data-i18n-attr="aria-label:calc.grpTable">
         <div class="popup-row">
-                <button id="insRowBtn" class="pop-btn" data-i18n-attr="title:calc.insRow">
+                <button id="insRowBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.insRow">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="nonzero" d="M12 13c.5 0 1 .4 1 .9V16h2a1 1 0 0 1 .1 2H13v2a1 1 0 0 1-2 .1V18H9a1 1 0 0 1-.1-2H11v-2c0-.6.4-1 1-1Zm6 7a1 1 0 0 1 0-2h1v-6H5v6h1a1 1 0 0 1 0 2H4a1 1 0 0 1-1-1V6c0-1.1.9-2 2-2h14a2 2 0 0 1 2 2v13c0 .5-.4 1-.9 1H18ZM11 6H5v4h6V6Zm8 0h-6v4h6V6Z"/></svg>
                 </button>
-                <button id="delRowBtn" class="pop-btn" data-i18n-attr="title:calc.delRow">
+                <button id="delRowBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.delRow">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="nonzero" d="M19 4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2h14Zm0 2H5v3h2.5v2H5v2h2.5v2H5v3h14v-3h-2.5v-2H19v-2h-2.5V9H19V6Zm-4.7 1.8 1.2 1L13 12l2.6 3.3-1.2 1-2.3-3-2.3 3-1.2-1L11 12 8.5 8.7l1.2-1 2.3 3 2.3-3Z"/></svg>
                 </button>
         </div>
         <div class="popup-row">
-                <button id="insColBtn" class="pop-btn" data-i18n-attr="title:calc.insCol">
+                <button id="insColBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.insCol">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="nonzero" d="M20 4c.6 0 1 .4 1 1v2a1 1 0 0 1-2 0V6h-8v12h8v-1a1 1 0 0 1 2 0v2c0 .5-.4 1-.9 1H5a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2h15ZM9 13H5v5h4v-5Zm7-5c.5 0 1 .4 1 .9V11h2a1 1 0 0 1 .1 2H17v2a1 1 0 0 1-2 .1V13h-2a1 1 0 0 1-.1-2H15V9c0-.6.4-1 1-1ZM9 6H5v5h4V6Z"/></svg>
                 </button>
-                <button id="delColBtn" class="pop-btn" data-i18n-attr="title:calc.delCol">
+                <button id="delColBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.delCol">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="nonzero" d="M19 4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2h14Zm-4 4h-2V6h-2v2H9V6H5v12h4v-2h2v2h2v-2h2v2h4V6h-4v2Zm.3.5 1 1.2-3 2.3 3 2.3-1 1.2L12 13l-3.3 2.6-1-1.2 3-2.3-3-2.3 1-1.2L12 11l3.3-2.5Z"/></svg>
                 </button>
         </div>
@@ -471,10 +477,10 @@
 
     <div id="sortPopup" class="popup" data-i18n-attr="aria-label:calc.grpSort">
         <div class="popup-row">
-                <button id="sortAscBtn" class="pop-btn" data-i18n-attr="title:calc.sortAsc">
+                <button id="sortAscBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.sortAsc">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="13" y2="6"></line><line x1="4" y1="12" x2="11" y2="12"></line><line x1="4" y1="18" x2="9" y2="18"></line><polyline points="17 8 20 5 20 19"></polyline><polyline points="17 8 20 5 23 8"></polyline></svg>
                 </button>
-                <button id="sortDescBtn" class="pop-btn" data-i18n-attr="title:calc.sortDesc">
+                <button id="sortDescBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.sortDesc">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="9" y2="6"></line><line x1="4" y1="12" x2="11" y2="12"></line><line x1="4" y1="18" x2="13" y2="18"></line><polyline points="17 16 20 19 20 5"></polyline><polyline points="17 16 20 19 23 16"></polyline></svg>
                 </button>
         </div>
@@ -482,29 +488,29 @@
 
     <div id="alignPopup" class="popup" data-i18n-attr="aria-label:calc.grpAlign">
         <div class="popup-row">
-                <button id="fmtAlignLeftBtn" class="pop-btn" data-i18n-attr="title:calc.alignLeft">
+                <button id="fmtAlignLeftBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.alignLeft">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M5 5h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 1 1 0-2Zm0 4h8c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 1 1 0-2Zm0 8h8c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 0 1 0-2Zm0-4h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 0 1 0-2Z"/></svg>
                 </button>
-                <button id="fmtAlignCenterBtn" class="pop-btn" data-i18n-attr="title:calc.alignCenter">
+                <button id="fmtAlignCenterBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.alignCenter">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M5 5h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 1 1 0-2Zm3 4h8c.6 0 1 .4 1 1s-.4 1-1 1H8a1 1 0 1 1 0-2Zm0 8h8c.6 0 1 .4 1 1s-.4 1-1 1H8a1 1 0 0 1 0-2Zm-3-4h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 0 1 0-2Z"/></svg>
                 </button>
-                <button id="fmtAlignRightBtn" class="pop-btn" data-i18n-attr="title:calc.alignRight">
+                <button id="fmtAlignRightBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.alignRight">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M5 5h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 1 1 0-2Zm6 4h8c.6 0 1 .4 1 1s-.4 1-1 1h-8a1 1 0 0 1 0-2Zm0 8h8c.6 0 1 .4 1 1s-.4 1-1 1h-8a1 1 0 0 1 0-2Zm-6-4h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 0 1 0-2Z"/></svg>
                 </button>
         </div>
         <div class="popup-row">
-                <button id="fmtValignTopBtn" class="pop-btn" data-i18n-attr="title:calc.valignTop">
+                <button id="fmtValignTopBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.valignTop">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1"></rect><line x1="7" y1="8" x2="17" y2="8"></line></svg>
                 </button>
-                <button id="fmtValignMiddleBtn" class="pop-btn" data-i18n-attr="title:calc.valignMiddle">
+                <button id="fmtValignMiddleBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.valignMiddle">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1"></rect><line x1="7" y1="12" x2="17" y2="12"></line></svg>
                 </button>
-                <button id="fmtValignBottomBtn" class="pop-btn" data-i18n-attr="title:calc.valignBottom">
+                <button id="fmtValignBottomBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.valignBottom">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1"></rect><line x1="7" y1="16" x2="17" y2="16"></line></svg>
                 </button>
         </div>
         <div class="popup-row popup-row-sep">
-                <button id="fmtWrapBtn" class="pop-btn" data-i18n-attr="title:calc.wrapText">
+                <button id="fmtWrapBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.wrapText">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="15" y2="12"></line><polyline points="18 9 21 12 18 15"></polyline><line x1="3" y1="18" x2="12" y2="18"></line></svg>
                 </button>
         </div>
@@ -512,10 +518,10 @@
 
     <div id="freezePopup" class="popup" data-i18n-attr="aria-label:calc.grpFreeze">
         <div class="popup-row">
-                <button id="fmtFreezeBtn" class="pop-btn" data-i18n-attr="title:calc.freezeCols">
+                <button id="fmtFreezeBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.freezeCols">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"></rect><line x1="9" y1="3" x2="9" y2="21" stroke-width="3"></line></svg>
                 </button>
-                <button id="fmtFreezeRowBtn" class="pop-btn" data-i18n-attr="title:calc.freezeRows">
+                <button id="fmtFreezeRowBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.freezeRows">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"></rect><line x1="3" y1="9" x2="21" y2="9" stroke-width="3"></line></svg>
                 </button>
         </div>
@@ -523,41 +529,41 @@
 
     <div id="borderPopup" class="popup" data-i18n-attr="aria-label:calc.borders">
         <div class="popup-row">
-            <button type="button" class="pop-btn" data-pos="all" data-i18n-attr="title:calc.bAll">
+            <button type="button" class="btn pop-btn" data-pos="all" data-i18n-attr="data-tip:calc.bAll">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18"></rect><line x1="12" y1="3" x2="12" y2="21"></line><line x1="3" y1="12" x2="21" y2="12"></line></svg>
             </button>
-            <button type="button" class="pop-btn" data-pos="outer" data-i18n-attr="title:calc.bOutline">
+            <button type="button" class="btn pop-btn" data-pos="outer" data-i18n-attr="data-tip:calc.bOutline">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18"></rect><line x1="12" y1="3" x2="12" y2="21" opacity="0.25"></line><line x1="3" y1="12" x2="21" y2="12" opacity="0.25"></line></svg>
             </button>
-            <button type="button" class="pop-btn" data-pos="inner" data-i18n-attr="title:calc.bInner">
+            <button type="button" class="btn pop-btn" data-pos="inner" data-i18n-attr="data-tip:calc.bInner">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" opacity="0.25"></rect><line x1="12" y1="3" x2="12" y2="21"></line><line x1="3" y1="12" x2="21" y2="12"></line></svg>
             </button>
-            <button type="button" class="pop-btn" data-pos="none" data-i18n-attr="title:calc.bNone">
+            <button type="button" class="btn pop-btn" data-pos="none" data-i18n-attr="data-tip:calc.bNone">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 3" opacity="0.4"><rect x="3" y="3" width="18" height="18"></rect><line x1="12" y1="3" x2="12" y2="21"></line><line x1="3" y1="12" x2="21" y2="12"></line></svg>
             </button>
         </div>
         <div class="popup-row">
-            <button type="button" class="pop-btn" data-pos="top" data-i18n-attr="title:calc.bTop">
+            <button type="button" class="btn pop-btn" data-pos="top" data-i18n-attr="data-tip:calc.bTop">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><g opacity="0.25"><rect x="3" y="3" width="18" height="18"></rect><line x1="12" y1="3" x2="12" y2="21"></line><line x1="3" y1="12" x2="21" y2="12"></line></g><line x1="3" y1="3" x2="21" y2="3"></line></svg>
             </button>
-            <button type="button" class="pop-btn" data-pos="bottom" data-i18n-attr="title:calc.bBottom">
+            <button type="button" class="btn pop-btn" data-pos="bottom" data-i18n-attr="data-tip:calc.bBottom">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><g opacity="0.25"><rect x="3" y="3" width="18" height="18"></rect><line x1="12" y1="3" x2="12" y2="21"></line><line x1="3" y1="12" x2="21" y2="12"></line></g><line x1="3" y1="21" x2="21" y2="21"></line></svg>
             </button>
-            <button type="button" class="pop-btn" data-pos="left" data-i18n-attr="title:calc.bLeft">
+            <button type="button" class="btn pop-btn" data-pos="left" data-i18n-attr="data-tip:calc.bLeft">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><g opacity="0.25"><rect x="3" y="3" width="18" height="18"></rect><line x1="12" y1="3" x2="12" y2="21"></line><line x1="3" y1="12" x2="21" y2="12"></line></g><line x1="3" y1="3" x2="3" y2="21"></line></svg>
             </button>
-            <button type="button" class="pop-btn" data-pos="right" data-i18n-attr="title:calc.bRight">
+            <button type="button" class="btn pop-btn" data-pos="right" data-i18n-attr="data-tip:calc.bRight">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><g opacity="0.25"><rect x="3" y="3" width="18" height="18"></rect><line x1="12" y1="3" x2="12" y2="21"></line><line x1="3" y1="12" x2="21" y2="12"></line></g><line x1="21" y1="3" x2="21" y2="21"></line></svg>
             </button>
         </div>
         <div class="popup-row popup-row-sep">
-            <button type="button" class="pop-btn" data-weight="thin" data-i18n-attr="title:calc.bThin">
+            <button type="button" class="btn pop-btn" data-weight="thin" data-i18n-attr="data-tip:calc.bThin">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="3" y1="12" x2="21" y2="12"></line></svg>
             </button>
-            <button type="button" class="pop-btn" data-weight="medium" data-i18n-attr="title:calc.bMedium">
+            <button type="button" class="btn pop-btn" data-weight="medium" data-i18n-attr="data-tip:calc.bMedium">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="10" width="18" height="4" rx="1"></rect></svg>
             </button>
-            <label class="pop-btn" id="borderColorLabel" data-i18n-attr="title:calc.bColor">
+            <label class="btn pop-btn" id="borderColorLabel" data-i18n-attr="data-tip:calc.bColor">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><g fill-rule="evenodd"><path class="pop-color-bar" d="M3 18h18v3H3z"></path><path fill-rule="nonzero" d="M7.7 16.7H3l3.3-3.3-.7-.8L10.2 8l4 4.1-4 4.2c-.2.2-.6.2-.8 0l-.6-.7-1.1 1.1zm5-7.5L11 7.4l3-2.9a2 2 0 0 1 2.6 0L18 6c.7.7.7 2 0 2.7l-2.9 2.9-1.8-1.8-.5-.6"></path></g></svg>
                 <input type="color" id="borderColor" value="#8b8e93">
             </label>
@@ -584,11 +590,11 @@
             </div>
 
             <div class="field" data-nf="numero moneda">
-                <label class="check"><span data-i18n="calc.thousands"></span><span class="switch sm"><input type="checkbox" id="nfThousands" checked><span class="track"></span></span></label>
+                <label class="check switch end"><span data-i18n="calc.thousands"></span><input role="switch" type="checkbox" id="nfThousands" checked></label>
             </div>
 
             <div class="field" data-nf="numero moneda">
-                <label class="check"><span data-i18n="calc.redNegatives"></span><span class="switch sm"><input type="checkbox" id="nfRedNeg"><span class="track"></span></span></label>
+                <label class="check switch end"><span data-i18n="calc.redNegatives"></span><input role="switch" type="checkbox" id="nfRedNeg"></label>
             </div>
 
             <div class="field" data-nf="moneda">
@@ -623,8 +629,8 @@
             </div>
 
             <div class="sheet-actions">
-                <button id="numFmtCloseBtn"   data-act="close" data-i18n-attr="title:ui.close"></button>
-                <button id="numFmtConfirmBtn" data-act="primary" data-i18n-attr="title:calc.apply"></button>
+                <button class="btn" id="numFmtCloseBtn"   data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="numFmtConfirmBtn" data-i18n-attr="data-tip:calc.apply"><span class="icon" data-icon="check"></span></button>
             </div>
         </div>
     </div>

@@ -108,7 +108,7 @@ ok( await c.evaluate( "! document.querySelector('#list [data-more], #tree [data-
 let ft = await fitState( c );
 ok( ft.acts.join() === "reply,replyAll,forward,read,star,label,spam,del" && ! ft.out.length && ! ft.more && ! ft.crowded,
     "wide: every action is a button, in menu order (Inbox: no Not spam, Restore, Delete for good); no ⋮", ft );
-ok( await c.evaluate( "document.querySelector('#selActions [data-sel-act=reply]').disabled && ! document.querySelector('#selActions [data-sel-act=del]').disabled" ), "…Reply greyed for two, Delete not" );
+ok( await c.evaluate( "document.querySelector('#selActions [data-sel-act=reply]').ariaDisabled === 'true' && document.querySelector('#selActions [data-sel-act=del]').ariaDisabled !== 'true'" ), "…Reply greyed for two, Delete not" );
 await key( c, "Escape" );
 await mouse( c, await EMPTY(), { button: "right" } );
 rows = await menuRows( c );
@@ -159,7 +159,7 @@ ok( await c.until( "[ ...document.querySelectorAll('#list .mail-row') ].some( r 
 section( "EMAIL · THE TREE" );
 const TR = id => `#tree .tree-row[data-id="${id}"]`;
 const trows = await c.evaluate( "[ ...document.querySelectorAll('#tree .tree-row') ].map( r => r.dataset.id ).join()" );
-ok( trows === `inbox,drafts,sent,spam,trash,labels,l:${work.id}`, "one tree: the five trays, then Labels with its labels", trows );
+ok( trows === `inbox,drafts,sent,spam,trash,labels,l:${work.id},nolabel`, "one tree: the five trays, then Labels with its labels and No label", trows );
 const srv = ( await J( "GET", `/api/mail/${A}/trays` ) ).j.trays.find( t => t.role === "inbox" );
 ok( await c.evaluate( `( document.querySelector( '${TR( "inbox" )} .tree-badge' ) || {} ).textContent === '${srv.unread || ""}' || ( ${srv.unread} === 0 && ! document.querySelector( '${TR( "inbox" )} .tree-badge' ) )` ) &&
     await c.evaluate( `/${srv.total}/.test( document.querySelector( '${TR( "inbox" )}' ).title )` ), "the Inbox's badge: not read (the server's); its tooltip: the total", srv );
@@ -194,6 +194,18 @@ ok( await c.until( "!! document.querySelector('#toast .toast-undo')" ), "…with
 await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
 ok( await c.until( "[ ...document.querySelectorAll('#list .mail-row') ].some( r => r.textContent.includes( 'Hello 6' ) )", 10000 ) && !! await inTray( "inbox", "Hello 6" ), "…Undo brings it back" );
 ok( await drag( c, ROW, TR( "drafts" ) ) === false, "Drafts takes no drop" );
+// the eyes: a label's hides its mail from the tray, No label's the mail with none
+const visible = subj => c.evaluate( `[ ...document.querySelectorAll('#list .mail-row') ].some( r => ! r.hidden && r.textContent.includes( ${JSON.stringify( subj )} ) )` );
+const eyeOf = id => c.evaluate( `document.querySelector( '${TR( id )} [data-tail]' ).click(); true` );
+await eyeOf( "l:" + work.id );
+ok( ! await visible( "Hello 5" ) && await visible( "Hello 6" ) && await c.evaluate( "! NayiveMail.S.label" ), "a label's eye: its mail hidden, the rest stays, the tray stays open" );
+ok( await c.evaluate( `document.querySelector( '${TR( "l:" + work.id )} [data-tail]' ).getAttribute( 'aria-pressed' ) === 'true'` ), "…the eye says so" );
+await eyeOf( "l:" + work.id );
+ok( await visible( "Hello 5" ), "again: its mail is back" );
+await eyeOf( "nolabel" );
+ok( await visible( "Hello 5" ) && ! await visible( "Hello 6" ), "No label's eye: the mail with no label hidden" );
+await eyeOf( "nolabel" );
+ok( await visible( "Hello 6" ), "again: back" );
 // a click opens a label's list
 await mouse( c, TR( "l:" + work.id ), { dx: 40 } );
 ok( await c.until( `NayiveMail.S.label === ${JSON.stringify( work.id )} && ! NayiveMail.S.loading` ) && await c.until( "document.querySelectorAll('#list .mail-row').length === 1" ) && await shown( "Hello 5" ),
@@ -278,7 +290,7 @@ ok( await c.until( "document.getElementById('side').classList.contains('open')" 
 await sleep( 300 );
 await shot( "e07-phone-tree" );
 await finger( c, TR( "sent" ) );
-ok( await c.until( "NayiveMail.S.tray === 'sent' && ! document.getElementById('side').classList.contains('open')" ) && await c.evaluate( "document.getElementById('whereName').textContent === NayiveUI.t('mail.tray.sent')" ), "a tap on Sent opens it and the tree slides away" );
+ok( await c.until( "NayiveMail.S.tray === 'sent' && ! document.getElementById('side').classList.contains('open')" ) && await c.evaluate( "document.getElementById('whereName').textContent === Ayni.t('mail.tray.sent')" ), "a tap on Sent opens it and the tree slides away" );
 await c.send( "Emulation.setDeviceMetricsOverride", { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false } );
 await mouse( c, TR( "inbox" ), { dx: 40 } );
 await c.until( "NayiveMail.S.tray === 'inbox' && !! document.querySelector('#list .mail-row') && ! NayiveMail.S.loading" );

@@ -38,6 +38,7 @@
     {
         if( ! S.accounts.length && ! force && ! S.bootFailed ) return;
         if( E.picking() || E.isComposing() ) return;    // never under the user's picks or pen
+        E.hush = ! force;                               // in the background: no busy line (core.js)
         try
         {
             var before = S.acct;
@@ -62,6 +63,7 @@
             else E.plug( "synced" );
         }
         catch( err ) { E.plug( "offline" ); }
+        finally { E.hush = false; }
     };
 
     function intro()
@@ -172,7 +174,7 @@
 
     document.addEventListener( "DOMContentLoaded", function ()
     {
-        NayiveI18n.ready.then( function ()
+        Ayni.i18n.ready.then( function ()
         {
             NayiveUI.bootWithStore( null, function ( who ) { S.user = ( who && who.user ) || ""; return E.start(); } );
         } );

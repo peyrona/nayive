@@ -7,18 +7,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- The interface language. First of all: it hides the page until the
-         dictionary is in, and every inline script below may call it. -->
+    <!-- Nayive's first script (old settings, whose page, error reports), then
+         Ayni's language layer: it hides the page until the texts are in, and
+         every inline script below may call Ayni.t(). -->
     <script src="../shared/i18n.js"></script>
+    <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
     <title>Habits</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22V10'/%3E%3Cpath d='M12 12C12 8.5 9.2 5.5 5.5 5.5c0 3.5 2.8 6.5 6.5 6.5z'/%3E%3Cpath d='M12 14c0-3.2 2.6-5.8 6-5.8 0 3.2-2.6 5.8-6 5.8z'/%3E%3C/svg%3E">
 
     <!-- Shared colour scheme. Apply the saved choice before first paint to avoid a flash. -->
     <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
-    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
-    <script src="../shared/theme.js" defer></script>
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script src="../shared/ayni/ayni-icons.js" defer></script>
+    <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS (and localhost). -->
@@ -32,7 +38,7 @@
     </script>
 
     <style>
-        /* Base reset, card shell (.page/.page-inner/.card), .header, .icon-btn,
+        /* Base reset, card shell (.page/.page-inner/.card), .header, .btn,
            .pill, .tag, .card-row, .sheet and inputs all come from ../shared/app.css.
            Only what is unique to Habits lives here. */
 
@@ -89,8 +95,8 @@
         .habit-row.archived .row-title { opacity: 0.55; }     /* not due today / archived: quieter, still there */
 
         /* "Ayer ✗": yesterday was due and is not marked. A tap fixes it. The shared
-           .text-btn.ghost.danger, sized down to sit in the row's meta line. */
-        .row-meta .text-btn { padding: 3px 9px; font-size: 0.72rem; }
+           .btn.text.bordered.danger, sized down to sit in the row's meta line. */
+        .row-meta .btn.text { padding: 3px 9px; font-size: 0.72rem; }
 
         /* THE CHECK BUTTON: 48px so a thumb cannot miss it. Hollow in the
            habit's colour; filled when the day is done. A counted habit shows "2/3". */
@@ -200,27 +206,27 @@
 
                         <div class="header-actions">
                             <div class="tb-group">
-                                <button id="addBtn" class="icon-btn" type="button" data-i18n-attr="title:habits.newHabit, aria-label:habits.newHabit">
+                                <button id="addBtn" class="btn" type="button" data-i18n-attr="data-tip:habits.newHabit, aria-label:habits.newHabit">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                                         <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
                                     </svg>
                                 </button>
                                 <!-- Only inside Planner (see the script at the foot): folds this pane
                                      away, leaving Planner's own chevron strip to bring it back. -->
-                                <button id="collapseBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:habits.collapse, aria-label:habits.collapse">
+                                <button id="collapseBtn" class="btn" type="button" hidden data-i18n-attr="data-tip:habits.collapse, aria-label:habits.collapse">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                                         <polyline points="6 9 12 15 18 9"></polyline>
                                     </svg>
                                 </button>
                             </div>
                             <div class="tb-group tb-sys">
-                                <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                                <button class="btn" data-intro-open type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                                         <circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>
                                     </svg>
                                 </button>
                             </div>
-                            <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.synced"></button>
+                            <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="data-tip:ui.synced"></button>
                         </div>
                     </div>
 
@@ -251,11 +257,11 @@
                     <!-- MES: the grid -->
                     <section id="monthView" hidden>
                         <div class="month-nav">
-                            <button id="prevMonth" class="icon-btn sm" type="button" data-i18n-attr="title:habits.prevMonth, aria-label:habits.prevMonth">
+                            <button id="prevMonth" class="btn sm" type="button" data-i18n-attr="data-tip:habits.prevMonth, aria-label:habits.prevMonth">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
                             </button>
                             <strong id="monthLabel"></strong>
-                            <button id="nextMonth" class="icon-btn sm" type="button" data-i18n-attr="title:habits.nextMonth, aria-label:habits.nextMonth">
+                            <button id="nextMonth" class="btn sm" type="button" data-i18n-attr="data-tip:habits.nextMonth, aria-label:habits.nextMonth">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                             </button>
                         </div>
@@ -315,11 +321,11 @@
 
             <div class="sheet-actions">
                 <div class="sheet-actions-left left-group">
-                    <button id="archiveBtn" class="text-btn ghost small" type="button" hidden data-i18n="habits.archive"></button>
-                    <button id="deleteBtn" type="button" data-act="danger" hidden data-i18n-attr="title:ui.delete"></button>
+                    <button id="archiveBtn" class="btn text bordered sm" type="button" hidden data-i18n="habits.archive"></button>
+                    <button class="btn danger" id="deleteBtn" type="button" hidden data-i18n-attr="data-tip:ui.delete"><span class="icon" data-icon="trash"></span></button>
                 </div>
-                <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
-                <button id="saveBtn" type="button" data-act="primary" data-i18n-attr="title:ui.save"></button>
+                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="saveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
             </div>
         </div>
     </div>
@@ -337,7 +343,7 @@
          anyway) there is nothing to fold, so the button stays hidden. Planner
          is same-origin, hence the plain window.parent read. -->
     <script>
-    NayiveI18n.ready.then( function () {
+    Ayni.i18n.ready.then( function () {
         var btn = document.getElementById( 'collapseBtn' );
 
         function usable()
@@ -358,29 +364,29 @@
     } );
     </script>
     <script>
-    NayiveI18n.ready.then( function () {
+    Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
         NayiveUI.firstRun( {
             app:   'habits',
             title: 'Habits',
-            lead:  NayiveUI.t( 'habits.introLead' ),
+            lead:  Ayni.t( 'habits.introLead' ),
             buttons: [
-                { sel: '#addBtn', text: NayiveUI.t( 'habits.introAdd' ) },
-                { icon: 'check', name: NayiveUI.t( 'habits.introMarkName' ), text: NayiveUI.t( 'habits.introMark' ) },
-                { icon: 'undo', name: NayiveUI.t( 'habits.introYesterdayName' ), text: NayiveUI.t( 'habits.introYesterday' ) },
-                { icon: 'edit', name: NayiveUI.t( 'ui.settings' ), text: NayiveUI.t( 'habits.introEdit' ) },
-                { icon: 'grid', name: NayiveUI.t( 'habits.introMonthName' ), text: NayiveUI.t( 'habits.introMonth' ) }
+                { sel: '#addBtn', text: Ayni.t( 'habits.introAdd' ) },
+                { icon: 'check', name: Ayni.t( 'habits.introMarkName' ), text: Ayni.t( 'habits.introMark' ) },
+                { icon: 'undo', name: Ayni.t( 'habits.introYesterdayName' ), text: Ayni.t( 'habits.introYesterday' ) },
+                { icon: 'edit', name: Ayni.t( 'ui.settings' ), text: Ayni.t( 'habits.introEdit' ) },
+                { icon: 'grid', name: Ayni.t( 'habits.introMonthName' ), text: Ayni.t( 'habits.introMonth' ) }
             ].concat( document.getElementById( 'collapseBtn' ).hidden
                       ? []
-                      : [ { sel: '#collapseBtn', text: NayiveUI.t( 'habits.introCollapse' ) } ] ),
+                      : [ { sel: '#collapseBtn', text: Ayni.t( 'habits.introCollapse' ) } ] ),
             // The guided tour ("Ver el tour" in the card). Rows that need a habit
             // ring the empty list as a ghost until there is one.
             tour: function () {
-                const T = NayiveUI.t, toToday = function () { const b = document.querySelector( '[data-view="today"]' ); if( b && ! b.classList.contains( 'is-active' ) ) b.click(); };
+                const T = Ayni.t, toToday = function () { const b = document.querySelector( '[data-view="today"]' ); if( b && ! b.classList.contains( 'is-active' ) ) b.click(); };
                 return [
                     { before: toToday, sel: '#addBtn', title: T( 'habits.newHabit' ), text: T( 'habits.introAdd' ) },
                     { sel: '.habit-row .check-btn', ghost: '#homeEmpty, #dueList', icon: 'check', title: T( 'habits.introMarkName' ), text: T( 'habits.introMark' ) },
-                    { sel: '.habit-row .text-btn.danger', ghost: '.habit-row .row-meta, #homeEmpty', icon: 'undo', title: T( 'habits.introYesterdayName' ), text: T( 'habits.introYesterday' ) },
+                    { sel: '.habit-row .btn.text.danger', ghost: '.habit-row .row-meta, #homeEmpty', icon: 'undo', title: T( 'habits.introYesterdayName' ), text: T( 'habits.introYesterday' ) },
                     { sel: '.habit-row .row-main', ghost: '#homeEmpty', icon: 'edit', title: T( 'ui.settings' ), text: T( 'habits.introEdit' ) },
                     { before: toToday, sel: '[data-view="month"]', tap: true, title: T( 'habits.introMonthName' ), text: T( 'habits.introMonth' ) },
                     { sel: '#gridWrap', ghost: '#monthEmpty', icon: 'grid', text: T( 'habits.gridHint' ), after: toToday },
@@ -399,7 +405,7 @@
     <script type="module">
         // Nothing is drawn from JS before the dictionary is in: without an
         // in-source fallback, an early render would paint the bare keys.
-        await NayiveI18n.ready;
+        await Ayni.i18n.ready;
 
         //------------------------------------------------------------------------//
         // STATE
@@ -443,8 +449,8 @@
         } );
 
         // Interface strings: Spanish here, translatable through shared/i18n/*.json.
-        const T  = k           => NayiveUI.t( k );
-        const TF = ( k, vars ) => NayiveUI.tf( k, vars );
+        const T  = k           => Ayni.t( k );
+        const TF = ( k, vars ) => Ayni.tf( k, vars );
 
         // The seven day buttons: initial on the face, full name in the tooltip,
         // both from the browser in the interface language.
@@ -457,8 +463,8 @@
                 b.className   = 'pill';
                 b.type        = 'button';
                 b.dataset.dow = String( d );
-                b.textContent = NayiveUI.weekday( d, 'narrow' );
-                b.title       = NayiveUI.weekday( d );
+                b.textContent = Ayni.i18n.weekday( d, 'narrow' );
+                Ayni.setTip( b, Ayni.i18n.weekday( d ) );
                 row.appendChild( b );
             }
         } )();
@@ -488,7 +494,7 @@
         }
 
         // "lunes": the language's own case, it sits inside the date line.
-        function dowName( iso ) { return NayiveUI.weekday( H.isoWeekday( iso ), 'long', true ); }
+        function dowName( iso ) { return Ayni.i18n.weekday( H.isoWeekday( iso ), 'long', true ); }
 
         function iconLabel( name )
         {
@@ -576,14 +582,14 @@
         $( 'archiveBtn' ).addEventListener( 'click', toggleArchive );
         $( 'deleteBtn' ).addEventListener( 'click', deleteHabit );
 
-        // The × of our sheet (shared/ui.js styles a data-act="close" button and
-        // flags it _nayiveClose; closing it is the app's job). Escape presses that
+        // The × of our sheet (a button marked data-close;
+        // closing it is the app's job). Escape presses that
         // × too (shared/ui.js). The shared confirm / alert dialogs handle their own
         // and carry no id.
         document.addEventListener( 'click', function( e )
         {
             const b = e.target.closest( 'button' );
-            if( ! b || ! b._nayiveClose ) return;
+            if( ! b || ! b.hasAttribute( 'data-close' ) ) return;
             const back = b.closest( '.sheet-backdrop' );
             if( back && back.id ) closeSheet( back.id );
         } );
@@ -750,9 +756,9 @@
             meta.appendChild( el( 'span', 'tag', streakText( H.streak( h, today ) ) ) );
             if( H.missedYesterday( h, today ) )
             {
-                const chip = el( 'button', 'text-btn ghost danger', T( 'habits.missedYesterday' ) );
+                const chip = el( 'button', 'btn text bordered danger', T( 'habits.missedYesterday' ) );
                 chip.type  = 'button';
-                chip.title = T( 'habits.fixYesterday' );
+                Ayni.setTip( chip, T( 'habits.fixYesterday' ) );
                 chip.addEventListener( 'click', function( e ) { e.stopPropagation(); fixYesterday( h ); } );
                 meta.appendChild( chip );
             }
@@ -770,9 +776,9 @@
             b.type = 'button';
             if( done ) b.classList.add( 'done' );
             if( h.target ) b.textContent = H.count( h, today ) + '/' + h.target;
-            else b.innerHTML = NayiveUI.icon( 'check' );
-            b.title = done ? T( 'habits.undoToday' )
-                    : h.target ? T( 'habits.addOne' ) : T( 'habits.markToday' );
+            else b.innerHTML = Ayni.icon( 'check' );
+            Ayni.setTip( b, done ? T( 'habits.undoToday' )
+                    : h.target ? T( 'habits.addOne' ) : T( 'habits.markToday' ) );
             b.setAttribute( 'aria-label', h.name + ': ' + b.title );
             b.setAttribute( 'aria-pressed', String( done ) );
             b.addEventListener( 'click', function() { tapHabit( h ); } );
@@ -838,7 +844,7 @@
             const cur   = H.monthOf( today );
             const first = month + '-01';
             $( 'monthLabel' ).textContent = month;
-            $( 'nextMonth' ).disabled = month >= cur;
+            $( 'nextMonth' ).ariaDisabled = month >= cur;
 
             // Habits alive at some point of that month. A habit restored before restores
             // kept history had its `created` moved to the restore day, so its first month
@@ -873,7 +879,7 @@
                 const th = el( 'th', 'name' );
                 const nb = el( 'button', 'name-btn' );
                 nb.type  = 'button';
-                nb.title = T( 'habits.seeStats' );
+                Ayni.setTip( nb, T( 'habits.seeStats' ) );
                 const ic = el( 'span', 'h-icon' );
                 ic.innerHTML = H.glyph( h.icon );
                 nb.appendChild( ic );
@@ -964,8 +970,8 @@
                 const b = el( 'button', 'icon-opt' + ( name === hs.icon ? ' is-active' : '' ) );
                 b.type = 'button';
                 b.dataset.icon = name;
-                b.title = iconLabel( name );
-                b.setAttribute( 'aria-label', b.title );
+                Ayni.setTip( b, iconLabel( name ) );
+                b.setAttribute( 'aria-label', b.dataset.tip );
                 b.setAttribute( 'aria-pressed', String( name === hs.icon ) );
                 b.innerHTML = H.glyph( name );
                 grid.appendChild( b );
@@ -981,8 +987,8 @@
                 const b = el( 'button', 'swatch' + ( i === hs.color ? ' is-active' : '' ) );
                 b.type = 'button';
                 b.setAttribute( 'data-c', String( i ) );
-                b.title = TF( 'habits.colorN', { n: i + 1 } );
-                b.setAttribute( 'aria-label', b.title );
+                Ayni.setTip( b, TF( 'habits.colorN', { n: i + 1 } ) );
+                b.setAttribute( 'aria-label', b.dataset.tip );
                 b.setAttribute( 'aria-pressed', String( i === hs.color ) );
                 box.appendChild( b );
             }

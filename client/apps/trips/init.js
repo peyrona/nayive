@@ -3,7 +3,7 @@
 //------------------------------------------------------------------------//
 // INITIALIZATION
 
-NayiveI18n.ready.then( function()
+Ayni.i18n.ready.then( function()
 {
     API_FILES = GumApi.API_FILES;
     store     = NayiveStore.createStore( { apiBase: API_FILES, conflicts: true, merge: mergeTrip } );
@@ -19,13 +19,24 @@ NayiveI18n.ready.then( function()
         else if( document.getElementById( 'mapSheetBackdrop'      ).classList.contains( 'open' ) ) closeMapSheet();
         else if( document.getElementById( 'setSheetBackdrop'      ).classList.contains( 'open' ) ) closeSheet( 'setSheetBackdrop' );
         else if( document.getElementById( 'discoverSheetBackdrop' ).classList.contains( 'open' ) ) closeDiscover();
-        else if( document.getElementById( 'currencySheetBackdrop' ).classList.contains( 'open' ) ) closeSheet( 'currencySheetBackdrop' );
     });
 
     // Crossing the 920px breakpoint toggles whether the route panel is visible at all
     // (see renderRoutePanel()) - re-render on the transition so resizing/rotating into
     // "wide" while a trip is open builds the live map instead of leaving it blank.
     wideMql.addEventListener( 'change', function() { if( view === 'detail' ) renderRoutePanel(); } );
+
+    // In a desktop window the line between the stages and the map is a drag handle
+    // (trips.css): the list's width is this device's; the map is told it changed size.
+    NayiveUI.paneResizer( document.getElementById( 'routeResizer' ), document.getElementById( 'tripContent' ),
+    {
+        key: 'trips-list-width', min: 300, max: 1200, def: 460, off: function() { return ! wideMql.matches; },
+        set: function( w )
+        {
+            document.documentElement.style.setProperty( '--trip-list-w', w + 'px' );
+            if( panelMapInstance ) panelMapInstance.invalidateSize();
+        }
+    } );
 
     // The store's state machine drives the header plug for every read and write.
     store.onState( setSyncStatus );
@@ -151,6 +162,6 @@ function hereStageId( trip )
 
 function anySheetOpen()
 {
-    return ['tripSheetBackdrop', 'stageSheetBackdrop', 'mapSheetBackdrop', 'setSheetBackdrop', 'discoverSheetBackdrop', 'currencySheetBackdrop', 'filePickerSheetBackdrop']
+    return ['tripSheetBackdrop', 'stageSheetBackdrop', 'mapSheetBackdrop', 'setSheetBackdrop', 'discoverSheetBackdrop', 'filePickerSheetBackdrop']
         .some( function( id ) { return document.getElementById( id ).classList.contains( 'open' ); } );
 }

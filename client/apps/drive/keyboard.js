@@ -3,9 +3,8 @@
  */
 "use strict";
 
-// The list's and the tree's own keys (arrows, Shift / Ctrl, Space, Enter,
-// Ctrl+A, Esc, Del, F2, Ctrl+C / X / V, Alt+N, Ctrl+U, Ctrl+D, Tab and ←
-// into the tree) are the shared item browser's: each one belongs to an
+// The list's own keys (arrows, Shift / Ctrl, Space, Enter, Ctrl+A, Esc,
+// Del, F2, Ctrl+C / X / V, Alt+N, Ctrl+U, Ctrl+D) are the shared item browser's: each one belongs to an
 // action in menus.js. This file keeps the search key and the tooltips' hints.
 
 //------------------------------------------------------------------------//

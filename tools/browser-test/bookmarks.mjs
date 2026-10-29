@@ -57,11 +57,11 @@ ok( ft.acts.join() === "edit,fav,link,move,delete" && ! ft.out.length && ! ft.cr
 ok( ft.more && ft.rows.filter( Boolean ).join() === OWN, "…the ⋮ shows: Bookmarks' own rows only", ft );
 await mouse( c, ROW( "b_c" ), { dx: 120, mods: 2 } );
 ft = await fitState( c );
-ok( ft.acts.join() === "openAll,edit,fav,link,move,delete" && await c.evaluate( "document.querySelector('#selActions [data-sel-act=edit]').disabled && ! document.querySelector('#selActions [data-sel-act=delete]').disabled" ),
+ok( ft.acts.join() === "openAll,edit,fav,link,move,delete" && await c.evaluate( "document.querySelector('#selActions [data-sel-act=edit]').ariaDisabled === 'true' && document.querySelector('#selActions [data-sel-act=delete]').ariaDisabled !== 'true'" ),
     "two bookmarks: Open all comes (hideOff); Edit greyed, Delete not", ft );
 await mouse( c, ROW( "f_work" ), { dx: 120 } );
 ft = await fitState( c );
-ok( ft.acts.join() === "edit,fav,link,move,subfolder,delete" && await c.evaluate( "document.querySelector('#selActions [data-sel-act=fav]').disabled" ),
+ok( ft.acts.join() === "edit,fav,link,move,subfolder,delete" && await c.evaluate( "document.querySelector('#selActions [data-sel-act=fav]').ariaDisabled === 'true'" ),
     "a folder: New subfolder comes (hideOff); Favourite greyed", ft );
 await mouse( c, "#moreBtn" );
 rows = await menuRows( c );
@@ -105,13 +105,14 @@ ok( ! ft.crowded && ft.more && [ "delete", "fav" ].every( a => ft.acts.includes(
     Math.max( ...ft.acts.map( a => RANK[ a ] ) ) < Math.min( ...ft.out.map( a => RANK[ a ] ) ),
     "phone header: one row; the top ranks stay (none shown outranked by one hidden), the tools leave first, the ⋮ shows", ft );
 const ids = ft.rows.filter( Boolean );
-ok( ids.filter( i => BAR.includes( i ) ).join() === ft.out.join() && ft.out.join() === BAR.filter( a => ft.out.includes( a ) ).join() && ft.out.length > 0 &&
-    ids.indexOf( ft.out[ ft.out.length - 1 ] ) < ids.indexOf( "searchBtn" ),
+// (Every action may fit at 390 px: then the ⋮ holds only the tools.)
+ok( ids.filter( i => BAR.includes( i ) ).join() === ft.out.join() && ft.out.join() === BAR.filter( a => ft.out.includes( a ) ).join() &&
+    ( ! ft.out.length || ids.indexOf( ft.out[ ft.out.length - 1 ] ) < ids.indexOf( "searchBtn" ) ),
     "…its ⋮ lists the hidden actions in toolbar order, then the hidden tools", ft );
 ok( ids.slice( -OWN.split( "," ).length - 2 ).join() === OWN + ",mode:grid,mode:list", "…then Bookmarks' own rows, grid / list last (they left the header)", ids );
 await finger( c, "#moreBtn" );
 rows = await menuRows( c );
-ok( rows && rows.some( r => r.act === ft.out[ 0 ] ) && rows.some( r => r.act === "mode:list" ), "the ⋮ opens with them", rows );
+ok( rows && rows.some( r => r.act === ( ft.out[ 0 ] || "searchBtn" ) ) && rows.some( r => r.act === "mode:list" ), "the ⋮ opens with them", rows );
 await c.evaluate( "document.querySelector('.item-menu [data-act=\"mode:list\"]').scrollIntoView( { block: 'nearest' } ); true" );
 await finger( c, '.item-menu [data-act="mode:list"]' );
 ok( await c.until( "ui.mode === 'list' && document.getElementById('items').classList.contains('is-list')" ), "List from the ⋮ turns the cards into rows" );

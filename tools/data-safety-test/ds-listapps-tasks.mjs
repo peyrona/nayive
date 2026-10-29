@@ -85,7 +85,7 @@ section( "H8 · A BIRTHDAY AND A TRIP REMINDER MADE IN ONE TICK" );
     // artifact): tick the first task. It must tick that one only, and the file
     // must hold two ids.
     await c.until( "! window.__frozen" );
-    await c.evaluate( `${groups}[ 0 ].querySelector( '.icon-btn.check' ).click(); true` );
+    await c.evaluate( `${groups}[ 0 ].querySelector( '.btn.check' ).click(); true` );
     ok( await disk( () => { const t = json( F ); return t && t.length === 2 && t.some( x => x.done ); } ), "the tick is saved", json( F ) );
     const saved = json( F ) || [];
     ok( new Set( saved.map( t => t.id ) ).size === 2, "...two ids in the file", saved.map( t => t.id ) );
@@ -101,7 +101,7 @@ section( "H8 · IDS AN OLDER BUILD REPEATED ARE MADE UNIQUE ON LOAD" );
     ok( await c.until( `${groups}.length === 2` ), "both tasks show" );
     const ids = await c.evaluate( `${groups}.map( g => g.dataset.taskId )` );
     ok( ids[ 0 ] !== ids[ 1 ], "...with two ids now", ids );
-    await c.evaluate( `${groups}.find( g => g.textContent.includes( 'One' ) ).querySelector( '.icon-btn.check' ).click(); true` );
+    await c.evaluate( `${groups}.find( g => g.textContent.includes( 'One' ) ).querySelector( '.btn.check' ).click(); true` );
     ok( await disk( () => ( json( F ) || [] ).some( x => x.done ) ), "ticking One is saved" );
     const saved = json( F ) || [];
     ok( new Set( saved.map( t => t.id ) ).size === 2 && saved.filter( t => t.done ).map( t => t.text ).join() === "One",
@@ -125,10 +125,10 @@ async function typeWhileMerging( phoneDo )
 
     // Tick Bravo: its save meets the phone's (412) and the merge's GET is held.
     await c.evaluate( "window.__hold = 'data%2Ftasks.json'; window.__held = 0; true" );
-    await c.evaluate( "document.querySelector( '.task-group[data-task-id=\"2\"] .icon-btn.check' ).click(); true" );
+    await c.evaluate( "document.querySelector( '.task-group[data-task-id=\"2\"] .btn.check' ).click(); true" );
     ok( await c.until( "window.__held === 1" ), "the merge is out" );
 
-    await c.evaluate( "document.querySelector( '.task-group[data-task-id=\"1\"] .icon-btn.check' ).nextElementSibling.click(); true" );
+    await c.evaluate( "document.querySelector( '.task-group[data-task-id=\"1\"] .btn.check' ).nextElementSibling.click(); true" );
     ok( await c.until( "document.activeElement && document.activeElement.classList.contains( 'subtask-edit-input' )" ), "the new sub-task's field is open" );
     await c.send( "Input.insertText", { text: "Milk" } );
     await c.evaluate( "window.__release(); true" );

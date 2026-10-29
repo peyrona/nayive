@@ -134,7 +134,7 @@
            because over-filling it is exactly the kind of mistake the red digit
            above is there to show. */
         .sudoku-pad { display: flex; gap: 4px; width: var(--board); }
-        /* The look is the shared .text-btn.ghost (app.css); the size and the
+        /* The look is the shared .btn.text.bordered (app.css); the size and the
            digit's type are the pad's own. */
         .spad
         {
@@ -193,13 +193,13 @@
                 <div class="sudoku">
                     <div class="view-bar" data-options="sudoku">
                         <div class="tb-modes">
-                            <button class="icon-btn sm is-active" data-sudoku-level="easy" type="button" data-i18n-attr="title:games.sudokuEasy, aria-label:games.sudokuEasy">
+                            <button class="btn sm" data-sudoku-level="easy" type="button" data-i18n-attr="data-tip:games.sudokuEasy, aria-label:games.sudokuEasy" aria-pressed="true">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="20" x2="12" y2="13"></line></svg>
                             </button>
-                            <button class="icon-btn sm" data-sudoku-level="medium" type="button" data-i18n-attr="title:games.sudokuMedium, aria-label:games.sudokuMedium">
+                            <button class="btn sm" data-sudoku-level="medium" type="button" data-i18n-attr="data-tip:games.sudokuMedium, aria-label:games.sudokuMedium">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="9" y1="20" x2="9" y2="13"></line><line x1="15" y1="20" x2="15" y2="8.5"></line></svg>
                             </button>
-                            <button class="icon-btn sm" data-sudoku-level="hard" type="button" data-i18n-attr="title:games.sudokuHard, aria-label:games.sudokuHard">
+                            <button class="btn sm" data-sudoku-level="hard" type="button" data-i18n-attr="data-tip:games.sudokuHard, aria-label:games.sudokuHard">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="6" y1="20" x2="6" y2="13"></line><line x1="12" y1="20" x2="12" y2="8.5"></line><line x1="18" y1="20" x2="18" y2="4"></line></svg>
                             </button>
                         </div>
@@ -216,14 +216,14 @@
                         </div>
 
                         <div class="tb-actions">
-                            <button class="icon-btn sm" id="sudokuNotes" type="button" data-i18n-attr="title:games.sudokuNotes, aria-label:games.sudokuNotes">
+                            <button class="btn sm" id="sudokuNotes" type="button" data-i18n-attr="data-tip:games.sudokuNotes, aria-label:games.sudokuNotes">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7.5 18.5 3.5 19.5l1-4z"></path></svg>
                             </button>
-                            <button class="icon-btn sm" id="sudokuPause" type="button" data-i18n-attr="title:games.pause, aria-label:games.pause">
+                            <button class="btn sm" id="sudokuPause" type="button" data-i18n-attr="data-tip:games.pause, aria-label:games.pause">
                                 <svg data-ic="pause" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="5" width="3.6" height="14" rx="1.2"></rect><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"></rect></svg>
                                 <svg data-ic="play" viewBox="0 0 24 24" fill="currentColor" hidden><path d="M8 5.5a1 1 0 0 1 1.5-.87l9 6.5a1 1 0 0 1 0 1.74l-9 6.5A1 1 0 0 1 8 18.5z"></path></svg>
                             </button>
-                            <button class="icon-btn sm" id="sudokuNew" type="button" data-i18n-attr="title:games.newGame, aria-label:games.newGame">
+                            <button class="btn sm" id="sudokuNew" type="button" data-i18n-attr="data-tip:games.newGame, aria-label:games.newGame">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8"></path><polyline points="21 3 21 8 16 8"></polyline><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16"></path><polyline points="3 21 3 16 8 16"></polyline></svg>
                             </button>
                         </div>
@@ -236,7 +236,7 @@
                          a paused game is left the way any other pane is. -->
                     <div class="game-cover solid" id="sudokuPaused" hidden>
                         <p class="game-cover-t" data-i18n="games.paused"></p>
-                        <button class="text-btn" id="sudokuResume" type="button" data-i18n="games.resume"></button>
+                        <button class="btn text primary" id="sudokuResume" type="button" data-i18n="games.resume"></button>
                     </div>
 
                     <div class="sudoku-area">
@@ -497,7 +497,7 @@
                 unpause();
 
                 boardEl.classList.remove( 'is-done' );
-                levelBtns.forEach( function ( b ) { b.classList.toggle( 'is-active', b.dataset.sudokuLevel === level ); } );
+                levelBtns.forEach( function ( b ) { b.setAttribute( 'aria-pressed', b.dataset.sudokuLevel === level ); } );
                 render();
                 sfx.play( 'start' );               // silent at boot: there is no sound before the first press
             }
@@ -578,7 +578,7 @@
 
                 pads.forEach( function ( el, k ) { el.classList.toggle( 'is-done', used[ k + 1 ] >= 9 ); } );
                 padEl.classList.toggle( 'is-notes', noteMode );
-                notesBtn.classList.toggle( 'is-active', noteMode );
+                notesBtn.setAttribute( 'aria-pressed', noteMode );
 
                 timeEl.textContent = clock( seconds() );
                 bestEl.textContent = has( level ) ? clock( times[ level ] ) : '--';
@@ -802,7 +802,7 @@
                 {
                     el = document.createElement( 'button' );
                     el.type        = 'button';
-                    el.className   = 'text-btn ghost spad';
+                    el.className   = 'btn text bordered spad';
                     el.dataset.v   = String( i );
                     el.textContent = String( i );
                     pads.push( el );
@@ -811,10 +811,10 @@
 
                 el = document.createElement( 'button' );
                 el.type      = 'button';
-                el.className = 'text-btn ghost spad';
+                el.className = 'btn text bordered spad';
                 el.dataset.v = '0';
                 el.innerHTML = RUB;
-                el.title     = T( 'games.sudokuErase' );
+                Ayni.setTip( el, T( 'games.sudokuErase' ) );
                 el.setAttribute( 'aria-label', T( 'games.sudokuErase' ) );
                 padEl.appendChild( el );
 

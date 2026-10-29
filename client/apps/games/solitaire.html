@@ -194,10 +194,10 @@
                              one card or three is what the whole game is, not a
                              setting inside it. -->
                         <div class="tb-modes">
-                            <button class="icon-btn sm" data-sol-draw="1" type="button" data-i18n-attr="title:games.solitaireDraw1, aria-label:games.solitaireDraw1">
+                            <button class="btn sm" data-sol-draw="1" type="button" data-i18n-attr="data-tip:games.solitaireDraw1, aria-label:games.solitaireDraw1">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="4" width="9" height="16" rx="2"></rect></svg>
                             </button>
-                            <button class="icon-btn sm is-active" data-sol-draw="3" type="button" data-i18n-attr="title:games.solitaireDraw3, aria-label:games.solitaireDraw3">
+                            <button class="btn sm" data-sol-draw="3" type="button" data-i18n-attr="data-tip:games.solitaireDraw3, aria-label:games.solitaireDraw3" aria-pressed="true">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="8" height="16" rx="2"></rect><path d="M13 4h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-2"></path><path d="M17.5 6.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2"></path></svg>
                             </button>
                         </div>
@@ -218,14 +218,14 @@
                         </div>
 
                         <div class="tb-actions">
-                            <button class="icon-btn sm" id="solPause" type="button" data-i18n-attr="title:games.pause, aria-label:games.pause">
+                            <button class="btn sm" id="solPause" type="button" data-i18n-attr="data-tip:games.pause, aria-label:games.pause">
                                 <svg data-ic="pause" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="5" width="3.6" height="14" rx="1.2"></rect><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"></rect></svg>
                                 <svg data-ic="play" viewBox="0 0 24 24" fill="currentColor" hidden><path d="M8 5.5a1 1 0 0 1 1.5-.87l9 6.5a1 1 0 0 1 0 1.74l-9 6.5A1 1 0 0 1 8 18.5z"></path></svg>
                             </button>
-                            <button class="icon-btn sm" id="solUndo" type="button" data-i18n-attr="title:games.solitaireUndo, aria-label:games.solitaireUndo">
+                            <button class="btn sm" id="solUndo" type="button" data-i18n-attr="data-tip:games.solitaireUndo, aria-label:games.solitaireUndo">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-6a5 5 0 0 0-5-5H4"></path></svg>
                             </button>
-                            <button class="icon-btn sm" id="solNew" type="button" data-i18n-attr="title:games.newGame, aria-label:games.newGame">
+                            <button class="btn sm" id="solNew" type="button" data-i18n-attr="data-tip:games.newGame, aria-label:games.newGame">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8"></path><polyline points="21 3 21 8 16 8"></polyline><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16"></path><polyline points="3 21 3 16 8 16"></polyline></svg>
                             </button>
                         </div>
@@ -238,7 +238,7 @@
                          the screen. -->
                     <div class="game-cover solid" id="solPaused" hidden>
                         <p class="game-cover-t" data-i18n="games.paused"></p>
-                        <button class="text-btn" id="solResume" type="button" data-i18n="games.resume"></button>
+                        <button class="btn text primary" id="solResume" type="button" data-i18n="games.resume"></button>
                     </div>
 
                     <!-- Won. Not solid: there is nothing left to work out from
@@ -247,7 +247,7 @@
                     <div class="game-cover" id="solOver" hidden>
                         <p class="game-cover-t" id="solOverTitle"></p>
                         <p class="game-cover-s" id="solOverSub"></p>
-                        <button class="text-btn" id="solOverBtn" type="button" data-i18n="games.newGame"></button>
+                        <button class="btn text primary" id="solOverBtn" type="button" data-i18n="games.newGame"></button>
                     </div>
 
                     <div class="sol-area">
@@ -792,15 +792,15 @@
                     el = document.createElement( 'button' );
                     el.type      = 'button';
                     el.className = 'sol-card down';
-                    el.title     = T( 'games.solitaireStock' );
-                    el.setAttribute( 'aria-label', el.title );   // a back has no text to read out
+                    Ayni.setTip( el, T( 'games.solitaireStock' ) );
+                    el.setAttribute( 'aria-label', el.dataset.tip );   // a back has no text to read out
                     stockEl.appendChild( el );
                 }
                 else
                 {
                     slot = slotEl( waste.length ? 'redeal' : '', ! waste.length );
-                    slot.title = T( waste.length ? 'games.solitaireRedeal' : 'games.solitaireStock' );
-                    slot.setAttribute( 'aria-label', slot.title );
+                    Ayni.setTip( slot, T( waste.length ? 'games.solitaireRedeal' : 'games.solitaireStock' ) );
+                    slot.setAttribute( 'aria-label', slot.dataset.tip );
                     stockEl.appendChild( slot );
                 }
 
@@ -886,7 +886,7 @@
 
                 movesEl.textContent = String( moves );
                 timeEl.textContent  = clock( seconds() );
-                undoBtn.disabled    = ! hist.length || over;
+                undoBtn.ariaDisabled    = ! hist.length || over;
 
                 layout();
             }
@@ -1034,7 +1034,7 @@
 
                         draw = Number( b.dataset.solDraw );
                         Array.prototype.slice.call( document.querySelectorAll( '[data-sol-draw]' ) )
-                             .forEach( function ( o ) { o.classList.toggle( 'is-active', o === b ); } );
+                             .forEach( function ( o ) { o.setAttribute( 'aria-pressed', o === b ); } );
                         bestEl.textContent = has( draw ) ? clock( times[ draw ] ) : '--';
                         newGame();
                     } );

@@ -210,7 +210,7 @@ await sleep( 600 );                     // the long-press's own click is eaten f
 await finger( c, ROW( "e" ) );
 ok( await sel() === "d,e", "…then a tap adds one", await sel() );
 fs = await fitState( c );
-ok( ! fs.crowded && fs.more && [ "group", "delete" ].every( a => fs.acts.includes( a ) ) && ! fs.tools.includes( "addBtn" ),
+ok( ! fs.crowded && fs.more && fs.acts.includes( "delete" ) && ! fs.tools.includes( "addBtn" ),   // 8 px touch gaps: only the top rank fits at 390
     "phone header: one row; the top ranks stay, the tools leave first, the ⋮ shows", fs );
 const ORDER = [ "edit", "fav", "group", "share", "export", "merge", "delete" ];
 ok( fs.out.length && fs.rows.filter( r => r !== "all" ).slice( 0, fs.out.length ).join() === fs.out.join() && fs.out.join() === ORDER.filter( a => fs.out.includes( a ) ).join(),

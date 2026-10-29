@@ -30,8 +30,8 @@
     var providers = [];      // from the server, once
     var picked    = false;   // the user chose the provider by hand
 
-    var EYE     = NayiveUI.icon( "eye" );
-    var EYE_OFF = NayiveUI.icon( "eyeoff" );
+    var EYE     = Ayni.icon( "eye" );
+    var EYE_OFF = Ayni.icon( "eye-off" );
 
     function prov() { return providers.filter( function ( p ) { return p.id === E.$( "addProv" ).value; } )[ 0 ] || null; }
 
@@ -156,7 +156,7 @@
         var blocked = !! ( p && p.blocked );
         E.$( "provHelp" ).classList.toggle( "is-blocked", blocked );
         E.$( "addFields" ).hidden = blocked;
-        E.$( "addBtn" ).disabled = blocked;
+        E.$( "addBtn" ).ariaDisabled = blocked;
         var jmap = !! ( p && p.kind === "jmap" );
         E.$( "hostFields" ).hidden = !! p;
         E.$( "jmapField" ).hidden = ! jmap || !! p.jmapUrl;
@@ -173,7 +173,7 @@
         pw.type = on ? "text" : "password";
         eye.innerHTML = on ? EYE_OFF : EYE;
         var tip = E.T( on ? "ui.hidePassword" : "ui.showPassword" );
-        eye.title = tip;
+        Ayni.setTip( eye, tip );
         eye.setAttribute( "aria-label", tip );
     }
 
@@ -193,7 +193,7 @@
                     : ( p ? p.name : a.imapHost ) + ( p && p.id === "jmap" && a.jmapUrl ? " · " + hostOf( a.jmapUrl ) : "" ) +
                       ( a.name ? " · " + a.name : "" );
             var form = newPassForm( a );
-            var key = h( "button", { class: "icon-btn" + ( a.error === "auth" || a.error === "key" ? " is-on" : "" ), html: E.icon( "key" ),
+            var key = h( "button", { class: "btn" + ( a.error === "auth" || a.error === "key" ? " is-on" : "" ), html: E.icon( "key" ),
                                      attrs: { type: "button", title: E.T( "mail.newPass" ), "aria-label": E.T( "mail.newPass" ), "aria-expanded": "false" },
                                      on: { click: function ()
                                      {
@@ -201,7 +201,7 @@
                                          key.setAttribute( "aria-expanded", form.hidden ? "false" : "true" );
                                          if( ! form.hidden ) form.querySelector( "input" ).focus();
                                      } } } );
-            var bin = h( "button", { class: "icon-btn danger", html: NayiveUI.icon( "trash" ),
+            var bin = h( "button", { class: "btn danger", html: Ayni.icon( "trash" ),
                                      attrs: { type: "button", title: E.T( "mail.removeAccount" ), "aria-label": E.T( "mail.removeAccount" ) },
                                      on: { click: function () { remove( a ); } } } );
             box.appendChild( h( "div", { class: "card-row" },
@@ -220,12 +220,12 @@
         status.hidden = true;
         var errBox = h( "p", { class: "field-error" } );
         errBox.hidden = true;
-        var save = h( "button", { class: "text-btn", text: E.T( "ui.save" ), attrs: { type: "button" } } );
+        var save = h( "button", { class: "btn text primary", text: E.T( "ui.save" ), attrs: { type: "button" } } );
         async function go()
         {
             var pass = input.value;
             if( ! pass.trim() ) { input.focus(); return; }
-            save.disabled = true;
+            Ayni.setBusy( save, E.T( "ui.sync.saving" ) );
             errBox.hidden = true;
             status.textContent = E.TF( "mail.checkingWith", { name: a.email } );
             status.hidden = false;
@@ -242,12 +242,15 @@
                 errBox.textContent = E.errText( err );
                 errBox.hidden = false;
             }
-            finally { status.hidden = true; save.disabled = false; }
+            finally { status.hidden = true; Ayni.setBusy( save, false ); }
         }
         save.addEventListener( "click", go );
         input.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); go(); } } );
         input.addEventListener( "input", function () { errBox.hidden = true; } );
-        var box = h( "div", { class: "mail-newpass" }, h( "div", { class: "mail-pass" }, input ), save, status, errBox );
+        var eye = h( "button", { class: "btn sm", attrs: { type: "button", "data-tip": E.T( "ui.showPassword" ), "aria-label": E.T( "ui.showPassword" ) } } );
+        NayiveUI.pwEye( eye, input );
+        eye.addEventListener( "click", function () { Ayni.setTip( eye, E.T( input.type === "password" ? "ui.showPassword" : "ui.hidePassword" ) ); } );
+        var box = h( "div", { class: "mail-newpass" }, h( "div", { class: "mail-pass" }, input, eye ), save, status, errBox );
         box.hidden = true;
         return box;
     }
@@ -318,7 +321,7 @@
             return;
         }
         errBox.hidden = true;
-        btn.disabled = true;
+        Ayni.setBusy( btn, E.T( "ui.wait" ) );
         status.textContent = E.TF( "mail.checkingWith", { name: body.jmapUrl || ( p ? p.name : body.imapHost ) } );
         status.hidden = false;
         try
@@ -340,7 +343,8 @@
         finally
         {
             status.hidden = true;
-            btn.disabled = !! ( prov() && prov().blocked );
+            Ayni.setBusy( btn, false );
+            btn.ariaDisabled = !! ( prov() && prov().blocked );
         }
     };
 

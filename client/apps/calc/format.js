@@ -2,7 +2,7 @@
  * format.js - Calc's cell formatting: the formatting toolbar, the border
  * picker and the number-format dialog. Imported by calc.js.
  *
- * Its top level runs BEFORE calc.js's `await NayiveI18n.ready`: nothing out
+ * Its top level runs BEFORE calc.js's `await Ayni.i18n.ready`: nothing out
  * here may call T() or read another file's names - keep that inside functions.
  */
 
@@ -358,7 +358,7 @@ let painter = null;          // { looks: [[style|null]], h, w } while it is on
 function setPainter( p )
 {
     painter = p || null;
-    document.getElementById( 'fmtPainterBtn' ).classList.toggle( 'active', !! p );
+    document.getElementById( 'fmtPainterBtn' ).setAttribute( 'aria-pressed', !! p );
     document.body.classList.toggle( 'calc-painting', !! p );    // the grid's className is reset on New / Open
 }
 
@@ -433,17 +433,17 @@ function updateToolbarActiveState()
 {
     const style = lastSelection ? styleOf( activeSheet, lastSelection.r1, lastSelection.c1 ) : null;
 
-    document.getElementById( 'fmtBoldBtn'         ).classList.toggle( 'active', !! ( style && style.bold )      );
-    document.getElementById( 'fmtItalicBtn'       ).classList.toggle( 'active', !! ( style && style.italic )    );
-    document.getElementById( 'fmtUnderlineBtn'    ).classList.toggle( 'active', !! ( style && style.underline ) );
-    document.getElementById( 'fmtBorderBtn'       ).classList.toggle( 'active', !! ( style && style.border )    );
-    document.getElementById( 'fmtWrapBtn'         ).classList.toggle( 'active', !! ( style && style.wrap )      );
-    document.getElementById( 'fmtAlignLeftBtn'    ).classList.toggle( 'active', !! style && style.align  === 'left'   );
-    document.getElementById( 'fmtAlignCenterBtn'  ).classList.toggle( 'active', !! style && style.align  === 'center' );
-    document.getElementById( 'fmtAlignRightBtn'   ).classList.toggle( 'active', !! style && style.align  === 'right'  );
-    document.getElementById( 'fmtValignTopBtn'    ).classList.toggle( 'active', !! style && style.valign === 'top'    );
-    document.getElementById( 'fmtValignMiddleBtn' ).classList.toggle( 'active', !! style && style.valign === 'middle' );
-    document.getElementById( 'fmtValignBottomBtn' ).classList.toggle( 'active', !! style && style.valign === 'bottom' );
+    document.getElementById( 'fmtBoldBtn'         ).setAttribute( 'aria-pressed', !! ( style && style.bold ) );
+    document.getElementById( 'fmtItalicBtn'       ).setAttribute( 'aria-pressed', !! ( style && style.italic ) );
+    document.getElementById( 'fmtUnderlineBtn'    ).setAttribute( 'aria-pressed', !! ( style && style.underline ) );
+    document.getElementById( 'fmtBorderBtn'       ).setAttribute( 'aria-pressed', !! ( style && style.border ) );
+    document.getElementById( 'fmtWrapBtn'         ).setAttribute( 'aria-pressed', !! ( style && style.wrap ) );
+    document.getElementById( 'fmtAlignLeftBtn'    ).setAttribute( 'aria-pressed', !! style && style.align  === 'left' );
+    document.getElementById( 'fmtAlignCenterBtn'  ).setAttribute( 'aria-pressed', !! style && style.align  === 'center' );
+    document.getElementById( 'fmtAlignRightBtn'   ).setAttribute( 'aria-pressed', !! style && style.align  === 'right' );
+    document.getElementById( 'fmtValignTopBtn'    ).setAttribute( 'aria-pressed', !! style && style.valign === 'top' );
+    document.getElementById( 'fmtValignMiddleBtn' ).setAttribute( 'aria-pressed', !! style && style.valign === 'middle' );
+    document.getElementById( 'fmtValignBottomBtn' ).setAttribute( 'aria-pressed', !! style && style.valign === 'bottom' );
 
     const ink = gridColors();
     document.getElementById( 'fmtFontColor'  ).value = '#' + ( ( style && style.color ) || ink.text  );
@@ -454,10 +454,10 @@ function updateToolbarActiveState()
     document.getElementById( 'fmtFontSize'   ).value = ( style && style.size )        || '';
     showNumFmt( style && style.numFmt );
 
-    document.getElementById( 'fmtSplitBtn'     ).disabled = ! mergesInSelection().length;
+    document.getElementById( 'fmtSplitBtn'     ).ariaDisabled = ! mergesInSelection().length;
 
-    document.getElementById( 'fmtFreezeBtn'    ).classList.toggle( 'active', table.getSettings().fixedColumnsStart > 0 );
-    document.getElementById( 'fmtFreezeRowBtn' ).classList.toggle( 'active', table.getSettings().fixedRowsTop      > 0 );
+    document.getElementById( 'fmtFreezeBtn'    ).setAttribute( 'aria-pressed', table.getSettings().fixedColumnsStart > 0 );
+    document.getElementById( 'fmtFreezeRowBtn' ).setAttribute( 'aria-pressed', table.getSettings().fixedRowsTop      > 0 );
 
     // Alignment, wrap and freeze live inside group cards now, so the bar shows
     // none of the lights above until a card is opened. The two that answer a
@@ -618,7 +618,7 @@ function syncBorderPopupState()
 {
     document.querySelectorAll( '#borderPopup [data-weight]' ).forEach( function( b )
     {
-        b.classList.toggle( 'active', b.dataset.weight === borderWeight );
+        b.setAttribute( 'aria-pressed', b.dataset.weight === borderWeight );
     });
 
     document.getElementById( 'borderColor' ).value = '#' + borderColorValue;

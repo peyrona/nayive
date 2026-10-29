@@ -26,8 +26,8 @@ let data    = emptyData();
 let loaded  = false;    // false = we do not know what is in the file: never write it
 let store   = null;     // NayiveStore, set by boot.js
 
-function T( k )     { return NayiveUI.t( k ); }
-function TF( k, v ) { return NayiveUI.tf( k, v ); }
+function T( k )     { return Ayni.t( k ); }
+function TF( k, v ) { return Ayni.tf( k, v ); }
 
 function emptyData()
 {

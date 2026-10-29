@@ -43,7 +43,7 @@
         <item quantity="other">Tens %d mensagens por ler</item>
     </plurals>
     <string name="update_title">Há uma versão nova do Nayive</string>
-    <string name="update_text">Toca para a descarregar.</string>
+    <string name="update_text">Toca para a instalar.</string>
 
     <string name="media_done">Fotos enviadas para o Nayive</string>
     <plurals name="media_photos">

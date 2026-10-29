@@ -8,7 +8,7 @@
  *     <script src="../shared/i18n.js"></script>
  *     <script src="../shared/ui.js" defer></script>
  *
- * NO interface string lives here either: NayiveUI.t / .tf re-export the engine
+ * NO interface string lives here either: Ayni.t / .tf re-export the engine
  * in shared/i18n.js, and every message is a `ui.*` / `share.*` key in
  * shared/i18n/*.json. Because ui.js is deferred, an app's inline script must
  * not call NayiveUI while it is being parsed - wrap the call in a function.
@@ -17,8 +17,7 @@
  *   - backdrop / sheet / popup open-close (the `.open` class dance)
  *   - the bottom-centre transient toast (paired CSS is in shared/theme.css)
  *   - the viewer's IANA time zone
- *   - the interface language, re-exported from shared/i18n.js: t / tf /
- *     applyI18n / lang / locale / weekday / month
+ *   - (the texts are Ayni's: Ayni.t / Ayni.tf / Ayni.i18n, shared/ayni/)
  *   - dialog action buttons: the one Nayive style (see Calendar -> "Ir a mes").
  *   - the info dot: a circled "i" by a label that opens a small popup
  *     (NayiveUI.applyInfoDots; paired CSS .info-dot / .info-popup in app.css).
@@ -41,21 +40,19 @@
  * DIALOG ACTION BUTTONS
  *
  * The Nayive convention for a dialog's bottom action row is a right-aligned line
- * of round, icon-only buttons: a card-coloured "close" (X) and an accent
- * "primary" (check), plus optional "danger" (trash) and "ghost" (help) roles.
- * The shape lives in shared/theme.css (.sheet-actions / .btn / .btn-*).
- *
- * Write the buttons with a `data-act` attribute instead of a class + inline SVG:
+ * of Ayni's round, icon-only buttons (shared/ayni/ayni-buttons.css): a plain
+ * "close" (×, marked data-close) and the default ✓ (.btn.primary), plus
+ * optional .btn.danger (trash) and plain help buttons. Class and icon are
+ * written in the markup:
  *
  *     <div class="sheet-actions">
- *       <button id="fooCancel"  data-act="close"   title="Cancelar"></button>
- *       <button id="fooConfirm" data-act="primary" title="Guardar"></button>
+ *       <button class="btn" id="fooCancel" data-close data-tip="Cancelar"><span class="icon" data-icon="close"></span></button>
+ *       <button class="btn primary" id="fooConfirm" data-tip="Guardar"><span class="icon" data-icon="check"></span></button>
  *     </div>
  *
- * `data-act` = `role[:icon]`. Roles: close | primary | secondary | danger |
- * ghost. Override the icon with e.g. `data-act="primary:search"`. On load this
- * fills in the class + SVG (IDs and event listeners are untouched). Apps that
- * build dialogs dynamically call NayiveUI.applySheetButtons( sheetEl ) after.
+ * Apps that build dialogs on the fly call NayiveUI.applySheetButtons( sheetEl )
+ * after: Ayni wires the new buttons (the aria-label from the tooltip) and a
+ * lone × moves to the corner (below).
  *
  * UIX rule: when a dialog's whole action row is just a "close" button, that
  * button is moved to the sheet's top-right corner, on the title's line (class
@@ -72,7 +69,7 @@
  *                Guardar, Renombrar, Crear, Aplicar, Fusionar, Ir... If a button
  *                means "yes, do the thing I set up", it is the check. No
  *                exceptions inside that meaning - no diskette, no "OK" text.
- *   - "saveas" = save the current thing as a NEW named copy: the check with a
+ *   - "save-as" = save the current thing as a NEW named copy: the check with a
  *                small + centred near the top edge. Used by calc / write / text
  *                "Guardar como" and the launcher's "Guardar como esquema nuevo".
  *                Nothing else.
@@ -478,17 +475,13 @@
     }
 
     //------------------------------------------------------------------------//
-    // i18n  -  re-exported from shared/i18n.js (loaded before this script)
-    //
-    // The engine lives in shared/i18n.js so the login screen, which does not
-    // need the rest of ui.js, can translate itself too. Everything here is a
-    // thin alias, kept because every app already says NayiveUI.t(...).
+    // TEXTS - Ayni's language layer (shared/ayni/ayni-i18n.js, loaded first in
+    // <head>): Ayni.t( "key" ), Ayni.tf( "key", { n: 3 } ), Ayni.i18n.ready.
+    // These short local names are only for this file.
 
-    var I18N      = window.NayiveI18n || null;
-    var t         = I18N ? I18N.t         : function ( k ) { return k; };
-    var tf        = I18N ? I18N.tf        : function ( k ) { return k; };
-    var applyI18n = I18N ? I18N.applyI18n : function () {};
-    var i18nReady = I18N ? I18N.ready     : Promise.resolve( {} );
+    var t         = window.Ayni ? Ayni.t  : function ( k ) { return k; };
+    var tf        = window.Ayni ? Ayni.tf : function ( k ) { return k; };
+    var i18nReady = window.Ayni ? Ayni.i18n.ready : Promise.resolve( {} );
 
     // Sheets are often built dynamically (trip, calendar recurrence row) - catch
     // date/time inputs added to the DOM after this script runs. (Their
@@ -519,101 +512,54 @@
     //------------------------------------------------------------------------//
     // DIALOG ACTION BUTTONS
 
-    // name -> [ stroke-width, inner SVG markup ]. 24x24 viewBox; CSS sizes it.
-    var ICONS = {
-        x:      [ 2.2, '<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>' ],
-        check:  [ 2.6, '<polyline points="20 6 9 17 4 12"></polyline>' ],
-        trash:  [ 2,   '<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>' ],
-        help:   [ 2,   '<circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>' ],
-        info:   [ 2,   '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="11" x2="12" y2="16"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>' ],
-        search: [ 2,   '<circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>' ],
-        filter: [ 2,   '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>' ],
-        // "Limpiar": empties a dialog's fields (the advanced searches).
-        eraser: [ 2,   '<path d="M7 21l-4.3-4.3a2.4 2.4 0 0 1 0-3.4l9.6-9.6a2.4 2.4 0 0 1 3.4 0l5.6 5.6a2.4 2.4 0 0 1 0 3.4L13 21"></path><line x1="22" y1="21" x2="7" y2="21"></line><line x1="5" y1="11" x2="14" y2="20"></line>' ],
-        textcursor: [ 2, '<path d="M5 4h1a3 3 0 0 1 3 3 3 3 0 0 1 3-3h1"></path><path d="M13 20h-1a3 3 0 0 1-3-3 3 3 0 0 1-3 3H5"></path><path d="M5 16H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h1"></path><path d="M13 8h7a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-7"></path><line x1="9" y1="7" x2="9" y2="17"></line>' ],
-        plus:   [ 2.4, '<line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>' ],
-        back:   [ 2.2, '<line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>' ],
-        // Arrows move BETWEEN SCREENS - "back", and "forward" to open an item. A chevron
-        // never navigates: it means expand or step in place (Drive's tree twisty, the
-        // month pagers in Calendar and Habits, a collapsible section's caret).
-        forward: [ 2.2, '<line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline>' ],
-        up:     [ 2.2, '<polyline points="18 15 12 9 6 15"></polyline>' ],      // move up in a list
-        down:   [ 2.2, '<polyline points="6 9 12 15 18 9"></polyline>' ],       // move down in a list
-        edit:   [ 2,   '<path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>' ],
-        grid:   [ 1.9, '<rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line>' ],
-        folder: [ 2,   '<path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>' ],
-        // "New folder" - the same glyph Drive's toolbar uses, so the verb reads
-        // the same in the toolbar and in the folder picker.
-        folderplus: [ 2, '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line>' ],
-        // "Extract here" - the same folder, with an arrow going into it (Drive's .zip).
-        unzip:  [ 2,   '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="10" x2="12" y2="17"></line><polyline points="9 14 12 17 15 14"></polyline>' ],
-        doc:    [ 2,   '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="12" y2="17"></line>' ],
-        // "Save as" - the check, with a small + centred near the top edge for "as a new copy".
-        saveas: [ 2,   '<polyline points="5 14 10 18 17 9" stroke-width="2.5"></polyline><line x1="12" y1="1" x2="12" y2="7" stroke-width="2.4"></line><line x1="9" y1="4" x2="15" y2="4" stroke-width="2.4"></line>' ],
-        save:   [ 2,   '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline>' ],
-        // "Quick tour" - a compass.
-        compass:[ 2,   '<circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>' ],
-        // Settings - a cog wheel.
-        gear:   [ 2,   '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>' ],
-        // "Mi cuenta" - a person bust.
-        user:   [ 2,   '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>' ],
-        // "Show the password" - an eye (NayiveUI.pwEye, eMail's account form).
-        eye:    [ 2,   '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle>' ],
-        // "Do not show again" - an eye with a slash.
-        eyeoff: [ 2,   '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>' ],
-        // "Marcar como pendiente" - a counter-clockwise arrow (standard undo).
-        undo:   [ 2.2, '<path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path>' ],
-        // Drag-reorder grip - six dots. Stroke-width 0 = render filled, not stroked
-        // (matches the handle tasks / trips draw in their list rows).
-        grip:   [ 0,   '<circle cx="9" cy="6" r="1.6"></circle><circle cx="15" cy="6" r="1.6"></circle><circle cx="9" cy="12" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle><circle cx="9" cy="18" r="1.6"></circle><circle cx="15" cy="18" r="1.6"></circle>' ],
-        // "Instalar app" + the install dialog: the tray-with-an-arrow, iOS's
-        // Compartir (box with an arrow leaving it), iOS's "Añadir a pantalla de
-        // inicio" (box with a +), full screen (four corners) and speed (a bolt).
-        download: [ 2, '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>' ],
-        share:    [ 2, '<path d="M8 7H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"></path><polyline points="8 6 12 2 16 6"></polyline><line x1="12" y1="2" x2="12" y2="14"></line>' ],
-        addhome:  [ 2, '<rect x="3" y="3" width="18" height="18" rx="3"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line>' ],
-        // Android's browser menu (three dots, one above the other).
-        menudots: [ 0, '<circle cx="12" cy="5" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="12" cy="19" r="1.8"></circle>' ],
-        fullscr:  [ 2, '<path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M16 3h3a2 2 0 0 1 2 2v3"></path><path d="M21 16v3a2 2 0 0 1-2 2h-3"></path><path d="M3 16v3a2 2 0 0 0 2 2h3"></path>' ],
-        bolt:     [ 2, '<polygon points="13 2 4 14 11 14 10 22 20 10 13 10 13 2"></polygon>' ],
-        // "Solo lectura" - a closed padlock. Drawn blue in .ro-badge (see app.css).
-        lock:     [ 2, '<rect x="4.5" y="10.5" width="15" height="10.5" rx="2.2"></rect><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path>' ],
-        // A document's password (Write / Calc) - the Passwords app's key.
-        key:      [ 2, '<circle cx="7.5" cy="15.5" r="4.5"></circle><path d="M10.7 12.3 21 2"></path><path d="m15.5 7.5 3 3"></path><path d="m18 5 2.5 2.5"></path>' ],
-        // Cortar / Copiar / Pegar - the same three glyphs Drive's context menu
-        // draws. Write's and Calc's Edición menus use them (shared/menubar.js).
-        cut:      [ 2, '<circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line>' ],
-        copy:     [ 2, '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>' ],
-        paste:    [ 2, '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><path d="M9 14l2 2 4-4"></path>' ],
-        // Pausa / Seguir / Parar - a running thing (the desktop's countdown).
-        pause:    [ 2.2, '<line x1="9" y1="5" x2="9" y2="19"></line><line x1="15" y1="5" x2="15" y2="19"></line>' ],
-        play:     [ 2.2, '<polygon points="7 4 19 12 7 20 7 4"></polygon>' ],
-        stop:     [ 2.2, '<rect x="6" y="6" width="12" height="12" rx="1.5"></rect>' ]
-    };
-
-    // App logos that don't fit the 24 stroke grid the ICONS table above uses:
-    // each carries its own 512 viewBox. `write` = fountain pen + inkwell,
-    // `calc` = the "f(x)" formula mark (vertically stretched).
-    var APP_LOGOS = {
+    // NAYIVE'S ICONS - the ones Ayni's controls do not ship (Ayni's own set,
+    // shared/ayni/ayni-icons.js, holds close, check, trash, help, info, search,
+    // filter, plus, chev-down, edit, folder, file, eye, eye-off, undo, more,
+    // cut, copy, paste, sun, moon...). Same drawings as ever, Ayni's names:
+    // Ayni.icon( "save-as" ), or <span class="icon" data-icon="save-as"> in a page.
+    // A drawing is a 24x24 icon drawn with lines; <g stroke-width> where an icon
+    // reads better thicker, <g fill> for a filled one.
+    //   "save-as"  = save the current thing as a NEW named copy: the check with a
+    //                small + near the top edge.
+    //   back / forward move BETWEEN SCREENS; a chevron never navigates: it means
+    //   expand or step in place (chev-up / chev-down move up / down in a list).
+    if( window.Ayni ) Ayni.icons.add( {
+        eraser: '<path d="M7 21l-4.3-4.3a2.4 2.4 0 0 1 0-3.4l9.6-9.6a2.4 2.4 0 0 1 3.4 0l5.6 5.6a2.4 2.4 0 0 1 0 3.4L13 21"/><line x1="22" y1="21" x2="7" y2="21"/><line x1="5" y1="11" x2="14" y2="20"/>',
+        "text-cursor": '<path d="M5 4h1a3 3 0 0 1 3 3 3 3 0 0 1 3-3h1"/><path d="M13 20h-1a3 3 0 0 1-3-3 3 3 0 0 1-3 3H5"/><path d="M5 16H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h1"/><path d="M13 8h7a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-7"/><line x1="9" y1="7" x2="9" y2="17"/>',
+        back: '<g stroke-width="2.2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></g>',
+        forward: '<g stroke-width="2.2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></g>',
+        "chev-up": '<g stroke-width="2.2"><polyline points="18 15 12 9 6 15"/></g>',
+        grid: '<g stroke-width="1.9"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></g>',
+        "folder-plus": '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>',
+        unzip: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="10" x2="12" y2="17"/><polyline points="9 14 12 17 15 14"/>',
+        "save-as": '<polyline points="5 14 10 18 17 9" stroke-width="2.5"/><line x1="12" y1="1" x2="12" y2="7" stroke-width="2.4"/><line x1="9" y1="4" x2="15" y2="4" stroke-width="2.4"/>',
+        save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
+        compass: '<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>',
+        settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+        user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+        grip: '<g fill="currentColor" stroke="none"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></g>',
+        download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+        "ios-share": '<path d="M8 7H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"/><polyline points="8 6 12 2 16 6"/><line x1="12" y1="2" x2="12" y2="14"/>',
+        share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/>',
+        "add-home": '<rect x="3" y="3" width="18" height="18" rx="3"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>',
+        fullscreen: '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M21 16v3a2 2 0 0 1-2 2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/>',
+        bolt: '<polygon points="13 2 4 14 11 14 10 22 20 10 13 10 13 2"/>',
+        lock: '<rect x="4.5" y="10.5" width="15" height="10.5" rx="2.2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>',
+        key: '<circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2"/><path d="m15.5 7.5 3 3"/><path d="m18 5 2.5 2.5"/>',
+        pause: '<g stroke-width="2.2"><line x1="9" y1="5" x2="9" y2="19"/><line x1="15" y1="5" x2="15" y2="19"/></g>',
+        play: '<g stroke-width="2.2"><polygon points="7 4 19 12 7 20 7 4"/></g>',
+        stop: '<g stroke-width="2.2"><rect x="6" y="6" width="12" height="12" rx="1.5"/></g>',
+        // App logos that do not fit the 24 grid: their own viewBox. `write` =
+        // fountain pen + inkwell, `calc` = the "f(x)" mark, `nayive` = the real
+        // Nayive logo (the launcher's artwork, never redrawn): the icon of every
+        // button about Nayive's own files (From Nayive, Save to Nayive...).
+        nayive:
+            '<svg viewBox="0 0 24 24">',
         write:
-            '<svg viewBox="0 0 512 512" fill="currentColor" aria-hidden="true">' +
-            '<g transform="translate(45 465) rotate(-48)">' +
-            '<path d="M0 0 28 -14 82 -36C96 -36 110 -27 122 -19L122 19C110 27 96 36 82 36L28 14Z"></path>' +
-            '<rect x="132" y="-26" width="350" height="52"></rect>' +
-            '<path d="M494 -26 522 -26C542 -26 550 -14 550 0 550 14 542 26 522 26L494 26Z"></path></g>' +
-            '<rect x="262" y="220" width="176" height="50" rx="12"></rect>' +
-            '<path fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" ' +
-            'd="M294 270 294 300C294 314 228 312 228 332L228 445C228 460 240 472 255 472L445 472C460 472 472 460 472 445L472 332C472 312 406 314 406 300L406 270"></path>' +
-            '<path d="M228 355 472 355 472 445C472 460 460 472 445 472L255 472C240 472 228 460 228 445Z"></path></svg>',
+            '<svg viewBox="0 0 512 512" fill="currentColor"><g transform="translate(45 465) rotate(-48)"><path d="M0 0 28 -14 82 -36C96 -36 110 -27 122 -19L122 19C110 27 96 36 82 36L28 14Z"></path><rect x="132" y="-26" width="350" height="52"></rect><path d="M494 -26 522 -26C542 -26 550 -14 550 0 550 14 542 26 522 26L494 26Z"></path></g><rect x="262" y="220" width="176" height="50" rx="12"></rect><path fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" d="M294 270 294 300C294 314 228 312 228 332L228 445C228 460 240 472 255 472L445 472C460 472 472 460 472 445L472 332C472 312 406 314 406 300L406 270"></path>',
         calc:
-            '<svg viewBox="0 0 512 512" fill="currentColor" aria-hidden="true">' +
-            '<g transform="translate(-213.2 -558.1) scale(1.8891 3.2191)"><g transform="translate(37.3 3.7)">' +
-            '<path d="m 159.5,210.8 v 7.2 h 25.2 v 16.5 H 159.5 V 300 h -21.5 v -65.6 h -19.9 v -16.5 h 19.9 v -5.7 q 0,-14.8 6.2,-20.5 6.2,-5.7 22.9,-5.7 h 17.7 v 16.5 h -16.8 q -4.8,0 -6.6,1.8 -1.7,1.8 -1.8,6.5 z"></path>' +
-            '<g transform="translate(67.4 112.5) scale(.625)">' +
-            '<path d="m 243.4,186.2 q -9.7,17.5 -14.4,33.9 -4.7,16.4 -4.7,32.8 0,16.3 4.7,32.8 4.7,16.5 14.4,34.1 h -16.7 q -11.6,-16.9 -17.3,-33.3 -5.6,-16.5 -5.6,-33.5 0,-17 5.6,-33.5 5.7,-16.6 17.3,-33.3 z"></path>' +
-            '<path d="M 329.9,218 302.2,257.2 332.3,300 H 307.2 L 291.1,272.4 275.1,300 h -25 l 30.3,-42.8 -27.9,-39.3 h 25 l 13.6,24.5 13.7,-24.5 z"></path>' +
-            '<path d="m 338.9,186.2 h 16.7 q 11.6,16.7 17.2,33.3 5.7,16.5 5.7,33.5 0,17.1 -5.6,33.5 -5.6,16.4 -17.3,33.3 h -16.7 q 9.7,-17.6 14.4,-34.1 4.7,-16.6 4.7,-32.8 0,-16.4 -4.7,-32.8 -4.7,-16.4 -14.4,-33.9 z"></path>' + '</g></g></g></svg>'
-    };
+            '<svg viewBox="0 0 512 512" fill="currentColor"><g transform="translate(-213.2 -558.1) scale(1.8891 3.2191)"><g transform="translate(37.3 3.7)"><path d="m 159.5,210.8 v 7.2 h 25.2 v 16.5 H 159.5 V 300 h -21.5 v -65.6 h -19.9 v -16.5 h 19.9 v -5.7 q 0,-14.8 6.2,-20.5 6.2,-5.7 22.9,-5.7 h 17.7 v 16.5 h -16.8 q -4.8,0 -6.6,1.8 -1.7,1.8 -1.8,6.5 z"></path><g transform="translate(67.4 112.5) scale(.625)"><path d="m 243.4,186.2 q -9.7,17.5 -14.4,33.9 -4.7,16.4 -4.7,32.8 0,16.3 4.7,32.8 4.7,16.5 14.4,34.1 h -16.7 q -11.6,-16.9 -17.3,-33.3 -5.6,-16.5 -5.6,-33.5 0,-17 5.6,-33.5 5.7,-16.6 17.3,-33.3 z"></path><path d="M 329.9,218 302.2,257.2 332.3,300 H 307.2 L 291.1,272.4 275.1,300 h -25 l 30.3,-42.8 -27.9,-39.3 h 25 l 13.6,24.5 13.7,-24.5 z"></path><path d="m 338.9,186.2 h 16.7 q 11.6,16.7 17.2,33.3 5.7,16.5 5.7,33.5 0,17.1 -5.6,33.5 -5.6,16.4 -17.3,33.3 h -16.7 q 9.7,-17.6 14.4,-34.1 4.7,-16.6 4.7,-32.8 0,-16.4 -4.7,-32.8 -4.7,-16.4 -14.4,-33.9 z"></path></g></g></g></svg>',
+    } );
 
     /* The DOM builder (Chat's C.h, eMail's E.h):
      *   h( "div", { class: "x", text: "…", html: "<svg…>", on: { click: fn },
@@ -648,27 +594,31 @@
         el.appendChild( typeof kid === "string" || typeof kid === "number" ? document.createTextNode( String( kid ) ) : kid );
     }
 
-    function icon( name )
-    {
-        if( APP_LOGOS[ name ] ) return APP_LOGOS[ name ];
-
-        var d = ICONS[ name ] || ICONS.check;
-        if( d[ 0 ] === 0 )      // filled glyph (e.g. the drag grip), not stroked
-            return '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">' + d[ 1 ] + '</svg>';
-        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + d[ 0 ] +
-               '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d[ 1 ] + '</svg>';
-    }
-
     // A × button of class `cls`, titled `title` ("Cerrar" when none), that runs `onClick`.
     function xButton( cls, onClick, title )
     {
         var b = document.createElement( "button" );
         b.type      = "button";
         b.className = cls;
-        b.title     = title || t( "ui.close" );
-        b.setAttribute( "aria-label", b.title );
-        b.innerHTML = icon( "x" );
+        Ayni.setTip( b, title || t( "ui.close" ) );
+        b.setAttribute( "aria-label", b.dataset.tip );
+        b.innerHTML = Ayni.icon( "close" );
         if( onClick ) b.addEventListener( "click", onClick );
+        return b;
+    }
+
+    // A dialog button built in code, as the markup writes it: role "close"
+    // (the ×, marked data-close), "primary" (the default ✓), "danger" (trash)
+    // or "" (a plain round button); `icon` overrides the role's own.
+    function sheetButton( role, tip, icon )
+    {
+        var b = document.createElement( "button" );
+        b.type      = "button";
+        b.className = role === "primary" || role === "danger" ? "btn " + role : "btn";
+        if( role === "close" ) b.setAttribute( "data-close", "" );
+        b.innerHTML = Ayni.icon( icon || { close: "close", primary: "check", danger: "trash" }[ role ] );
+        b.dataset.tip = tip;
+        b.setAttribute( "aria-label", tip );
         return b;
     }
 
@@ -677,12 +627,12 @@
     // own copy, as it does not load this file).
     function pwEye( btn, input )
     {
-        btn.innerHTML = icon( "eye" );
+        btn.innerHTML = Ayni.icon( "eye" );
         btn.addEventListener( "click", function ()
         {
             var show = input.type === "password";
             input.type = show ? "text" : "password";
-            btn.innerHTML = icon( show ? "eyeoff" : "eye" );
+            btn.innerHTML = Ayni.icon( show ? "eye-off" : "eye" );
             btn.setAttribute( "aria-label", t( show ? "ui.hidePassword" : "ui.showPassword" ) );
             input.focus();
         } );
@@ -726,10 +676,10 @@
         {
             toggle = document.createElement( "button" );
             toggle.type = "button";
-            toggle.className = "icon-btn";
-            toggle.innerHTML = icon( "search" );
-            toggle.setAttribute( "data-i18n-attr", "title:ui.search, aria-label:ui.search" );
-            toggle.title = t( "ui.search" );
+            toggle.className = "btn";
+            toggle.innerHTML = Ayni.icon( "search" );
+            toggle.setAttribute( "data-i18n-attr", "data-tip:ui.search, aria-label:ui.search" );
+            Ayni.setTip( toggle, t( "ui.search" ) );
             toggle.setAttribute( "aria-label", t( "ui.search" ) );
             box.parentNode.insertBefore( toggle, box );
         }
@@ -748,32 +698,32 @@
         // A filter dialog gets its funnel button; a plain field gets nothing
         // there - a magnifier that cannot be pressed would only look like one.
         var mark = o.filterBtn;
-        if( mark ) mark.classList.add( "icon-btn", "sm" );
+        if( mark ) mark.classList.add( "btn", "sm" );
         else if( o.filter )
         {
             mark = document.createElement( "button" );
             mark.type = "button";
-            mark.className = "icon-btn sm";
+            mark.className = "btn sm";
             mark.addEventListener( "click", function () { o.filter(); } );
             if( o.filterTitle )
             {
-                mark.setAttribute( "data-i18n-attr", "title:" + o.filterTitle + ", aria-label:" + o.filterTitle );
-                mark.title = t( o.filterTitle );
+                mark.setAttribute( "data-i18n-attr", "data-tip:" + o.filterTitle + ", aria-label:" + o.filterTitle );
+                Ayni.setTip( mark, t( o.filterTitle ) );
                 mark.setAttribute( "aria-label", t( o.filterTitle ) );
             }
         }
         if( mark )
         {
             mark.classList.add( "search-mark" );
-            mark.innerHTML = icon( "filter" );
+            mark.innerHTML = Ayni.icon( "filter" );
             box.classList.add( "has-filter" );
         }
         var shut = document.createElement( "button" );
         shut.type = "button";
-        shut.className = "icon-btn sm search-shut";
-        shut.innerHTML = icon( "x" );
-        shut.setAttribute( "data-i18n-attr", "title:ui.close, aria-label:ui.close" );
-        shut.title = t( "ui.close" );
+        shut.className = "btn sm search-shut";
+        shut.innerHTML = Ayni.icon( "close" );
+        shut.setAttribute( "data-i18n-attr", "data-tip:ui.close, aria-label:ui.close" );
+        Ayni.setTip( shut, t( "ui.close" ) );
         shut.setAttribute( "aria-label", t( "ui.close" ) );
         shut.addEventListener( "click", function () { close(); } );
         var tally = document.createElement( "span" );
@@ -784,16 +734,16 @@
         var steps = [];
         if( o.step )
         {
-            [ [ -1, "up", "ui.prev" ], [ 1, "down", "ui.next" ] ].forEach( function ( d )
+            [ [ -1, "chev-up", "ui.prev" ], [ 1, "chev-down", "ui.next" ] ].forEach( function ( d )
             {
                 var b = document.createElement( "button" );
                 b.type = "button";
-                b.className = "icon-btn sm search-step";
-                b.innerHTML = icon( d[ 1 ] );
-                b.setAttribute( "data-i18n-attr", "title:" + d[ 2 ] + ", aria-label:" + d[ 2 ] );
-                b.title = t( d[ 2 ] );
+                b.className = "btn sm search-step";
+                b.innerHTML = Ayni.icon( d[ 1 ] );
+                b.setAttribute( "data-i18n-attr", "data-tip:" + d[ 2 ] + ", aria-label:" + d[ 2 ] );
+                Ayni.setTip( b, t( d[ 2 ] ) );
                 b.setAttribute( "aria-label", t( d[ 2 ] ) );
-                b.disabled = true;
+                b.ariaDisabled = true;
                 b.addEventListener( "click", function () { o.step( d[ 0 ] ); } );
                 steps.push( b );
                 ends.appendChild( b );
@@ -811,7 +761,7 @@
             tally.hidden = ! text;
             input.style.paddingRight = text ? ( ends.offsetWidth + 8 ) + "px" : "";
         }
-        function canStep( on ) { steps.forEach( function ( b ) { b.disabled = ! on; } ); }
+        function canStep( on ) { steps.forEach( function ( b ) { b.ariaDisabled = ! on; } ); }
 
         function isOpen() { return box.classList.contains( "is-open" ); }
         function open( noFocus )
@@ -851,7 +801,7 @@
             if( e.key === "Enter" && o.step && ! e.isComposing )
             {
                 e.preventDefault();
-                if( steps.length && ! steps[ 0 ].disabled ) o.step( e.shiftKey ? -1 : 1 );
+                if( steps.length && steps[ 0 ].ariaDisabled !== "true" ) o.step( e.shiftKey ? -1 : 1 );
                 return;
             }
             if( e.key !== "Escape" || ! isOpen() ) return;
@@ -940,7 +890,7 @@
 
     // THE CLIP'S PANEL (Chat's writer, eMail's): a round coloured button per
     // choice, its name under it, three to a row (app.css .attach). items:
-    // [{ icon: <svg> node, label, color: 0-5, act }]. A tap runs onPick (the
+    // [{ icon: <svg> node, label, color: 0-8, act }]. A tap runs onPick (the
     // caller closes the panel), then the choice. The caller places it.
     function attachPanel( items, onPick )
     {
@@ -963,51 +913,20 @@
         return el;
     }
 
-    // role -> [ css class, default icon ]
-    var ROLES = {
-        close:     [ "btn-secondary", "x"     ],
-        primary:   [ "btn-primary",   "check" ],
-        secondary: [ "btn-secondary", null    ],
-        danger:    [ "btn-danger",    "trash" ],
-        ghost:     [ "btn-ghost",     "help"  ]
-    };
-
-    // Style every <button data-act="…"> under `root` (default: document) as a
-    // Nayive dialog button. Idempotent; keeps id / title / disabled / listeners.
+    // Lay out the dialog buttons under `root` (default: document): a tooltip
+    // that is a dictionary key names the button too (both land with the words),
+    // Ayni wires the ones built on the fly (at once: they may move out of
+    // `root` next), and a lone × moves to the corner. Idempotent.
     function applySheetButtons( root )
     {
         var scope = root || document;
-        var list  = scope.querySelectorAll( "button[data-act]" );
-
-        for( var i = 0; i < list.length; i++ )
+        scope.querySelectorAll( "button[data-i18n-attr]" ).forEach( function ( b )
         {
-            var b     = list[ i ];
-            var spec  = ( b.getAttribute( "data-act" ) || "primary" ).split( ":" );
-            var role  = ROLES[ spec[ 0 ] ] || ROLES.primary;
-
-            b.classList.add( "btn" );
-            if( role[ 0 ] ) b.classList.add( role[ 0 ] );
-
-            b.innerHTML = icon( spec[ 1 ] || role[ 1 ] || "check" );
-
-            // The title is usually a data-i18n-attr key that shared/i18n.js has
-            // not filled in yet, so mirror the KEY into aria-label and let
-            // applyI18n set both at once. A literal title is copied as before.
-            if( ! b.getAttribute( "aria-label" ) )
-            {
-                var i18nAttr = b.getAttribute( "data-i18n-attr" ) || "";
-                var titleKey = /(?:^|,)\s*title\s*:\s*([\w.]+)/.exec( i18nAttr );
-
-                if( titleKey && i18nAttr.indexOf( "aria-label" ) === -1 )
-                    b.setAttribute( "data-i18n-attr", i18nAttr + ", aria-label:" + titleKey[ 1 ] );
-                else if( b.title )
-                    b.setAttribute( "aria-label", b.title );
-            }
-
-            if( spec[ 0 ] === "close" ) b._nayiveClose = true;
-
-            b.removeAttribute( "data-act" );
-        }
+            var said = b.getAttribute( "data-i18n-attr" ), key = /(?:^|,)\s*data-tip\s*:\s*([\w.]+)/.exec( said );
+            if( key && said.indexOf( "aria-label" ) === -1 && ! b.hasAttribute( "aria-label" ) )
+                b.setAttribute( "data-i18n-attr", said + ", aria-label:" + key[ 1 ] );
+        } );
+        if( root ) Ayni.init( root );
 
         // A dialog whose only action is "close" shows it in the top-right corner.
         var rows = scope.querySelectorAll( ".sheet-actions" );
@@ -1023,13 +942,12 @@
     function cornerLoneClose( row )
     {
         var kids = row.children;
-        if( kids.length !== 1 || ! kids[ 0 ]._nayiveClose ) return;
+        if( kids.length !== 1 || ! kids[ 0 ].hasAttribute( "data-close" ) ) return;
 
         var b     = kids[ 0 ];
         var sheet = row.closest && row.closest( ".sheet" );
         if( ! sheet ) return;
 
-        b.classList.remove( "btn", "btn-secondary" );
         b.classList.add( "sheet-close" );
 
         var head = titleRow( sheet );
@@ -1440,7 +1358,7 @@
 
             if( d.tagName === "BUTTON" && ! d.getAttribute( "type" ) )
                 d.setAttribute( "type", "button" );
-            if( ! d.innerHTML.trim() ) d.innerHTML = icon( "info" );
+            if( ! d.innerHTML.trim() ) d.innerHTML = Ayni.icon( "info" );
             if( ! d.getAttribute( "aria-label" ) )
                 d.setAttribute( "data-i18n-attr",
                                 ( d.getAttribute( "data-i18n-attr" ) ? d.getAttribute( "data-i18n-attr" ) + ", " : "" )
@@ -1589,27 +1507,19 @@
             var cancel = null;
             if( withCancel )
             {
-                cancel = document.createElement( "button" );
-                cancel.setAttribute( "data-act", "close" );
-                cancel.title = opts.cancel || t( "ui.cancel" );
+                cancel = sheetButton( "close", opts.cancel || t( "ui.cancel" ) );
                 row.appendChild( cancel );
             }
 
             var other = null;
             if( withCancel && opts.other )
             {
-                other = document.createElement( "button" );
-                other.setAttribute( "data-act", "secondary:" + ( opts.otherIcon || "check" ) );
-                other.title = opts.other;
+                other = sheetButton( "", opts.other, opts.otherIcon || "check" );
                 row.appendChild( other );
             }
 
-            var ok = document.createElement( "button" );
-            if( withCancel )
-                ok.setAttribute( "data-act", opts.danger ? "danger" : "primary" );
-            else
-                ok.setAttribute( "data-act", "close" );        // lone close -> corner "x"
-            ok.title = opts.confirm || ( withCancel ? t( "ui.accept" ) : t( "ui.close" ) );
+            var ok = sheetButton( withCancel ? ( opts.danger ? "danger" : "primary" ) : "close",   // lone close -> corner "x"
+                                  opts.confirm || ( withCancel ? t( "ui.accept" ) : t( "ui.close" ) ) );
             row.appendChild( ok );
 
             function finish( val )
@@ -1697,17 +1607,11 @@
 
             var row = document.createElement( "div" );
             row.className = "sheet-actions";
-            var no = document.createElement( "button" );
-            no.type = "button";
+            var no = sheetButton( "close", t( "ui.cancel" ) );
             if( ids.cancel ) no.id = ids.cancel;
-            no.setAttribute( "data-act", "close" );
-            no.title = t( "ui.cancel" );
-            var ok = document.createElement( "button" );
-            ok.type = "button";
+            var ok = sheetButton( "primary", o.okTitle || t( "ui.accept" ) );
             if( ids.ok ) ok.id = ids.ok;
-            if( o.okClass ) ok.className = o.okClass;
-            ok.setAttribute( "data-act", "primary" );
-            ok.title = o.okTitle || t( "ui.accept" );
+            if( o.okClass ) ok.classList.add( o.okClass );
             row.appendChild( no );
             row.appendChild( ok );
             d.sheet.appendChild( row );
@@ -1792,8 +1696,19 @@
                 // browser's password manager offers to make one or to fill it.
                 inp.autocomplete = opts.verify ? "new-password" : "current-password";
 
+                // The eye inside the box's right end (app.css PASSWORD EYE).
+                var wrap = document.createElement( "div" );
+                var eye  = document.createElement( "button" );
+                wrap.className = "pw-wrap";
+                eye.type       = "button";
+                eye.className  = "pw-eye";
+                eye.setAttribute( "aria-label", t( "ui.showPassword" ) );
+                pwEye( eye, inp );
+                wrap.appendChild( inp );
+                wrap.appendChild( eye );
+
                 box.appendChild( lab );
-                box.appendChild( inp );
+                box.appendChild( wrap );
                 sheet.appendChild( box );
                 return inp;
             }
@@ -1810,14 +1725,10 @@
             row.className = "sheet-actions";
             sheet.appendChild( row );
 
-            var cancel = document.createElement( "button" );
-            cancel.setAttribute( "data-act", "close" );
-            cancel.title = opts.cancel || t( "ui.cancel" );
+            var cancel = sheetButton( "close", opts.cancel || t( "ui.cancel" ) );
             row.appendChild( cancel );
 
-            var ok = document.createElement( "button" );
-            ok.setAttribute( "data-act", "primary" );
-            ok.title = opts.confirm || t( "ui.accept" );
+            var ok = sheetButton( "primary", opts.confirm || t( "ui.accept" ) );
             row.appendChild( ok );
 
             function complain( key )
@@ -1992,7 +1903,7 @@
         }
         else if( it.icon )
         {
-            span.innerHTML = icon( it.icon );
+            span.innerHTML = Ayni.icon( it.icon );
         }
         else if( svg )
         {
@@ -2030,12 +1941,14 @@
         }
 
         // The guided tour, when the app has one: first thing under the lead.
-        if( opts.tour )
+        // Not when the "?" is a menu (Write / Calc / Text): the tour is a
+        // menu entry there (#tourBtn, shared/office.js).
+        if( opts.tour && ! helpIsMenu )
         {
             var tb = document.createElement( "button" );
             tb.type      = "button";
-            tb.className = "text-btn small intro-tour";
-            tb.innerHTML = icon( "play" ) + "<span></span>";
+            tb.className = "btn text primary sm intro-tour";
+            tb.innerHTML = Ayni.icon( "play" ) + "<span></span>";
             tb.lastChild.textContent = t( "ui.tour.open" );
             tb.addEventListener( "click", function ()
             {
@@ -2079,7 +1992,7 @@
                 boxx.className = "intro-btn-t";
 
                 var name = it.name
-                        || ( el && ( el.getAttribute( "title" ) || el.getAttribute( "aria-label" ) ) )
+                        || ( el && ( el.dataset.tip || el.getAttribute( "title" ) || el.getAttribute( "aria-label" ) ) )
                         || "";
                 if( name )
                 {
@@ -2211,7 +2124,7 @@
             el.classList.add( "nayive-home-link" );
             if( isIcon )
             {
-                if( ! el.getAttribute( "title" ) ) el.setAttribute( "data-i18n-attr", "title:ui.toApps" );
+                if( ! el.dataset.tip ) el.setAttribute( "data-i18n-attr", "data-tip:ui.toApps, aria-label:ui.toApps" );
                 el.setAttribute( "role", "button" );
             }
             el.addEventListener( "click", onHomeClick );
@@ -2439,9 +2352,9 @@
             var btn = document.createElement( "button" );      // countdown, then (x)
             btn.type      = "button";
             btn.className = "coach-close";
-            btn.disabled  = true;
-            btn.title     = t( "ui.coach.wait" );
-            btn.setAttribute( "aria-label", btn.title );
+            btn.ariaDisabled  = true;
+            Ayni.setTip( btn, t( "ui.coach.wait" ) );
+            btn.setAttribute( "aria-label", btn.dataset.tip );
             bub.appendChild( btn );
 
             var p = document.createElement( "p" );
@@ -2558,10 +2471,10 @@
                 var b = marks[ i ].btn;
                 if( secs > 0 ) { b.textContent = String( secs ); continue; }
 
-                b.innerHTML = icon( "x" );
-                b.disabled  = false;
-                b.title     = t( "ui.close" );
-                b.setAttribute( "aria-label", b.title );
+                b.innerHTML = Ayni.icon( "close" );
+                b.ariaDisabled  = false;
+                Ayni.setTip( b, t( "ui.close" ) );
+                b.setAttribute( "aria-label", b.dataset.tip );
             }
 
             // Count over = it has been read: remember it and never show it
@@ -2913,11 +2826,11 @@
         count.className = "tour-count";
         var back = row.appendChild( document.createElement( "button" ) );
         back.type      = "button";
-        back.className = "text-btn ghost small";
+        back.className = "btn text bordered sm";
         back.textContent = t( "ui.tour.back" );
         var next = row.appendChild( document.createElement( "button" ) );
         next.type      = "button";
-        next.className = "text-btn small";
+        next.className = "btn text primary sm";
 
         var idx = -1, cur = null, token = 0, ended = false;
 
@@ -3003,7 +2916,7 @@
             ring.classList.toggle( "is-ghost", !! cur.ghost );
 
             glyph.hidden = ! ( cur.ghost && s.icon );
-            if( ! glyph.hidden ) glyph.innerHTML = icon( s.icon );
+            if( ! glyph.hidden ) glyph.innerHTML = Ayni.icon( s.icon );
             title.textContent = s.title || "";
             head.hidden = glyph.hidden && ! s.title;
             para.textContent = s.text || "";
@@ -3287,12 +3200,10 @@
             }
 
             // One of the three bottom-left folder buttons.
-            function fpAct( act, title, off, fn )
+            function fpAct( role, icon, title, off, fn )
             {
-                var b = document.createElement( "button" );
-                b.setAttribute( "data-act", act );
-                b.title    = title;
-                b.disabled = !! off;
+                var b = sheetButton( role, title, icon );
+                b.ariaDisabled = !! off;
                 b.addEventListener( "click", fn );
                 return b;
             }
@@ -3551,7 +3462,7 @@
                     input.addEventListener( "input", function ()
                     {
                         nameVal     = input.value;
-                        ok.disabled = ! nameOk();
+                        ok.ariaDisabled = ! nameOk();
                     } );
                     input.addEventListener( "keydown", function ( e )
                     {
@@ -3575,23 +3486,19 @@
 
                     var left = document.createElement( "div" );
                     left.className = "sheet-actions-left";
-                    left.appendChild( fpAct( "danger", t( "ui.delete" ), ! onOne, deleteFolder ) );
-                    left.appendChild( fpAct( "secondary:edit", t( "ui.rename" ), ! onOne,
+                    left.appendChild( fpAct( "danger", null, t( "ui.delete" ), ! onOne, deleteFolder ) );
+                    left.appendChild( fpAct( "", "edit", t( "ui.rename" ), ! onOne,
                                              function () { startName( "rename" ); } ) );
-                    left.appendChild( fpAct( "secondary:folderplus", t( "ui.newFolder" ), ! ready,
+                    left.appendChild( fpAct( "", "folder-plus", t( "ui.newFolder" ), ! ready,
                                              function () { startName( "create" ); } ) );
                     arow.appendChild( left );
                 }
 
-                var cancel = document.createElement( "button" );
-                cancel.setAttribute( "data-act", "close" );
-                cancel.title = t( "ui.cancel" );
+                var cancel = sheetButton( "close", t( "ui.cancel" ) );
                 arow.appendChild( cancel );
 
-                var ok = document.createElement( "button" );
-                ok.setAttribute( "data-act", "primary" );
-                ok.title = ! nameMode ? t( "ui.fp.choose" )
-                         : nameMode === "create" ? t( "ui.newFolder" ) : t( "ui.rename" );
+                var ok = sheetButton( "primary", ! nameMode ? t( "ui.fp.choose" )
+                                               : nameMode === "create" ? t( "ui.newFolder" ) : t( "ui.rename" ) );
                 arow.appendChild( ok );
 
                 sheet.appendChild( arow );
@@ -3606,14 +3513,14 @@
 
                 if( nameMode )
                 {
-                    ok.disabled = ! nameOk();
+                    ok.ariaDisabled = ! nameOk();
                     ok.addEventListener( "click", commitName );
                     input.focus();
                     if( ! namePicked ) { namePicked = true; input.select(); }
                 }
                 else
                 {
-                    ok.disabled = ! selected || busy;
+                    ok.ariaDisabled = ! selected || busy;
                     ok.addEventListener( "click", function () { if( selected ) finish( selected ); } );
                 }
             }
@@ -3707,7 +3614,7 @@
 
                 var ic = document.createElement( "span" );
                 ic.className = "fp-ic";
-                ic.innerHTML = icon( isDir( n ) ? "folder" : "doc" );
+                ic.innerHTML = Ayni.icon( isDir( n ) ? "folder" : "file" );
                 row.appendChild( ic );
 
                 var name = document.createElement( "span" );
@@ -3775,16 +3682,12 @@
                 var arow = document.createElement( "div" );
                 arow.className = "sheet-actions";
 
-                var cancel = document.createElement( "button" );
-                cancel.setAttribute( "data-act", "close" );
-                cancel.title = t( "ui.cancel" );
+                var cancel = sheetButton( "close", t( "ui.cancel" ) );
                 cancel.addEventListener( "click", function () { finish( null ); } );
                 arow.appendChild( cancel );
 
-                var ok = document.createElement( "button" );
-                ok.setAttribute( "data-act", "primary" );
-                ok.title    = opts.confirm || t( "ui.fp.chooseFile" );
-                ok.disabled = ! selected;
+                var ok = sheetButton( "primary", opts.confirm || t( "ui.fp.chooseFile" ) );
+                ok.ariaDisabled = ! selected;
                 ok.addEventListener( "click", function () { if( selected ) finish( selected ); } );
                 arow.appendChild( ok );
 
@@ -4011,7 +3914,7 @@
 
         var ic = document.createElement( "span" );
         ic.className = "intro-btn-i";
-        ic.innerHTML = icon( iconName );
+        ic.innerHTML = Ayni.icon( iconName );
         li.appendChild( ic );
 
         var box = document.createElement( "div" );
@@ -4034,7 +3937,7 @@
 
         var ic = document.createElement( "span" );
         ic.className = "intro-btn-i";
-        ic.innerHTML = icon( iconName );
+        ic.innerHTML = Ayni.icon( iconName );
         li.appendChild( ic );
 
         var sp = document.createElement( "span" );
@@ -4085,7 +3988,7 @@
             ul.className = "intro-btns";
             ul.appendChild( installRow( "grid", t( "ui.install.b1n" ),
                 t( "ui.install.b1" ) ) );
-            ul.appendChild( installRow( "fullscr", t( "ui.install.b2n" ),
+            ul.appendChild( installRow( "fullscreen", t( "ui.install.b2n" ),
                 t( "ui.install.b2" ) ) );
             ul.appendChild( installRow( "bolt", t( "ui.install.b3n" ),
                 t( "ui.install.b3" ) ) );
@@ -4101,10 +4004,10 @@
 
             var ol = document.createElement( "ol" );
             ol.className = "install-steps";
-            ol.appendChild( installStep( "share",   t( "ui.install.s1a" ),
+            ol.appendChild( installStep( "ios-share", t( "ui.install.s1a" ),
                                                     t( "ui.install.s1b" ),
                                                     t( "ui.install.s1c" ) ) );
-            ol.appendChild( installStep( "addhome", t( "ui.install.s2a" ),
+            ol.appendChild( installStep( "add-home", t( "ui.install.s2a" ),
                                                     t( "ui.install.s2b" ),
                                                     t( "ui.install.s2c" ) ) );
             ol.appendChild( installStep( "check",   t( "ui.install.s3a" ),
@@ -4122,10 +4025,10 @@
 
             var olA = document.createElement( "ol" );
             olA.className = "install-steps";
-            olA.appendChild( installStep( "menudots", t( "ui.install.a1a" ),
+            olA.appendChild( installStep( "more", t( "ui.install.a1a" ),
                                                       t( "ui.install.a1b" ),
                                                       t( "ui.install.a1c" ) ) );
-            olA.appendChild( installStep( "addhome",  t( "ui.install.a2a" ),
+            olA.appendChild( installStep( "add-home",  t( "ui.install.a2a" ),
                                                       t( "ui.install.a2b" ),
                                                       t( "ui.install.a2c" ) ) );
             olA.appendChild( installStep( "check",    t( "ui.install.a3a" ),
@@ -4518,7 +4421,7 @@
     {
         var el = document.createElement( "span" );
         el.className = "ro-badge";
-        el.innerHTML = icon( "lock" );
+        el.innerHTML = Ayni.icon( "lock" );
 
         if( by )
         {
@@ -4565,15 +4468,15 @@
         var b = document.createElement( "button" );
         b.type      = "button";
         b.className = "share-drop";
-        b.title     = title;
+        Ayni.setTip( b, title );
         b.setAttribute( "aria-label", title );
-        b.innerHTML = icon( name );
+        b.innerHTML = Ayni.icon( name );
         b.addEventListener( "click", function ()
         {
-            b.disabled = true;
+            Ayni.setBusy( b, t( "ui.wait" ) );
             Promise.resolve().then( action )
                 .catch( function ( e ) { toast( e.message ); } )
-                .then( function () { b.disabled = false; } );
+                .then( function () { Ayni.setBusy( b, false ); } );
         } );
         return b;
     }
@@ -4734,11 +4637,11 @@
                         var del = document.createElement( "button" );
                         del.type      = "button";
                         del.className = "share-drop";
-                        del.title     = t( "share.stop" );
-                        del.innerHTML = icon( "x" );
+                        Ayni.setTip( del, t( "share.stop" ) );
+                        del.innerHTML = Ayni.icon( "close" );
                         del.addEventListener( "click", function ()
                         {
-                            del.disabled = true;
+                            Ayni.setBusy( del, t( "ui.wait" ) );
                             shareApi( "DELETE", null, g.id )
                                 .then( function ()
                                 {
@@ -4752,7 +4655,7 @@
                                     } );
                                     return load();
                                 } )
-                                .catch( function ( e ) { toast( e.message ); del.disabled = false; } );
+                                .catch( function ( e ) { toast( e.message ); Ayni.setBusy( del, false ); } );
                         } );
                         row.appendChild( del );
                         have.appendChild( row );
@@ -4798,7 +4701,7 @@
                         allLab.classList.toggle( "on", toAll );
                         list.classList.toggle( "all", toAll );
                         list.querySelectorAll( "input" ).forEach( function ( b ) { if( b !== allBox ) b.disabled = toAll; } );
-                        if( ok ) ok.disabled = ! ( toAll || chosen.length );
+                        if( ok ) ok.ariaDisabled = ! ( toAll || chosen.length );
                     } );
 
                     var allName = document.createElement( "span" );
@@ -4830,7 +4733,7 @@
 
                             // No render() here: it would scroll the list back to the top.
                             lab.classList.toggle( "on", box.checked );
-                            if( ok ) ok.disabled = ! ( toAll || chosen.length );
+                            if( ok ) ok.ariaDisabled = ! ( toAll || chosen.length );
                         } );
 
                         // A <span>, not a bare text node: only an element can end in "..."
@@ -4858,6 +4761,7 @@
 
                     var addBox = document.createElement( "input" );
                     addBox.type    = "checkbox";
+                    addBox.setAttribute( "role", "switch" );
                     addBox.checked = mayAdd;
                     addBox.addEventListener( "change", function ()
                     {
@@ -4867,11 +4771,8 @@
 
                     // An on / off option: the text, then the shared .switch.
                     var addSw = document.createElement( "span" );
-                    addSw.className = "switch sm";
-                    var addTrack = document.createElement( "span" );
-                    addTrack.className = "track";
+                    addSw.className = "switch";
                     addSw.appendChild( addBox );
-                    addSw.appendChild( addTrack );
 
                     addLab.appendChild( document.createTextNode(
                         t( "share.mayadd" ) ) );
@@ -4884,22 +4785,18 @@
                 var row2 = document.createElement( "div" );
                 row2.className = "sheet-actions";
 
-                var cancel = document.createElement( "button" );
-                cancel.setAttribute( "data-act", "close" );
-                cancel.title = t( "ui.close" );
+                var cancel = sheetButton( "close", t( "ui.close" ) );
                 cancel.addEventListener( "click", close );
                 row2.appendChild( cancel );
 
                 if( free.length )
                 {
-                    ok = document.createElement( "button" );
-                    ok.setAttribute( "data-act", "primary" );
-                    ok.title    = t( "share.send" );
-                    ok.disabled = ! ( toAll || chosen.length );
+                    ok = sheetButton( "primary", t( "share.send" ) );
+                    ok.ariaDisabled = ! ( toAll || chosen.length );
                     ok.addEventListener( "click", function ()
                     {
                         if( ! toAll && ! chosen.length ) return;
-                        ok.disabled = true;
+                        Ayni.setBusy( ok, t( "ui.wait" ) );   // load() draws the list again, with a new ✓
 
                         // Everybody: ONE grant. The server drops the ones made to
                         // single people for this same item.
@@ -4994,7 +4891,7 @@
                     } ) );
                     // Gone from the sheet at once; the link itself dies when the
                     // Undo does (a new link would be a new address).
-                    row.appendChild( rowButton( "x", t( "share.link.stop" ), function ()
+                    row.appendChild( rowButton( "close", t( "share.link.stop" ), function ()
                     {
                         var id = link.id;
                         linksGoing[ id ] = true;
@@ -5055,7 +4952,7 @@
     function townName( lat, lon )
     {
         var url = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=" +
-                  encodeURIComponent( I18N ? I18N.locale() : "es" ) + "&lat=" + lat + "&lon=" + lon;
+                  encodeURIComponent( window.Ayni ? Ayni.i18n.lang() : "es" ) + "&lat=" + lat + "&lon=" + lon;
         return fetch( url, { headers: { Accept: "application/json" } } )
             .then( function ( r ) { return r.ok ? r.json() : {}; } )
             .then( function ( j )
@@ -5311,11 +5208,11 @@
         {
             var stop = document.createElement( "button" );
             stop.type      = "button";
-            stop.className = "icon-btn sm transfer-stop";
-            stop.title     = t( "ui.cancel" );
+            stop.className = "btn sm transfer-stop";
+            Ayni.setTip( stop, t( "ui.cancel" ) );
             stop.setAttribute( "aria-label", t( "ui.cancel" ) );
-            stop.innerHTML = icon( "x" );
-            stop.addEventListener( "click", function () { stop.disabled = true; opts.onStop(); } );
+            stop.innerHTML = Ayni.icon( "close" );
+            stop.addEventListener( "click", function () { stop.ariaDisabled = true; opts.onStop(); } );
             row.appendChild( stop );
             row.classList.add( "can-stop" );
         }
@@ -5535,7 +5432,7 @@
         head.className = "quota-card-head";
         var title = document.createElement( "strong" );
         title.textContent = t( "ui.quota.title" );
-        var close = xButton( "icon-btn sm", function () { card.remove(); } );
+        var close = xButton( "btn sm", function () { card.remove(); } );
         head.appendChild( title );
         head.appendChild( close );
 
@@ -5560,8 +5457,8 @@
         // anywhere else it is a trip to Drive.
         var find = document.createElement( "button" );
         find.type      = "button";
-        find.className = "text-btn";
-        find.innerHTML = icon( "search" ) + "<span></span>";
+        find.className = "btn text primary";
+        find.innerHTML = Ayni.icon( "search" ) + "<span></span>";
         find.lastChild.textContent = t( "ui.quota.find" );
         find.addEventListener( "click", function ()
         {
@@ -5626,13 +5523,13 @@
             var el = s.el && document.getElementById( s.el );
             if( ! el ) return;
 
-            var hint = " · " + s.label();
-            var tip  = el.getAttribute( "title" ) || "";
+            var hint = " (" + s.label() + ")";   // Ayni's form: "Print (Ctrl+P)"
+            var tip  = el.dataset.tip || "";
 
             if( tip.slice( -hint.length ) === hint ) tip = tip.slice( 0, -hint.length );
             if( ! tip ) return;                    // no tooltip yet: nothing to hang the hint on
 
-            el.setAttribute( "title", phone ? tip : tip + hint );
+            Ayni.setTip( el, phone ? tip : tip + hint );
         } );
     }
 
@@ -5783,7 +5680,7 @@
 
         var key = ( opts.titles && opts.titles[ state ] ) || ( "ui.sync." + ( SYNC_KEYS[ state ] || "error" ) );
         var hint = ( opts.tapHint != null ? opts.tapHint : el.tagName === "BUTTON" ) ? t( "ui.sync.tapHint" ) : "";
-        el.title = t( key ) + hint;
+        Ayni.setTip( el, t( key ) + hint );
 
         // Stamped so bootWithStore can tell "nobody has touched this plug yet"
         // (settle it) from "the app deliberately put it here" (leave it alone -
@@ -5832,7 +5729,7 @@
         // probe above already carries it, so this costs no extra request. When
         // adopt() takes it, a reload is on its way - stop here rather than
         // render a frame that gets thrown away (and flashes the old language).
-        if( who && window.NayiveI18n && NayiveI18n.adopt && NayiveI18n.adopt( who.lang ) )
+        if( who && window.Ayni && Ayni.i18n.setLang( who.lang ) )
             return null;
         var app = byId( opts.appId || "app" );
         if( app ) app.style.display = "";
@@ -6155,6 +6052,36 @@
         return { open: open, close: close, isOpen: isOpen };
     }
 
+    // A popup menu taller than the room it has scrolls (app.css: .top-menu
+    // overflow-y auto) instead of running off the screen. Every app places its
+    // menus its own way, so this watches them all: when a .top-menu shows (its
+    // `hidden` goes, or it is added), its height is capped at the edge it
+    // would cross - the bottom for one hung under its button, the top for one
+    // that rises above it (Chat's send menu, the desktop bar at the bottom).
+    function fitMenu( m )
+    {
+        m.style.maxHeight = "";
+        if( m.hidden || ! m.isConnected ) return;
+        var r = m.getBoundingClientRect(), vh = window.innerHeight, pad = 8;
+        if( r.bottom > vh - pad && r.top >= pad )
+            m.style.maxHeight = Math.max( 120, vh - pad - r.top ) + "px";
+        else if( r.top < pad && r.bottom <= vh - pad )
+            m.style.maxHeight = Math.max( 120, r.bottom - pad ) + "px";
+    }
+    function isMenu( n ) { return n.nodeType === 1 && n.classList.contains( "top-menu" ); }
+    new MutationObserver( function ( recs )
+    {
+        var seen = [];
+        recs.forEach( function ( rec )
+        {
+            var list = rec.type === "attributes" ? [ rec.target ] : rec.addedNodes;
+            for( var i = 0; i < list.length; i++ )
+                if( isMenu( list[ i ] ) && seen.indexOf( list[ i ] ) < 0 ) seen.push( list[ i ] );
+        } );
+        seen.forEach( fitMenu );
+    } ).observe( document.documentElement, { subtree: true, childList: true,
+                                             attributes: true, attributeFilter: [ "hidden" ] } );
+
     //------------------------------------------------------------------------//
     // CLOSE-ONLY DIALOGS  -  the GNOME way (docs/audit/dialogs.md): a settings
     // dialog has only its ×, and every change is kept. × = Escape = close =
@@ -6248,7 +6175,7 @@
     // in shared/app.css): a static .sheet-backdrop closes on its own × / ✓
     // buttons and on Escape - never on a backdrop click. Wired ONCE here, for
     // every dialog written in the page's HTML: a click on its close button
-    // (data-act="close", flagged _nayiveClose by applySheetButtons) or Escape
+    // (the button marked data-close) or Escape
     // while it is the top-most open sheet closes it. The dialogs ui.js builds
     // on the fly carry no id and handle their own closing.
     function topSheetBackdrop()
@@ -6269,7 +6196,7 @@
         document.addEventListener( "click", function ( e )
         {
             var b = e.target.closest && e.target.closest( "button" );
-            if( ! b || ! b._nayiveClose ) return;
+            if( ! b || ! b.hasAttribute( "data-close" ) ) return;
             var back = b.closest( ".sheet-backdrop" );
             if( back && back.id && back.classList.contains( "open" ) )
                 setTimeout( function () { closeSheetBackdrop( back ); }, 0 );   // after the app's own handler
@@ -6281,8 +6208,8 @@
             var back = topSheetBackdrop();
             if( ! back || ! back.id ) return;
             // Prefer the dialog's own close button: an app may reset state in its handler.
-            var x = back.querySelector( "button.sheet-close, button.btn-secondary" );
-            if( x && x._nayiveClose ) { x.click(); return; }
+            var x = back.querySelector( "button[data-close]" );
+            if( x ) { x.click(); return; }
             closeSheetBackdrop( back );
         } );
     }
@@ -6494,9 +6421,7 @@
         d.sheet.appendChild( p );
         var row = document.createElement( "div" );
         row.className = "sheet-actions";
-        var ok = document.createElement( "button" );
-        ok.setAttribute( "data-act", "close" );        // lone close -> corner "x"
-        ok.title = t( "ui.close" );
+        var ok = sheetButton( "close", t( "ui.close" ) );        // lone close -> corner "x"
         row.appendChild( ok );
         d.sheet.appendChild( row );
         ok.addEventListener( "click", function () { d.close(); } );
@@ -6527,6 +6452,8 @@
             check();
         }, function () {} );
     }
+
+    function applyI18n() { if( window.Ayni ) Ayni.i18n.apply( document ); }
 
     function uiInit()
     {
@@ -6599,17 +6526,10 @@
         undoSettle:     undoSettle,       // the Undo on show is final now (editor / game: next key)
         transfer:       transfer,         // a row on the shared upload/download bar
         wireMenu:       wireMenu,         // the header "..." popup menu
-        icon:              icon,
         h:                 h,             // build DOM: h( "div", { class, text, on, attrs, data }, kids… )
         attachPanel:       attachPanel,   // the clip's round-button panel (Chat, eMail)
-        t:         t,
-        tf:        tf,
-        applyI18n: applyI18n,
-        lang:      I18N ? I18N.lang    : function () { return "es"; },
-        locale:    I18N ? I18N.locale  : function () { return "es"; },
-        weekday:   I18N ? I18N.weekday : function ( n ) { return String( n ); },
-        month:     I18N ? I18N.month   : function ( n ) { return String( n ); },
         applySheetButtons: applySheetButtons,
+        sheetButton:       sheetButton,
         applyInfoDots:     applyInfoDots,
         applyHomeLinks:    applyHomeLinks,
         applySyncDots:     applySyncDots,

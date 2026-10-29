@@ -24,8 +24,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -242,7 +240,7 @@ public class LinkService extends Service {
                 pause(5 * 60_000L);
                 continue;
             }
-            maybeCheckUpdate();
+            Updater.maybeCheck(this);
             Api.Reply r;
             try {
                 r = Api.get(this, "/api/device/wait?v=" + Uri.encode(version) + (ear != null ? "&ear=1" : "")
@@ -447,40 +445,5 @@ public class LinkService extends Service {
             Log.i(TAG, "ack failed: " + e);
         }
         kick();
-    }
-
-    // ------------------------------------------------------------------
-    // a newer APK
-    // ------------------------------------------------------------------
-
-    /** Once a day: <origin>/app/version.json, {"code": N, "url": "..."}. */
-    private void maybeCheckUpdate() {
-        long now = System.currentTimeMillis();
-        if (now - Prefs.updateChecked(this) < 24 * 3600_000L) return;
-        Prefs.setUpdateChecked(this, now);
-        sender.execute(() -> {
-            HttpURLConnection h = null;
-            try {
-                h = (HttpURLConnection) new URL(BuildConfig.ORIGIN + "/app/version.json").openConnection();
-                h.setConnectTimeout(20_000);
-                h.setReadTimeout(20_000);
-                if (h.getResponseCode() != 200) return;
-                java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
-                try (java.io.InputStream in = h.getInputStream()) {
-                    byte[] b = new byte[4096];
-                    int n;
-                    while ((n = in.read(b)) > 0 && buf.size() < 65536) buf.write(b, 0, n);
-                }
-                JSONObject v = new JSONObject(buf.toString("UTF-8"));
-                if (v.optInt("code", 0) > BuildConfig.VERSION_CODE) {
-                    String url = v.optString("url", "/app/");
-                    Notes.update(this, url.startsWith("http") ? url : BuildConfig.ORIGIN + url);
-                }
-            } catch (IOException | JSONException e) {
-                Log.i(TAG, "update check failed: " + e);
-            } finally {
-                if (h != null) h.disconnect();
-            }
-        });
     }
 }

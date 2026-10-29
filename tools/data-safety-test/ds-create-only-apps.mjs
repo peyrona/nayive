@@ -35,11 +35,11 @@ section( "D3 · PHOTOS: UPLOAD A PHOTO NAMED LIKE ONE THE PHONE PUT THERE SINCE"
         window.__up = 'busy'; handleAddPhotos( [ new File( [ b, 'MINE' ], 'new.png', { type: 'image/png' } ) ] ).then( () => { window.__up = 'done'; }, e => { window.__up = 'error ' + e; } );
         return true; } )()` );
     const SHEET = "document.querySelector( '.sheet-backdrop.open .sheet' )";
-    ok( await c.until( SHEET + " && " + SHEET + ".textContent.indexOf( NayiveUI.t( 'drive.alreadyExistOne' ) ) !== -1" ), "the upload asks: the name is taken on the server" );
+    ok( await c.until( SHEET + " && " + SHEET + ".textContent.indexOf( Ayni.t( 'drive.alreadyExistOne' ) ) !== -1" ), "the upload asks: the name is taken on the server" );
     ok( tail( "files/F/new.png" ) === "PHONE", "the phone's photo is untouched while it asks" );
     // The sheet's buttons are icons: their words are in the title.
     ok( await c.evaluate( `( () => { const b = [ ...document.querySelectorAll( '.sheet-backdrop.open .sheet-actions button' ) ]
-        .find( x => x.title === NayiveUI.t( 'drive.keepBoth' ) ); if( b ) b.click(); return !! b; } )()` ), "Keep both pressed" );
+        .find( x => x.dataset.tip === Ayni.t( 'drive.keepBoth' ) ); if( b ) b.click(); return !! b; } )()` ), "Keep both pressed" );
     ok( await c.until( "window.__up === 'done'" ), "Keep both: the upload ends" );
     ok( tail( "files/F/new.png" ) === "PHONE", "the phone's photo is still there" );
     ok( await disk( () => tail( "files/F/new (2).png" ) === "MINE" ), "...and this one went up beside it", fs.readdirSync( path.join( s.home(), "files/F" ) ) );

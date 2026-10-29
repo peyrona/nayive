@@ -83,7 +83,7 @@
 }
 #gridHost .ht_clone_top_inline_start_corner thead th:hover::after { border-bottom-color: var(--accent); }
 
-/* Base reset, .app shell, .topbar, .icon-btn, .sheet, .field and the
+/* Base reset, .app shell, .topbar, .btn, .sheet, .field and the
    input look all come from ../shared/app.css. Calc overrides the page
    scroll and adds its chrome + the hand-built formatting toolbar. */
 html, body { height: 100%; overflow: hidden; }
@@ -111,15 +111,9 @@ html, body { height: 100%; overflow: hidden; }
     overflow-x: visible;
 }
 .fmt-sep { width: 1px; align-self: stretch; margin: 4px 6px; background: var(--line); flex: 0 0 auto; }
-/* Toolbar buttons: 30px circles; hover = GROWING WASH in app.css. */
-.fmt-btn, .fmt-color-btn
-{
-    display: flex; align-items: center; justify-content: center;
-    width: 30px; height: 30px; flex: 0 0 auto;
-    border-radius: 50%; border: none; color: var(--text-dim);
-    cursor: pointer; padding: 0; font-weight: 700; font-size: 0.95rem; font-family: inherit;
-}
-.fmt-btn.active, .fmt-btn.is-active { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
+/* Toolbar buttons: Ayni's .btn at 30 px (a toggle is aria-pressed); B / I / U
+   are letters, in bold. */
+.btn.fmt-btn, .btn.fmt-color-btn { --btn: 30px; font-weight: 700; font-size: 0.95rem; }
 /* Text/fill colour buttons — the same TinyMCE 'text-color' / 'highlight-bg-color'
    glyphs the Write app shows; the bar under each glyph tracks the current colour.
    The real <input type=color> is visually hidden but still opened by a click
@@ -345,7 +339,7 @@ body.calc-painting #gridHost .htCore td { cursor: copy; }
     /* The formula row stays (it never folds), just tighter. */
     #formulaRow { padding: 4px 4px; }
     #formulaRow .fmt-sep { margin: 4px 3px; }
-    .fmt-btn, .fmt-color-btn { width: 36px; height: 36px; }
+    .btn.fmt-btn, .btn.fmt-color-btn { --btn: 36px; }
     .fmt-color-clear { width: 22px; }
 
     /* Collapsed: only the favourites (the .fmt-keep ones). They wrap like
@@ -422,7 +416,7 @@ body.calc-painting #gridHost .htCore td { cursor: copy; }
 /* ---- FORMULA EDITOR (see FORMULA EDITOR in the script) -------------
    The .popup card, fixed over the top-right of the cells while a cell's
    "=…" is typed. Only layout lives here: the pieces are the shared .pill,
-   .icon-btn and dialog buttons, and this sheet's .pop-btn, .fx-item and
+   .btn and dialog buttons, and this sheet's .pop-btn, .fx-item and
    .nf-preview. z-index 300: over the grid's clones (up to 210) and its
    open cell editor (200), under the menus (400) and the dialogs (500). */
 #fePanel               { z-index: 300; width: 292px; max-width: calc(100vw - 32px); padding: 0; flex-direction: column; overflow: hidden; }

@@ -27,14 +27,14 @@ section( "D4 · SHARE TO NAYIVE WHILE THE ALBUM CANNOT BE READ" );
         await cache.put( new URL( 'inbox/0', location.href ).toString(), new Response( new Blob( [ 'THE SHARED PHOTO' ], { type: 'image/jpeg' } ) ) );
         return true; } )()` ), "one photo waits in the inbox" );
     await c.open( PAGE + "?n=1", PAGE );
-    ok( await c.until( "ITEMS.length === 1 && DEST === 'files/Album' && ! document.getElementById('goBtn').disabled" ), "the page shows it, album chosen" );
+    ok( await c.until( "ITEMS.length === 1 && DEST === 'files/Album' && document.getElementById('goBtn').ariaDisabled !== 'true'" ), "the page shows it, album chosen" );
 
     // The listing fails (a 5xx, a hiccup); the PUTs would work.
     await c.evaluate( `GumApi.listDir = function() { const e = new Error( 'HTTP 502: Bad Gateway' ); e.status = 502; return Promise.reject( e ); }; true` );
     await c.evaluate( "document.getElementById('goBtn').click(); true" );
     ok( await c.until( "document.querySelector( '.sheet-backdrop.open .dialog-text' )" ), "it says so" );
     const said = await c.evaluate( "( document.querySelector( '.sheet-backdrop.open .dialog-text' ) || {} ).textContent || ''" );
-    ok( said.includes( await c.evaluate( "NayiveUI.t( 'st.albumUnread' )" ) ), "...that the album could not be read and nothing was sent", said );
+    ok( said.includes( await c.evaluate( "Ayni.t( 'st.albumUnread' )" ) ), "...that the album could not be read and nothing was sent", said );
     ok( onDisk( s, "files/Album/IMG_1.jpg" ) === "THE ALBUM'S PHOTO", "the album's photo is untouched", onDisk( s, "files/Album/IMG_1.jpg" ) );
     ok( await c.evaluate( "( async () => !! await ( await caches.open( 'nayive-share-inbox' ) ).match( new URL( 'inbox/0', location.href ).toString() ) )()" ),
         "the shared photo is still in the inbox, to try again" );
@@ -43,7 +43,7 @@ section( "D4 · SHARE TO NAYIVE WHILE THE ALBUM CANNOT BE READ" );
     // Again, with a listing that does not know the name yet (another device
     // put it there after the look): create-only gets a 412 -> the next free name.
     await c.evaluate( `GumApi.listDir = function() { return Promise.resolve( { nodes: [] } ); }; true` );
-    await c.until( "! document.getElementById('goBtn').disabled" );
+    await c.until( "document.getElementById('goBtn').ariaDisabled !== 'true'" );
     await c.evaluate( "document.getElementById('goBtn')?.click(); true" );
     ok( await disk( () => onDisk( s, "files/Album/IMG_1 (2).jpg" ) === "THE SHARED PHOTO" ), "the shared photo goes up under the next free name",
         onDisk( s, "files/Album/IMG_1 (2).jpg" ) );

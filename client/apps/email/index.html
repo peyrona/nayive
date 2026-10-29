@@ -10,15 +10,20 @@
     <!-- The interface language. First of all: it hides the page until the
          dictionary is in. -->
     <script src="../shared/i18n.js"></script>
+    <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
     <title>eMail</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpolyline points='22 6 12 13 2 6'/%3E%3C/svg%3E">
 
     <!-- Shared colour scheme. Apply the saved choice before first paint to avoid a flash. -->
     <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
-    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
-    <script src="../shared/theme.js" defer></script>
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script src="../shared/ayni/ayni-icons.js" defer></script>
+    <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <link rel="manifest" href="manifest.json">
@@ -40,7 +45,7 @@
         <!-- List:      [icon] eMail ......... [search] [write] [select] [settings] [?] [plug]
              Picked:    [icon] eMail ... [× 3] [all] [what can be done to them] [search]... [⋮]
                         (the shared item browser draws that group: browse.js)
-             Writing:   [←] [icon] eMail ...... [clip] [discard] [send] [?] [plug]
+             Writing:   [←] [icon] eMail ...... [clip] [discard] [close] [send] [?] [plug]
                         (the clip opens Chat's panel: this device, Nayive, gallery)
              Reading:   [←] [icon] eMail ...... [what can be done to it] [?] [plug]
              The reader's buttons get their glyphs from core.js (data-icon); which of
@@ -48,7 +53,7 @@
              data-rank (1 = the last to leave, as the action list's rank): what
              does not fit the row goes into the ⋮ before the gear (NayiveUI.fitBar). -->
         <div class="topbar">
-            <button id="backBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:mail.back, aria-label:mail.back">
+            <button id="backBtn" class="btn" type="button" hidden data-i18n-attr="data-tip:mail.back, aria-label:mail.back">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
             </button>
             <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><polyline points="22 6 12 13 2 6"></polyline></svg>
@@ -61,24 +66,25 @@
                      (browse.js, syncBar). -->
                 <div id="msgTools" class="tb-group">
                     <div id="actions" class="mail-actions" hidden>
-                        <button id="actReply"    class="icon-btn" type="button" data-rank="5" data-icon="reply"    data-i18n-attr="title:mail.reply, aria-label:mail.reply"></button>
-                        <button id="actReplyAll" class="icon-btn" type="button" data-rank="8" data-icon="replyAll" data-i18n-attr="title:mail.replyAll, aria-label:mail.replyAll"></button>
-                        <button id="actForward"  class="icon-btn" type="button" data-rank="7" data-icon="forward"  data-i18n-attr="title:mail.forward, aria-label:mail.forward"></button>
-                        <button id="actRead"    class="icon-btn" type="button" data-rank="2" data-icon="read"    data-i18n-attr="title:mail.markRead, aria-label:mail.markRead"></button>
-                        <button id="actUnread"  class="icon-btn" type="button" data-rank="2" data-icon="unread"  data-i18n-attr="title:mail.markUnread, aria-label:mail.markUnread"></button>
-                        <button id="actStar"    class="icon-btn" type="button" data-rank="6" data-icon="star"    data-i18n-attr="title:mail.star, aria-label:mail.star"></button>
-                        <button id="actLabel"   class="icon-btn" type="button" data-rank="3" data-icon="tag"     data-i18n-attr="title:mail.labelsBtn, aria-label:mail.labelsBtn"></button>
-                        <button id="actSpam"    class="icon-btn" type="button" data-rank="9" data-icon="spam"    data-i18n-attr="title:mail.toSpam, aria-label:mail.toSpam"></button>
-                        <button id="actNotSpam" class="icon-btn" type="button" data-rank="3" data-icon="inbox"   data-i18n-attr="title:mail.notSpam, aria-label:mail.notSpam"></button>
-                        <button id="actRestore" class="icon-btn" type="button" data-rank="2" data-icon="restore" data-i18n-attr="title:mail.restore, aria-label:mail.restore"></button>
-                        <button id="actDelete"  class="icon-btn" type="button" data-rank="1" data-icon="trash"   data-i18n-attr="title:mail.delete, aria-label:mail.delete"></button>
-                        <button id="actForget"  class="icon-btn danger" type="button" data-rank="3" data-icon="forget" data-i18n-attr="title:mail.forget, aria-label:mail.forget"></button>
+                        <button id="actReply"    class="btn" type="button" data-rank="5" data-icon="reply"    data-i18n-attr="data-tip:mail.reply, aria-label:mail.reply"></button>
+                        <button id="actReplyAll" class="btn" type="button" data-rank="8" data-icon="replyAll" data-i18n-attr="data-tip:mail.replyAll, aria-label:mail.replyAll"></button>
+                        <button id="actForward"  class="btn" type="button" data-rank="7" data-icon="forward"  data-i18n-attr="data-tip:mail.forward, aria-label:mail.forward"></button>
+                        <button id="actRead"    class="btn" type="button" data-rank="2" data-icon="read"    data-i18n-attr="data-tip:mail.markRead, aria-label:mail.markRead"></button>
+                        <button id="actUnread"  class="btn" type="button" data-rank="2" data-icon="unread"  data-i18n-attr="data-tip:mail.markUnread, aria-label:mail.markUnread"></button>
+                        <button id="actStar"    class="btn" type="button" data-rank="6" data-icon="star"    data-i18n-attr="data-tip:mail.star, aria-label:mail.star"></button>
+                        <button id="actLabel"   class="btn" type="button" data-rank="3" data-icon="tag"     data-i18n-attr="data-tip:mail.labelsBtn, aria-label:mail.labelsBtn"></button>
+                        <button id="actSpam"    class="btn" type="button" data-rank="9" data-icon="spam"    data-i18n-attr="data-tip:mail.toSpam, aria-label:mail.toSpam"></button>
+                        <button id="actNotSpam" class="btn" type="button" data-rank="3" data-icon="inbox"   data-i18n-attr="data-tip:mail.notSpam, aria-label:mail.notSpam"></button>
+                        <button id="actRestore" class="btn" type="button" data-rank="2" data-icon="restore" data-i18n-attr="data-tip:mail.restore, aria-label:mail.restore"></button>
+                        <button id="actDelete"  class="btn" type="button" data-rank="1" data-icon="trash"   data-i18n-attr="data-tip:mail.delete, aria-label:mail.delete"></button>
+                        <button id="actForget"  class="btn danger" type="button" data-rank="3" data-icon="forget" data-i18n-attr="data-tip:mail.forget, aria-label:mail.forget"></button>
                     </div>
                     <!-- Writing: what a message being written can do. -->
                     <div id="writeActions" class="mail-actions" hidden>
-                        <button id="cAttach"  class="icon-btn" type="button" data-icon="clip"   aria-haspopup="true" data-i18n-attr="title:mail.attach, aria-label:mail.attach"></button>
-                        <button id="cDiscard" class="icon-btn" type="button" data-icon="trash"  data-i18n-attr="title:mail.discard, aria-label:mail.discard"></button>
-                        <button id="cSend"    class="icon-btn mail-send" type="button" data-icon="sent" data-i18n-attr="title:mail.send, aria-label:mail.send"></button>
+                        <button id="cAttach"  class="btn" type="button" data-icon="clip"   aria-haspopup="true" data-i18n-attr="data-tip:mail.attach, aria-label:mail.attach"></button>
+                        <button id="cDiscard" class="btn" type="button" data-icon="trash"  data-i18n-attr="data-tip:mail.discard, aria-label:mail.discard"></button>
+                        <button id="cClose"   class="btn" type="button" data-icon="close"      data-i18n-attr="data-tip:mail.closeDraft, aria-label:mail.closeDraft"></button>
+                        <button id="cSend"    class="btn mail-send" type="button" data-icon="sent" data-i18n-attr="data-tip:mail.send, aria-label:mail.send"></button>
                     </div>
                 </div>
                 <!-- The tray's own: list-only, so reading, picking or writing hides it (email.css). -->
@@ -88,29 +94,31 @@
                     <div id="searchWrap" class="search-wrap">
                         <input id="searchInput" class="topbar-search" type="text" enterkeyhint="search" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:mail.search, aria-label:mail.search">
                     </div>
-                    <button id="searchBtn" class="icon-btn mail-list-only" type="button" data-rank="20" data-i18n-attr="title:mail.search, aria-label:mail.search">
+                    <button id="searchBtn" class="btn mail-list-only" type="button" data-rank="20" data-i18n-attr="data-tip:mail.search, aria-label:mail.search">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                     </button>
-                    <button id="composeBtn" class="icon-btn mail-list-only" type="button" data-rank="21" data-icon="compose" data-i18n-attr="title:mail.compose, aria-label:mail.compose"></button>
+                    <button id="composeBtn" class="btn mail-list-only" type="button" data-rank="21" data-icon="compose" data-i18n-attr="data-tip:mail.compose, aria-label:mail.compose"></button>
                     <!-- picks the rows that match some fields (the pick dialog) -->
-                    <button id="selectBtn" class="icon-btn mail-list-only" type="button" data-rank="22" data-icon="selectAll" data-i18n-attr="title:mail.pickGo, aria-label:mail.pickGo"></button>
+                    <button id="selectBtn" class="btn mail-list-only" type="button" data-rank="22" data-icon="selectAll" data-i18n-attr="data-tip:mail.pickGo, aria-label:mail.pickGo"></button>
                 </div>
                 <div class="tb-group tb-sys">
                     <!-- The buttons that do not fit the header (NayiveUI.fitBar, browse.js);
                          hidden while everything fits. -->
-                    <button id="moreBtn" class="icon-btn" type="button" hidden aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.moreOptions, aria-label:ui.moreOptions">
-                        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>
+                    <button id="moreBtn" class="btn" type="button" hidden aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.moreOptions, aria-label:ui.moreOptions">
+                        <span class="icon" data-icon="more"></span>
                     </button>
-                    <button id="setBtn" class="icon-btn mail-list-only" type="button" data-rank="30" data-icon="gear" data-i18n-attr="title:mail.settings, aria-label:mail.settings"></button>
-                    <button class="icon-btn" data-intro-open data-rank="31" type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                    <button id="setBtn" class="btn mail-list-only" type="button" data-rank="30" data-icon="settings" data-i18n-attr="data-tip:mail.settings, aria-label:mail.settings"></button>
+                    <button class="btn" data-intro-open data-rank="31" type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                     </button>
                 </div>
-                <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.synced"></button>
+                <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="data-tip:ui.synced"></button>
             </div>
         </div>
 
         <div class="mail-body">
+            <!-- Runs while the mail server is being asked (core.js E.busy). -->
+            <div id="busyLine" class="mail-busy-line" hidden></div>
             <!-- The account (a picker, only with two or more), then ONE tree: the
                  five trays, and "Labels" with Nayive's own labels under it (the
                  shared NayiveUI.tree, browse.js). A column on a wide screen; on a
@@ -126,14 +134,14 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><polyline points="22 6 12 13 2 6"></polyline></svg>
                     <p data-i18n="mail.noAccount"></p>
                     <p data-i18n="mail.noAccountHint"></p>
-                    <button id="noAcctAdd" class="text-btn" type="button" data-i18n="mail.addAccount"></button>
+                    <button id="noAcctAdd" class="btn text primary" type="button" data-i18n="mail.addAccount"></button>
                 </div>
 
                 <!-- A tray -->
                 <section id="listView" class="mail-list-view" hidden>
                     <!-- a phone: the tray or label on screen, and the button that slides the tree in -->
                     <div class="mail-where">
-                        <button id="treeBtn" class="icon-btn" type="button" data-i18n-attr="title:mail.labelsAndTrays, aria-label:mail.labelsAndTrays">
+                        <button id="treeBtn" class="btn" type="button" data-i18n-attr="data-tip:mail.labelsAndTrays, aria-label:mail.labelsAndTrays">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
                         </button>
                         <span id="whereName" class="mail-where-name"></span>
@@ -143,7 +151,7 @@
                          empties it now, for good (list.js sets the words). -->
                     <div id="trashBar" class="mail-images-bar" hidden>
                         <span id="trashBarText"></span>
-                        <button id="emptyTrashBtn" class="icon-btn danger mail-bar-bin" type="button" data-icon="trash" data-i18n-attr="title:mail.emptyTrash, aria-label:mail.emptyTrash"></button>
+                        <button id="emptyTrashBtn" class="btn danger mail-bar-bin" type="button" data-icon="trash" data-i18n-attr="data-tip:mail.emptyTrash, aria-label:mail.emptyTrash"></button>
                     </div>
                     <!-- An advanced search in force: what it asks, and the way out (search.js). -->
                     <div id="advBar" class="mail-images-bar" hidden>
@@ -163,7 +171,7 @@
                 <section id="readView" class="mail-read-view" hidden>
                     <div class="mail-head">
                         <h2 id="readSubject" class="mail-subject"></h2>
-                        <button id="metaBtn" class="icon-btn sm mail-meta-btn" type="button" data-icon="chevron" aria-controls="readMeta" aria-expanded="false" data-i18n-attr="title:mail.details, aria-label:mail.details"></button>
+                        <button id="metaBtn" class="btn sm mail-meta-btn" type="button" data-icon="chevron" aria-controls="readMeta" aria-expanded="false" data-i18n-attr="data-tip:mail.details, aria-label:mail.details"></button>
                         <button id="imagesBtn" class="pill mail-images-btn" type="button" hidden aria-pressed="false" data-i18n="mail.showImages"></button>
                         <span id="readLabels" class="mail-chips" hidden></span>
                     </div>
@@ -183,7 +191,7 @@
                     <div class="mail-cfield">
                         <label for="cTo" data-i18n="mail.to"></label>
                         <input id="cTo" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-addr data-i18n-attr="placeholder:mail.toPh">
-                        <button id="cCcBtn" class="text-btn ghost" type="button" data-i18n="mail.ccBtn"></button>
+                        <button id="cCcBtn" class="btn text bordered" type="button" data-i18n="mail.ccBtn"></button>
                     </div>
                     <div id="cCcRow" class="mail-cfield" hidden>
                         <label for="cCc" data-i18n="mail.cc"></label>
@@ -202,13 +210,13 @@
                          The mail goes out as HTML and as plain text (compose.js). -->
                     <div class="mail-cbox is-empty">
                         <div id="cFormat" class="mail-cformat" role="toolbar" data-i18n-attr="aria-label:mail.format">
-                            <button id="fBold" class="icon-btn sm" type="button" data-fmt="bold" aria-pressed="false" data-i18n-attr="title:write.tb.bold, aria-label:write.tb.bold"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M272-200v-560h221q65 0 120 40t55 111q0 51-23 78.5T602-491q25 11 55.5 41t30.5 90q0 89-65 124.5T501-200H272Zm121-112h104q48 0 58.5-24.5T566-372q0-11-10.5-35.5T494-432H393v120Zm0-228h93q33 0 48-17t15-38q0-24-17-39t-44-15h-95v109Z"></path></svg></button>
-                            <button id="fItalic" class="icon-btn sm" type="button" data-fmt="italic" aria-pressed="false" data-i18n-attr="title:write.tb.italic, aria-label:write.tb.italic"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M200-200v-100h160l120-360H320v-100h400v100H580L460-300h140v100H200Z"></path></svg></button>
-                            <button id="fUnderline" class="icon-btn sm" type="button" data-fmt="underline" aria-pressed="false" data-i18n-attr="title:write.tb.underline, aria-label:write.tb.underline"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M200-120v-80h560v80H200Zm123-223q-56-63-56-167v-330h103v336q0 56 28 91t82 35q54 0 82-35t28-91v-336h103v330q0 104-56 167t-157 63q-101 0-157-63Z"></path></svg></button>
-                            <button id="fBullet" class="icon-btn sm" type="button" data-fmt="ul" aria-pressed="false" data-i18n-attr="title:write.tb.bulletList, aria-label:write.tb.bulletList"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M360-200v-80h480v80H360Zm0-240v-80h480v80H360Zm0-240v-80h480v80H360ZM200-160q-33 0-56.5-23.5T120-240q0-33 23.5-56.5T200-320q33 0 56.5 23.5T280-240q0 33-23.5 56.5T200-160Zm0-240q-33 0-56.5-23.5T120-480q0-33 23.5-56.5T200-560q33 0 56.5 23.5T280-480q0 33-23.5 56.5T200-400Zm-56.5-263.5Q120-687 120-720t23.5-56.5Q167-800 200-800t56.5 23.5Q280-753 280-720t-23.5 56.5Q233-640 200-640t-56.5-23.5Z"></path></svg></button>
-                            <button id="fNumbered" class="icon-btn sm" type="button" data-fmt="ol" aria-pressed="false" data-i18n-attr="title:write.tb.numberedList, aria-label:write.tb.numberedList"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M120-80v-60h100v-30h-60v-60h60v-30H120v-60h120q17 0 28.5 11.5T280-280v40q0 17-11.5 28.5T240-200q17 0 28.5 11.5T280-160v40q0 17-11.5 28.5T240-80H120Zm0-280v-110q0-17 11.5-28.5T160-510h60v-30H120v-60h120q17 0 28.5 11.5T280-560v70q0 17-11.5 28.5T240-450h-60v30h100v60H120Zm60-280v-180h-60v-60h120v240h-60Zm180 440v-80h480v80H360Zm0-240v-80h480v80H360Zm0-240v-80h480v80H360Z"></path></svg></button>
-                            <button id="fLink" class="icon-btn sm" type="button" data-fmt="link" aria-pressed="false" data-i18n-attr="title:write.tb.link, aria-label:write.tb.link"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M440-280H280q-83 0-141.5-58.5T80-480q0-83 58.5-141.5T280-680h160v80H280q-50 0-85 35t-35 85q0 50 35 85t85 35h160v80ZM320-440v-80h320v80H320Zm200 160v-80h160q50 0 85-35t35-85q0-50-35-85t-85-35H520v-80h160q83 0 141.5 58.5T880-480q0 83-58.5 141.5T680-280H520Z"></path></svg></button>
-                            <button id="fClear" class="icon-btn sm" type="button" data-fmt="clear" data-i18n-attr="title:write.tb.clearFormatting, aria-label:write.tb.clearFormatting"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M800-436q0 36-8 69t-22 63l-62-60q6-17 9-34.5t3-37.5q0-47-17.5-89T650-600L480-768l-88 86-56-56 144-142 226 222q44 42 69 99.5T800-436Zm-8 380L668-180q-41 29-88 44.5T480-120q-133 0-226.5-92.5T160-436q0-51 16-98t48-90L56-792l56-56 736 736-56 56ZM480-200q36 0 68.5-10t61.5-28L280-566q-21 32-30.5 64t-9.5 66q0 98 70 167t170 69Zm-37-204Zm110-116Z"></path></svg></button>
+                            <button id="fBold" class="btn sm" type="button" data-fmt="bold" aria-pressed="false" data-i18n-attr="data-tip:write.tb.bold, aria-label:write.tb.bold"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M272-200v-560h221q65 0 120 40t55 111q0 51-23 78.5T602-491q25 11 55.5 41t30.5 90q0 89-65 124.5T501-200H272Zm121-112h104q48 0 58.5-24.5T566-372q0-11-10.5-35.5T494-432H393v120Zm0-228h93q33 0 48-17t15-38q0-24-17-39t-44-15h-95v109Z"></path></svg></button>
+                            <button id="fItalic" class="btn sm" type="button" data-fmt="italic" aria-pressed="false" data-i18n-attr="data-tip:write.tb.italic, aria-label:write.tb.italic"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M200-200v-100h160l120-360H320v-100h400v100H580L460-300h140v100H200Z"></path></svg></button>
+                            <button id="fUnderline" class="btn sm" type="button" data-fmt="underline" aria-pressed="false" data-i18n-attr="data-tip:write.tb.underline, aria-label:write.tb.underline"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M200-120v-80h560v80H200Zm123-223q-56-63-56-167v-330h103v336q0 56 28 91t82 35q54 0 82-35t28-91v-336h103v330q0 104-56 167t-157 63q-101 0-157-63Z"></path></svg></button>
+                            <button id="fBullet" class="btn sm" type="button" data-fmt="ul" aria-pressed="false" data-i18n-attr="data-tip:write.tb.bulletList, aria-label:write.tb.bulletList"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M360-200v-80h480v80H360Zm0-240v-80h480v80H360Zm0-240v-80h480v80H360ZM200-160q-33 0-56.5-23.5T120-240q0-33 23.5-56.5T200-320q33 0 56.5 23.5T280-240q0 33-23.5 56.5T200-160Zm0-240q-33 0-56.5-23.5T120-480q0-33 23.5-56.5T200-560q33 0 56.5 23.5T280-480q0 33-23.5 56.5T200-400Zm-56.5-263.5Q120-687 120-720t23.5-56.5Q167-800 200-800t56.5 23.5Q280-753 280-720t-23.5 56.5Q233-640 200-640t-56.5-23.5Z"></path></svg></button>
+                            <button id="fNumbered" class="btn sm" type="button" data-fmt="ol" aria-pressed="false" data-i18n-attr="data-tip:write.tb.numberedList, aria-label:write.tb.numberedList"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M120-80v-60h100v-30h-60v-60h60v-30H120v-60h120q17 0 28.5 11.5T280-280v40q0 17-11.5 28.5T240-200q17 0 28.5 11.5T280-160v40q0 17-11.5 28.5T240-80H120Zm0-280v-110q0-17 11.5-28.5T160-510h60v-30H120v-60h120q17 0 28.5 11.5T280-560v70q0 17-11.5 28.5T240-450h-60v30h100v60H120Zm60-280v-180h-60v-60h120v240h-60Zm180 440v-80h480v80H360Zm0-240v-80h480v80H360Zm0-240v-80h480v80H360Z"></path></svg></button>
+                            <button id="fLink" class="btn sm" type="button" data-fmt="link" aria-pressed="false" data-i18n-attr="data-tip:write.tb.link, aria-label:write.tb.link"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M440-280H280q-83 0-141.5-58.5T80-480q0-83 58.5-141.5T280-680h160v80H280q-50 0-85 35t-35 85q0 50 35 85t85 35h160v80ZM320-440v-80h320v80H320Zm200 160v-80h160q50 0 85-35t35-85q0-50-35-85t-85-35H520v-80h160q83 0 141.5 58.5T880-480q0 83-58.5 141.5T680-280H520Z"></path></svg></button>
+                            <button id="fClear" class="btn sm" type="button" data-fmt="clear" data-i18n-attr="data-tip:write.tb.clearFormatting, aria-label:write.tb.clearFormatting"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M800-436q0 36-8 69t-22 63l-62-60q6-17 9-34.5t3-37.5q0-47-17.5-89T650-600L480-768l-88 86-56-56 144-142 226 222q44 42 69 99.5T800-436Zm-8 380L668-180q-41 29-88 44.5T480-120q-133 0-226.5-92.5T160-436q0-51 16-98t48-90L56-792l56-56 736 736-56 56ZM480-200q36 0 68.5-10t61.5-28L280-566q-21 32-30.5 64t-9.5 66q0 98 70 167t170 69Zm-37-204Zm110-116Z"></path></svg></button>
                         </div>
                         <div id="cText" class="mail-ctext" role="textbox" aria-multiline="true" data-i18n-attr="aria-label:mail.textPh, data-ph:mail.textPh"></div>
                     </div>
@@ -242,8 +250,8 @@
                 <input id="linkHref" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://">
             </div>
             <div class="sheet-actions">
-                <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
-                <button id="linkOkBtn" type="button" data-act="primary" data-i18n-attr="title:write.apply"></button>
+                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="linkOkBtn" type="button" data-i18n-attr="data-tip:write.apply"><span class="icon" data-icon="check"></span></button>
             </div>
         </div>
     </div>
@@ -258,10 +266,10 @@
             <p id="labelPickEmpty" class="hint" data-i18n="mail.noLabels" hidden></p>
             <div class="mail-new-label">
                 <input id="labelNew" type="text" maxlength="40" autocomplete="off" data-i18n-attr="placeholder:mail.newLabelPh, aria-label:mail.newLabel">
-                <button id="labelNewBtn" class="icon-btn" type="button" data-icon="plus" data-i18n-attr="title:mail.newLabel, aria-label:mail.newLabel"></button>
+                <button id="labelNewBtn" class="btn" type="button" data-icon="plus" data-i18n-attr="data-tip:mail.newLabel, aria-label:mail.newLabel"></button>
             </div>
             <div class="sheet-actions">
-                <button type="button" data-act="close" data-i18n-attr="title:ui.close"></button>
+                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
             </div>
         </div>
     </div>
@@ -305,18 +313,18 @@
                 <label for="pickLabel" data-i18n="mail.pickLabel"></label>
                 <select id="pickLabel"></select>
             </div>
-            <label class="mail-pick-switch">
+            <label class="mail-pick-switch switch end">
                 <span data-i18n="mail.pickAttach"></span>
-                <span class="switch sm"><input type="checkbox" id="pickAttach"><span class="track"></span></span>
+                <input role="switch" type="checkbox" id="pickAttach">
             </label>
-            <label class="mail-pick-switch">
+            <label class="mail-pick-switch switch end">
                 <span data-i18n="mail.pickStarred"></span>
-                <span class="switch sm"><input type="checkbox" id="pickStarred"><span class="track"></span></span>
+                <input role="switch" type="checkbox" id="pickStarred">
             </label>
             <div class="sheet-actions">
-                <button id="pickAllBtn" class="text-btn small sheet-actions-left" type="button" data-i18n="mail.pickAll"></button>
-                <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
-                <button id="pickGoBtn" type="button" data-act="primary" data-i18n-attr="title:mail.pickGo"></button>
+                <button id="pickAllBtn" class="btn text primary sm sheet-actions-left" type="button" data-i18n="mail.pickAll"></button>
+                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="pickGoBtn" type="button" data-i18n-attr="data-tip:mail.pickGo"><span class="icon" data-icon="check"></span></button>
             </div>
         </div>
     </div>
@@ -369,18 +377,18 @@
                     <select id="advLabel"></select>
                 </div>
             </div>
-            <label class="mail-pick-switch">
+            <label class="mail-pick-switch switch end">
                 <span data-i18n="mail.pickAttach"></span>
-                <span class="switch sm"><input type="checkbox" id="advAttach"><span class="track"></span></span>
+                <input role="switch" type="checkbox" id="advAttach">
             </label>
-            <label class="mail-pick-switch">
+            <label class="mail-pick-switch switch end">
                 <span data-i18n="mail.pickStarred"></span>
-                <span class="switch sm"><input type="checkbox" id="advStarred"><span class="track"></span></span>
+                <input role="switch" type="checkbox" id="advStarred">
             </label>
             <div class="sheet-actions">
-                <button id="advClearBtn" class="sheet-actions-left" type="button" data-act="secondary:eraser" data-i18n-attr="title:mail.advClear"></button>
-                <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
-                <button id="advGoBtn" type="button" data-act="primary:search" data-i18n-attr="title:ui.search"></button>
+                <button id="advClearBtn" class="btn sheet-actions-left" type="button" data-i18n-attr="data-tip:mail.advClear"><span class="icon" data-icon="eraser"></span></button>
+                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="advGoBtn" type="button" data-i18n-attr="data-tip:ui.search"><span class="icon" data-icon="search"></span></button>
             </div>
         </div>
     </div>
@@ -392,7 +400,7 @@
         <div class="transfer-row" role="progressbar" aria-valuemin="0" aria-valuemax="100">
             <span class="transfer-text"></span>
             <span class="transfer-track"><span class="transfer-fill"></span></span>
-            <button id="busyStopBtn" class="icon-btn sm transfer-stop" type="button" data-icon="x" data-i18n-attr="title:ui.cancel, aria-label:ui.cancel"></button>
+            <button id="busyStopBtn" class="btn sm transfer-stop" type="button" data-icon="close" data-i18n-attr="data-tip:ui.cancel, aria-label:ui.cancel"></button>
         </div>
     </div>
 
@@ -430,7 +438,7 @@
                 <div id="provHelp" class="mail-prov-help">
                     <p id="provWhat"></p>
                     <ol id="provSteps"></ol>
-                    <a id="provLink" class="text-btn ghost" target="_blank" rel="noopener noreferrer" hidden>
+                    <a id="provLink" class="btn text bordered" target="_blank" rel="noopener noreferrer" hidden>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
                         <span id="provLinkText"></span>
                     </a>
@@ -441,7 +449,7 @@
                         <label for="addPass" id="addPassLabel"></label>
                         <div class="mail-pass">
                             <input id="addPass" type="password" autocomplete="new-password" spellcheck="false" autocapitalize="none">
-                            <button id="passEye" class="icon-btn sm" type="button" data-i18n-attr="title:ui.showPassword, aria-label:ui.showPassword"></button>
+                            <button id="passEye" class="btn sm" type="button" data-i18n-attr="data-tip:ui.showPassword, aria-label:ui.showPassword"></button>
                         </div>
                     </div>
 
@@ -485,7 +493,7 @@
 
                 <p id="addStatus" class="mail-add-status" hidden></p>
                 <p id="addError" class="field-error" hidden></p>
-                <button id="addBtn" class="text-btn" type="button" data-i18n="mail.addAccount"></button>
+                <button id="addBtn" class="btn text primary" type="button" data-i18n="mail.addAccount"></button>
 
             </div>
 
@@ -504,7 +512,7 @@
             </div>
 
             <div class="sheet-actions">
-                <button type="button" data-act="close" data-i18n-attr="title:ui.close"></button>
+                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
             </div>
         </div>
     </div>
@@ -525,9 +533,9 @@
             </div>
             <p id="labelDlgError" class="field-error" hidden></p>
             <div class="sheet-actions">
-                <button id="labelDelBtn" class="sheet-actions-left" type="button" data-act="danger" data-i18n-attr="title:mail.removeLabel" hidden></button>
-                <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
-                <button id="labelSaveBtn" type="button" data-act="primary" data-i18n-attr="title:ui.save"></button>
+                <button id="labelDelBtn" class="btn danger sheet-actions-left" type="button" data-i18n-attr="data-tip:mail.removeLabel" hidden><span class="icon" data-icon="trash"></span></button>
+                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+                <button class="btn primary" id="labelSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
             </div>
         </div>
     </div>

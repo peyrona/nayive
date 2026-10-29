@@ -51,7 +51,7 @@ try
     await c.send( "Page.navigate", { url: BASE + "/nayive/login.html" } );
     await sleep( 1500 );
     const st = await c.evaluate( `localStorage.setItem('balata-coach-seen','1'); localStorage.setItem('nayive-install-snooze','never');
-        localStorage.setItem('balata-intro-dismiss:launcher','1'); localStorage.setItem('balata-lang','en');
+        localStorage.setItem('balata-intro-dismiss:launcher','1'); localStorage.setItem('ayni-lang','en');
         fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:'test',password:'test'})}).then(r=>r.status)` );
     if( st !== 200 ) { console.log( "sign-in failed: " + st ); bad++; }
 

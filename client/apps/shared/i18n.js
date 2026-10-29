@@ -1,261 +1,56 @@
 /*
- * i18n.js - the interface language for every Nayive page.
- *
- * Classic script, one global `NayiveI18n`, no dependencies. Load it FIRST, in
- * <head>, without `defer`, so the dictionary starts downloading before the rest
- * of the page:
+ * i18n.js - the first script of every Nayive page. Load it FIRST, in <head>,
+ * without `defer`, right before Ayni's language script:
  *
  *     <script src="../shared/i18n.js"></script>
+ *     <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
  *
- * NO string lives in the source any more - not even the Spanish one. Every
- * interface message is a key in shared/i18n/<lang>.json, one file per language
- * (es en pt fr de). es.json is the reference: a key missing from another
- * language falls back to Spanish, and then to the literal key.
+ * The texts themselves are Ayni's job now (shared/ayni/ayni-i18n.js): keys in
+ * shared/i18n/<lang>.json, es.json the reference, data-i18n / data-i18n-attr in
+ * the page, Ayni.t() / Ayni.tf() in code, Ayni.i18n.ready before a render that
+ * builds text. This file keeps what is Nayive's own:
  *
- *   - static text:   <span data-i18n="key"></span>
- *   - attributes:    <input data-i18n-attr="placeholder:key, title:key2">
- *   - in JS:         NayiveI18n.t( "key" )  /  NayiveUI.t( "key" )
- *                    NayiveI18n.tf( "key", { n: 3 } )    // "{n}" placeholders
+ *   - OLD SETTINGS: the choices this device saved under Nayive's old names move,
+ *     once, to Ayni's (language, light / dark, automatic = Sun mode, the place
+ *     for the sun, the colour schemes), so nobody loses them. It runs before
+ *     Ayni reads them, which is why it is the first script.
+ *   - WHOSE PAGE: NayiveWho.now() / NayiveWho.atLoad (data-safety L5, below).
+ *   - ERROR REPORTS: at the end of the file.
  *
- * Because there is no in-source fallback, nothing may be painted before the
- * dictionary is in: this script hides <html> (a <style> it injects) and shows it
- * again as soon as the JSON has landed and the page has been translated - or
- * after SHOW_MS, so a dead network can never leave a blank screen. An app that
- * builds text from JS should `await NayiveI18n.ready` before its first render.
- *
- * Language = localStorage["balata-lang"] when set, else the first of the
- * browser's languages we translate, else English. The launcher's "Mi cuenta"
- * dialog changes it (NayiveI18n.setLang), which reloads the page - it returns
- * true when that reload is coming, so a caller can leave itself a note to pick
- * up on the other side; a change in
- * another tab reloads this one too (the "storage" event). Its first entry is
- * "por defecto" - setLang("") forgets the choice and hands the decision back to
- * the browser. `saved()` is that stored choice (null when there is none), which
- * `lang()` cannot tell you: with nothing stored lang() still returns a code.
- *
- * That localStorage value is the DEVICE layer, and it is all this file can read
- * on its own: it runs in <head>, before any session is known, and the sign-in
- * screen is translated too. But the language belongs to the PERSON, not to the
- * screen - pick Spanish on the phone and the PC should follow. So there is a
- * second, ACCOUNT layer on the server (homes/<user>/data/config.json "lang"),
- * and it wins: /api/whoami hands it back on every boot and the caller passes it
- * to NayiveI18n.adopt(), which copies it into localStorage and reloads. The
- * device layer stays the one that paints - nothing waits on the network - and
- * from the second boot onwards the two agree, so nothing reloads.
+ * The language belongs to the PERSON, not to the screen: the account's choice
+ * (homes/<user>/data/config.json "lang", from /api/whoami on every boot) is
+ * handed to Ayni.i18n.setLang(), which copies it onto this device and reloads
+ * when it differs. The device layer stays the one that paints.
  */
 
 ( function ()
 {
     "use strict";
 
-    var LANGS   = [ "es", "en", "pt", "fr", "de" ];        // languages the UI can offer
-    var SOURCE  = "es";                               // the reference dictionary
-    var KEY     = "balata-lang";
-    var SHOW_MS = 2500;                               // never hide the page longer than this
-
-    var dict = {};                                    // active: source merged under the chosen language
-
-    // shared/i18n/ sits next to this script, whatever depth the page is at.
-    var URL_BASE = ( function ()
-    {
-        try { return new URL( "i18n/", ( document.currentScript || {} ).src ).toString(); }
-        catch ( e ) { return "/nayive/shared/i18n/"; }
-    } )();
-
-    // The language the user PICKED, or null when they never did - which is not
-    // the same as the language in use: with nothing stored we follow the
-    // browser, and that may well land on the same code.
-    function saved()
-    {
-        try
-        {
-            var s = localStorage.getItem( KEY );
-            if( s && LANGS.indexOf( s ) !== -1 ) return s;
-        }
-        catch ( e ) {}
-        return null;
-    }
-
-    function pick()
-    {
-        var s = saved();
-        if( s ) return s;
-
-        var navs = navigator.languages || [ navigator.language || "" ];
-        for( var i = 0; i < navs.length; i++ )
-        {
-            var two = String( navs[ i ] || "" ).slice( 0, 2 ).toLowerCase();
-            if( LANGS.indexOf( two ) !== -1 ) return two;
-        }
-        return "en";                                  // browser locale not one we translate
-    }
-
-    var lang = pick();
-
-    // Armed NOW, while this head script runs and the parser is still going, so
-    // the listener can never be attached too late. Waiting on readyState later
-    // would not do: it flips to "interactive" BEFORE the deferred scripts run,
-    // and everything waiting on `ready` expects GumApi / NayiveUI to be there.
-    var domReady = new Promise( function ( go )
-    {
-        if( document.readyState === "interactive" || document.readyState === "complete" ) go();
-        else document.addEventListener( "DOMContentLoaded", go, { once: true } );
-    } );
-
-    //------------------------------------------------------------------------//
-    // HIDE THE PAGE UNTIL THE DICTIONARY IS IN
-
-    var hider = null;
+    // OLD SETTINGS - Nayive's old localStorage names -> Ayni's. Each is copied
+    // only while Ayni's is still empty, then the old one goes, so this does its
+    // work once per device and is a few reads after that.
+    //   balata-theme       "light" / "dark"  -> ayni-theme (same values)
+    //   balata-theme-auto  "1"               -> ayni-theme-sun "1"
+    //   balata-geo         { lat, lon }      -> ayni-place
+    //   balata-schemes     the schemes JSON  -> ayni-schemes (same shape)
+    //   balata-lang        "es" ...          -> ayni-lang
+    var OLD = [ [ "balata-theme", "ayni-theme" ], [ "balata-theme-auto", "ayni-theme-sun" ],
+                [ "balata-geo", "ayni-place" ], [ "balata-schemes", "ayni-schemes" ],
+                [ "balata-lang", "ayni-lang" ] ];
     try
     {
-        hider = document.createElement( "style" );
-        hider.textContent = "html{visibility:hidden!important}";
-        ( document.head || document.documentElement ).appendChild( hider );
+        OLD.forEach( function ( p )
+        {
+            var v = localStorage.getItem( p[ 0 ] );
+            if( v === null ) return;
+            if( p[ 0 ] === "balata-theme-auto" && v !== "1" ) v = null;    // "0" = off: nothing to carry
+            if( v !== null && localStorage.getItem( p[ 1 ] ) === null ) localStorage.setItem( p[ 1 ], v );
+            localStorage.removeItem( p[ 0 ] );
+        } );
+        localStorage.removeItem( "balata-theme-auto-offered" );   // the old "automatic starts on once" mark: gone
     }
     catch ( e ) {}
-
-    function show()
-    {
-        if( hider && hider.parentNode ) hider.parentNode.removeChild( hider );
-        hider = null;
-    }
-    setTimeout( show, SHOW_MS );
-
-    //------------------------------------------------------------------------//
-    // LOOKUP
-
-    function t( key )
-    {
-        if( key && Object.prototype.hasOwnProperty.call( dict, key ) ) return dict[ key ];
-        return key;                                   // dictionary not in yet, or a typo in the key
-    }
-
-    // t() with "{name}" placeholders:  tf( "k", { n: 2 } )
-    function tf( key, vars )
-    {
-        return String( t( key ) ).replace( /\{(\w+)\}/g, function ( m, k )
-        {
-            return vars && vars[ k ] != null ? vars[ k ] : m;
-        } );
-    }
-
-    function els( scope, sel )
-    {
-        var list = [].slice.call( scope.querySelectorAll( sel ) );
-        if( scope.nodeType === 1 && scope.matches && scope.matches( sel ) ) list.push( scope );
-        return list;
-    }
-
-    function applyI18n( root )
-    {
-        var scope = root && root.querySelectorAll ? root : document;
-
-        els( scope, "[data-i18n]" ).forEach( function ( el )
-        {
-            var key = el.getAttribute( "data-i18n" );
-            if( key ) el.textContent = t( key );
-        } );
-
-        els( scope, "[data-i18n-attr]" ).forEach( function ( el )
-        {
-            el.getAttribute( "data-i18n-attr" ).split( "," ).forEach( function ( pair )
-            {
-                var bits = pair.split( ":" );
-                if( bits.length !== 2 ) return;
-                var attr = bits[ 0 ].trim(), key = bits[ 1 ].trim();
-                if( attr && key ) el.setAttribute( attr, t( key ) );
-            } );
-        } );
-    }
-
-    //------------------------------------------------------------------------//
-    // DATE NAMES  -  never a list in a dictionary: the browser knows them all
-    //
-    //   weekday( 1 )            -> "lunes" / "Monday" / "Montag" ...   (1 = Monday)
-    //   weekday( 1, "narrow" )  -> "L" / "M" / "M"
-    //   month( 0 )              -> "enero" / "January" ...             (0 = January)
-
-    function capitalise( s ) { return s ? s.charAt( 0 ).toUpperCase() + s.slice( 1 ) : s; }
-
-    // `asIs` keeps the language's own case, for a name inside a sentence
-    // ("2026-09-28 · lunes").
-    function weekday( iso, style, asIs )
-    {
-        // 2024-01-01 was a Monday, so 2024-01-<iso> lines the ISO number up.
-        var d = new Date( Date.UTC( 2024, 0, iso ) );
-        try
-        {
-            var name = new Intl.DateTimeFormat( lang, { weekday: style || "long", timeZone: "UTC" } ).format( d );
-            return asIs ? name : capitalise( name );
-        }
-        catch ( e ) { return String( iso ); }
-    }
-
-    function month( idx, style )
-    {
-        var d = new Date( Date.UTC( 2024, idx, 1 ) );
-        try
-        {
-            return capitalise( new Intl.DateTimeFormat( lang,
-                   { month: style || "long", timeZone: "UTC" } ).format( d ) );
-        }
-        catch ( e ) { return String( idx + 1 ); }
-    }
-
-    //------------------------------------------------------------------------//
-    // LOAD
-
-    async function grab( code )
-    {
-        try
-        {
-            var r = await fetch( URL_BASE + code + ".json" );
-            if( r.ok ) return await r.json();
-        }
-        catch ( e ) {}
-        return null;
-    }
-
-    var ready = ( async function ()
-    {
-        var merged = ( await grab( SOURCE ) ) || {};
-
-        if( lang !== SOURCE )
-        {
-            var extra = await grab( lang );
-            if( extra ) Object.assign( merged, extra );
-        }
-
-        dict = merged;
-        try { document.documentElement.setAttribute( "lang", lang ); } catch ( e ) {}
-
-        await domReady;
-
-        applyI18n( document );
-        show();
-        return dict;
-    } )();
-
-    // Anything added to the DOM later (a dialog built in JS, a row of a list).
-    if( window.MutationObserver )
-    {
-        var obs = new MutationObserver( function ( muts )
-        {
-            for( var i = 0; i < muts.length; i++ )
-            {
-                var added = muts[ i ].addedNodes;
-                for( var j = 0; j < added.length; j++ )
-                    if( added[ j ] && added[ j ].nodeType === 1 ) applyI18n( added[ j ] );
-            }
-        } );
-        try { obs.observe( document.documentElement, { childList: true, subtree: true } ); }
-        catch ( e ) {}
-    }
-
-    window.addEventListener( "storage", function ( e )
-    {
-        if( e && e.key === KEY ) location.reload();
-    } );
 
     // WHOSE PAGE: the "nayive_who" cookie (server/go/store_owner.go), the
     // account signed in on this browser. whoNow() reads it as it is NOW;
@@ -271,69 +66,9 @@
     }
     var WHO_AT_LOAD = whoNow();
 
-    window.NayiveI18n = {
-        whoNow:    whoNow,
-        whoAtLoad: WHO_AT_LOAD,
-        t:         t,
-        tf:        tf,
-        applyI18n: applyI18n,
-        ready:     ready,
-        lang:      function () { return lang; },
-        saved:     saved,
-        // The BCP-47 tag to hand Intl / toLocale*: the interface language, so
-        // dates, numbers and currency names follow what the user picked here
-        // rather than what the browser is set to.
-        locale:    function () { return lang; },
-        weekday:   weekday,
-        month:     month,
-        langs:     LANGS.slice(),
-        // The language the ACCOUNT chose, as /api/whoami reports it (see
-        // Users.UserLang in server/go/users.go). Copies it onto THIS device and
-        // reloads, so a choice made on the phone reaches the PC on its next boot.
-        //
-        //   null / undefined  the account never chose one: leave the device
-        //                     alone. Every device that existed before this
-        //                     setting did keeps exactly what it had.
-        //   ""                "por defecto", asked for on purpose: forget this
-        //                     device's choice and follow the browser again.
-        //   "es"              a real choice: adopt it here too.
-        //
-        // Returns true when a reload is on its way, so the caller can stop
-        // rendering a frame that is about to be thrown away.
-        //
-        // Unlike setLang(), which is one deliberate click, this runs on EVERY
-        // boot - so it must never reload unless the write really landed. With
-        // localStorage blocked (private mode, storage switched off) setItem
-        // throws, the stored value never moves, and a blind reload would spin
-        // for ever. Hence the re-read before each reload.
-        adopt:     function ( code )
-        {
-            if( code === null || code === undefined ) return false;
-
-            if( code === "" )                         // account says "follow the browser"
-            {
-                if( ! saved() ) return false;
-                try { localStorage.removeItem( KEY ); } catch ( e ) {}
-                if( saved() ) return false;           // write refused - do not spin
-                location.reload();
-                return true;
-            }
-
-            if( LANGS.indexOf( code ) === -1 || code === saved() ) return false;
-            try { localStorage.setItem( KEY, code ); } catch ( e ) {}
-            if( saved() !== code ) return false;      // write refused - do not spin
-            location.reload();
-            return true;
-        },
-        // Like adopt(), returns true when a reload is on its way and false when
-        // the pick changed nothing - a caller that has to survive the reload
-        // (the launcher reopens its settings dialog) needs to know which.
-        // Same write as adopt(), so a refused write (private mode) does not
-        // reload for nothing. No code = "por defecto": follow the browser again.
-        setLang:   function ( code )
-        {
-            return window.NayiveI18n.adopt( code || "" );
-        }
+    window.NayiveWho = {
+        now:    whoNow,
+        atLoad: WHO_AT_LOAD
     };
 } )();
 

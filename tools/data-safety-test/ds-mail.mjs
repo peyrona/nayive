@@ -256,12 +256,15 @@ await c.evaluate( "document.getElementById( 'backBtn' ).click(); true" );
 await c.until( "document.getElementById( 'composeView' ).hidden" );
 
 section( "I4 - THE SESSION ENDS WHILE WRITING: SIGN IN, AND IT IS BACK" );
+// the user's own device: "Keep me signed in" on. Off, the sign-out wipes this
+// browser on purpose (someone else's PC: api_auth.go apiLogout, TestDS_LogoutClearSiteData)
+await c.evaluate( "fetch( '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { user: 'ana', password: 'abc', remember: true } ) } ).then( r => r.status )" );
 await compose( "bob@example.com", "Sesión", "<div>texto antes de entrar</div>" );
 await c.evaluate( "fetch( '/api/logout', { method: 'POST', credentials: 'same-origin' } ).then( r => r.status )" );
 ok( await c.until( "!! document.getElementById( 'nayive-session-bar' )", 30000 ), "the next save meets the ended session: the bar says so" );
 await c.evaluate( "document.querySelector( '#nayive-session-bar button' ).click(); true" );
 ok( await c.until( "location.pathname === '/nayive/login.html'", 30000 ), "'Sign in' goes to the sign-in page" );
-await c.evaluate( "fetch( '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { user: 'ana', password: 'abc' } ) } ).then( r => r.status )" );
+await c.evaluate( "fetch( '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { user: 'ana', password: 'abc', remember: true } ) } ).then( r => r.status )" );
 ok( await openMail() && await c.until( ASKED ), "signed in again: it asks about the copy" );
 await answer( "keep" );
 ok( await c.until( "! document.getElementById( 'composeView' ).hidden && NayiveMail.composeText().includes( 'texto antes de entrar' )", 8000 ),

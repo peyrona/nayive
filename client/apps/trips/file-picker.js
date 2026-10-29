@@ -44,7 +44,7 @@ function renderFilePickerSheet()
     if( filePickerFilesNode === null )
     {
         const p = document.createElement( 'p' );
-        p.className = 'calc-rate';
+        p.className = 'dim-note';
         p.textContent = T( 'trips.loadingFiles' );
         sheet.appendChild( p );
         return;
@@ -53,7 +53,7 @@ function renderFilePickerSheet()
     if( filePickerFilesNode === undefined )
     {
         const p = document.createElement( 'p' );
-        p.className = 'calc-warn';
+        p.className = 'warn-box';
         p.textContent = T( 'trips.loadFilesFailed' );
         sheet.appendChild( p );
         return;

@@ -63,7 +63,7 @@
 
     function get( k )    { try { return localStorage.getItem( k ); } catch ( e ) { return null; } }
     function put( k, v ) { try { if( v == null ) localStorage.removeItem( k ); else localStorage.setItem( k, v ); } catch ( e ) {} }
-    function t( k )      { return window.NayiveI18n ? NayiveI18n.t( k ) : k; }
+    function t( k )      { return window.Ayni ? Ayni.t( k ) : k; }
 
     //------------------------------------------------------------------------//
     // SETTINGS
@@ -177,7 +177,7 @@
     //------------------------------------------------------------------------//
     // THE SCREEN (top window only)
 
-    var dlg = null, host = null, card = null, inp = null, btn = null, msg = null;
+    var dlg = null, host = null, card = null, inp = null, btn = null, eye = null, msg = null;
     var stopFn = null, cardTimer = 0, busy = false, waitingDom = false;
     var defs = {};
 
@@ -209,7 +209,7 @@
         stopLocker();
         clearTimeout( cardTimer );
         var d = dlg;
-        dlg = host = card = inp = btn = msg = null;
+        dlg = host = card = inp = btn = eye = msg = null;
         busy = false;
         if( d.open ) d.close();
         d.remove();
@@ -238,15 +238,23 @@
         inp.spellcheck = false;
         inp.setAttribute( "autocapitalize", "none" );
 
+        // The eye, before the ✓: shows / hides what is typed.
+        eye = document.createElement( "button" );
+        eye.type = "button";
+        eye.className = "btn";
+        if( window.NayiveUI && NayiveUI.pwEye ) NayiveUI.pwEye( eye, inp ); else eye.hidden = true;
+
         btn = document.createElement( "button" );
         btn.type = "button";
-        btn.setAttribute( "data-act", "primary" );
+        btn.className = "btn primary";
+        btn.innerHTML = '<span class="icon" data-icon="check"></span>';   // drawn by Ayni (this may run before it loads)
 
         msg = document.createElement( "p" );
         msg.className = "lock-msg";
         msg.hidden = true;
 
         card.appendChild( inp );
+        card.appendChild( eye );
         card.appendChild( btn );
         card.appendChild( msg );
         dlg.appendChild( host );
@@ -255,7 +263,7 @@
         if( window.NayiveUI && NayiveUI.applySheetButtons ) NayiveUI.applySheetButtons( card );
         label();
         // A page that opens locked builds this before its dictionary is in.
-        if( window.NayiveI18n && NayiveI18n.ready ) NayiveI18n.ready.then( label, function () {} );
+        if( window.Ayni ) Ayni.i18n.ready.then( label, function () {} );
 
         btn.addEventListener( "click", tryUnlock );
         inp.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); tryUnlock(); } } );
@@ -298,8 +306,18 @@
         if( ! card ) return;
         inp.placeholder = t( "scrlock.password" );
         inp.setAttribute( "aria-label", t( "scrlock.password" ) );
-        btn.title = t( "scrlock.unlock" );
+        btn.dataset.tip = t( "scrlock.unlock" );
         btn.setAttribute( "aria-label", t( "scrlock.unlock" ) );
+        eyeShut();
+    }
+
+    // The text hidden again, the eye shut.
+    function eyeShut()
+    {
+        inp.type = "password";
+        if( window.NayiveUI && Ayni.icon ) eye.innerHTML = Ayni.icon( "eye" );
+        eye.dataset.tip = t( "ui.showPassword" );   // not Ayni.setTip: this may run before Ayni loads
+        eye.setAttribute( "aria-label", eye.dataset.tip );
     }
 
     function showCard()
@@ -315,7 +333,7 @@
     {
         if( ! card || busy ) return;
         clearTimeout( cardTimer );
-        card.hidden = true; inp.value = "";
+        card.hidden = true; inp.value = ""; eyeShut();
         dlg.focus();                             // not inp.blur(): the keys must still reach dlg
     }
 
@@ -330,7 +348,7 @@
         // An empty box is sent too: an account with no password yet opens
         // with "", and the server says "wrong" to everyone else.
         if( busy || ! inp ) return;
-        busy = true; inp.disabled = true; btn.disabled = true;
+        busy = true; inp.disabled = true; btn.ariaDisabled = true;
 
         var status = 0;
         try
@@ -353,7 +371,7 @@
             return;
         }
         if( ! inp ) return;                      // unlocked from another tab
-        busy = false; inp.disabled = false; btn.disabled = false;
+        busy = false; inp.disabled = false; btn.ariaDisabled = false;
         inp.value = "";
         say( status === 403 ? "scrlock.wrong" : "scrlock.offline" );
         inp.focus();
@@ -396,7 +414,7 @@
     // Whose page this is, as it LOADED (the "nayive_who" cookie; data-safety
     // L5): the lockers' scripts load later, maybe after another account
     // signed in on this browser, and name this owner on their saves.
-    var WHO = ( window.NayiveI18n && NayiveI18n.whoAtLoad ) || "";      // shared/i18n.js WHOSE PAGE
+    var WHO = ( window.NayiveWho && NayiveWho.atLoad ) || "";      // shared/i18n.js WHOSE PAGE
 
     window.NayiveLock = {
         LOCKERS:  LOCKERS,
