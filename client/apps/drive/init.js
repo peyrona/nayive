@@ -136,13 +136,13 @@ function wireStaticUI()
 
     document.getElementById( 'newFolderCancelBtn'  ).addEventListener( 'click', function() { setBackdrop( 'newFolderBackdrop', false ); } );
     document.getElementById( 'newFolderConfirmBtn' ).addEventListener( 'click', confirmNewFolder );
-    document.getElementById( 'newFolderName'       ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) confirmNewFolder(); } );
+    document.getElementById( 'newFolderName'       ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) { e.preventDefault(); confirmNewFolder(); } } );
 
     document.getElementById( 'propsCloseBtn' ).addEventListener( 'click', function() { setBackdrop( 'propsBackdrop', false ); } );
 
     document.getElementById( 'renameCancelBtn'  ).addEventListener( 'click', function() { setBackdrop( 'renameBackdrop', false ); } );
     document.getElementById( 'renameConfirmBtn' ).addEventListener( 'click', confirmRename );
-    document.getElementById( 'renameName'       ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) confirmRename(); } );
+    document.getElementById( 'renameName'       ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) { e.preventDefault(); confirmRename(); } } );
     document.getElementById( 'renameName'       ).addEventListener( 'input', noSlash );
     document.getElementById( 'renameName'       ).addEventListener( 'paste', pasteName );
 
@@ -182,8 +182,8 @@ function wireStaticUI()
     });
     document.addEventListener( 'keydown', function( e )
     {
-        // (The menu closes itself on Escape.)
-        if( e.key !== 'Escape' ) return;
+        // (The menu closes itself on Escape; an open dialog takes it - Ayni.)
+        if( e.key !== 'Escape' || e.defaultPrevented || document.querySelector( 'dialog.panel[open]' ) ) return;
 
         if( document.getElementById( 'viewerBackdrop' ).classList.contains( 'open' ) )
         {
@@ -197,28 +197,12 @@ function wireStaticUI()
             return;
         }
 
-        const open = document.querySelector( '.sheet-backdrop.open' );
-
-        if( ! open || open.id === 'progressBackdrop' )   // indeterminate progress is not user-dismissable
-            return;
-
-        if( open.id === 'replaceBackdrop' )
-        {
-            settleReplace( 'cancel' );
-            return;
-        }
-
-        if( open.id === 'convertBackdrop' )
-        {
-            settleConvert( 'cancel' );
-            return;
-        }
-
-        if( open.id === 'importWithBackdrop' )
-            openWithPath = null;
-
-        setBackdrop( open.id, false );
+        // A dialog: Ayni presses its × (data-close), whose handler cancels
+        // (settleReplace / settleConvert / openWithPath = null).
     });
+
+    // An indeterminate progress is not user-dismissable: Escape stops at it.
+    document.getElementById( 'progressBackdrop' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Escape' ) e.preventDefault(); } );
 
     document.addEventListener( 'keydown', onShortcutKey );
 

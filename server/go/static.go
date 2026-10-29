@@ -75,6 +75,8 @@ var publicStatic = map[string]bool{
 	"shared/ayni/ayni-buttons.js":  true,
 	"shared/ayni/ayni-toasts.css":  true,
 	"shared/ayni/ayni-toasts.js":   true,
+	"shared/ayni/ayni-dialogs.css": true,
+	"shared/ayni/ayni-dialogs.js":  true,
 	"shared/ayni/ayni-icons.js":    true,
 	"shared/ayni/tz-geo.json":      true,
 	"shared/ayni/i18n/es.json":     true,

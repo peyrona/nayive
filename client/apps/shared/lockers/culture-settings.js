@@ -7,7 +7,7 @@
  *     NayiveSalonSettings.open( "science" )  Science (needs science.js loaded too)
  *
  * Needs culture.js loaded first (window.NayiveSalon: the lists, the defaults,
- * read/write) and shared/ui.js (NayiveUI.modal, icons, toast).
+ * read/write) and Ayni (Ayni.dialog, icons, toast).
  *
  * Four tabs:
  *   Languages   mine, in order of importance; which ones each box uses; how
@@ -61,8 +61,8 @@ function open( kind )
     if( ! S || ! A ) return;
     var cfg = null;
     var CARD = sci ? "sci.card." : "salon.card.";
-    var ui  = NayiveUI.modal( { title: t( sci ? "sci.settings" : "salon.settings" ), cls: "sheet--wide", id: "salonSettings" } );
-    var sheet = ui.sheet;
+    var ui  = Ayni.dialog( { title: t( sci ? "sci.settings" : "salon.settings" ), big: true, id: "salonSettings" } );
+    var sheet = ui.body;
 
     var style = el( "style", null, STYLE + S.faces(), sheet );
     var tabs  = el( "div", "salon-tabs", null, sheet );
@@ -91,12 +91,13 @@ function open( kind )
         for( var k in panes ) panes[ k ].hidden = k !== id;
     }
 
-    var actions = el( "div", "sheet-actions", null, sheet );
-    var bClose = actions.appendChild( NayiveUI.sheetButton( "close", t( "ui.close" ) ) );
+    var bClose = Ayni.dialogButton( "close", t( "ui.close" ) );
+    ui.place( [ bClose ] );                       // a lone × goes in the title row
     bClose.addEventListener( "click", function () { ui.close(); } );
-    NayiveUI.onSheetClose( ui.back, save );
+    ui.dialog.addEventListener( "close", save );   // closed by any road: kept
 
-    ui.show( function () { NayiveUI.applySheetButtons( sheet ); } );
+    ui.show();
+    NayiveUI.applySheetButtons( ui.dialog );
     show( "content" );
     [].forEach.call( sheet.querySelectorAll( ".salon-pane" ), function ( p ) { el( "p", "salon-note", "…", p ); } );
 

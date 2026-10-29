@@ -72,9 +72,9 @@ const addEntry = ( p, title, pass ) => p.evaluate( `( function () { var now = no
 
 async function answerPassword( p, pw )
 {
-    await p.until( "!! document.querySelector( '.sheet-backdrop.open #askPw1' )" );
+    await p.until( "!! document.querySelector( 'dialog.panel[open] #askPw1' )" );
     return p.evaluate( `( function () { document.getElementById( 'askPw1' ).value = ${JSON.stringify( pw )};
-        var backs = document.querySelectorAll( '.sheet-backdrop.open' ), b = backs[ backs.length - 1 ];
+        var backs = document.querySelectorAll( 'dialog.panel[open]' ), b = backs[ backs.length - 1 ];
         b.querySelector( '.btn.primary' ).click(); return true; } )()` );
 }
 
@@ -222,14 +222,14 @@ section( "P6 · DELETE + UNDO; NEW MASTER PASSWORD AND RECOVERY KEY KEEP EVERY E
     const entries = JSON.stringify( json().items );
     await c.evaluate( `openPhraseSheet(); document.getElementById( 'hintEdit' ).value = 'the ds reminder';
                        document.getElementById( 'hintMaster' ).value = ${JSON.stringify( PW )}; document.getElementById( 'hintLogin' ).value = 'test'; savePhrase(); true` );
-    ok( await c.until( "! document.getElementById( 'hintBackdrop' ).classList.contains( 'open' )", 30000 ), "a reminder phrase saved" );
+    ok( await c.until( "! document.getElementById( 'hintBackdrop' ).open", 30000 ), "a reminder phrase saved" );
     ok( await disk( () => json().hint && json().hint.c ) && raw().indexOf( "ds reminder" ) < 0, "…encrypted in the file" );
     ok( JSON.stringify( json().items ) === entries, "…every entry exactly as it was" );
     const hint = JSON.stringify( json().hint );
 
     await c.evaluate( `openChangePw( false ); document.getElementById( 'chpwCur' ).value = ${JSON.stringify( PW )};
                        document.getElementById( 'chpwNew' ).value = document.getElementById( 'chpwNew2' ).value = ${JSON.stringify( PW2 )}; saveChangePw(); true` );
-    ok( await c.until( "! document.getElementById( 'chpwBackdrop' ).classList.contains( 'open' )", 30000 ), "a new master password saved" );
+    ok( await c.until( "! document.getElementById( 'chpwBackdrop' ).open", 30000 ), "a new master password saved" );
     await sleep( 1500 );
     ok( JSON.stringify( json().items ) === entries, "…every entry exactly as it was (same ciphertext)" );
     ok( JSON.stringify( json().hint ) === hint, "…and the reminder phrase too" );
@@ -239,10 +239,10 @@ section( "P6 · DELETE + UNDO; NEW MASTER PASSWORD AND RECOVERY KEY KEEP EVERY E
 
     await c.evaluate( "newRecoveryKey(); true" );
     await answerPassword( c, PW2 );
-    ok( await c.until( "document.getElementById( 'recShowBackdrop' ).classList.contains( 'open' )", 30000 ), "a new recovery key" );
+    ok( await c.until( "document.getElementById( 'recShowBackdrop' ).open", 30000 ), "a new recovery key" );
     await sleep( 1500 );
     ok( JSON.stringify( json().items ) === entries, "…every entry exactly as it was" );
-    await c.evaluate( "NayiveUI.close( 'recShowBackdrop' ); true" );
+    await c.evaluate( "document.getElementById( 'recShowBackdrop' ).close(); true" );
 }
 
 //----------------------------------------------------------------------------//

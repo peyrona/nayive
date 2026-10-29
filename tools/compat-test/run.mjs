@@ -44,7 +44,9 @@ try
             const ctx  = await br.newContext( { ...opts, serviceWorkers: "block", locale: "en-US" } );
             const page = await ctx.newPage();
             let errs = [];
-            page.on( "pageerror", e => errs.push( String( e.message || e ).split( "\n" )[ 0 ] ) );
+            // "ResizeObserver loop ..." is a browser notice, not a script error (WebKit raises it
+            // when a size settles over two frames); shared/i18n.js drops it from the error log too.
+            page.on( "pageerror", e => { const m = String( e.message || e ).split( "\n" )[ 0 ]; if( ! /ResizeObserver loop/.test( m ) ) errs.push( m ); } );
 
             const st = await signIn( page, BASE );
             if( st !== 200 ) { console.log( `ERR ${name}/${shape}: sign-in failed ${st}` ); failed.push( `${name}/${shape}` ); await ctx.close(); continue; }

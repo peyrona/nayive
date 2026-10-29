@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -24,6 +25,7 @@
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
+    <script src="../shared/ayni/ayni-dialogs.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
@@ -89,29 +91,39 @@
         </div>
     </div>
 
-    <div class="sheet-backdrop" id="tripSheetBackdrop">
-        <div class="sheet" id="tripSheet"></div>
-    </div>
+    <dialog class="panel" id="tripSheetBackdrop">
+        <header><h2></h2></header>
+        <div class="body" id="tripSheet"></div>
+        <footer></footer>
+    </dialog>
 
-    <div class="sheet-backdrop" id="stageSheetBackdrop">
-        <div class="sheet" id="stageSheet"></div>
-    </div>
+    <dialog class="panel" id="stageSheetBackdrop">
+        <header><h2></h2></header>
+        <div class="body" id="stageSheet"></div>
+        <footer></footer>
+    </dialog>
 
-    <div class="sheet-backdrop" id="mapSheetBackdrop">
-        <div class="sheet" id="mapSheet"></div>
-    </div>
+    <dialog class="panel map-dialog" id="mapSheetBackdrop">
+        <div class="body" id="mapSheet"></div>
+    </dialog>
 
-    <div class="sheet-backdrop" id="setSheetBackdrop">
-        <div class="sheet" id="setSheet"></div>
-    </div>
+    <dialog class="panel" id="setSheetBackdrop">
+        <header><h2></h2></header>
+        <div class="body" id="setSheet"></div>
+        <footer></footer>
+    </dialog>
 
-    <div class="sheet-backdrop" id="discoverSheetBackdrop">
-        <div class="sheet" id="discoverSheet"></div>
-    </div>
+    <dialog class="panel" id="discoverSheetBackdrop">
+        <header><h2></h2></header>
+        <div class="body" id="discoverSheet"></div>
+        <footer></footer>
+    </dialog>
 
-    <div class="sheet-backdrop" id="filePickerSheetBackdrop">
-        <div class="sheet" id="filePickerSheet"></div>
-    </div>
+    <dialog class="panel" id="filePickerSheetBackdrop">
+        <header><h2></h2></header>
+        <div class="body" id="filePickerSheet"></div>
+        <footer></footer>
+    </dialog>
 
     <input type="file" id="docUploadInput" style="display:none">
 

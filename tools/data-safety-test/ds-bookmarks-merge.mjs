@@ -92,7 +92,7 @@ section( "EXPORT INTO NAYIVE WHEN THE FOLDER'S LISTING FAILS" );
     await c.evaluate( `GumApi.listDir = function () { var e = new Error( 'HTTP 500' ); e.status = 500; return Promise.reject( e ); };
         NayiveUI.pickFolder = function () { return Promise.resolve( 'files' ); };
         document.querySelector( 'input[name=exportWhere][value=nayive]' ).checked = true;
-        NayiveUI.open( 'exportBackdrop' ); document.getElementById( 'exportJsonBtn' ).click(); true` );
+        document.getElementById( 'exportBackdrop' ).showModal(); document.getElementById( 'exportJsonBtn' ).click(); true` );
     const two = name.replace( /\.json$/, " (2).json" );
     ok( await disk( () => onDisk( s, "files/" + two ) !== null ), "the export is saved under the next free name", two );
     ok( onDisk( s, "files/" + name ) === "PRECIOUS - another file of that name", "the file that was there is untouched", onDisk( s, "files/" + name ) );

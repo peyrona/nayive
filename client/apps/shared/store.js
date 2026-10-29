@@ -742,8 +742,8 @@
             window.nayiveBeforeClose = function ()
             {
                 if( ! Object.keys( pageOnly ).length ) return true;
-                if( ! window.NayiveUI || ! NayiveUI.confirm || ! Ayni.t ) return false;
-                return NayiveUI.confirm( { title: Ayni.t( "drive.unsavedTitle" ), body: Ayni.t( "ui.store.pageOnly" ),
+                if( ! window.Ayni || ! Ayni.confirm || ! Ayni.t ) return false;
+                return Ayni.confirm( { title: Ayni.t( "drive.unsavedTitle" ), body: Ayni.t( "ui.store.pageOnly" ),
                                            confirm: Ayni.t( "drive.closeWithout" ), danger: true } );
             };
     }

@@ -1,5 +1,5 @@
 /* email.css - eMail's own styles. */
-/* Base reset, .app shell, .topbar, .btn, .pill, .sheet, .field and the
+/* Base reset, .app shell, .topbar, .btn, .pill, .field and the
    input look all come from ../shared/app.css. eMail keeps the page still
    (the tray column and the list / message pane scroll themselves) and adds
    its rows, the message header and the reading frame. */
@@ -291,8 +291,8 @@ body.composing #readRz         { display: none; }
 .mail-acct-list .card-row small { font-size: 0.76rem; color: var(--text-dim); }
 .mail-acct-list .card-row small.bad { color: var(--danger); }
 .field .hint,
-.sheet > .hint { margin: 6px 0 0; font-size: 0.78rem; line-height: 1.4; color: var(--text-dim); }
-.sheet > .hint { margin: 0 0 12px; }
+dialog.panel .body > .hint { margin: 6px 0 0; font-size: 0.78rem; line-height: 1.4; color: var(--text-dim); }
+dialog.panel .body > .hint { margin: 0 0 12px; }
 .field.mail-port { flex: 0 0 90px; }
 .field.mail-prov { flex: 0 1 230px; }
 

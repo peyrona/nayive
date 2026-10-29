@@ -56,6 +56,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -63,6 +64,7 @@
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
+    <script src="../shared/ayni/ayni-dialogs.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
@@ -92,7 +94,7 @@
     <style>
     /* ===================================================================
      * MOVIES - per-app layout only. The chrome (header, .btn, .field,
-     * .sheet, .btn) comes from shared/theme.css + app.css; this
+     * dialogs) comes from shared/theme.css + app.css + Ayni; this
      * block holds the poster library, the movie detail, the video stage and
      * the player bar - none of which exists anywhere else except, in spirit,
      * in Music's own <style>.
@@ -400,20 +402,22 @@
 </div>
 
 <!-- TMDB API key. Closes on its buttons / Escape only (dialog-close rule). -->
-<div id="tmdbBackdrop" class="sheet-backdrop">
-    <div class="sheet">
+<dialog id="tmdbBackdrop" class="panel">
+    <header>
         <h2 data-i18n="movies.tmdbTitle"></h2>
-        <p class="dialog-text" data-i18n="movies.tmdbLead"></p>
+    </header>
+    <div class="body">
+        <p class="text" data-i18n="movies.tmdbLead"></p>
         <div class="field">
             <label for="tmdbKey" data-i18n="movies.tmdbKey"></label>
             <input type="text" id="tmdbKey" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:movies.tmdbKeyPh">
         </div>
-        <div class="sheet-actions">
-            <button class="btn" id="tmdbCancelBtn" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-            <button class="btn primary" id="tmdbSaveBtn"   data-i18n-attr="data-tip:movies.saveAndSearch"><span class="icon" data-icon="check"></span></button>
-        </div>
     </div>
-</div>
+    <footer>
+        <button class="btn" id="tmdbCancelBtn" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+        <button class="btn primary" id="tmdbSaveBtn"   data-i18n-attr="data-tip:movies.saveAndSearch"><span class="icon" data-icon="check"></span></button>
+    </footer>
+</dialog>
 
 <script src="../shared/media.js"></script>
 <script src="../shared/play-on.js"></script>
@@ -800,7 +804,7 @@ async function savePosters()
 function openTmdbKeySheet()
 {
     $( "#tmdbKey" ).value = st.posters.key || "";
-    NayiveUI.setOpen( "tmdbBackdrop", true );
+    document.getElementById( "tmdbBackdrop" ).showModal();
     $( "#tmdbKey" ).focus();
 }
 
@@ -1643,7 +1647,7 @@ function wireStaticUI()
     } );
 
     $( "#postersBtn" ).addEventListener( "click", function () { fetchPosters(); } );
-    $( "#tmdbCancelBtn" ).addEventListener( "click", function () { NayiveUI.setOpen( "tmdbBackdrop", false ); } );
+    $( "#tmdbCancelBtn" ).addEventListener( "click", function () { document.getElementById( "tmdbBackdrop" ).close(); } );
     $( "#tmdbSaveBtn" ).addEventListener( "click", async function ()
     {
         var k = ( $( "#tmdbKey" ).value || "" ).trim();
@@ -1651,7 +1655,7 @@ function wireStaticUI()
         if( ! await postersReady() ) return;          // the sheet stays open, the key kept
         st.posters.key = k;
         st.postersKeyMine = true;
-        NayiveUI.setOpen( "tmdbBackdrop", false );
+        document.getElementById( "tmdbBackdrop" ).close();
         await savePosters();
         fetchPosters();
     } );
@@ -1734,9 +1738,9 @@ function wireStaticUI()
 
     document.addEventListener( "keydown", function ( e )
     {
-        if( $( "#tmdbBackdrop" ).classList.contains( "open" ) )
+        if( $( "#tmdbBackdrop" ).open )
         {
-            if( e.key === "Escape" ) NayiveUI.setOpen( "tmdbBackdrop", false );
+            if( e.key === "Escape" ) document.getElementById( "tmdbBackdrop" ).close();
             return;
         }
         var tag = ( e.target && e.target.tagName ) || "";

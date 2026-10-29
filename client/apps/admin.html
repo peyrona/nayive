@@ -23,6 +23,7 @@
     <link rel="stylesheet" href="shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="shared/theme.css">
     <link rel="stylesheet" href="shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -30,6 +31,7 @@
     <script src="shared/ayni/ayni-base.js" defer></script>
     <script src="shared/ayni/ayni-buttons.js" defer></script>
     <script src="shared/ayni/ayni-toasts.js" defer></script>
+    <script src="shared/ayni/ayni-dialogs.js" defer></script>
     <script src="shared/locker.js"></script>
     <script src="shared/ui.js" defer></script>
     <!-- Only for signing a regular account out (the 403 below): its saves
@@ -313,9 +315,11 @@
 </div>
 
 <!-- Language: a new engine, a second server of an existing kind. -->
-<div id="addBackdrop" class="sheet-backdrop">
-    <div class="sheet" role="dialog" aria-modal="true" data-i18n-attr="aria-label:language.addEngine">
+<dialog id="addBackdrop" class="panel" data-i18n-attr="aria-label:language.addEngine">
+    <header>
         <h2 data-i18n="language.addEngine"></h2>
+    </header>
+    <div class="body">
         <div class="field">
             <label for="addKind" data-i18n="language.engineKind"></label>
             <select id="addKind">
@@ -332,12 +336,12 @@
             <input id="addUrl" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://">
         </div>
         <p id="addError" class="field-error" hidden></p>
-        <div class="sheet-actions">
-            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-            <button class="btn primary" id="addSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
-        </div>
     </div>
-</div>
+    <footer>
+        <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+        <button class="btn primary" id="addSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+    </footer>
+</dialog>
 
 <script>
 ( function ()
@@ -518,8 +522,8 @@
 
     function pickSitesDir()
     {
-        var d     = NayiveUI.modal();
-        var sheet = d.sheet;
+        var d     = Ayni.dialog( { title: 'Web sites folder' } );
+        var sheet = d.body;
         var cur   = null;      // { path, home, dirs } once listed
         var err   = '';
         var seq   = 0;
@@ -555,10 +559,8 @@
 
         function render()
         {
-            sheet.innerHTML = '';
-            var h = document.createElement( 'h2' );
-            h.textContent = 'Web sites folder';
-            sheet.appendChild( h );
+            sheet.innerHTML    = '';
+            d.footer.innerHTML = '';
 
             // "/ › home › me": every step but the last goes back there
             var crumbs = document.createElement( 'div' );
@@ -604,12 +606,11 @@
                 box.appendChild( row );
             } );
 
-            var arow = document.createElement( 'div' );
-            arow.className = 'sheet-actions';
-            var cancel = NayiveUI.sheetButton( 'close', 'Cancel' );
+            var arow = d.footer;
+            var cancel = Ayni.dialogButton( 'close', 'Cancel' );
             cancel.addEventListener( 'click', function () { d.close(); } );
             arow.appendChild( cancel );
-            var ok = NayiveUI.sheetButton( 'primary', 'Use this folder' );
+            var ok = Ayni.dialogButton( 'primary', 'Use this folder' );
             ok.ariaDisabled = ! cur || !! err;
             ok.addEventListener( 'click', function ()
             {
@@ -619,8 +620,7 @@
                 autosave();
             } );
             arow.appendChild( ok );
-            sheet.appendChild( arow );
-            NayiveUI.applySheetButtons( sheet );
+            NayiveUI.applySheetButtons( d.dialog );
         }
 
         d.show();
@@ -868,7 +868,7 @@
 
         var acts = document.createElement( 'div' );
         acts.className = 'row-acts';
-        var btn = NayiveUI.sheetButton( act, title, act === 'danger' ? null : 'close' );
+        var btn = Ayni.dialogButton( act, title, act === 'danger' ? null : 'close' );
         acts.appendChild( btn );
         var tdA = cell( 'col-act', acts );
 
@@ -964,7 +964,7 @@
 
             del.addEventListener( 'click', async function ()
             {
-                if ( ! await NayiveUI.confirm( {
+                if ( ! await Ayni.confirm( {
                     title: 'Delete user',
                     body: 'Delete "' + ctl.name + '"?\n\n'
                         + 'This permanently removes the account and EVERYTHING tied to it: '

@@ -83,7 +83,7 @@
 }
 #gridHost .ht_clone_top_inline_start_corner thead th:hover::after { border-bottom-color: var(--accent); }
 
-/* Base reset, .app shell, .topbar, .btn, .sheet, .field and the
+/* Base reset, .app shell, .topbar, .btn, .field and the
    input look all come from ../shared/app.css. Calc overrides the page
    scroll and adds its chrome + the hand-built formatting toolbar. */
 html, body { height: 100%; overflow: hidden; }
@@ -367,7 +367,7 @@ body.calc-painting #gridHost .htCore td { cursor: copy; }
    they climb high: row numbers 120, the bottom pair 130 / 150, the
    column letters 160, the top-left corner 180 - and its move / resize
    guides reach 210. Every one of them beats the shared overlays
-   (menu 150, sheet 100, popup / toast 200, coach 300), so anything of
+   (menu 150, popup 200, coach 300), so anything of
    ours that opens over the grid has to be lifted clear of 210. Same
    order as app.css, just moved up.
 
@@ -376,12 +376,10 @@ body.calc-painting #gridHost .htCore td { cursor: copy; }
      .popup      the toolbar's group cards and the border picker. At the
                  shared 200 a card opened low enough to fall behind a
                  resize guide.
-     others      a dialog reaching the row-number column had its left
-                 edge covered on a phone. */
+     others      the coach marks. (Dialogs, the info popup and the
+                 notifications are in the top layer: above all of it.) */
 .top-menu              { z-index: 400; }
 .popup                 { z-index: 400; }
-.sheet-backdrop        { z-index: 500; }
-.info-popup            { z-index: 600; }
 .coach-overlay         { z-index: 700; }
 
 .fx-list { max-height: 320px; overflow-y: auto; margin-bottom: 14px; }

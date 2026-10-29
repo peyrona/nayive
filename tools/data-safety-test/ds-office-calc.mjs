@@ -57,8 +57,8 @@ section( "E3 · EDITS AFTER \"DO NOT SAVE\" ON THE LOSS GATE" );
 
 ok( await openSheet( "files/land.xlsx", "NOW" ), "land.xlsx (landscape print setup) is open" );
 await typeInB2( "77" );
-ok( await c.until( "document.getElementById('lossyBackdrop').classList.contains('open')" ), "the edit opens the loss gate" );
-await c.evaluate( "NayiveUI.close('lossyBackdrop'), true" );             // ✗ = do not write it now
+ok( await c.until( "document.getElementById('lossyBackdrop').open" ), "the edit opens the loss gate" );
+await c.evaluate( "document.getElementById( 'lossyBackdrop' ).close(), true" );             // ✗ = do not write it now
 ok( await untilDraft( c, d => d.name === "land.xlsx" ), "the held edits are in a device draft (the 7 s timer)" );
 const b64 = await c.evaluate( DRAFT_B64( "land.xlsx" ) );
 const draft = b64 ? Buffer.from( b64, "base64" ) : null;
@@ -112,8 +112,8 @@ section( "G2 · NO RESTORE OVER EDITS THE GATE HELD BACK" );
 c = await first.tab();
 ok( await openSheet( "files/s3.xlsx", "NOW3" ), "s3.xlsx (landscape) is open" );
 await typeInB2( "77" );
-ok( await c.until( "document.getElementById('lossyBackdrop').classList.contains('open')" ), "the edit opens the loss gate" );
-await c.evaluate( "NayiveUI.close('lossyBackdrop'), true" );
+ok( await c.until( "document.getElementById('lossyBackdrop').open" ), "the edit opens the loss gate" );
+await c.evaluate( "document.getElementById( 'lossyBackdrop' ).close(), true" );
 ok( await c.until( `${B2} === '77'` ), "77 is on screen, not in the file" );
 await c.evaluate( "document.getElementById('restoreBtn').click(), true" );
 await c.until( `${TOLD( "write.restoreSaveFirst" )} || window.__sheet()`, 15000 );

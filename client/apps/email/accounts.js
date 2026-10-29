@@ -68,7 +68,7 @@
         catch( err ) { Ayni.toast( "err", E.errText( err ) ); }
         E.$( "addProv" ).value = providers.length ? providers[ 0 ].id : "other";
         renderProvider();
-        NayiveUI.open( "setSheet" );
+        document.getElementById( "setSheet" ).showModal();
         if( ! S.accounts.length && tab !== "general" ) setTimeout( function () { E.$( "addEmail" ).focus(); }, 50 );
     };
 
@@ -328,7 +328,7 @@
         {
             var a = await E.api( "POST", "accounts", body );
             Ayni.toast( "ok", E.T( "mail.added" ) );
-            NayiveUI.close( "setSheet" );
+            document.getElementById( "setSheet" ).close();
             await E.loadAccounts();
             S.acct = a.id;
             S.tray = "inbox";
@@ -365,7 +365,7 @@
         E.$( "trashDays" ).addEventListener( "input", saveDays );
         E.$( "signature" ).addEventListener( "input", saveSignature );
         E.$( "signature" ).addEventListener( "change", retrySignature );
-        NayiveUI.onSheetClose( "setSheet", retrySignature );
+        E.$( "setSheet" ).addEventListener( "close", retrySignature );
         document.querySelector( "#setSheet .mail-tabs" ).addEventListener( "click", function ( e )
         {
             var b = e.target.closest( "[data-tab]" );

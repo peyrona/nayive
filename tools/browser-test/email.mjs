@@ -151,7 +151,7 @@ await at( "Hello 4" );
 await c.evaluate( "window.__toasts = []; true" );
 await key( c, "Delete" );
 ok( await c.until( "! [ ...document.querySelectorAll('#list .mail-row') ].some( r => r.textContent.includes( 'Hello 4' ) )" ), "Del: the row goes at once" );
-ok( await c.evaluate( "! document.querySelector('.sheet-backdrop.open')" ) && await c.until( "!! document.querySelector('#ayni-toasts .toast.undo .act')" ), "…no question, an Undo" );
+ok( await c.evaluate( "! document.querySelector('dialog.panel[open]')" ) && await c.until( "!! document.querySelector('#ayni-toasts .toast.undo .act')" ), "…no question, an Undo" );
 ok( ! await inTray( "inbox", "Hello 4" ) && !! await inTray( "trash", "Hello 4" ), "…on the server: in the Trash" );
 await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
 ok( await c.until( "[ ...document.querySelectorAll('#list .mail-row') ].some( r => r.textContent.includes( 'Hello 4' ) )", 10000 ) && !! await inTray( "inbox", "Hello 4" ) && ! await inTray( "trash", "Hello 4" ), "Undo: back in the Inbox (server too)" );
@@ -236,8 +236,9 @@ await c.until( "NayiveMail.S.tray === 'inbox' && document.querySelectorAll('#lis
 await shot( "e04-desktop" );
 
 section( "EMAIL · PICK DIALOG" );
-await c.evaluate( "document.getElementById('selectBtn').click(); true" );
-ok( await c.until( "document.getElementById('pickSheet').classList.contains('open')" ), "the select button opens the pick dialog" );
+// focus first, as a real click does: the dialog gives the focus back to it when it closes
+await c.evaluate( "document.getElementById('selectBtn').focus(); document.getElementById('selectBtn').click(); true" );
+ok( await c.until( "document.getElementById('pickSheet').open" ), "the select button opens the pick dialog" );
 await c.evaluate( "document.getElementById('pickFrom').value = 'eve'; document.getElementById('pickGoBtn').click(); true" );
 ok( await c.until( "NayiveMail.picked().length === 1 && NayiveMail.picked()[ 0 ].subject === 'Pictures'" ) &&
     await c.evaluate( "[ ...document.querySelectorAll('#list .mail-row') ].filter( r => ! r.hidden ).length === 1" ), "From eve: only her mail, picked and in sight", await picked() );

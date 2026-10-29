@@ -5,6 +5,8 @@
 <script src="shared/ayni/ayni-i18n.js" data-dict="shared/i18n/" data-langs="es en pt fr de"></script>
 <link rel="stylesheet" href="shared/ayni/ayni-base.css">
 <link rel="stylesheet" href="shared/ayni/ayni-buttons.css">
+<link rel="stylesheet" href="shared/ayni/ayni-toasts.css">
+<link rel="stylesheet" href="shared/ayni/ayni-dialogs.css">
 <link rel="stylesheet" href="shared/theme.css">
 <link rel="stylesheet" href="shared/app.css">
 <script src="shared/gum-api.js"></script>
@@ -86,6 +88,8 @@ window.makeStore = function ( binary )
 <script src="shared/ayni/ayni-icons.js" defer></script>
 <script src="shared/ayni/ayni-base.js" defer></script>
 <script src="shared/ayni/ayni-buttons.js" defer></script>
+<script src="shared/ayni/ayni-toasts.js" defer></script>
+<script src="shared/ayni/ayni-dialogs.js" defer></script>
 <script src="shared/ui.js" defer></script>
 <script src="shared/crypt.js" defer></script>
 <script src="shared/office.js" defer></script>
@@ -100,11 +104,11 @@ window.makeStore = function ( binary )
   <button id="saveAsBtn"></button><button id="restoreBtn"></button>
   <button id="lockBtn"><svg></svg></button>
   <div id="toast"></div>
-  <div id="openBackdrop" class="sheet-backdrop"><div class="sheet">
-    <div id="openRecent"></div><div id="openCrumb"></div><ul id="openList"></ul></div></div>
-  <div id="saveAsBackdrop" class="sheet-backdrop"><div class="sheet">
-    <input id="saveName"><button id="saveDirBtn"><span id="saveDirName"></span></button>
-    <button id="saveAsConfirmBtn"></button><button id="saveAsDeleteBtn"></button></div></div>
+  <dialog id="openBackdrop" class="panel"><div class="body">
+    <div id="openRecent"></div><div id="openCrumb"></div><ul id="openList"></ul></div></dialog>
+  <dialog id="saveAsBackdrop" class="panel"><div class="body">
+    <input id="saveName"><button id="saveDirBtn"><span id="saveDirName"></span></button></div>
+    <footer><button id="saveAsDeleteBtn"></button><button id="saveAsConfirmBtn" class="btn primary"></button></footer></dialog>
 </div>
 <script>
 window.DOC = { body: null, how: null, name: null };
@@ -139,7 +143,7 @@ window.typePassword = async function ( pw, repeat )
             one.value = pw;
             var two = document.getElementById( "askPw2" );
             if( two ) two.value = repeat === undefined ? pw : repeat;
-            one.closest( ".sheet" ).querySelector( ".sheet-actions button:last-child" ).click();
+            one.closest( "dialog" ).querySelector( "footer button:last-child" ).click();
             return true;
         }
         await new Promise( function ( r ) { setTimeout( r, 25 ); } );
@@ -151,7 +155,7 @@ window.cancelSheet = async function ()
 {
     for( var i = 0; i < 60; i++ )
     {
-        var s = document.querySelector( ".sheet-backdrop.open .sheet" );
+        var s = document.querySelector( "dialog.panel[open]" );
         if( s ) { document.dispatchEvent( new KeyboardEvent( "keydown", { key: "Escape", bubbles: true } ) ); return true; }
         await new Promise( function ( r ) { setTimeout( r, 25 ); } );
     }
@@ -162,8 +166,8 @@ window.clickConfirm = async function ( which )
 {
     for( var i = 0; i < 60; i++ )
     {
-        var s = document.querySelector( ".sheet-backdrop.open .sheet" );
-        var row = s && s.querySelector( ".sheet-actions" );
+        var s = document.querySelector( "dialog.panel[open]" );
+        var row = s && s.querySelector( "footer" );
         if( row && row.children.length >= 2 )
         {
             row.children[ which === "cancel" ? 0 : row.children.length - 1 ].click();

@@ -23,6 +23,7 @@
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
+    <script src="../shared/ayni/ayni-dialogs.js" defer></script>
     <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
     <script src="../shared/gum-api.js" defer></script>
     <!-- Small shared UI helpers: backdrop open/close, toast. -->
@@ -85,6 +86,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -101,7 +103,7 @@
     </script>
 
     <style>
-        /* Base reset, .app shell, .topbar, .sheet, .field and the input look all
+        /* Base reset, .app shell, .topbar, .field and the input look all
            come from ../shared/app.css. Write overrides the page scroll and adds
            its toolbar / editor chrome. */
         html, body { height: 100%; overflow: hidden; }
@@ -330,7 +332,7 @@
         .find-mark            { position: absolute; background: rgba(255, 210, 0, .45); border-radius: 2px; mix-blend-mode: multiply; }
         .find-mark.is-current { background: rgba(255, 150, 0, .55); }
 
-        /* Dialogs (open / save-as): .sheet-backdrop / .sheet / .field / inputs from app.css. */
+        /* Dialogs (open / save-as): Ayni's dialog.panel; .field / inputs from app.css. */
         /* .open-crumb / .open-list are the shared OFFICE CHROME block in shared/app.css
            (Calc and Text get the same list from shared/office.js). Nothing local. */
 
@@ -386,7 +388,6 @@
             width: 1px; height: 1px; opacity: 0; pointer-events: none;
         }
 
-        /* .sheet-actions / .btn / .btn-* live in ../shared/theme.css */
 
         /* ------------------------------------------------------------------ *
          * PRINT  (and "Guardar como PDF", which is the same browser dialog)
@@ -406,7 +407,7 @@
         {
             /* app chrome — none of it belongs on paper */
             .topbar, #toolbarRow, #menuBar, .menu-panel, .top-menu, .popup, #tbPopup, #symPopup, #ayni-toasts,
-            .sheet-backdrop, .editor-loading, .session-bar, .nayive-home-link, #spellLayer,
+            dialog, .editor-loading, .session-bar, .nayive-home-link, #spellLayer,
             #findBar, #findLayer { display: none !important; }
 
             html, body, #app, #editor, #editorHost
@@ -677,9 +678,11 @@
          editors share, built by shared/office.js (session, THE SHEETS). -->
 
     <!-- Page-setup dialog -->
-    <div id="pageSetupBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="pageSetupBackdrop" class="panel">
+        <header>
             <h2 data-i18n="write.pageSetup"></h2>
+        </header>
+        <div class="body">
             <div class="field">
                 <label for="psSize" data-i18n="write.size"></label>
                 <select id="psSize">
@@ -711,21 +714,21 @@
                 <div class="field"><label for="psLeft" data-i18n="write.marginLeft"></label><input type="text" id="psLeft" inputmode="decimal"></div>
                 <div class="field"><label for="psRight" data-i18n="write.marginRight"></label><input type="text" id="psRight" inputmode="decimal"></div>
             </div>
-
-            <div class="sheet-actions">
-                <button class="btn" id="pageSetupCancelBtn"  data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="pageSetupConfirmBtn" data-i18n-attr="data-tip:write.apply"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" id="pageSetupCancelBtn"  data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="pageSetupConfirmBtn" data-i18n-attr="data-tip:write.apply"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- Párrafo. Filled from the caret's paragraph; each group is applied only
          when something in it was touched, so paragraphs that disagree (a blank
          field) are not flattened. See PARRAFO in write.js. -->
-    <div id="paraBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--wide">
+    <dialog id="paraBackdrop" class="panel big">
+        <header>
             <h2 data-i18n="write.paragraph"></h2>
-
+        </header>
+        <div class="body">
             <div class="section-label" data-i18n="write.paSpacingLabel"></div>
             <div class="field-row">
                 <div class="field"><label for="paBefore" data-i18n="write.paBefore"></label><input type="text" id="paBefore" inputmode="decimal" value="0"></div>
@@ -773,7 +776,7 @@
                     </select>
                 </div>
             </div>
-            <p id="paListNote" class="dialog-text st-note" data-i18n="write.paListNote" hidden></p>
+            <p id="paListNote" class="text st-note" data-i18n="write.paListNote" hidden></p>
 
             <div class="section-label" data-i18n="write.paTabsLabel"></div>
             <div class="field-row">
@@ -787,20 +790,20 @@
                     </select>
                 </div>
             </div>
-            <p class="dialog-text st-note" data-i18n="write.paTouchNote"></p>
-
-            <div class="sheet-actions">
-                <button class="btn" id="paraCancelBtn"  data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="paraConfirmBtn" data-i18n-attr="data-tip:write.apply"><span class="icon" data-icon="check"></span></button>
-            </div>
+            <p class="text st-note" data-i18n="write.paTouchNote"></p>
         </div>
-    </div>
+        <footer>
+            <button class="btn" id="paraCancelBtn"  data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="paraConfirmBtn" data-i18n-attr="data-tip:write.apply"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- Cambiar estilos: Normal and Heading 1-3 of this document (write.js openStyles). -->
-    <div id="stylesBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="stylesBackdrop" class="panel">
+        <header>
             <h2 data-i18n="write.editStyles"></h2>
-
+        </header>
+        <div class="body">
             <div class="field"><label for="stStyle" data-i18n="write.stStyle"></label>
                 <select id="stStyle">
                     <option value="Normal" data-i18n="write.sc.normal"></option>
@@ -825,33 +828,34 @@
             </div>
 
             <div class="field"><label class="check switch end"><span data-i18n="write.stDefault"></span><input role="switch" type="checkbox" id="stDefault"></label></div>
-            <p class="dialog-text st-note" data-i18n="write.stNote"></p>
-
-            <div class="sheet-actions">
-                <button class="btn" id="stylesCancelBtn"  data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="stylesConfirmBtn" data-i18n-attr="data-tip:write.apply"><span class="icon" data-icon="check"></span></button>
-            </div>
+            <p class="text st-note" data-i18n="write.stNote"></p>
         </div>
-    </div>
+        <footer>
+            <button class="btn" id="stylesCancelBtn"  data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="stylesConfirmBtn" data-i18n-attr="data-tip:write.apply"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- Plantillas: every .docx in the folder you pick. -->
-    <div id="tplBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="tplBackdrop" class="panel">
+        <header>
             <h2 data-i18n="write.templates"></h2>
+        </header>
+        <div class="body">
             <!-- A row of its own: shared/ui.js moves a lone × up onto the title's
                  line. The bottom row keeps only "Change folder". -->
-            <div class="sheet-actions">
+            <div class="actions-row">
                 <button class="btn" id="tplCloseBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
             </div>
             <div id="tplCrumb" class="open-crumb"></div>
             <ul id="tplList" class="open-list"></ul>
-            <div class="sheet-actions">
-                <div class="sheet-actions-left">
-                    <button id="tplChangeBtn" class="btn text bordered" data-i18n="write.changeTemplatesDir"></button>
-                </div>
-            </div>
         </div>
-    </div>
+        <footer>
+            <div class="extra">
+                <button id="tplChangeBtn" class="btn text bordered" data-i18n="write.changeTemplatesDir"></button>
+            </div>
+        </footer>
+    </dialog>
 
     <!-- Símbolos: an anchored popup off the toolbar's Ω button. -->
     <div id="symPopup" class="popup tb-popup sym-popup" role="menu" data-i18n-attr="aria-label:write.symbols">
@@ -870,19 +874,21 @@
     <input id="imgInput" type="file" accept="image/*" style="display:none">
 
     <!-- Insertar ▸ Hipervínculo. -->
-    <div id="linkBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--pack">
+    <dialog id="linkBackdrop" class="panel">
+        <header>
             <h2 data-i18n="write.sc.link"></h2>
+        </header>
+        <div class="body">
             <div class="field">
                 <label for="linkHref" data-i18n="write.linkAddress"></label>
                 <input id="linkHref" type="url" inputmode="url" autocomplete="off" placeholder="https://">
             </div>
-            <div class="sheet-actions">
-                <button class="btn" id="linkCancelBtn"  data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="linkConfirmBtn" data-i18n-attr="data-tip:write.apply"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" id="linkCancelBtn"  data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="linkConfirmBtn" data-i18n-attr="data-tip:write.apply"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- Table-borders popup — opened by the toolbar's "Bordes de tabla" button,
          anchored just under it. Pick a preset plus weight / line style / colour,

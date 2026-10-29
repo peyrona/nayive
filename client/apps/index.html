@@ -55,6 +55,7 @@
     <link rel="stylesheet" href="shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="shared/theme.css">
     <link rel="stylesheet" href="shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -62,6 +63,7 @@
     <script src="shared/ayni/ayni-base.js" defer></script>
     <script src="shared/ayni/ayni-buttons.js" defer></script>
     <script src="shared/ayni/ayni-toasts.js" defer></script>
+    <script src="shared/ayni/ayni-dialogs.js" defer></script>
     <script src="shared/ui.js" defer></script>
     <script src="shared/store.js" defer></script>
     <script>
@@ -163,7 +165,7 @@
             padding: 28px 16px;
         }
 
-        .panel
+        .apps-panel
         {
             position: relative;
             display: flex;
@@ -404,7 +406,7 @@
         @media (max-width: 640px)
         {
             :root:not(.in-desktop) .launcher { padding: 16px 10px; }
-            :root:not(.in-desktop) .panel    { width: 100%; max-width: 420px; padding: 22px 12px 26px; gap: 22px; }
+            :root:not(.in-desktop) .apps-panel { width: 100%; max-width: 420px; padding: 22px 12px 26px; gap: 22px; }
             :root:not(.in-desktop) .grid     { width: 100%; gap: 8px 4px; justify-items: center; }
             :root:not(.in-desktop) .tile     { width: 100%; max-width: 110px; padding: 12px 4px 10px; }
             :root:not(.in-desktop) .tile.has-popup { --pad-top: 12px; }
@@ -422,10 +424,10 @@
         .scm-check-row > .switch { margin-left: auto; }
 
         /* ---- The three dialogs (Esquemas de color, Mi cuenta, Buscar mi móvil) ----
-           The shared shell: app.css .sheet-backdrop / .sheet, opened and closed with
-           NayiveUI.open / close, so shared/ui.js gives them its Escape, focus, drag
-           and "a dialog is open" guards. Esquemas sits AFTER Mi cuenta in the page:
-           opened from it, it is the top one (drawn over it, closed first by Escape). */
+           Ayni's dialog.panel, opened with showModal() and closed with close(), so
+           Ayni gives them its Escape, focus and moving, and "a dialog is open"
+           guards see them. Esquemas, opened from Mi cuenta, is the innermost one
+           (drawn over it, closed first by Escape). */
         .scm-h
         {
             font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
@@ -475,7 +477,6 @@
             font-family: ui-monospace, Menlo, Consolas, monospace;
         }
         .scm-tok input[type="text"].bad { border-color: var(--danger); color: var(--danger); }
-        /* Action row + buttons: shared .sheet-actions / .btn (../shared/theme.css). */
         .scm-msg { font-size: 0.8rem; color: var(--danger); margin: 10px 0 0; }
         .scm-msg[hidden] { display: none; }
 
@@ -490,15 +491,15 @@
            it left too little for its own label ("Fuseau horaire" wrapped). Cap it
            at a share of the row instead, so the label always gets one line. */
         #tzSel { max-width: min( 190px, 55% ); }
-        /* My account: narrower than the shared 460px sheet (his call, 2026-10-02). */
-        #pwBackdrop .sheet, #pwChangeBackdrop .sheet { max-width: 380px; }
+        /* My account: narrower than the shared 460px dialog (his call, 2026-10-02). */
+        #pwBackdrop, #pwChangeBackdrop { max-width: min(380px, calc(100vw - 32px)); }
     </style>
 </head>
 
 <body>
     <div class="launcher">
 
-      <div class="panel">
+      <div class="apps-panel">
 
         <div class="grid">
             <!-- 4 rows of 3 (2026-10-28): Planner+Chat+eMail / Office+Records+Tools / Photos+Music+Movies /
@@ -664,23 +665,21 @@
     </div>
 
     <!-- "Mi cuenta" dialog - opened by the account button in the settings row. -->
-    <div class="sheet-backdrop" id="pwBackdrop">
-        <div class="sheet" role="dialog" aria-modal="true" data-i18n-attr="aria-label:ui.account">
-            <!-- The title line: the title, colour schemes, then the × (shared/ui.js
-                 moves the lone × of the bottom row here, after the palette). -->
-            <div class="sheet-header">
-                <h2 data-i18n="ui.account"></h2>
-                <button class="btn sheet-tool" id="schemesBtn" type="button" data-i18n-attr="data-tip:ui.colorSchemes, aria-label:ui.colorSchemes">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="13.5" cy="6.5" r="1.1" fill="currentColor" stroke="none"></circle>
-                        <circle cx="17" cy="10.5" r="1.1" fill="currentColor" stroke="none"></circle>
-                        <circle cx="8.5" cy="7.5" r="1.1" fill="currentColor" stroke="none"></circle>
-                        <circle cx="6.5" cy="12" r="1.1" fill="currentColor" stroke="none"></circle>
-                        <path d="M12 2.5C6.75 2.5 2.5 6.75 2.5 12S6.75 21.5 12 21.5c1 0 1.7-.8 1.7-1.75 0-.45-.18-.85-.45-1.15-.28-.3-.45-.68-.45-1.1a1.7 1.7 0 0 1 1.7-1.7h2C19.5 14.6 21.5 12.6 21.5 10 21.5 5.9 17.3 2.5 12 2.5Z"></path>
-                    </svg>
-                </button>
-            </div>
-
+    <dialog class="panel" id="pwBackdrop" data-i18n-attr="aria-label:ui.account">
+        <header>
+            <h2 data-i18n="ui.account"></h2>
+            <button class="btn" id="schemesBtn" type="button" data-i18n-attr="data-tip:ui.colorSchemes, aria-label:ui.colorSchemes">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="13.5" cy="6.5" r="1.1" fill="currentColor" stroke="none"></circle>
+                    <circle cx="17" cy="10.5" r="1.1" fill="currentColor" stroke="none"></circle>
+                    <circle cx="8.5" cy="7.5" r="1.1" fill="currentColor" stroke="none"></circle>
+                    <circle cx="6.5" cy="12" r="1.1" fill="currentColor" stroke="none"></circle>
+                    <path d="M12 2.5C6.75 2.5 2.5 6.75 2.5 12S6.75 21.5 12 21.5c1 0 1.7-.8 1.7-1.75 0-.45-.18-.85-.45-1.15-.28-.3-.45-.68-.45-1.1a1.7 1.7 0 0 1 1.7-1.7h2C19.5 14.6 21.5 12.6 21.5 10 21.5 5.9 17.3 2.5 12 2.5Z"></path>
+                </svg>
+            </button>
+            <button class="btn" id="acctClose" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
             <!-- Close-only, the GNOME way (docs/audit/dialogs.md): every row saves
                  itself on change, so the dialog has just its ×. The password,
                  the one thing that needs a ✓, has its own small dialog below. -->
@@ -750,19 +749,16 @@
                 <p class="scm-h" data-i18n="dev.title"></p>
                 <div class="scm-list" id="devList"></div>
             </div>
-
-            <div class="sheet-actions">
-                <button class="btn" id="acctClose" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+    </dialog>
 
     <!-- Change password - opened from "My account", or on its own for a
          brand-new user with a blank password (no × then, no current field). -->
-    <div class="sheet-backdrop" id="pwChangeBackdrop">
-        <div class="sheet" role="dialog" aria-modal="true" data-i18n-attr="aria-label:acct.changePw">
+    <dialog class="panel" id="pwChangeBackdrop" data-i18n-attr="aria-label:acct.changePw">
+        <header>
             <h2 id="pwChangeTitle" data-i18n="acct.changePw"></h2>
-
+        </header>
+        <div class="body">
             <div class="pw-wrap">
                 <input class="scm-input" id="pwCurrent" type="password"
                        autocomplete="current-password" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:acct.currentPassword">
@@ -775,19 +771,20 @@
             </div>
 
             <p class="scm-msg" id="pwMsg" hidden></p>
-
-            <div class="sheet-actions">
-                <button class="btn" id="pwCancel" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="pwSave"   type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" id="pwCancel" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="pwSave"   type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- "Esquemas de color" dialog - opened by the palette button in the settings row. -->
-    <div class="sheet-backdrop" id="scmBackdrop">
-        <div class="sheet" role="dialog" aria-modal="true" data-i18n-attr="aria-label:ui.colorSchemes">
+    <dialog class="panel" id="scmBackdrop" data-i18n-attr="aria-label:ui.colorSchemes">
+        <header>
             <h2 data-i18n="ui.colorSchemes"></h2>
-
+            <button class="btn" id="scmCloseBtn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
             <p class="scm-h" data-i18n="scm.saved"></p>
             <div class="scm-list" id="scmList"></div>
 
@@ -807,8 +804,8 @@
                 <label class="scm-tok"><input type="color" data-k="--accent" aria-label="--accent"><code>--accent</code><input type="text" data-k="--accent" maxlength="7" spellcheck="false" aria-label="--accent hex"></label>
             </div>
             <p class="scm-msg" id="scmAccentMsg" hidden></p>
-            <div class="sheet-actions">
-                <button id="scmDelete"  class="btn danger sheet-actions-left" type="button" data-i18n-attr="data-tip:scm.deleteThis"><span class="icon" data-icon="trash"></span></button>
+            <div class="actions-row">
+                <div class="extra"><button id="scmDelete"  class="btn danger" type="button" data-i18n-attr="data-tip:scm.deleteThis"><span class="icon" data-icon="trash"></span></button></div>
                 <button class="btn" id="scmSaveNew" type="button" data-i18n-attr="data-tip:scm.saveAsNew"><span class="icon" data-icon="save-as"></span></button>
                 <button class="btn primary" id="scmSave"    type="button" data-i18n-attr="data-tip:scm.saveChanges"><span class="icon" data-icon="check"></span></button>
             </div>
@@ -819,19 +816,18 @@
                 <label class="scm-assign"><span data-i18n="scm.dark"></span><select id="scmActiveDark"></select></label>
                 <label class="scm-assign"><span data-i18n="scm.light"></span><select id="scmActiveLight"></select></label>
             </div>
-
-            <div class="sheet-actions">
-                <button class="btn" id="scmCloseBtn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+    </dialog>
 
     <!-- "Buscar mi móvil" (server/go/devices.go): ring a phone that has the
          Android app, see where the owner was last seen (from every source), and
          ask the other devices "¿Dónde estás?". Filled by the script below. -->
-    <div class="sheet-backdrop" id="findBackdrop">
-        <div class="sheet" role="dialog" aria-modal="true" data-i18n-attr="aria-label:find.title">
+    <dialog class="panel" id="findBackdrop" data-i18n-attr="aria-label:find.title">
+        <header>
             <h2 data-i18n="find.title"></h2>
+            <button class="btn" id="findClose" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
             <div id="findPhonesWrap" hidden>
                 <p class="scm-h" data-i18n="find.phones"></p>
                 <div class="scm-list" id="findPhones"></div>
@@ -843,11 +839,8 @@
                 <div class="scm-list" id="findAsk"></div>
                 <p class="find-note" data-i18n="find.iphone"></p>
             </div>
-            <div class="sheet-actions">
-                <button class="btn" id="findClose" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+    </dialog>
 
     <script>
         // MOUSE CHIP - "Open the desktop" on Auto (see the <head>): a mouse or
@@ -1019,7 +1012,7 @@
             // Runs in the capture phase, before the button's own handler fires: the theme
             // toggle rewrites its own <svg> on click, which would orphan e.target and defeat a
             // later bubble-phase check. The gear is skipped so it keeps toggling the row.
-            var panel = document.querySelector( '.panel' );
+            var panel = document.querySelector( '.apps-panel' );
             panel.addEventListener( 'click', function ( e )
             {
                 var btn = e.target.closest( 'a, button' );
@@ -1028,7 +1021,7 @@
 
             document.addEventListener( 'keydown', function ( e )
             {
-                if( e.key === 'Escape' && tools.classList.contains( 'open' ) && ! scmBack.classList.contains( 'open' ) ) setOpen( false );
+                if( e.key === 'Escape' && tools.classList.contains( 'open' ) && ! scmBack.open ) setOpen( false );
             } );
 
             /* ---- "Esquemas de color" ---------------------------------- */
@@ -1253,20 +1246,19 @@
                 editingId = ( root.getAttribute( 'data-theme' ) === 'light' ) ? data.activeLight : data.activeDark;
                 loadDraft();
                 clearMsg();
-                NayiveUI.open( 'scmBackdrop' );
+                document.getElementById( 'scmBackdrop' ).showModal();
                 render();
             }
-            function closeDialog() { NayiveUI.close( 'scmBackdrop' ); }
+            function closeDialog() { document.getElementById( 'scmBackdrop' ).close(); }
 
-            // However it closes - its x, or Escape through shared/ui.js (which
-            // closes the top dialog without asking) - the live preview goes.
-            new MutationObserver( function ()
+            // However it closes - its x, or Escape (Ayni presses the x) - the
+            // live preview goes.
+            scmBack.addEventListener( 'close', function ()
             {
-                if( scmBack.classList.contains( 'open' ) ) return;
                 NKEYS.forEach( function ( k ){ root.style.removeProperty( k ); } );
                 root.style.removeProperty( '--on-accent' );
                 if( window.Ayni ) Ayni.setTheme( Ayni.theme.mode() );   // re-applies the stored schemes
-            } ).observe( scmBack, { attributes: true, attributeFilter: [ 'class' ] } );
+            } );
 
             openBtn.addEventListener( 'click', openDialog );
             closeBtn.addEventListener( 'click', closeDialog );
@@ -1358,7 +1350,7 @@
                     if( wasDark )  data.activeDark  = s.id;
                     if( wasLight ) data.activeLight = s.id;
                     persist();
-                    if( ! scmBack.classList.contains( 'open' ) ) { if( window.Ayni ) Ayni.setTheme( Ayni.theme.mode() ); return; }   // re-applies the stored schemes
+                    if( ! scmBack.open ) { if( window.Ayni ) Ayni.setTheme( Ayni.theme.mode() ); return; }   // re-applies the stored schemes
                     editingId = s.id;
                     loadDraft(); clearMsg(); render();
                 } } );
@@ -1425,7 +1417,7 @@
                 langSel.value = Ayni.i18n.saved() || '';
             }
 
-            // The SERVER first (NayiveUI.autoSave: the box is off while it
+            // The SERVER first (Ayni.autoSave: the box is off while it
             // saves, and back on the old value with langMsg on a failure).
             // Switch this device on a save that failed and the next boot reads
             // the old value back from /api/whoami and silently undoes the
@@ -1464,8 +1456,8 @@
                 // Language and time zone save themselves (shared/ui.js is
                 // deferred: here it is there).
                 if( langSel && window.Ayni )
-                    NayiveUI.autoSave( langSel, saveLang, { msg: langMsg, fail: 'acct.langFailed', done: langSaved } );
-                tzCtl = NayiveUI.autoSave( tzSel, saveTz, { msg: tzMsg, fail: 'acct.tzFailed', done: tzDone } );
+                    Ayni.autoSave( langSel, saveLang, { msg: langMsg, fail: Ayni.t( 'acct.langFailed' ), done: langSaved } );
+                tzCtl = Ayni.autoSave( tzSel, saveTz, { msg: tzMsg, fail: Ayni.t( 'acct.tzFailed' ), done: tzDone } );
             } );
 
             // One row's message line under its setting: hidden when empty,
@@ -1484,7 +1476,7 @@
             // zone follows the person to every device - and is picked from a
             // list, never typed, so an unknown zone can't be saved.
             var tzSaved = null;            // last value confirmed by the server
-            var tzCtl   = null;            // its NayiveUI.autoSave
+            var tzCtl   = null;            // its Ayni.autoSave
 
             // Every zone the browser knows (NayiveUI.timeZones; ancient browsers
             // get a short list) plus, below, whatever is already saved, which is
@@ -1522,7 +1514,7 @@
                 if( tzCtl ) tzCtl.saved( tzSel.value );
             }
 
-            // NayiveUI.autoSave runs it on change; a failure puts the box back
+            // Ayni.autoSave runs it on change; a failure puts the box back
             // and says acct.tzFailed in tzMsg.
             async function saveTz( z )
             {
@@ -1918,7 +1910,7 @@
                 loadPush();
                 if( window.NayiveDevices ) NayiveDevices.loadAccount();   // the phones with the app
 
-                NayiveUI.open( 'pwBackdrop' );
+                document.getElementById( 'pwBackdrop' ).showModal();
 
                 // Reopened after a language change: the language box, where the
                 // user was. Right here, in the same turn as open(): shared/ui.js
@@ -1944,7 +1936,7 @@
                 curWrap.hidden = mandatory;
                 cancel.hidden  = mandatory;
 
-                NayiveUI.open( 'pwChangeBackdrop' );
+                document.getElementById( 'pwChangeBackdrop' ).showModal();
                 focusOnce( mandatory ? newEl : curEl, pwBack );
             }
 
@@ -1957,7 +1949,7 @@
                 if( document.activeElement !== el && window.Ayni )
                     Ayni.i18n.ready.then( function ()
                     {
-                        if( sheetBack.classList.contains( 'open' ) && ! sheetBack.contains( document.activeElement ) )
+                        if( sheetBack.open && ! sheetBack.contains( document.activeElement ) )
                             el.focus();
                     } );
             }
@@ -1965,15 +1957,15 @@
             function close()
             {
                 if( mandatory ) return;          // can't leave without a password
-                NayiveUI.close( 'pwChangeBackdrop' );
+                document.getElementById( 'pwChangeBackdrop' ).close();
             }
 
-            // Escape closes the top dialog (shared/ui.js) - never Change password
-            // while it is mandatory. Capture phase: ahead of ui.js's own listener.
+            // Escape closes the top dialog (Ayni) - never Change password while
+            // it is mandatory. Capture phase: ahead of Ayni's own listener.
             document.addEventListener( 'keydown', function ( e )
             {
                 if( e.key !== 'Escape' || ! mandatory ) return;
-                var open = document.querySelectorAll( '.sheet-backdrop.open' );
+                var open = document.querySelectorAll( 'dialog.panel[open]' );
                 if( open.length && open[ open.length - 1 ] === pwBack ) e.preventDefault();
             }, true );
 
@@ -2007,15 +1999,9 @@
                 catch ( e ) { return false; }          // no storage -> would ask on every launch
             }
 
-            // Any dialog on screen at all - ours (hidden-driven) or one NayiveUI
-            // built (the welcome card, the install sheet). getClientRects() is
-            // empty exactly when the thing is display:none, which covers both.
-            function sheetUp()
-            {
-                var all = document.querySelectorAll( '.sheet-backdrop' );
-                for( var i = 0; i < all.length; i++ ) if( all[ i ].getClientRects().length ) return true;
-                return false;
-            }
+            // Any dialog on screen at all - ours or one NayiveUI built (the
+            // welcome card, the install sheet).
+            function sheetUp() { return !! document.querySelector( 'dialog[open]' ); }
 
             var nudgeTries = 0;
             function nudgePush()
@@ -2089,7 +2075,7 @@
                     {
                         clearJustIn();
                         if( pushState.subscribed ) return;
-                        var go = await NayiveUI.confirm( {
+                        var go = await Ayni.confirm( {
                             title:   Ayni.t( 'acct.pushOffTitle' ),
                             body:    Ayni.t( 'acct.pushOffBody' ),
                             confirm: Ayni.t( 'ui.account' ),
@@ -2345,7 +2331,7 @@
                     var user = me && me.user;
                     if( ! user ) return false;                 // nobody signed in: keep it for later
                     if( pending.ok === user ) return true;
-                    return NayiveUI.confirm( {
+                    return Ayni.confirm( {
                         title: pending.n ? TF( 'dev.addAsk', { name: pending.n } ) : T( 'dev.addAskNoName' ),
                         body:  T( 'dev.addAskBody' ) } ).then( function ( yes )
                     {
@@ -2556,16 +2542,16 @@
                     others = ( state && state.push ) || 0;
                     if( ep ) others--;                      // this browser is not "another device"
                     render();
-                    NayiveUI.open( 'findBackdrop' );
+                    document.getElementById( 'findBackdrop' ).showModal();
                     poll();
                 } );
             }
-            function isOpen()    { return back.classList.contains( 'open' ); }
-            function closeFind() { NayiveUI.close( 'findBackdrop' ); clearTimeout( pollT ); }
+            function isOpen()    { return back.open; }
+            function closeFind() { document.getElementById( 'findBackdrop' ).close(); clearTimeout( pollT ); }
 
             findBtn.addEventListener( 'click', openFind );
 
-            // Escape reaches it through shared/ui.js, which clicks this x.
+            // Escape reaches it through Ayni, which clicks this x.
             document.getElementById( 'findClose' ).addEventListener( 'click', closeFind );
 
             back.addEventListener( 'click', function ( e )

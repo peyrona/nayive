@@ -590,10 +590,10 @@ button.who { cursor: pointer; }
 
 /* Settings: one width for both tabs, so it does not jump when they switch;
    no pack - its long hints would stretch it to the full 460px */
-.sheet.chat-settings    { width: min(340px, calc(100vw - 32px)); }
+dialog.chat-settings    { width: min(340px, calc(100vw - 32px)); }
 
 /* "Schedule message": one date field and a short hint - no need for the full 460px */
-.sheet.later-sheet      { max-width: 280px; }
+dialog.later-sheet      { max-width: min(280px, calc(100vw - 32px)); }
 
 /* the clock of my scheduled texts, with how many; their list */
 .cbox .later-btn        { position: relative; color: var(--accent); }
@@ -760,11 +760,12 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
 
 /* ---- full screen: a photo, a map, picking a place ------------------------- */
 .full           { z-index: 160; }
-/* The owner's image editor (Editar foto) opens over the viewer; a sheet asked
-   from either (the Photos folder question, "close without saving?") must sit
-   above them, not behind. */
+/* The owner's image editor (Editar foto) opens over the viewer; a dialog asked
+   from either (the Photos folder question, "close without saving?") is in the
+   top layer, above them. A full screen opened FROM a dialog (the photo sheet's
+   crop) lives in that dialog as a popover (media.js onTopOfDialog). */
 .photo-editor   { z-index: 170; }
-.full ~ .sheet-backdrop, .photo-editor ~ .sheet-backdrop { z-index: 180; }
+.editor-backdrop[popover] { width: auto; height: auto; margin: 0; padding: 0; border: 0; color: inherit; overflow: visible; }
 .full .editor-canvas { display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .full .editor-canvas img { max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; }
 /* a computer's own camera (C.openCamera): the live view, the shutter under it */

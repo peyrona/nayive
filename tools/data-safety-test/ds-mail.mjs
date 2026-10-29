@@ -126,9 +126,9 @@ const phoneSave = async ( row, text, keep = [] ) =>
 };
 const until = async ( fn, ms = 30000 ) => { const end = Date.now() + ms; while( Date.now() < end ) { if( await fn() ) return true; await sleep( 150 ); } return false; };
 // the question a copy with no draft on the server brings (restoreLocal)
-const ASKED = "document.querySelector( '.sheet-backdrop.open h2' )?.textContent === 'Un correo sin guardar'";
+const ASKED = "document.querySelector( 'dialog.panel[open] h2' )?.textContent === 'Un correo sin guardar'";
 // its buttons, in shared/ui.js confirmDialog's order: Más tarde, Descartar, Recuperar como borrador
-const answer = which => c.evaluate( `( () => { const b = [ ...document.querySelectorAll( '.sheet-backdrop.open .sheet-actions button' ) ];
+const answer = which => c.evaluate( `( () => { const b = [ ...document.querySelectorAll( 'dialog.panel[open] footer button' ) ];
     b[ ${ JSON.stringify( { later: 0, drop: 1, keep: 2 } ) }[ ${ JSON.stringify( which ) } ] ]?.click(); return b.length; } )()` );
 const toastNow = () => c.evaluate( "( window.__toasts || [] ).join( ' | ' ) + ' | ' + ( ( document.getElementById( 'ayni-toasts' ) || {} ).textContent || '' )" );
 const closeWriter = async () => { if( await writing() ) { await c.evaluate( "document.getElementById( 'backBtn' ).click(); true" ); await c.until( "document.getElementById( 'composeView' ).hidden" ); } };
@@ -196,10 +196,10 @@ ok( await c.until( "( window.__toasts || [] ).some( t => /No se guardó en Borra
     "a save that fails is said in a toast", await toasts() );
 ok( await settles( COPIES + ".then( l => l.includes( 'Larga' ) )", 20000 ), "the writer is kept on this device", await c.evaluate( COPIES ) );
 await c.evaluate( "window.__asked = typeof window.nayiveBeforeClose === 'function' ? window.nayiveBeforeClose() : Promise.resolve( 'none' ); true" );
-ok( await c.until( "document.querySelector( '.sheet-backdrop.open h2' )?.textContent === 'Sin guardar en Borradores'" ),
+ok( await c.until( "document.querySelector( 'dialog.panel[open] h2' )?.textContent === 'Sin guardar en Borradores'" ),
     "the desktop's × (window.nayiveBeforeClose) asks first", await c.evaluate( "String( typeof window.nayiveBeforeClose )" ) );
 // its first button is Cancel (shared/ui.js confirmDialog)
-await c.evaluate( "document.querySelector( '.sheet-backdrop.open .sheet-actions button' )?.click(); true" );
+await c.evaluate( "document.querySelector( 'dialog.panel[open] footer button' )?.click(); true" );
 ok( await c.evaluate( "window.__asked" ) === false && await writing(), "…'Cancel' keeps the window and the writer" );
 await away();
 ok( await openMail() && await c.until( ASKED ), "closed and opened again: it asks what to do with the copy (no draft of it on the server)" );
@@ -216,7 +216,7 @@ ok( ( await drafts() ).some( d => d.subject === "Larga" && d.text.includes( "Vei
 ok( await settles( COPIES + ".then( l => ! l.length )", 20000 ), "the copy here is gone", await c.evaluate( COPIES ) );
 await c.evaluate( "window.__asked = window.nayiveBeforeClose ? window.nayiveBeforeClose() : Promise.resolve( 'none' ); true" );
 ok( await c.until( "window.__asked.then( v => window.__answer = v ) && window.__answer === true" ) &&
-    ! await c.evaluate( "!! document.querySelector( '.sheet-backdrop.open' )" ), "all in Drafts: the × closes with no question" );
+    ! await c.evaluate( "!! document.querySelector( 'dialog.panel[open]' )" ), "all in Drafts: the × closes with no question" );
 await c.evaluate( "document.getElementById( 'backBtn' ).click(); true" );
 ok( await c.until( "document.getElementById( 'composeView' ).hidden" ), "← leaves the writer" );
 
@@ -615,14 +615,14 @@ section( "OL5 (bugs-2) - A SIGNATURE THAT FAILED TO SAVE GOES AGAIN WHEN THE DIA
 await c.open( PAGE );                                                     // on the Trash, empty now
 ok( await c.until( "NayiveMail.S.acct && ! NayiveMail.S.loading" ), "eMail again" );
 await c.evaluate( "NayiveMail.openSettings( 'general' ); true" );
-ok( await c.until( "document.getElementById( 'setSheet' ).classList.contains( 'open' )" ), "Settings open" );
+ok( await c.until( "document.getElementById( 'setSheet' ).open" ), "Settings open" );
 await c.evaluate( `window.__fetch0 = window.fetch; window.fetch = function( u, o ) {
     if( o && o.method === 'PUT' && String( u ).includes( '/settings' ) ) return Promise.reject( new TypeError( 'offline' ) );
     return window.__fetch0.call( window, u, o ); }; window.__toasts = []; true` );
 await field( "signature", "Ana, desde Nayive" );
 ok( await c.until( "( window.__toasts || [] ).length > 0", 10000 ), "offline: the save fails, and says so", await toasts() );
 await c.evaluate( "window.fetch = window.__fetch0; true" );               // back online
-await c.evaluate( "NayiveUI.close( 'setSheet' ); true" );
+await c.evaluate( "document.getElementById( 'setSheet' ).close(); true" );
 ok( await until( async () => JSON.parse( ( await phone.call( "GET", "/api/mail/settings" ) ).text ).signature === "Ana, desde Nayive" ),
     "closing the dialog saves it", ( await phone.call( "GET", "/api/mail/settings" ) ).text );
 

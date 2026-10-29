@@ -14,16 +14,13 @@
  * not call NayiveUI while it is being parsed - wrap the call in a function.
  *
  * Deliberately small - just the bits that were byte-identical across apps:
- *   - backdrop / sheet / popup open-close (the `.open` class dance)
  *   - the viewer's IANA time zone
  *   - (the texts are Ayni's: Ayni.t / Ayni.tf / Ayni.i18n, shared/ayni/)
  *   - dialog action buttons: the one Nayive style (see Calendar -> "Ir a mes").
  *   - the info dot: a circled "i" by a label that opens a small popup
  *     (NayiveUI.applyInfoDots; paired CSS .info-dot / .info-popup in app.css).
- *   - movable dialogs: drag any open .sheet from a free spot (see MOVABLE
- *     DIALOGS below). Wired once for the whole page, no per-dialog code.
- *   - dialogs open with the caret already in their first field (see DIALOG
- *     FIRST FIELD below). Also wired once, nothing to add to a new dialog.
+ *   - (dialogs are Ayni's dialog.panel, shared/ayni/ayni-dialogs.js: opening,
+ *     Esc, the first field, moving, Ayni.confirm / alert / ask / autoSave)
  *   - embedded mode: when the page runs inside another Nayive page's <iframe>
  *     (Planner frames calendar + tasks + habits) the <html> gets .is-embedded, app.css
  *     hides the app's own title / sync dot (the host shows them once), and
@@ -38,25 +35,22 @@
  * ---------------------------------------------------------------------------
  * DIALOG ACTION BUTTONS
  *
- * The Nayive convention for a dialog's bottom action row is a right-aligned line
- * of Ayni's round, icon-only buttons (shared/ayni/ayni-buttons.css): a plain
- * "close" (×, marked data-close) and the default ✓ (.btn.primary), plus
- * optional .btn.danger (trash) and plain help buttons. Class and icon are
- * written in the markup:
+ * A dialog is Ayni's <dialog class="panel"> (header, .body, footer). Its
+ * bottom row (footer) is a right-aligned line of Ayni's round, icon-only
+ * buttons (shared/ayni/ayni-buttons.css): a plain "close" (×, marked
+ * data-close) and the default ✓ (.btn.primary), plus optional .btn.danger
+ * (trash) and plain help buttons; footer > .extra holds the left-hand ones.
+ * Class and icon are written in the markup:
  *
- *     <div class="sheet-actions">
+ *     <footer>
  *       <button class="btn" id="fooCancel" data-close data-tip="Cancelar"><span class="icon" data-icon="close"></span></button>
  *       <button class="btn primary" id="fooConfirm" data-tip="Guardar"><span class="icon" data-icon="check"></span></button>
- *     </div>
+ *     </footer>
  *
- * Apps that build dialogs on the fly call NayiveUI.applySheetButtons( sheetEl )
- * after: Ayni wires the new buttons (the aria-label from the tooltip) and a
- * lone × moves to the corner (below).
- *
- * UIX rule: when a dialog's whole action row is just a "close" button, that
- * button is moved to the sheet's top-right corner, on the title's line (class
- * `.sheet-close`, styled in shared/theme.css) and the empty row is dropped - a bottom row is only for
- * dialogs that also have a primary / danger action.
+ * A dialog whose only action is "close" has no footer: its × is written in the
+ * header, after the title. Dialogs built on the fly use Ayni.dialog and
+ * Ayni.dialogButton, then NayiveUI.applySheetButtons( dialogEl ) for the
+ * i18n names of buttons whose tooltip is a dictionary key.
  *
  * A SETTINGS dialog has no ✓ at all: every change is kept (on change, or when
  * it closes) and its × just closes - see CLOSE-ONLY DIALOGS below.
@@ -159,251 +153,6 @@
     {
         try { if( EMBEDDED && window.top.location.pathname ) return window.top; } catch ( e ) {}
         return window;
-    }
-
-    // Toggle an element's ".open" class (backdrops, sheets, popups). When a sheet
-    // is opened, size it to its content if it (or the sheet inside it) asked for
-    // it with .sheet--pack (see packSheet).
-    function setOpen( id, open )
-    {
-        var el = byId( id );
-        if( ! el ) return;
-
-        el.classList.toggle( "open", !! open );
-
-        if( open )
-        {
-            var s = el.classList.contains( "sheet" ) ? el : el.querySelector( ".sheet" );
-            if( s && s.classList.contains( "sheet--pack" ) ) packSheet( s );
-        }
-    }
-
-    function open( id )  { setOpen( id, true ); }
-    function close( id ) { setOpen( id, false ); }
-
-    // Java-Swing-style pack(): shrink a dialog to the width its content actually
-    // needs instead of always sitting at the CSS max-width. Height already
-    // self-fits (.sheet has max-height + internal scroll), so this only touches
-    // width. The natural width is clamped to [min, max] and to what fits on
-    // screen. Safe to call on every open - it recomputes from scratch.
-    //
-    //   <div class="sheet sheet--pack"> ...      -> packed automatically on open
-    //   packSheet( sheetEl, { min: 320, max: 440 } )       -> manual, custom bounds
-    //
-    // `target` may be the .sheet, the .sheet-backdrop around it, or either's id.
-    function packSheet( target, opts )
-    {
-        var el = ( typeof target === "string" ) ? byId( target ) : target;
-        if( ! el ) return;
-
-        var sheet = el.classList.contains( "sheet" ) ? el : el.querySelector( ".sheet" );
-        if( ! sheet ) return;
-
-        opts = opts || {};
-        var min = opts.min || 300;
-        var max = opts.max || 460;
-
-        // Measure at natural width: drop every width constraint, read, restore.
-        var saved = { w: sheet.style.width, min: sheet.style.minWidth, max: sheet.style.maxWidth };
-        sheet.style.width    = "max-content";
-        sheet.style.minWidth = "0";
-        sheet.style.maxWidth = "none";
-
-        var natural = Math.ceil( sheet.getBoundingClientRect().width );
-
-        sheet.style.width    = saved.w;
-        sheet.style.minWidth = saved.min;
-        sheet.style.maxWidth = saved.max;
-
-        var host  = sheet.parentElement;
-        var avail = ( ( host && host.clientWidth ) || window.innerWidth ) - 32;   // backdrop padding
-
-        var w = Math.min( max, Math.max( min, natural ) );
-        if( w > avail ) w = avail;
-
-        sheet.style.width    = w + "px";
-        sheet.style.minWidth = w + "px";   // beat the .sheet--pack fallback min-width
-        sheet.style.maxWidth = w + "px";
-    }
-
-    /* -------------------------------------------------------------------------
-     * MOVABLE DIALOGS
-     *
-     * Every open .sheet can be pushed around the screen: press on any free spot
-     * of the dialog and drag. There is no grip to aim at - the dialog itself is
-     * the handle - so nothing is drawn for this; the only hint is the "held"
-     * cursor once a drag is under way.
-     *
-     * How: the backdrop centres the sheet with flexbox, so rather than fight it
-     * with left/top the sheet gets a `transform: translate(dx, dy)`. The centred
-     * spot stays the origin, the packed width (packSheet) and the sheet's own
-     * scrolling are untouched, and going back to the middle is just dropping the
-     * transform.
-     *
-     * The rules that keep it out of the way:
-     *   - phones (<= 640px) never move a dialog: it is nearly full width there
-     *     and a stray finger must not drag it off.
-     *   - a press on a control (button, field, link, map...) is left alone.
-     *   - nothing moves until the pointer travelled DRAG_SLOP px, so a plain
-     *     click still reaches whatever is under it, and the click that ends a
-     *     real drag is swallowed.
-     *   - the dialog is always kept inside the window, also when it is resized.
-     *   - the offset is dropped when the dialog closes: dialogs always open
-     *     centred.
-     *
-     * On a touch screen the browser may claim the gesture for scrolling instead
-     * (we get a pointercancel); the drag then simply stops. Nothing breaks.
-     * ---------------------------------------------------------------------- */
-
-    var DRAG_SLOP   = 4;      // px of travel before a press counts as a drag
-    var DRAG_MARGIN = 8;      // px of window edge the dialog may not cross
-    var DRAG_PHONE  = 640;    // at or below this width dialogs do not move
-
-    // A press on any of these is a press on a control, not on the dialog.
-    var DRAG_SKIP = "button, a, input, select, textarea, label, summary," +
-                    "[contenteditable], [role=button], canvas, video, audio," +
-                    "iframe, .info-dot, .leaflet-container";
-
-    var drag      = null;     // the drag in progress, or null
-    var dragEnded = false;    // a drag just finished -> swallow its click
-
-    // Park the sheet at (x, y) away from its centred spot. x = y = 0 removes the
-    // transform, which is also how a closing dialog forgets it was ever moved.
-    function moveSheet( sheet, x, y )
-    {
-        sheet.nayiveDragX = x;
-        sheet.nayiveDragY = y;
-        sheet.style.transform = ( x || y ) ? "translate(" + x + "px," + y + "px)" : "";
-    }
-
-    // Keep the dialog inside the window: its edge has to stay between MARGIN and
-    // (window - size - MARGIN). `base` is where the edge sits with no offset. A
-    // dialog bigger than the window swaps the two bounds over, and the clamp
-    // then lets it be pushed either way to bring the hidden edge into view.
-    function clampDrag( v, base, size, win )
-    {
-        var a  = DRAG_MARGIN - base;
-        var b  = win - DRAG_MARGIN - size - base;
-        var lo = Math.min( a, b );
-        var hi = Math.max( a, b );
-        return Math.min( hi, Math.max( lo, v ) );
-    }
-
-    function onDragDown( e )
-    {
-        dragEnded = false;                                    // a new press, a fresh click
-        if( drag || e.button ) return;                         // main button only, one at a time
-        if( window.innerWidth <= DRAG_PHONE ) return;
-        if( ! e.target || ! e.target.closest ) return;
-        if( e.target.closest( DRAG_SKIP ) ) return;
-
-        var sheet = e.target.closest( ".sheet" );
-        if( ! sheet ) return;
-
-        var x = sheet.nayiveDragX || 0;
-        var y = sheet.nayiveDragY || 0;
-        var r = sheet.getBoundingClientRect();
-
-        drag = { sheet: sheet, id: e.pointerId, moving: false,
-                 px: e.clientX, py: e.clientY, x: x, y: y,
-                 baseL: r.left - x, baseT: r.top - y,
-                 w: r.width, h: r.height };
-
-        document.addEventListener( "pointermove",   onDragMove, true );
-        document.addEventListener( "pointerup",     onDragUp,   true );
-        document.addEventListener( "pointercancel", onDragUp,   true );
-    }
-
-    function onDragMove( e )
-    {
-        if( ! drag || e.pointerId !== drag.id ) return;
-
-        var dx = e.clientX - drag.px;
-        var dy = e.clientY - drag.py;
-
-        if( ! drag.moving )
-        {
-            if( Math.abs( dx ) < DRAG_SLOP && Math.abs( dy ) < DRAG_SLOP ) return;
-            drag.moving = true;
-            drag.sheet.classList.add( "is-dragging" );
-            closeInfo();                       // the popup is placed against the page, it cannot follow
-
-            // Drop the text the press started selecting on the way here.
-            var sel = window.getSelection && window.getSelection();
-            if( sel && sel.removeAllRanges ) sel.removeAllRanges();
-        }
-
-        moveSheet( drag.sheet,
-                   clampDrag( drag.x + dx, drag.baseL, drag.w, document.documentElement.clientWidth  ),
-                   clampDrag( drag.y + dy, drag.baseT, drag.h, document.documentElement.clientHeight ) );
-        e.preventDefault();
-    }
-
-    function onDragUp( e )
-    {
-        if( ! drag || ( e.pointerId != null && e.pointerId !== drag.id ) ) return;
-
-        if( drag.moving )
-        {
-            drag.sheet.classList.remove( "is-dragging" );
-            dragEnded = true;      // onDragClick eats the click this drag is about to fire
-        }
-        drag = null;
-
-        document.removeEventListener( "pointermove",   onDragMove, true );
-        document.removeEventListener( "pointerup",     onDragUp,   true );
-        document.removeEventListener( "pointercancel", onDragUp,   true );
-    }
-
-    // A drag ends with a click on whatever the pointer landed on. Swallow it, or
-    // moving a dialog over a list would also pick a row. Cleared by the next
-    // press (onDragDown), so a normal click is never lost.
-    function onDragClick( e )
-    {
-        if( ! dragEnded ) return;
-        dragEnded = false;
-        e.stopPropagation();
-        e.preventDefault();
-    }
-
-    // A moved dialog must not end up off screen when the window shrinks (or the
-    // phone layout kicks in, where dialogs do not move at all).
-    function reclampSheets()
-    {
-        var list  = document.querySelectorAll( ".sheet-backdrop.open .sheet" );
-        var phone = window.innerWidth <= DRAG_PHONE;
-
-        for( var i = 0; i < list.length; i++ )
-        {
-            var s = list[ i ];
-            if( ! s.nayiveDragX && ! s.nayiveDragY ) continue;
-
-            if( phone ) { moveSheet( s, 0, 0 ); continue; }
-
-            var r = s.getBoundingClientRect();
-            moveSheet( s,
-                       clampDrag( s.nayiveDragX, r.left - s.nayiveDragX, r.width,  document.documentElement.clientWidth  ),
-                       clampDrag( s.nayiveDragY, r.top  - s.nayiveDragY, r.height, document.documentElement.clientHeight ) );
-        }
-    }
-
-    // Dialogs open centred, always - so a closing one forgets where it was put.
-    // Apps close them in ~15 different places (NayiveUI.close, a plain
-    // classList.remove, a whole node thrown away), so instead of hooking each
-    // one we watch the `.open` class come off any backdrop - in the page's one
-    // class observer, wireSheetFocus (a second one here cost every class
-    // change in Calc and Write twice).
-    function recentreSheet( back )
-    {
-        var s = back.querySelector( ".sheet" );
-        if( s && ( s.nayiveDragX || s.nayiveDragY ) ) moveSheet( s, 0, 0 );
-    }
-
-    function initDragSheets()
-    {
-        document.addEventListener( "pointerdown", onDragDown,  true );
-        document.addEventListener( "click",       onDragClick, true );
-        window.addEventListener( "resize", reclampSheets );
     }
 
     // The viewer's IANA zone, or "UTC" if the browser won't say.
@@ -573,21 +322,6 @@
         b.setAttribute( "aria-label", b.dataset.tip );
         b.innerHTML = Ayni.icon( "close" );
         if( onClick ) b.addEventListener( "click", onClick );
-        return b;
-    }
-
-    // A dialog button built in code, as the markup writes it: role "close"
-    // (the ×, marked data-close), "primary" (the default ✓), "danger" (trash)
-    // or "" (a plain round button); `icon` overrides the role's own.
-    function sheetButton( role, tip, icon )
-    {
-        var b = document.createElement( "button" );
-        b.type      = "button";
-        b.className = role === "primary" || role === "danger" ? "btn " + role : "btn";
-        if( role === "close" ) b.setAttribute( "data-close", "" );
-        b.innerHTML = Ayni.icon( icon || { close: "close", primary: "check", danger: "trash" }[ role ] );
-        b.dataset.tip = tip;
-        b.setAttribute( "aria-label", tip );
         return b;
     }
 
@@ -882,10 +616,9 @@
         return el;
     }
 
-    // Lay out the dialog buttons under `root` (default: document): a tooltip
-    // that is a dictionary key names the button too (both land with the words),
-    // Ayni wires the ones built on the fly (at once: they may move out of
-    // `root` next), and a lone × moves to the corner. Idempotent.
+    // Name the buttons under `root` (default: document): a tooltip that is a
+    // dictionary key names the button too (both land with the words), and
+    // Ayni wires the ones built on the fly. Idempotent.
     function applySheetButtons( root )
     {
         var scope = root || document;
@@ -896,61 +629,6 @@
                 b.setAttribute( "data-i18n-attr", said + ", aria-label:" + key[ 1 ] );
         } );
         if( root ) Ayni.init( root );
-
-        // A dialog whose only action is "close" shows it in the top-right corner.
-        var rows = scope.querySelectorAll( ".sheet-actions" );
-        for( var j = 0; j < rows.length; j++ )
-            cornerLoneClose( rows[ j ] );
-    }
-
-    // If `row` holds nothing but a close button, move it to the sheet's top-right
-    // corner as a .sheet-close and remove the now-empty row. With a title, the ×
-    // goes on the title's own line (a .sheet-header: the title, then any
-    // .sheet-tool buttons, then the ×), so a long title wraps instead of
-    // running under it. With none, it is pinned to the corner.
-    function cornerLoneClose( row )
-    {
-        var kids = row.children;
-        if( kids.length !== 1 || ! kids[ 0 ].hasAttribute( "data-close" ) ) return;
-
-        var b     = kids[ 0 ];
-        var sheet = row.closest && row.closest( ".sheet" );
-        if( ! sheet ) return;
-
-        b.classList.add( "sheet-close" );
-
-        var head = titleRow( sheet );
-        if( head )
-        {
-            head.appendChild( b );
-            row.parentNode.removeChild( row );
-            return;
-        }
-
-        b.style.position = "absolute";
-        b.style.top      = "10px";
-        b.style.right    = "10px";
-        sheet.appendChild( b );
-        row.parentNode.removeChild( row );
-
-        if( getComputedStyle( sheet ).position === "static" )
-            sheet.style.position = "relative";
-    }
-
-    // The sheet's title line: its .sheet-header, or its <h2> wrapped in one now.
-    function titleRow( sheet )
-    {
-        var head = sheet.querySelector( ":scope > .sheet-header" );
-        if( head ) return head;
-
-        var h2 = sheet.querySelector( ":scope > h2" );
-        if( ! h2 ) return null;
-
-        head = document.createElement( "div" );
-        head.className = "sheet-header";
-        sheet.insertBefore( head, h2 );
-        head.appendChild( h2 );
-        return head;
     }
 
     //------------------------------------------------------------------------//
@@ -1020,7 +698,7 @@
         if( ! infoOpenDot ) return;
         infoOpenDot.classList.remove( "is-open" );
         infoOpenDot = null;
-        if( infoPopupEl ) infoPopupEl.style.display = "none";
+        if( infoPopupEl && infoPopupEl.matches( ":popover-open" ) ) infoPopupEl.hidePopover();
 
         document.removeEventListener( "pointerdown", onInfoOutside, true );
         document.removeEventListener( "keydown", onInfoKey, true );
@@ -1037,7 +715,8 @@
 
     function onInfoKey( e )
     {
-        if( e.key === "Escape" ) { e.stopPropagation(); closeInfo(); }
+        // preventDefault: the browser's own Escape would also close a dialog under it
+        if( e.key === "Escape" ) { e.preventDefault(); e.stopPropagation(); closeInfo(); }
     }
 
     function openInfo( dot )
@@ -1047,17 +726,27 @@
             infoPopupEl = document.createElement( "div" );
             infoPopupEl.className = "info-popup";
             infoPopupEl.setAttribute( "role", "tooltip" );
+            infoPopupEl.popover = "manual";             // the top layer: above an open dialog too
             // Reading the text means putting the pointer ON the popup: keep it
             // open while it is there, close it again when the pointer leaves.
             infoPopupEl.addEventListener( "mouseenter", infoCancelClose );
             infoPopupEl.addEventListener( "mouseleave", onInfoLeave );
-            document.body.appendChild( infoPopupEl );
         }
+
+        // Inside an open dialog the popup lives in it: outside, a modal dialog
+        // would keep it from taking the pointer (reading by hover needs it).
+        var host = dot.closest( "dialog[open]" ) || document.body;
+        if( infoPopupEl.parentNode !== host )
+        {
+            if( infoPopupEl.matches( ":popover-open" ) ) infoPopupEl.hidePopover();
+            host.appendChild( infoPopupEl );
+        }
+        if( host !== document.body ) host.addEventListener( "close", closeInfo, { once: true } );
 
         infoByHover = false;                            // openInfo() alone = pinned
 
         setInfoText( infoPopupEl, dot.getAttribute( "data-info" ) || "" );
-        infoPopupEl.style.display    = "block";
+        if( ! infoPopupEl.matches( ":popover-open" ) ) infoPopupEl.showPopover();
         infoPopupEl.style.visibility = "hidden";        // measure before placing
         infoPopupEl.style.left = "0px";
         infoPopupEl.style.top  = "0px";
@@ -1065,8 +754,6 @@
         var r    = dot.getBoundingClientRect();
         var pw   = infoPopupEl.offsetWidth;
         var ph   = infoPopupEl.offsetHeight;
-        var sx   = window.pageXOffset;
-        var sy   = window.pageYOffset;
         var vw   = document.documentElement.clientWidth;
         var vh   = document.documentElement.clientHeight;
         var gap  = 6;
@@ -1080,8 +767,8 @@
         if( top + ph > vh - pad && r.top - gap - ph >= pad )
             top = r.top - gap - ph;                     // flip above if it would overflow
 
-        infoPopupEl.style.left = ( left + sx ) + "px";
-        infoPopupEl.style.top  = ( top + sy ) + "px";
+        infoPopupEl.style.left = left + "px";
+        infoPopupEl.style.top  = top + "px";
         infoPopupEl.style.visibility = "visible";
 
         infoOpenDot = dot;
@@ -1350,267 +1037,13 @@
         return m ? m[ 1 ] : "app";
     }
 
-    //------------------------------------------------------------------------//
-    // CONFIRM / ALERT  - a Nayive sheet, never the browser's window.confirm /
-    // window.alert (those ignore the theme and the style guide).
-    //
-    //   if( await NayiveUI.confirm( { title: 'Vaciar la papelera?',
-    //                               body: 'Se borraran 12 elementos.',
-    //                               confirm: 'Vaciar', danger: true } ) ) { ... }
-    //   await NayiveUI.alert( { title: 'No se pudo importar', body: msg } );
-    //
-    // A confirm may carry a THIRD answer - `other: 'Solo protegerlo'` (with
-    // `otherIcon`) puts a second button between cancel and confirm and resolves
-    // the string "other". For the question that is not yes/no: two ways
-    // forward and a way out. Three is the ceiling - a fourth is a menu, not a
-    // question.
-    //
-    // The sheet is built on the fly and removed on close. It closes on its own
-    // buttons or Escape only - never a backdrop click (dialog-close rule).
-    // `body` may hold "\n" - each line becomes its own <p>. A plain string
-    // argument is taken as the body.
-
-    //------------------------------------------------------------------------//
-    // ONE DIALOG, BUILT ON THE FLY  -  the frame every dialog made here is
-    // thrown away in (confirm / alert, askPassword, the intro, pickFolder,
-    // pickFile, the install sheet, Compartir; Chat's own too): the backdrop,
-    // its sheet, an optional title, Escape, and one close.
-    //
-    //   var d = modal( { cls: "sheet--pack", title: "...", escape: fn } );
-    //   ... fill d.sheet ...
-    //   d.show( fill )   on the page: appended, then fill() (buttons are
-    //                    styled in place), then Escape heard and "open" set
-    //   d.close()        taken off, once: false when it already was
-    //
-    //   o.cls        more classes for the sheet;   o.id  the backdrop's id
-    //   o.title      an <h2>, first in the sheet
-    //   o.escape()   what Escape does (default: close); the key never goes
-    //                on to the page underneath
-    //   o.top()      Escape only while this answers true (a dialog asked
-    //                from inside this one closes first)
-    //   o.key( e )   any other key
-    //   o.linger     ms the node stays after close (a fade), 0 by default
-
-    function modal( o )
-    {
-        o = o || {};
-        var done = false;
-
-        var back = document.createElement( "div" );
-        back.className = "sheet-backdrop";
-        if( o.id ) back.id = o.id;
-        back.setAttribute( "role", "dialog" );
-        back.setAttribute( "aria-modal", "true" );
-
-        var sheet = document.createElement( "div" );
-        sheet.className = "sheet" + ( o.cls ? " " + o.cls : "" );
-        back.appendChild( sheet );
-
-        if( o.title )
-        {
-            var h = document.createElement( "h2" );
-            h.textContent = o.title;
-            sheet.appendChild( h );
-        }
-
-        function onKey( e )
-        {
-            if( e.key !== "Escape" ) { if( o.key ) o.key( e ); return; }
-            if( o.top && ! o.top() ) return;
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-            ( o.escape || close )();
-        }
-
-        function close()
-        {
-            if( done ) return false;
-            done = true;
-            document.removeEventListener( "keydown", onKey, true );
-            back.classList.remove( "open" );
-            if( o.linger ) setTimeout( function () { if( back.parentNode ) back.parentNode.removeChild( back ); }, o.linger );
-            else if( back.parentNode ) back.parentNode.removeChild( back );
-            return true;
-        }
-
-        function show( fill )
-        {
-            document.body.appendChild( back );
-            if( fill ) fill();
-            document.addEventListener( "keydown", onKey, true );
-            back.classList.add( "open" );
-        }
-
-        return { back: back, sheet: sheet, show: show, close: close };
-    }
+    // (CONFIRM / ALERT / ASK FOR ONE NAME are Ayni's: Ayni.confirm, Ayni.alert,
+    // Ayni.ask - shared/ayni/ayni-dialogs.js.)
 
     function normDialogOpts( opts )
     {
         if( typeof opts === "string" ) return { body: opts };
         return opts || {};
-    }
-
-    function makeDialog( opts, withCancel )
-    {
-        opts = normDialogOpts( opts );
-
-        return new Promise( function ( resolve )
-        {
-            var d     = modal( { title: opts.title, escape: function () { finish( false ); } } );
-            var sheet = d.sheet;
-
-            var bodyText = opts.body == null ? "" : String( opts.body );
-            if( bodyText )
-            {
-                var p = document.createElement( "p" );
-                p.className = "dialog-text";
-                p.textContent = bodyText;      // CSS white-space: pre-wrap keeps "\n"
-                sheet.appendChild( p );
-            }
-
-            var row = document.createElement( "div" );
-            row.className = "sheet-actions";
-            sheet.appendChild( row );
-
-            var cancel = null;
-            if( withCancel )
-            {
-                cancel = sheetButton( "close", opts.cancel || t( "ui.cancel" ) );
-                row.appendChild( cancel );
-            }
-
-            var other = null;
-            if( withCancel && opts.other )
-            {
-                other = sheetButton( "", opts.other, opts.otherIcon || "check" );
-                row.appendChild( other );
-            }
-
-            var ok = sheetButton( withCancel ? ( opts.danger ? "danger" : "primary" ) : "close",   // lone close -> corner "x"
-                                  opts.confirm || ( withCancel ? t( "ui.accept" ) : t( "ui.close" ) ) );
-            row.appendChild( ok );
-
-            function finish( val )
-            {
-                if( d.close() ) resolve( val );
-            }
-
-            // applySheetButtons keeps the same button nodes (it only re-classes
-            // them and may move a lone close to the sheet corner).
-            ok.addEventListener( "click", function () { finish( true ); } );
-            if( other )  other.addEventListener( "click", function () { finish( "other" ); } );
-            if( cancel ) cancel.addEventListener( "click", function () { finish( false ); } );
-
-            d.show( function () { applySheetButtons( sheet ); } );   // classes + SVGs; lone close -> corner
-
-            // For a destructive confirm, focus the safe (cancel) button so a
-            // stray Enter doesn't trigger the delete.
-            ( opts.danger && cancel ? cancel : ok ).focus();
-        } );
-    }
-
-    function confirmDialog( opts ) { return makeDialog( opts, true ); }
-    function alertDialog( opts )   { return makeDialog( opts, false ); }
-
-    //------------------------------------------------------------------------//
-    // ASK FOR ONE NAME  -  a new album (Photos), a group (Chat, Contacts), a rename
-    //
-    //   var name = await NayiveUI.askText( { title: '...', label: '...' } );
-    //   if( ! name ) return;             // cancelled, or Escape: null
-    //
-    //   o.value        the text it starts with (selected)
-    //   o.label        a <label> above the field, or
-    //   o.placeholder  the field's own grey text (and its aria-label)
-    //   o.hint         a line under the field
-    //   o.okTitle      the ✓'s tooltip (default "Accept");  o.okClass  a class on it
-    //   o.max          the field's maxlength
-    //   o.ids          { input, ok, cancel }: ids for the three
-    //   o.wide         a full sheet (default: a packed one, sheet--pack)
-    //   o.topOnly      Escape only while it is the page's last node (asked over
-    //                  another dialog that also hears Escape)
-    //   o.check( v )   the answer for the trimmed text v, or false to keep the
-    //                  dialog open (check says why); the field is then selected
-    //
-    // An empty field is never an answer: the ✓ only puts the focus back in it.
-    function askText( o )
-    {
-        o = o || {};
-        var ids = o.ids || {};
-
-        return new Promise( function ( resolve )
-        {
-            var d = modal( { cls: o.wide ? "" : "sheet--pack", title: o.title, escape: function () { finish( null ); },
-                             top: o.topOnly ? function () { return document.body.lastElementChild === d.back; } : null } );
-
-            var field = document.createElement( "div" );
-            field.className = "field";
-            var input = document.createElement( "input" );
-            input.type = "text";
-            input.autocomplete = "off";
-            if( ids.input ) input.id = ids.input;
-            if( o.max ) input.maxLength = o.max;
-            input.value = o.value || "";
-            if( o.label )
-            {
-                var lbl = document.createElement( "label" );
-                lbl.textContent = o.label;
-                if( ids.input ) lbl.htmlFor = ids.input;
-                field.appendChild( lbl );
-            }
-            if( o.placeholder )
-            {
-                input.placeholder = o.placeholder;
-                input.setAttribute( "aria-label", o.placeholder );
-            }
-            field.appendChild( input );
-            d.sheet.appendChild( field );
-
-            if( o.hint )
-            {
-                var hint = document.createElement( "p" );
-                hint.className = "hint";
-                hint.textContent = o.hint;
-                d.sheet.appendChild( hint );
-            }
-
-            var row = document.createElement( "div" );
-            row.className = "sheet-actions";
-            var no = sheetButton( "close", t( "ui.cancel" ) );
-            if( ids.cancel ) no.id = ids.cancel;
-            var ok = sheetButton( "primary", o.okTitle || t( "ui.accept" ) );
-            if( ids.ok ) ok.id = ids.ok;
-            if( o.okClass ) ok.classList.add( o.okClass );
-            row.appendChild( no );
-            row.appendChild( ok );
-            d.sheet.appendChild( row );
-            applySheetButtons( d.sheet );
-
-            function finish( v ) { if( d.close() ) resolve( v ); }
-
-            function submit()
-            {
-                var v = input.value.trim();
-                if( ! v ) { input.focus(); return; }
-                if( o.check )
-                {
-                    var r = o.check( v );
-                    if( r === false ) { input.select(); return; }
-                    v = r;
-                }
-                finish( v );
-            }
-
-            no.addEventListener( "click", function () { finish( null ); } );
-            ok.addEventListener( "click", submit );
-            input.addEventListener( "keydown", function ( e )
-            {
-                if( e.key === "Enter" && ! e.isComposing ) { e.preventDefault(); submit(); }
-            } );
-
-            d.show();
-            setTimeout( function () { input.focus(); input.select(); }, 30 );
-        } );
     }
 
     //------------------------------------------------------------------------//
@@ -1624,8 +1057,8 @@
     // back from a typo) and refuses anything shorter than `min` (default 8).
     // Without it the sheet asks for a password that already exists, so it only
     // refuses an empty box.
-    // Built and thrown away like confirm/alert, and it closes the same way:
-    // its own buttons or Escape, never a backdrop click.
+    // Built on Ayni.dialog and thrown away like Ayni.confirm, and it closes
+    // the same way: its own buttons or Escape, never a backdrop click.
     //
     // The value is returned, never kept: the caller turns it into a key and
     // this sheet's nodes are gone from the DOM before the promise resolves.
@@ -1637,13 +1070,13 @@
 
         return new Promise( function ( resolve )
         {
-            var d     = modal( { cls: "sheet--pack", title: opts.title, escape: function () { finish( null ); }, key: onKey } );
-            var sheet = d.sheet;
+            var d     = Ayni.dialog( { title: opts.title } );
+            var sheet = d.body;
 
             if( opts.body )
             {
                 var lead = document.createElement( "p" );
-                lead.className   = "dialog-text";
+                lead.className   = "text";
                 lead.textContent = String( opts.body );
                 sheet.appendChild( lead );
             }
@@ -1690,15 +1123,9 @@
             warn.hidden    = true;
             sheet.appendChild( warn );
 
-            var row = document.createElement( "div" );
-            row.className = "sheet-actions";
-            sheet.appendChild( row );
-
-            var cancel = sheetButton( "close", opts.cancel || t( "ui.cancel" ) );
-            row.appendChild( cancel );
-
-            var ok = sheetButton( "primary", opts.confirm || t( "ui.accept" ) );
-            row.appendChild( ok );
+            var cancel = Ayni.dialogButton( "close", opts.cancel || t( "ui.cancel" ) );
+            var ok     = Ayni.dialogButton( "primary", opts.confirm || t( "ui.accept" ) );
+            d.place( [ cancel, ok ] );
 
             function complain( key )
             {
@@ -1728,22 +1155,13 @@
                 finish( pw );
             }
 
-            // Enter in a field is the ✓ (Escape is the modal's).
-            function onKey( e )
-            {
-                if( e.key === "Enter" && ( e.target === one || e.target === two ) )
-                {
-                    e.preventDefault();
-                    submit();
-                }
-            }
-
+            // Enter in a field is the ✓ and Escape the × (Ayni: the default
+            // button, the data-close one); the first field takes the caret.
             ok.addEventListener( "click", submit );
             cancel.addEventListener( "click", function () { finish( null ); } );
+            d.dialog.addEventListener( "close", function () { finish( null ); } );
 
-            d.show( function () { applySheetButtons( sheet ); } );
-            packSheet( sheet, { min: 300, max: 420 } );
-            one.focus();
+            d.show();
         } );
     }
 
@@ -1789,7 +1207,7 @@
         }
         if ( ids && ids.length )
         {
-            var ok = await confirmDialog( {
+            var ok = await Ayni.confirm( {
                 title:   t( "ui.room.title" ),
                 body:    short + "\n\n" + tf( "ui.room.trashBody", { held: fmtBytes( held ) } ),
                 confirm: t( "ui.room.empty" ), danger: true } );
@@ -1852,7 +1270,7 @@
     function holdIntro()
     {
         introHeld = true;
-        var x = document.querySelector( ".sheet-backdrop.open .intro-close" );
+        var x = document.querySelector( "dialog.panel[open] .intro-close" );
         if( x ) x.click();
     }
 
@@ -1892,8 +1310,8 @@
     function buildIntro( opts )
     {
         var app   = opts.app || appKey();
-        var d     = modal( { cls: "intro-sheet", title: opts.title } );
-        var sheet = d.sheet;
+        var d     = Ayni.dialog( { cls: "intro-sheet", title: opts.title } );
+        var sheet = d.body;
 
         // One paragraph, or several: `lead` takes a string or an array of them,
         // so an app can add a note under its summary without a new option.
@@ -1903,7 +1321,7 @@
             {
                 if( ! line ) return;
                 var p = document.createElement( "p" );
-                p.className   = "dialog-text";
+                p.className   = "text";
                 p.textContent = String( line );
                 sheet.appendChild( p );
             } );
@@ -1982,24 +1400,23 @@
         if( opts.tip )
         {
             var hint = document.createElement( "p" );
-            hint.className   = "dialog-text intro-home-hint";
+            hint.className   = "text intro-home-hint";
             hint.textContent = String( opts.tip );
             sheet.appendChild( hint );
         }
 
         function finish() { d.close(); }
 
-        // Close (x) in the top-right corner, like every other Nayive dialog. It is
-        // sticky, not just absolute, so it stays put while a long button list
-        // scrolls under it. First child so it sits above the title.
-        var xb = xButton( "sheet-close intro-close", finish, opts.confirm );
-        sheet.insertBefore( xb, sheet.firstChild );
+        // Close (x) in the title row, like every other Nayive dialog: the
+        // header stays put while a long button list scrolls under it.
+        var xb = xButton( "btn intro-close", finish, opts.confirm );
+        xb.setAttribute( "data-close", "" );
+        d.header.appendChild( xb );
 
         // The launcher keeps its wide "No volver a mostrar" button at the bottom.
         if( opts.dismissible )
         {
-            var row = document.createElement( "div" );
-            row.className = "sheet-actions";
+            var row = d.footer;
             var db = document.createElement( "button" );
             db.type      = "button";
             db.className = "intro-dismiss";
@@ -2011,11 +1428,9 @@
                 finish();
             } );
             row.appendChild( db );
-            sheet.appendChild( row );
         }
 
         d.show();
-        xb.focus();
     }
 
     function introDismissed( app )
@@ -2030,7 +1445,7 @@
         if( ! opts || introHeld ) return;
 
         // don't stack on top of a folder picker / other open sheet
-        if( deferIfBusy && document.querySelector( ".sheet-backdrop.open" ) )
+        if( deferIfBusy && document.querySelector( "dialog.panel[open]" ) )
         {
             setTimeout( function () { doShowIntro( opts, false ); }, 800 );
             return;
@@ -2529,7 +1944,7 @@
         // host page is where a newcomer is looking anyway.
         if( EMBEDDED || coachOpen || coachSeen() || introHeld ) return;
 
-        var busy = !! document.querySelector( ".sheet-backdrop.open" );
+        var busy = !! document.querySelector( "dialog.panel[open]" );
         if( ! busy && showCoach( false ) ) return;
 
         if( tries < ( busy ? 100 : 15 ) )
@@ -2911,8 +2326,26 @@
             n.style.height = Math.max( 0, h ) + "px";
         }
 
+        // Above an open dialog the tour lives in the innermost one, as a
+        // popover in the top layer: outside it, the modal dialog would cover
+        // it and keep its presses. Checked on every placing, and when a
+        // dialog closes.
+        function hostOver()
+        {
+            if( ended ) return;
+            var dl = [].filter.call( document.querySelectorAll( "dialog[open]" ), function ( d ) { return d.matches( ":modal" ); } ).pop();
+            var host = dl || document.body;
+            if( over.parentNode === host ) return;
+            if( over.matches( ":popover-open" ) ) over.hidePopover();
+            host.appendChild( over );
+            if( dl ) { over.popover = "manual"; over.showPopover(); }
+            else over.removeAttribute( "popover" );
+        }
+        function onDialogClose() { setTimeout( function () { hostOver(); place(); } ); }
+
         function place()
         {
+            hostOver();
             if( ! cur || bub.hidden ) return;
             var vw = window.innerWidth, vh = window.innerHeight, PAD = 8;
             var target = ( cur.el && onScreen( cur.el ) ) ? cur.el
@@ -3002,6 +2435,7 @@
             token++;
             leave();
             document.removeEventListener( "click", onTap, true );
+            document.removeEventListener( "close", onDialogClose, true );
             follow( false, place, onKey );
             if( over.parentNode ) over.parentNode.removeChild( over );
             tourOpen = false;
@@ -3009,6 +2443,7 @@
 
         document.body.appendChild( over );
         document.addEventListener( "click", onTap, true );
+        document.addEventListener( "close", onDialogClose, true );
         follow( true, place, onKey );
         go( 0 );
         return true;
@@ -3131,10 +2566,11 @@
             var namePicked = false;   // the text was select()ed once already
             var busy       = false;   // a server call is in flight
 
-            // Escape is heard on document/capture, BEFORE the name field's own
-            // keydown: while a name is open, that is what Escape drops.
-            var d     = modal( { escape: function () { if( nameMode ) cancelName(); else finish( null ); } } );
-            var sheet = d.sheet;
+            // Escape presses the × (Ayni): while a name is open, that is what
+            // drops it, and the dialog stays.
+            var d     = Ayni.dialog( { title: opts.title || t( "ui.fp.pickFolder" ) } );
+            var sheet = d.body;
+            d.dialog.addEventListener( "close", function () { finish( null ); } );
 
             function finish( val )
             {
@@ -3171,7 +2607,7 @@
             // One of the three bottom-left folder buttons.
             function fpAct( role, icon, title, off, fn )
             {
-                var b = sheetButton( role, title, icon );
+                var b = Ayni.dialogButton( role, title, icon );
                 b.ariaDisabled = !! off;
                 b.addEventListener( "click", fn );
                 return b;
@@ -3346,16 +2782,13 @@
                 var prevScroll = prevBox ? prevBox.scrollTop : 0;
                 var hadFocus   = !! prevBox && prevBox.contains( document.activeElement );
 
-                sheet.innerHTML = "";
-
-                var h = document.createElement( "h2" );
-                h.textContent = opts.title || t( "ui.fp.pickFolder" );
-                sheet.appendChild( h );
+                sheet.innerHTML    = "";
+                d.footer.innerHTML = "";
 
                 if( opts.note )
                 {
                     var note = document.createElement( "p" );
-                    note.className   = "dialog-text";
+                    note.className   = "text";
                     note.textContent = opts.note;
                     sheet.appendChild( note );
                 }
@@ -3442,8 +2875,7 @@
                     sheet.appendChild( fld );
                 }
 
-                var arow = document.createElement( "div" );
-                arow.className = "sheet-actions";
+                var arow = d.footer;
 
                 if( ! nameMode )
                 {
@@ -3454,7 +2886,7 @@
                     var onOne = ready && !! selected && selected !== filesNode.path;
 
                     var left = document.createElement( "div" );
-                    left.className = "sheet-actions-left";
+                    left.className = "extra";
                     left.appendChild( fpAct( "danger", null, t( "ui.delete" ), ! onOne, deleteFolder ) );
                     left.appendChild( fpAct( "", "edit", t( "ui.rename" ), ! onOne,
                                              function () { startName( "rename" ); } ) );
@@ -3463,20 +2895,19 @@
                     arow.appendChild( left );
                 }
 
-                var cancel = sheetButton( "close", t( "ui.cancel" ) );
+                var cancel = Ayni.dialogButton( "close", t( "ui.cancel" ) );
                 arow.appendChild( cancel );
 
-                var ok = sheetButton( "primary", ! nameMode ? t( "ui.fp.choose" )
-                                               : nameMode === "create" ? t( "ui.newFolder" ) : t( "ui.rename" ) );
+                var ok = Ayni.dialogButton( "primary", ! nameMode ? t( "ui.fp.choose" )
+                                                     : nameMode === "create" ? t( "ui.newFolder" ) : t( "ui.rename" ) );
                 arow.appendChild( ok );
 
-                sheet.appendChild( arow );
+                applySheetButtons( d.dialog );
 
-                applySheetButtons( sheet );
-
-                cancel.addEventListener( "click", function ()
+                // While a name is open the × only drops it: the dialog stays.
+                cancel.addEventListener( "click", function ( e )
                 {
-                    if( nameMode ) cancelName();
+                    if( nameMode ) { e.preventDefault(); cancelName(); }
                     else           finish( null );
                 } );
 
@@ -3494,7 +2925,8 @@
                 }
             }
 
-            d.show( render );
+            render();
+            d.show();
 
             loadTree().then( render );
         } );
@@ -3529,8 +2961,9 @@
             var selected = null;      // the highlighted file's node
             var seq      = 0;         // the newest listing asked for
 
-            var d     = modal( { escape: function () { finish( null ); } } );
-            var sheet = d.sheet;
+            var d     = Ayni.dialog( { title: opts.title || t( "ui.fp.pickFile" ) } );
+            var sheet = d.body;
+            d.dialog.addEventListener( "close", function () { finish( null ); } );
 
             function finish( node )
             {
@@ -3611,11 +3044,8 @@
 
             function render()
             {
-                sheet.innerHTML = "";
-
-                var h = document.createElement( "h2" );
-                h.textContent = opts.title || t( "ui.fp.pickFile" );
-                sheet.appendChild( h );
+                sheet.innerHTML    = "";
+                d.footer.innerHTML = "";
 
                 // "Archivos > fotos > 2024": every step but the last goes back there.
                 var crumbs = document.createElement( "div" );
@@ -3648,20 +3078,16 @@
                 else if( ! nodes.length ) box.appendChild( fpMsg( t( "ui.fp.emptyFolder" ) ) );
                 else nodes.forEach( function ( n ) { box.appendChild( fileRow( n ) ); } );
 
-                var arow = document.createElement( "div" );
-                arow.className = "sheet-actions";
-
-                var cancel = sheetButton( "close", t( "ui.cancel" ) );
+                var cancel = Ayni.dialogButton( "close", t( "ui.cancel" ) );
                 cancel.addEventListener( "click", function () { finish( null ); } );
-                arow.appendChild( cancel );
+                d.footer.appendChild( cancel );
 
-                var ok = sheetButton( "primary", opts.confirm || t( "ui.fp.chooseFile" ) );
+                var ok = Ayni.dialogButton( "primary", opts.confirm || t( "ui.fp.chooseFile" ) );
                 ok.ariaDisabled = ! selected;
                 ok.addEventListener( "click", function () { if( selected ) finish( selected ); } );
-                arow.appendChild( ok );
+                d.footer.appendChild( ok );
 
-                sheet.appendChild( arow );
-                applySheetButtons( sheet );
+                applySheetButtons( d.dialog );
             }
 
             d.show();
@@ -3776,7 +3202,6 @@
         deferredInstall = null;
         try { localStorage.setItem( INSTALL_SNOOZE, "installed" ); } catch ( _ ) {}
         var back = document.getElementById( "nayive-install-bar" );
-        // _finish also drops the dialog's Escape listener - remove() alone leaks it
         if( back ) { if( back._finish ) back._finish(); else back.remove(); }
         Ayni.toast( "ok", t( "ui.install.done" ) );
     } );
@@ -3921,15 +3346,16 @@
 
     function buildInstall( mode, manual )
     {
-        var d     = modal( { id: "nayive-install-bar", cls: "intro-sheet install-sheet" } );
-        var back  = d.back;
-        var sheet = d.sheet;
+        var d     = Ayni.dialog( { id: "nayive-install-bar", cls: "intro-sheet install-sheet" } );
+        var back  = d.dialog;
+        var sheet = d.body;
 
         function finish() { d.close(); }
         back._finish = finish;
 
-        // Corner x, sticky, above the title - like every other Nayive dialog.
-        var xb = sheet.appendChild( xButton( "sheet-close intro-close", finish ) );
+        // The x in the title row, like every other Nayive dialog.
+        var xb = d.header.appendChild( xButton( "btn intro-close", finish ) );
+        xb.setAttribute( "data-close", "" );
 
         var logo = document.createElement( "img" );
         logo.className = "install-logo";
@@ -3945,7 +3371,7 @@
         sheet.appendChild( h );
 
         var lead = document.createElement( "p" );
-        lead.className   = "dialog-text install-lead";
+        lead.className   = "text install-lead";
         lead.textContent = mode === "installed"
             ? t( "ui.install.leadDone" )
             : t( "ui.install.lead" );
@@ -4009,7 +3435,7 @@
         if( mode === "inapp" || mode === "unsupported" )
         {
             var note = document.createElement( "p" );
-            note.className   = "dialog-text install-note";
+            note.className   = "text install-note";
             note.textContent = mode === "inapp"
                 ? t( "ui.install.inapp" )
                 : t( "ui.install.unsupported" );
@@ -4063,7 +3489,6 @@
         if( acts.children.length ) sheet.appendChild( acts );
 
         d.show();
-        xb.focus();
         return back;
     }
 
@@ -4090,10 +3515,10 @@
         // both waiting here and then opening two dialogs. While a sheet is
         // visibly open we wait as long as it takes (the user is reading it);
         // the give-up only guards the "held but nothing on screen" case.
-        if( introHeld || document.querySelector( ".sheet-backdrop.open" ) )
+        if( introHeld || document.querySelector( "dialog.panel[open]" ) )
         {
             if( installPending ) return;
-            if( ! document.querySelector( ".sheet-backdrop.open" ) && ++installTries > 15 )
+            if( ! document.querySelector( "dialog.panel[open]" ) && ++installTries > 15 )
                 return;                            // ~12 s held with nothing visible: next visit
             installPending = true;
             setTimeout( function ()
@@ -4160,15 +3585,16 @@
         var key = CHROME_WARN + ( wc.kind === "old" ? "-old" : "" );
         try { if( localStorage.getItem( key ) === "never" ) return; } catch ( _ ) {}
         if( document.getElementById( "nayive-chrome-warn" ) ) return;
-        if( introHeld || document.querySelector( ".sheet-backdrop.open" ) )
-            return void setTimeout( warnChrome, 800 );     // never on top of another sheet
+        if( introHeld || document.querySelector( "dialog.panel[open]" ) )
+            return void setTimeout( warnChrome, 800 );     // never on top of another dialog
 
-        var d     = modal( { id: "nayive-chrome-warn", cls: "intro-sheet install-sheet" } );
-        var sheet = d.sheet;
+        var d     = Ayni.dialog( { id: "nayive-chrome-warn", cls: "intro-sheet install-sheet" } );
+        var sheet = d.body;
         function finish() { d.close(); }
-        d.back._finish = finish;
+        d.dialog._finish = finish;
 
-        var xb = sheet.appendChild( xButton( "sheet-close intro-close", finish ) );
+        var xb = d.header.appendChild( xButton( "btn intro-close", finish ) );
+        xb.setAttribute( "data-close", "" );
 
         var h = document.createElement( "h2" );
         h.className   = "install-title";
@@ -4183,7 +3609,7 @@
           t( "ui.chromeWarn.p3" ) ].forEach( function ( s )
         {
             var p = document.createElement( "p" );
-            p.className   = "dialog-text";
+            p.className   = "text";
             p.textContent = s;
             sheet.appendChild( p );
         } );
@@ -4203,7 +3629,6 @@
         sheet.appendChild( acts );
 
         d.show();
-        xb.focus();
     }
 
     //------------------------------------------------------------------------//
@@ -4526,14 +3951,11 @@
 
         return new Promise( function ( resolve )
         {
-            // Escape as the other dialogs take it: from anywhere (nothing inside
-            // needs the focus first), and never on to the app underneath. Only
-            // while this is the top sheet: a question asked from inside it
-            // (NayiveUI.confirm) is closed by its own Escape, not this one.
-            // Closed, it fades out before it goes.
-            var d = modal( { escape: close, linger: 200, top: function () { return topSheetBackdrop() === back; } } );
-            var back  = d.back;
-            var sheet = d.sheet;
+            // Escape presses its × (Ayni); a question asked from inside it
+            // (Ayni.confirm) is the innermost dialog and takes its own Escape.
+            var d = Ayni.dialog( { title: tf( "share.title", { what: opts.title || path.split( "/" ).pop() } ) } );
+            var sheet = d.body;
+            d.dialog.addEventListener( "close", function () { close(); } );
 
             var users = [], mine = [], chosen = [];   // chosen = every person ticked right now
             var mayAdd = false;                      // "pueden añadir archivos" ticked?
@@ -4551,13 +3973,9 @@
             function render()
             {
                 ok = null;
-                sheet.innerHTML = "";
-
-                var what = opts.title || path.split( "/" ).pop();
-
-                var h = document.createElement( "h2" );
-                h.textContent = tf( "share.title", { what: what } );
-                sheet.appendChild( h );
+                sheet.innerHTML    = "";
+                d.footer.innerHTML = "";
+                d.header.querySelectorAll( "[data-close]" ).forEach( function ( b ) { b.remove(); } );
 
                 // --- anyone with the link (a trip only - server/go/api_public.go), above the people ---
                 if( opts.app === "trips" ) sheet.appendChild( linkSection() );
@@ -4750,17 +4168,16 @@
                 }
                 sheet.appendChild( people );
 
-                // --- buttons ---
-                var row2 = document.createElement( "div" );
-                row2.className = "sheet-actions";
+                // --- buttons: a lone × goes in the title row ---
+                var row2 = d.footer;
 
-                var cancel = sheetButton( "close", t( "ui.close" ) );
+                var cancel = Ayni.dialogButton( "close", t( "ui.close" ) );
                 cancel.addEventListener( "click", close );
-                row2.appendChild( cancel );
+                ( free.length ? row2 : d.header ).appendChild( cancel );
 
                 if( free.length )
                 {
-                    ok = sheetButton( "primary", t( "share.send" ) );
+                    ok = Ayni.dialogButton( "primary", t( "share.send" ) );
                     ok.ariaDisabled = ! ( toAll || chosen.length );
                     ok.addEventListener( "click", function ()
                     {
@@ -4813,8 +4230,7 @@
                     row2.appendChild( ok );
                 }
 
-                sheet.appendChild( row2 );
-                applySheetButtons( sheet );
+                applySheetButtons( d.dialog );
             }
 
             // "Cualquiera con el enlace": the trip's public link - send it, copy it,
@@ -4911,7 +4327,8 @@
                 } ).then( render );
             }
 
-            d.show( render );
+            render();
+            d.show();
             load();
         } );
     }
@@ -5107,8 +4524,8 @@
                         // A list save that only its app can merge (L6): going
                         // online is not enough - name the app to open.
                         var apps = ( why && why.apps ) || [];
-                        // window.NayiveUI.confirm, not confirmDialog: a test answers it.
-                        return window.NayiveUI.confirm( { title: t( "launcher.unsavedTitle" ),
+                        // Looked up on window.Ayni at call time: a test answers it.
+                        return window.Ayni.confirm( { title: t( "launcher.unsavedTitle" ),
                                                           body: apps.length ? tf( "launcher.unsavedBodyApps", { n: n, apps: apps.join( ", " ) } )
                                                                             : tf( "launcher.unsavedBody", { n: n } ),
                                                           confirm: t( "launcher.unsavedOk" ), danger: true } );
@@ -5273,7 +4690,7 @@
         }, ms );
     }
 
-    function dialogOpen() { return !! document.querySelector( ".sheet-backdrop.open" ); }
+    function dialogOpen() { return !! document.querySelector( "dialog.panel[open]" ); }
 
     async function checkQuota( force )
     {
@@ -5650,7 +5067,7 @@
     // up to 1 min) and "online" -> maybeRefresh( true, "online" ).
     //
     // `guard( force, why )` returns true while a re-read must NOT happen (a sheet is
-    // open, text is being typed); the default is "any .sheet-backdrop is open".
+    // open, text is being typed); the default is "any dialog is open".
     // `why` is "visible" / "focus" / "plug" / "retry" / "online", so an app can tell a DELIBERATE refresh
     // from an automatic one - Trips lets the plug re-read from any screen but keeps
     // the automatic paths on the trip list, where re-rendering costs nothing.
@@ -5659,7 +5076,7 @@
         opts = opts || {};
         var lastRefresh = 0;
         var throttle    = opts.throttleMs || 20000;
-        var guard       = opts.guard || function () { return !! document.querySelector( ".sheet-backdrop.open" ); };
+        var guard       = opts.guard || function () { return !! document.querySelector( "dialog.panel[open]" ); };
 
         async function maybeRefresh( force, why )
         {
@@ -5862,307 +5279,9 @@
     //------------------------------------------------------------------------//
     // CLOSE-ONLY DIALOGS  -  the GNOME way (docs/audit/dialogs.md): a settings
     // dialog has only its ×, and every change is kept. × = Escape = close =
-    // KEEP. Two helpers, so no dialog writes this by hand again:
-    //
-    //   NayiveUI.autoSave( field, save, o )
-    //       Saves one field on its own: a select / tick-box / switch on
-    //       "change"; a text box also while typing, o.wait ms after the last
-    //       key (default 700), and at once when it loses the focus.
-    //       save( value ) does the work and returns a promise (or nothing).
-    //       While it runs a select / tick-box is disabled (a text box is not:
-    //       that would take the caret away). A failure puts a select /
-    //       tick-box back to the last saved value (a text box keeps what was
-    //       typed - the next change tries again) and o.msg (a <p>) says the
-    //       i18n key o.fail, or "Could not save.". o.done( value ) after a
-    //       good save. Callable before the page's words are in (keys, not text).
-    //       Returns { saved( v ) }: tell it the value loaded from outside.
-    //
-    //   NayiveUI.onSheetClose( back, fn )
-    //       fn() every time the .sheet-backdrop `back` (element or id) closes,
-    //       by any road: its ×, Escape, the app's own code. For what is kept
-    //       only when the dialog goes: a costly re-check, or one server write
-    //       for the whole dialog instead of one per change.
-
-    function autoSave( field, save, o )
-    {
-        o = o || {};
-        var box   = field.type === "checkbox";
-        var typed = field.tagName === "TEXTAREA" ||
-                    ( field.tagName === "INPUT" && ! box && field.type !== "radio" );
-        var good  = get();
-        var timer = 0;
-        var queue = Promise.resolve();     // one save at a time, in order
-
-        function get()      { return box ? field.checked : field.value; }
-        function put( v )   { if( box ) field.checked = v; else field.value = v; }
-        function say( txt ) { if( o.msg ) { o.msg.textContent = txt || ""; o.msg.hidden = ! txt; } }
-
-        function run()
-        {
-            clearTimeout( timer );
-            timer = 0;
-            queue = queue.then( function ()
-            {
-                var v = get();
-                if( v === good ) return;
-                if( ! typed ) field.disabled = true;
-                say( "" );
-                return Promise.resolve()
-                    .then( function () { return save( v ); } )
-                    .then( function ()
-                    {
-                        good = v;
-                        if( o.done ) o.done( v );
-                    }, function ()
-                    {
-                        if( ! typed ) put( good );
-                        say( t( o.fail || "ui.saveFailed" ) );
-                    } )
-                    .then( function () { field.disabled = false; } );
-            } );
-        }
-
-        field.addEventListener( "change", run );
-        if( typed )
-            field.addEventListener( "input", function ()
-            {
-                clearTimeout( timer );
-                timer = setTimeout( run, o.wait || 700 );
-            } );
-
-        return { saved: function ( v ) { good = v; } };
-    }
-
-    function onSheetClose( back, fn )
-    {
-        if( typeof back === "string" ) back = byId( back );
-        if( ! back ) return;
-
-        var was = back.classList.contains( "open" );
-        new MutationObserver( function ()
-        {
-            var now = back.classList.contains( "open" );
-            if( was && ! now ) fn();
-            was = now;
-        } ).observe( back, { attributes: true, attributeFilter: [ "class" ] } );
-    }
-
-    //------------------------------------------------------------------------//
-    // DIALOG CLOSING  -  the one rule for the whole suite (see the DIALOG block
-    // in shared/app.css): a static .sheet-backdrop closes on its own × / ✓
-    // buttons and on Escape - never on a backdrop click. Wired ONCE here, for
-    // every dialog written in the page's HTML: a click on its close button
-    // (the button marked data-close) or Escape
-    // while it is the top-most open sheet closes it. The dialogs ui.js builds
-    // on the fly carry no id and handle their own closing.
-    function topSheetBackdrop()
-    {
-        var list = document.querySelectorAll( ".sheet-backdrop.open" );
-        return list.length ? list[ list.length - 1 ] : null;
-    }
-
-    function closeSheetBackdrop( back )
-    {
-        if( ! back || ! back.id ) return false;
-        back.classList.remove( "open" );
-        return true;
-    }
-
-    function wireSheetClosing()
-    {
-        document.addEventListener( "click", function ( e )
-        {
-            var b = e.target.closest && e.target.closest( "button" );
-            if( ! b || ! b.hasAttribute( "data-close" ) ) return;
-            var back = b.closest( ".sheet-backdrop" );
-            if( back && back.id && back.classList.contains( "open" ) )
-                setTimeout( function () { closeSheetBackdrop( back ); }, 0 );   // after the app's own handler
-        } );
-
-        document.addEventListener( "keydown", function ( e )
-        {
-            if( e.key !== "Escape" || e.defaultPrevented ) return;
-            var back = topSheetBackdrop();
-            if( ! back || ! back.id ) return;
-            // Prefer the dialog's own close button: an app may reset state in its handler.
-            var x = back.querySelector( "button[data-close]" );
-            if( x ) { x.click(); return; }
-            closeSheetBackdrop( back );
-        } );
-    }
-
-    //------------------------------------------------------------------------//
-    // DIALOG FIRST FIELD  -  every dialog opens with the caret already in it.
-    //
-    // The rule for the whole suite: when a .sheet-backdrop gets ".open", the
-    // FIRST usable field inside it takes the focus, so the user can type (or
-    // arrow / space) straight away without reaching for the mouse. Wired ONCE
-    // here for every dialog in the page - static markup and the sheets ui.js
-    // builds on the fly alike - so there is nothing to add to a new dialog.
-    //
-    // What it never does:
-    //   - it does not steal a focus the app set itself. A dialog that puts the
-    //     caret somewhere else on purpose (Drive's "Propiedades" -> the close
-    //     button, a destructive confirm -> "cancel", pickFolder -> the name it
-    //     pre-selects) has already focused it by the time we look, and anything
-    //     already focused inside the sheet is left alone.
-    //   - it never focuses a BUTTON. A dialog with no field keeps the focus
-    //     where it was: landing on the corner "x" would turn a stray Enter into
-    //     "close", which is exactly the accident this feature must not cause.
-    //
-    // "Ready to receive input" is the catch: some sheets are still empty when
-    // they open (shareSheet lists people after a fetch, a field may start
-    // disabled). So when there is no field yet, a small observer watches THAT
-    // dialog and focuses the first one that shows up. It gives up on the first
-    // success, when the dialog closes, or after FOCUS_WAIT ms.
-    //------------------------------------------------------------------------//
-
-    var FOCUS_WAIT = 4000;    // ms to keep waiting for an async dialog's fields
-
-    // A field the user can actually put text / a choice into - never a button.
-    function isField( el )
-    {
-        var tag = el.tagName;
-
-        if( el.disabled || el.readOnly ) return false;
-        if( el.getAttribute( "aria-hidden" ) === "true" ) return false;
-
-        // Taken out of the tab order on purpose = not a field to start on. The
-        // ATTRIBUTE, not el.tabIndex: a contenteditable div reads -1 there by
-        // default in Chrome, and that one IS where the user types.
-        var ti = el.getAttribute( "tabindex" );
-        if( ti !== null && +ti < 0 ) return false;
-
-        if( tag === "INPUT" )
-        {
-            var ty = ( el.type || "text" ).toLowerCase();
-            if( ty === "hidden" || ty === "button" || ty === "submit" ||
-                ty === "reset"  || ty === "image" ) return false;
-        }
-        else if( tag !== "SELECT" && tag !== "TEXTAREA" )
-        {
-            var ce = el.getAttribute( "contenteditable" );
-            if( ce === null || ce === "false" ) return false;
-        }
-
-        return el.getClientRects().length > 0;      // laid out = really on screen
-    }
-
-    function firstField( sheet )
-    {
-        var all  = sheet.querySelectorAll( "input, select, textarea, [contenteditable]" );
-        var head = null;                  // a field in .sheet-header, kept as a last resort
-
-        for( var i = 0; i < all.length; i++ )
-        {
-            var el = all[ i ];
-            if( ! isField( el ) ) continue;
-
-            // .sheet-header is the title row - "one small control on the right"
-            // (Calendar's "all day" switch). It sits before the form but it is
-            // not the form's first field, so the caret goes past it. Unless it
-            // is the only field there is.
-            if( el.closest( ".sheet-header" ) ) { if( ! head ) head = el; continue; }
-
-            return el;
-        }
-
-        return head;
-    }
-
-    // Try once. true = done with this dialog (focused, or someone else owns it).
-    function focusFirstField( back )
-    {
-        if( ! back.classList.contains( "open" ) ) return true;
-        if( back.contains( document.activeElement ) ) return true;   // the app chose
-
-        var f = firstField( back );
-        if( ! f ) return false;
-
-        f.focus( { preventScroll: true } );
-
-        // A text field opens with the caret AFTER what is already there (a
-        // suggested file name, the value being edited) - ready to add to it, not
-        // to type in front of it. Dialogs that mean "replace this whole value"
-        // call select() themselves, and those we never reach anyway.
-        if( f.tagName === "TEXTAREA" || /^(text|search|url|tel|password)$/.test( f.type || "" ) )
-            try { f.setSelectionRange( f.value.length, f.value.length ); } catch ( e ) {}
-
-        // A spinner (number) or an e-mail field has no setSelectionRange, so a
-        // browser that selects all on focus left its value marked. Putting the
-        // value back moves the caret to the end; the "" step is needed because
-        // Firefox only moves it when the value CHANGES. No input event fires.
-        else if( /^(number|email)$/.test( f.type || "" ) && f.value !== "" )
-        {
-            var v = f.value;
-            f.value = "";
-            f.value = v;
-        }
-
-        return true;
-    }
-
-    // Nothing to focus yet: watch this one dialog until there is.
-    function waitForField( back )
-    {
-        var mo    = null;
-        var timer = null;
-
-        function stop()
-        {
-            if( mo )    { mo.disconnect();  mo    = null; }
-            if( timer ) { clearTimeout( timer ); timer = null; }
-        }
-
-        mo = new MutationObserver( function ()
-        {
-            if( focusFirstField( back ) ) stop();
-        } );
-
-        mo.observe( back, { childList: true, subtree: true,
-                            attributes: true,
-                            attributeFilter: [ "disabled", "readonly", "class", "style" ] } );
-
-        timer = setTimeout( stop, FOCUS_WAIT );
-    }
-
-    function wireSheetFocus()
-    {
-        // One observer for the page: every .sheet-backdrop that gains ".open"
-        // (and, for recentreSheet, every one that loses it).
-        // Both dialog families are covered - setOpen() toggles the class on the
-        // markup's backdrops, and the sheets ui.js builds are in the document
-        // before they get it.
-        new MutationObserver( function ( recs )
-        {
-            for( var i = 0; i < recs.length; i++ )
-            {
-                var back = recs[ i ].target;
-
-                if( back.nodeType !== 1 || ! back.classList.contains( "sheet-backdrop" ) ) continue;
-
-                // Read the LIVE class, not the record: an open-then-close inside
-                // one tick arrives here as two records for a closed dialog.
-                if( ! back.classList.contains( "open" ) )
-                {
-                    back._nayiveFocused = false;
-                    recentreSheet( back );
-                    continue;
-                }
-                if( back._nayiveFocused ) continue;
-
-                back._nayiveFocused = true;
-
-                // Right here, no rAF, no timer. A MutationObserver callback is a
-                // microtask: the whole opening handler - packSheet, the app's own
-                // focus() / select() - has already run, and we are still inside
-                // the user's gesture, which is the only moment iOS Safari lets a
-                // programmatic focus raise the keyboard.
-                if( ! focusFirstField( back ) ) waitForField( back );
-            }
-        } ).observe( document.documentElement,
-                     { attributes: true, attributeFilter: [ "class" ], subtree: true } );
-    }
+    // KEEP. Ayni.autoSave( field, save, o ) saves one field on its own; the
+    // dialog's own `close` event runs what is kept only when it goes. Moving,
+    // the first field, Escape and the × are Ayni's too (ayni-dialogs.js).
 
     //------------------------------------------------------------------------//
     // LOW BATTERY (2026-10-04) - where the browser tells the battery level
@@ -6190,20 +5309,15 @@
 
     function battShow( level )
     {
-        var d = modal( { title: t( "ui.battLowTitle" ) } );
-        d.back.style.zIndex = "200000";                // in front of everything, the desktop's menus too
+        var d = Ayni.dialog( { title: t( "ui.battLowTitle" ) } );   // a modal dialog: in front of everything
         var p = document.createElement( "p" );
-        p.className = "dialog-text";
+        p.className = "text";
         p.textContent = tf( "ui.battLowBody", { n: Math.round( level * 100 ) } );
-        d.sheet.appendChild( p );
-        var row = document.createElement( "div" );
-        row.className = "sheet-actions";
-        var ok = sheetButton( "close", t( "ui.close" ) );        // lone close -> corner "x"
-        row.appendChild( ok );
-        d.sheet.appendChild( row );
+        d.body.appendChild( p );
+        var ok = Ayni.dialogButton( "close", t( "ui.close" ) );
+        d.place( [ ok ] );                                     // a lone × goes in the title row
         ok.addEventListener( "click", function () { d.close(); } );
-        d.show( function () { applySheetButtons( d.sheet ); } );
-        ok.focus();
+        d.show();
         return d;
     }
 
@@ -6241,9 +5355,6 @@
         applyHomeLinks();
         applySyncDots();
         startChatDot();
-        initDragSheets();
-        wireSheetClosing();
-        wireSheetFocus();
 
         // uiInit runs at DOMContentLoaded; the dictionary usually lands a moment
         // later, and applySheetButtons / applyInfoDots may have added keys of
@@ -6267,16 +5378,10 @@
         uiInit();
 
     window.NayiveUI = {
-        setOpen:  setOpen,
         paneResizer: paneResizer,   // a .pane-resizer handle sizes the pane next to it
         isMac:    IS_MAC,           // shortcuts take ⌘ (Drive, Write, Calc, Text)
         pwEye:    pwEye,            // show / hide a password field's text
         searchFold: searchFold,     // a toolbar search field folded behind a magnifier
-        modal:    modal,            // a dialog built on the fly: backdrop, sheet, Escape, close
-        autoSave: autoSave,         // close-only dialogs: one field saves itself on change
-        onSheetClose: onSheetClose, // close-only dialogs: run something when a sheet closes
-        open:     open,
-        close:    close,
         sessionExpired: sessionExpired,   // the shared "your session expired" bar (gum-api / store call it)
         loginRedirect:  loginRedirect,    // to the sign-in page and back here (GumApi.loginRedirect too)
         signOut:        signOut,          // the launcher's and admin's sign-out ({ unlinkPhone, swScope })
@@ -6302,15 +5407,11 @@
         h:                 h,             // build DOM: h( "div", { class, text, on, attrs, data }, kids… )
         attachPanel:       attachPanel,   // the clip's round-button panel (Chat, eMail)
         applySheetButtons: applySheetButtons,
-        sheetButton:       sheetButton,
         applyInfoDots:     applyInfoDots,
         applyHomeLinks:    applyHomeLinks,
         applySyncDots:     applySyncDots,
         windowed:          WINDOWED,     // true inside a desktop window
-        confirm:  confirmDialog,
         askPassword: askPassword,
-        askText:  askText,        // one name in a small dialog -> the text, or null
-        alert:    alertDialog,
         fmtBytes:   fmtBytes,
         ensureRoom: ensureRoom,
         firstRun:  firstRun,      // register the help dialog for this app

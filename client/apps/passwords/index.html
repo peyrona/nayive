@@ -26,6 +26,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <!-- The theme before the first paint, and the service worker (what other
@@ -35,6 +36,7 @@
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
+    <script src="../shared/ayni/ayni-dialogs.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS. -->
@@ -210,9 +212,11 @@
     </div>
 
     <!-- Add / edit an entry -->
-    <div id="itemBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--wide">
+    <dialog id="itemBackdrop" class="panel big">
+        <header>
             <h2 id="itemTitle"></h2>
+        </header>
+        <div class="body">
             <div id="itemTypeRow" class="tabs pw-type-tabs">
                 <button class="pill" type="button" data-type="login" data-i18n="passwords.typeLogin"></button>
                 <button class="pill" type="button" data-type="note" data-i18n="passwords.typeNote"></button>
@@ -273,18 +277,20 @@
                 <div id="itHistoryList"></div>
             </details>
             <p id="itDates" class="pw-dates"></p>
-            <div class="sheet-actions">
-                <button id="itDeleteBtn" class="btn danger sheet-actions-left" type="button" data-i18n-attr="data-tip:ui.delete"><span class="icon" data-icon="trash"></span></button>
-                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="itSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <div class="extra"><button id="itDeleteBtn" class="btn danger" type="button" data-i18n-attr="data-tip:ui.delete"><span class="icon" data-icon="trash"></span></button></div>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="itSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- New folder / rename a folder -->
-    <div id="folderBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="folderBackdrop" class="panel">
+        <header>
             <h2 id="folderTitle"></h2>
+        </header>
+        <div class="body">
             <div class="field">
                 <label for="folderName" data-i18n="passwords.folderName"></label>
                 <input id="folderName" type="text" autocomplete="off" spellcheck="false">
@@ -293,17 +299,19 @@
                 <label for="folderParent" data-i18n="passwords.parent"></label>
                 <select id="folderParent"></select>
             </div>
-            <div class="sheet-actions">
-                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="folderSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="folderSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- The generator: on its own (the ⋮) or for an entry's password ("Use"). -->
-    <div id="genBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="genBackdrop" class="panel">
+        <header>
             <h2 data-i18n="passwords.generator"></h2>
+        </header>
+        <div class="body">
             <div class="tabs pw-gen-tabs">
                 <button class="pill" type="button" data-gen="chars" data-i18n="passwords.genChars"></button>
                 <button class="pill" type="button" data-gen="words" data-i18n="passwords.genWords"></button>
@@ -342,17 +350,20 @@
                 <label class="check-row switch end"><span data-i18n="passwords.genCaps"></span><input role="switch" id="genCaps" type="checkbox"></label>
                 <label class="check-row switch end"><span data-i18n="passwords.genNumber"></span><input role="switch" id="genNum" type="checkbox"></label>
             </div>
-            <div class="sheet-actions">
-                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="genUseBtn" type="button" data-i18n-attr="data-tip:passwords.genUse"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="genUseBtn" type="button" data-i18n-attr="data-tip:passwords.genUse"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
-    <!-- Settings: close-only, every change kept at once (NayiveUI.autoSave). -->
-    <div id="settingsBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <!-- Settings: close-only, every change kept at once (Ayni.autoSave). -->
+    <dialog id="settingsBackdrop" class="panel">
+        <header>
             <h2 data-i18n="passwords.settings"></h2>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
             <div class="field">
                 <label for="setLock" data-i18n="passwords.setLock"></label>
                 <select id="setLock"></select>
@@ -366,17 +377,16 @@
                 <button id="newRecBtn" class="btn text bordered" type="button" data-i18n="passwords.newRecovery"></button>
                 <button id="hintSetBtn" class="btn text bordered" type="button" data-i18n="passwords.hintTitle"></button>
             </div>
-            <div class="sheet-actions">
-                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+    </dialog>
 
     <!-- A new master password: from Settings (the current one asked), or after
          the recovery key opened the vault (then the current one is not). -->
-    <div id="chpwBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="chpwBackdrop" class="panel">
+        <header>
             <h2 id="chpwTitle" data-i18n="passwords.changePw"></h2>
+        </header>
+        <div class="body">
             <p id="chpwLead" class="sheet-lead"></p>
             <div id="chpwCurRow" class="field">
                 <label for="chpwCur" data-i18n="passwords.currentPw"></label>
@@ -403,18 +413,20 @@
             <p id="chpwHintWarn" class="pw-hint-warn" hidden></p>
             <p id="chpwErr" class="field-error" hidden></p>
             <p id="chpwBusy" class="pw-gate-busy" hidden></p>
-            <div class="sheet-actions">
-                <button class="btn" id="chpwCancel" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="chpwSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" id="chpwCancel" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="chpwSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- Settings › Reminder phrase: change it, remove it (empty), or seal it
          again after the Nayive password changed. -->
-    <div id="hintBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="hintBackdrop" class="panel">
+        <header>
             <h2 data-i18n="passwords.hintTitle"></h2>
+        </header>
+        <div class="body">
             <p class="sheet-lead" data-i18n="passwords.hintSheetLead"></p>
             <div class="field">
                 <label for="hintEdit" data-i18n="passwords.hint"></label>
@@ -440,17 +452,19 @@
             </div>
             <p id="hintErr" class="field-error" hidden></p>
             <p id="hintBusy" class="pw-gate-busy" hidden></p>
-            <div class="sheet-actions">
-                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="hintSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="hintSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- Open with the recovery key -->
-    <div id="recBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="recBackdrop" class="panel">
+        <header>
             <h2 data-i18n="passwords.useRecovery"></h2>
+        </header>
+        <div class="body">
             <p class="sheet-lead" data-i18n="passwords.recEnterLead"></p>
             <div class="field">
                 <label for="recInput" data-i18n="passwords.recKey"></label>
@@ -458,48 +472,53 @@
             </div>
             <p id="recErr" class="field-error" hidden></p>
             <p id="recBusy" class="pw-gate-busy" hidden></p>
-            <div class="sheet-actions">
-                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="recGoBtn" type="button" data-i18n-attr="data-tip:passwords.unlock"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="recGoBtn" type="button" data-i18n-attr="data-tip:passwords.unlock"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- A new recovery key, shown once -->
-    <div id="recShowBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="recShowBackdrop" class="panel">
+        <header>
             <h2 data-i18n="passwords.recTitle"></h2>
+        </header>
+        <div class="body">
             <p class="sheet-lead" data-i18n="passwords.recLead"></p>
             <p id="recShowCode" class="pw-rec-code"></p>
             <div class="choice-row">
                 <button id="recShowCopy" class="btn text bordered" type="button" data-i18n="ui.copy"></button>
                 <button id="recShowPrint" class="btn text bordered" type="button" data-i18n="passwords.print"></button>
             </div>
-            <div class="sheet-actions">
-                <button class="btn primary" id="recShowDone" type="button" data-i18n-attr="data-tip:passwords.recWritten"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn primary" id="recShowDone" type="button" data-i18n-attr="data-tip:passwords.recWritten"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- Import -->
-    <div id="importBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="importBackdrop" class="panel">
+        <header>
             <h2 data-i18n="passwords.import"></h2>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
             <p class="sheet-lead" data-i18n="passwords.importLead"></p>
             <p class="sheet-lead" data-i18n="passwords.importFrom"></p>
             <div class="choice-row">
                 <button id="importPickBtn" class="btn text primary" type="button" data-i18n="passwords.importPick"></button>
             </div>
-            <div class="sheet-actions">
-                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+    </dialog>
 
     <!-- Export -->
-    <div id="exportBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="exportBackdrop" class="panel">
+        <header>
             <h2 data-i18n="passwords.export"></h2>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
             <p class="sheet-lead" data-i18n="passwords.exportLead"></p>
             <div class="choice-row">
                 <button id="exportEncBtn" class="btn text primary" type="button" data-i18n="passwords.exportEnc"></button>
@@ -508,11 +527,8 @@
             <div class="choice-row">
                 <button id="exportCsvBtn" class="btn text bordered" type="button" data-i18n="passwords.exportCsv"></button>
             </div>
-            <div class="sheet-actions">
-                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+    </dialog>
 
     <input type="file" id="importInput" accept=".csv,.json,text/csv,application/json" hidden>
     <div id="printRoot"></div>

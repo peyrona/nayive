@@ -33,6 +33,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -40,6 +41,7 @@
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
+    <script src="../shared/ayni/ayni-dialogs.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
@@ -503,7 +505,7 @@
         {
             var el = e.target;
 
-            if( document.querySelector( '.sheet-backdrop.open' ) ) return true;
+            if( document.querySelector( 'dialog.panel[open]' ) ) return true;
             return !! ( el && ( el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable ) );
         }
 
@@ -722,7 +724,7 @@
                     // Any dialog over the app pauses it - the help sheet, the
                     // install prompt, "session expired" - the same rule the
                     // canvas games follow: time under a sheet is not played.
-                    if( document.querySelector( '.sheet-backdrop.open' ) ) { w.pause(); return; }
+                    if( document.querySelector( 'dialog.panel[open]' ) ) { w.pause(); return; }
                     g.els().time.textContent = clock( w.seconds() );
                 }, 250 );
             };
@@ -905,7 +907,7 @@
             // `runs` states is on: a finished game's dust still settles.
             function step()
             {
-                if( runs.indexOf( o.getState() ) >= 0 && document.querySelector( '.sheet-backdrop.open' ) ) { pause(); return; }
+                if( runs.indexOf( o.getState() ) >= 0 && document.querySelector( 'dialog.panel[open]' ) ) { pause(); return; }
                 o.step();
             }
 

@@ -202,7 +202,7 @@ async function applyImport( text, name )
     if( mode === 'replace' )
     {
         const have = allBookmarks().length;
-        const ok = await NayiveUI.confirm( {
+        const ok = await Ayni.confirm( {
             title:   T( 'bookmarks.importReplace' ),
             body:    TF( 'bookmarks.replaceQ', { have: have, n: counts.bookmarks } ),
             confirm: T( 'bookmarks.importReplace' ),
@@ -219,7 +219,7 @@ async function applyImport( text, name )
     const after = snapshot();                   // what Replace all made, for its Undo
 
     if( ! save() ) { data = before; return; }
-    NayiveUI.close( 'importBackdrop' );
+    document.getElementById( 'importBackdrop' ).close();
     curFolder = dest; filter = 'all';
     if( query ) { query = ''; document.getElementById( 'searchInput' ).value = ''; }
     revealInTree( dest );
@@ -329,7 +329,7 @@ async function deliver( text, name, type )
 {
     if( exportWhere() === 'nayive' ) { if( ! await saveInNayive( text, name ) ) return; }
     else NayiveUI.saveFile( text, name, type );
-    NayiveUI.close( 'exportBackdrop' );
+    document.getElementById( 'exportBackdrop' ).close();
 }
 
 // Into a folder the user picks; a name already there gets " (2)", " (3)"…
@@ -372,7 +372,7 @@ let dupGroups = [];
 // `newFolder`: the folder that import made (its copies are not the ones kept).
 function openDupSheet( auto, newFolder )
 {
-    if( auto && document.querySelector( '.sheet-backdrop.open' ) ) return;
+    if( auto && document.querySelector( 'dialog.panel[open]' ) ) return;
     dupGroups = findDuplicates( newFolder );
     if( ! dupGroups.length ) { if( auto !== true ) Ayni.toast( 'info', T( 'bookmarks.noDupes' ) ); return; }
 
@@ -390,7 +390,7 @@ function openDupSheet( auto, newFolder )
         } ).join( '' ) + '</div>';
     } ).join( '' );
 
-    NayiveUI.open( 'dupBackdrop' );
+    document.getElementById( 'dupBackdrop' ).showModal();
 }
 
 // The copies go, then the folders that leaves empty (an import's folder
@@ -407,7 +407,7 @@ function removeDuplicates()
     } );
     const emptied = dropEmptied( rec );
     save();
-    NayiveUI.close( 'dupBackdrop' );
+    document.getElementById( 'dupBackdrop' ).close();
     pruneState();
     render();
     const msg = ( gone === 1 ? T( 'bookmarks.dupesRemovedOne' ) : TF( 'bookmarks.dupesRemoved', { n: gone } ) ) +

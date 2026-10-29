@@ -89,9 +89,9 @@ section( "B5-18 · a save waiting here is read back, never skipped" );
         if( i && i.method === 'PUT' && window.__noPut ) return Promise.reject( new TypeError( 'Failed to fetch' ) );
         return f.apply( this, arguments ); }; window.__noPut = true; return true; } )()` );
     await c.evaluate( "document.getElementById('editBtn').click(); true" );
-    await c.until( "document.getElementById('groupSheetBackdrop').classList.contains('open')" );
+    await c.until( "document.getElementById('groupSheetBackdrop').open" );
     await c.evaluate( "( () => { const i = document.getElementById('groupNameInput'); i.value = 'Alpha local'; i.dispatchEvent( new Event( 'input', { bubbles: true } ) ); document.getElementById('groupSaveBtn').click(); return true; } )()" );
-    ok( await c.until( "! document.getElementById('groupSheetBackdrop').classList.contains('open')" ), "renamed" );
+    ok( await c.until( "! document.getElementById('groupSheetBackdrop').open" ), "renamed" );
     // The PUT has failed (its retries done): the save is back in the outbox.
     ok( await c.until( "[ 'offline', 'pending', 'error' ].includes( document.getElementById('syncIndicator').dataset.syncState )" ),
         "the plug says the save is waiting", await c.evaluate( "document.getElementById('syncIndicator').dataset.syncState" ) );

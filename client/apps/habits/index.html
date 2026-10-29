@@ -20,6 +20,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -27,6 +28,7 @@
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
+    <script src="../shared/ayni/ayni-dialogs.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS (and localhost). -->
@@ -41,7 +43,7 @@
 
     <style>
         /* Base reset, card shell (.page/.page-inner/.card), .header, .btn,
-           .pill, .tag, .card-row, .sheet and inputs all come from ../shared/app.css.
+           .pill, .tag, .card-row and inputs all come from ../shared/app.css.
            Only what is unique to Habits lives here. */
 
 
@@ -281,10 +283,11 @@
     </div>
 
     <!-- NEW / EDIT HABIT (its figures on top when it already exists) -->
-    <div class="sheet-backdrop" id="habitSheetBackdrop" role="dialog" aria-modal="true">
-        <div class="sheet">
+    <dialog class="panel" id="habitSheetBackdrop">
+        <header>
             <h2 id="habitSheetTitle" data-i18n="habits.newHabit"></h2>
-
+        </header>
+        <div class="body">
             <div id="statsStrip" class="stats" hidden>
                 <div class="stat"><b id="statStreak">0</b><span data-i18n="habits.statStreak"></span></div>
                 <div class="stat"><b id="statBest">0</b><span data-i18n="habits.statBest"></span></div>
@@ -320,17 +323,16 @@
                 </label>
                 <input id="targetInput" type="number" min="2" max="99" inputmode="numeric" data-i18n-attr="placeholder:habits.targetPh">
             </div>
-
-            <div class="sheet-actions">
-                <div class="sheet-actions-left left-group">
-                    <button id="archiveBtn" class="btn text bordered sm" type="button" hidden data-i18n="habits.archive"></button>
-                    <button class="btn danger" id="deleteBtn" type="button" hidden data-i18n-attr="data-tip:ui.delete"><span class="icon" data-icon="trash"></span></button>
-                </div>
-                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="saveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <div class="left-group extra">
+                <button id="archiveBtn" class="btn text bordered sm" type="button" hidden data-i18n="habits.archive"></button>
+                <button class="btn danger" id="deleteBtn" type="button" hidden data-i18n-attr="data-tip:ui.delete"><span class="icon" data-icon="trash"></span></button>
+            </div>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="saveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- File-API client (access probe, retrying fetch, file ops). -->
     <script src="../shared/gum-api.js" defer></script>
@@ -551,7 +553,7 @@
 
         // The habit sheet
         $( 'saveBtn' ).addEventListener( 'click', saveHabit );
-        $( 'nameInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) saveHabit(); } );
+        $( 'nameInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) { e.preventDefault(); saveHabit(); } } );
         $( 'iconGrid' ).addEventListener( 'click', function( e )
         {
             const b = e.target.closest( '[data-icon]' );
@@ -584,13 +586,13 @@
 
         // The × of our sheet (a button marked data-close;
         // closing it is the app's job). Escape presses that
-        // × too (shared/ui.js). The shared confirm / alert dialogs handle their own
-        // and carry no id.
+        // × too (Ayni). Ayni's confirm / alert dialogs handle their own and
+        // carry no id.
         document.addEventListener( 'click', function( e )
         {
             const b = e.target.closest( 'button' );
             if( ! b || ! b.hasAttribute( 'data-close' ) ) return;
-            const back = b.closest( '.sheet-backdrop' );
+            const back = b.closest( 'dialog.panel' );
             if( back && back.id ) closeSheet( back.id );
         } );
 
@@ -922,7 +924,7 @@
 
         function closeSheet( id )
         {
-            NayiveUI.close( id );
+            document.getElementById( id ).close();
             if( id === 'habitSheetBackdrop' ) hs = null;
         }
 
@@ -957,7 +959,7 @@
             $( 'archiveBtn' ).textContent = h && h.archived ? T( 'habits.restore' ) : T( 'habits.archive' );
             $( 'deleteBtn' ).hidden = ! ( h && h.archived );
 
-            NayiveUI.open( 'habitSheetBackdrop' );
+            document.getElementById( 'habitSheetBackdrop' ).showModal();
             if( ! h ) setTimeout( function() { $( 'nameInput' ).focus(); }, 60 );
         }
 

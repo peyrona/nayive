@@ -76,7 +76,7 @@ section( "H6 · A MERGE LANDS WHILE THE STAGE SHEET IS OPEN" );
     await c.until( "! navigator.onLine" );
     await c.evaluate( "toggleStage( 72 ); true" );
     await c.evaluate( "openEditStage( 71 ); true" );
-    ok( await c.until( "document.getElementById( 'stageSheetBackdrop' ).classList.contains( 'open' )" ), "the Roma sheet is open" );
+    ok( await c.until( "document.getElementById( 'stageSheetBackdrop' ).open" ), "the Roma sheet is open" );
 
     // The phone uploads a ticket to Roma and sets its hotel.
     await seed( "data/trips/italy-2026/b.pdf", "PHONE-TICKET" );
@@ -112,7 +112,7 @@ section( "H6 · ...AND WHILE THE TRIP SHEET IS OPEN, ITS DOCUMENT LIST TOUCHED" 
     await c.send( "Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 } );
     await c.until( "! navigator.onLine" );
     await c.evaluate( "toggleStage( 91 ); openEditTrip(); removeTripDoc( 11 ); true" );   // a change waits; the sheet drops p1
-    ok( await c.until( "document.getElementById( 'tripSheetBackdrop' ).classList.contains( 'open' )" ), "the trip sheet is open, p1 removed in it" );
+    ok( await c.until( "document.getElementById( 'tripSheetBackdrop' ).open" ), "the trip sheet is open, p1 removed in it" );
 
     await seed( DIR + "/ph.pdf", "PHONE-DOC" );
     const r = await phone.get( F );
@@ -142,7 +142,7 @@ section( "D2 · TWO STAGES' \"ticket.pdf\", AND A FILE ALREADY IN THE FOLDER" );
     await reopen( "/nayive/trips/" );
     ok( await c.until( "typeof trips !== 'undefined' && trips.some( t => t.id === 8000 )" ), "the trip is listed" );
     await c.evaluate( "goToDetail( 8000 ); openEditStage( 82 ); true" );
-    ok( await c.until( "document.getElementById( 'stageSheetBackdrop' ).classList.contains( 'open' )" ), "the Kyoto sheet is open" );
+    ok( await c.until( "document.getElementById( 'stageSheetBackdrop' ).open" ), "the Kyoto sheet is open" );
 
     for( const [ name, body ] of [ [ "ticket.pdf", "KYOTO" ], [ "boarding.pdf", "KYOTO-BOARDING" ] ] )
     {
@@ -186,7 +186,7 @@ section( "PHOTO FOLDER OUTSIDE PHOTOS: <Photos>/<Trips>/<trip> IS MADE, NOTHING 
     const isDir = rel => { try { return fs.statSync( path.join( s.home(), rel ) ).isDirectory(); } catch { return false; } };
     const dirOf = () => ( json( DIR + "/trip.json" ) || {} ).photosDir;
     const pick  = ( answer ) => c.evaluate( `( () => { NayiveUI.pickFolder = () => Promise.resolve( 'files/Other' );
-        NayiveUI.confirm = () => Promise.resolve( ${JSON.stringify( answer )} ); goToDetail( 9000 );
+        Ayni.confirm = () => Promise.resolve( ${JSON.stringify( answer )} ); goToDetail( 9000 );
         return pickTripPhotoFolder( findTrip( 9000 ) ).then( () => true ); } )()` );
 
     await pick( false );

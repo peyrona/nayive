@@ -146,14 +146,14 @@ try
     ok( await c.evaluate( "!document.querySelector('.attach.mail-attach') && !document.getElementById('composeView').hidden" ), "Escape closes it (the writer stays)" );
     // Doc. de Nayive: the file picker, and the file goes on the message
     await c.evaluate( "document.getElementById('cAttach').click(); [...document.querySelectorAll('.attach .att')][1].click(); true" );
-    ok( await waitFor( c, "document.querySelector('.sheet-backdrop.open')" ), "Doc. de Nayive opens Nayive's file picker" );
+    ok( await waitFor( c, "document.querySelector('dialog.panel[open]')" ), "Doc. de Nayive opens Nayive's file picker" );
     await shot( c, "03-nayive-picker" );
-    await waitFor( c, "[...document.querySelectorAll('.sheet-backdrop.open .fp-row')].some( r => /Docs/.test( r.textContent ) )" );
-    await c.evaluate( "[...document.querySelectorAll('.sheet-backdrop.open .fp-row')].find( r => /Docs/.test( r.textContent ) ).click(); true" );
-    await waitFor( c, "[...document.querySelectorAll('.sheet-backdrop.open .fp-row')].some( r => /nota\\.txt/.test( r.textContent ) )" );
-    await c.evaluate( "[...document.querySelectorAll('.sheet-backdrop.open .fp-row')].find( r => /nota\\.txt/.test( r.textContent ) ).dispatchEvent( new MouseEvent( 'dblclick', { bubbles: true } ) ); true" );
+    await waitFor( c, "[...document.querySelectorAll('dialog.panel[open] .fp-row')].some( r => /Docs/.test( r.textContent ) )" );
+    await c.evaluate( "[...document.querySelectorAll('dialog.panel[open] .fp-row')].find( r => /Docs/.test( r.textContent ) ).click(); true" );
+    await waitFor( c, "[...document.querySelectorAll('dialog.panel[open] .fp-row')].some( r => /nota\\.txt/.test( r.textContent ) )" );
+    await c.evaluate( "[...document.querySelectorAll('dialog.panel[open] .fp-row')].find( r => /nota\\.txt/.test( r.textContent ) ).dispatchEvent( new MouseEvent( 'dblclick', { bubbles: true } ) ); true" );
     ok( await waitFor( c, "/nota\\.txt/.test( document.getElementById('cFiles').textContent )", 5000 ), "the Nayive file is on the message",
-        await c.evaluate( "document.getElementById('cFiles').textContent + ' | ' + ( document.querySelector('.sheet-backdrop.open') ? document.querySelector('.sheet-backdrop.open').textContent.slice( 0, 200 ) : '' )" ) );
+        await c.evaluate( "document.getElementById('cFiles').textContent + ' | ' + ( document.querySelector('dialog.panel[open]') ? document.querySelector('dialog.panel[open]').textContent.slice( 0, 200 ) : '' )" ) );
     // Galería: a file input for pictures
     await c.evaluate( `window.__clicked = null; ( () => { const i = document.getElementById('cFileInput'); i.click = function () { window.__clicked = i.accept; }; } )(); true` );
     await c.evaluate( "document.getElementById('cAttach').click(); [...document.querySelectorAll('.attach .att')][2].click(); true" );
@@ -373,10 +373,10 @@ try
     const size = await c.evaluate( "document.querySelector('#readParts small').textContent" );
     ok( /^\d+\s*B/.test( size ) && parseInt( size ) >= 25 && parseInt( size ) <= 45, "its size is the file's own (not the base64's)", size );
     await c.evaluate( "window.__toasts = []; document.querySelector('#readParts .mail-part').click(); true" );
-    ok( await waitFor( c, "document.querySelector('.sheet-backdrop.open .fp-tree .tree-row')" ), "Save to Nayive asks for a folder" );
-    await c.evaluate( "document.querySelector('.sheet-backdrop.open .fp-tree .tree-row').click(); true" );     // the root: Archivos
-    await waitFor( c, "document.querySelector('.sheet-backdrop.open .btn.primary').ariaDisabled !== 'true'" );
-    await c.evaluate( "document.querySelector('.sheet-backdrop.open .btn.primary').click(); true" );
+    ok( await waitFor( c, "document.querySelector('dialog.panel[open] .fp-tree .tree-row')" ), "Save to Nayive asks for a folder" );
+    await c.evaluate( "document.querySelector('dialog.panel[open] .fp-tree .tree-row').click(); true" );     // the root: Archivos
+    await waitFor( c, "document.querySelector('dialog.panel[open] .btn.primary').ariaDisabled !== 'true'" );
+    await c.evaluate( "document.querySelector('dialog.panel[open] .btn.primary').click(); true" );
     ok( await waitFor( c, "window.__toasts.some( t => /^Guardado en (?!Borradores)/.test( t ) )", 8000 ), "saved in Nayive", await lastToast( c ) );
     const saved = ( await c.evaluate( "window.__toasts.filter( t => /^Guardado en (?!Borradores)/.test( t ) ).pop()" ) ).replace( /^Guardado en /, "" );
     const folder = saved === "Inicio" ? "files" : "files/" + saved;
@@ -388,7 +388,7 @@ try
     console.log( "PICKING" );
     // the select button opens the pick dialog; its All picks every row, again none
     await c.evaluate( "document.getElementById('selectBtn').click(); true" );
-    ok( await waitFor( c, "document.getElementById('pickSheet').classList.contains('open')" ), "the select button opens the pick dialog" );
+    ok( await waitFor( c, "document.getElementById('pickSheet').open" ), "the select button opens the pick dialog" );
     await c.evaluate( "document.getElementById('pickAllBtn').click(); true" );
     ok( await c.evaluate( "document.querySelectorAll('#list .mail-row.is-selected').length === document.querySelectorAll('#list .mail-row').length" ), "All: every row picked" );
     await c.evaluate( "document.getElementById('selectBtn').click(); document.getElementById('pickAllBtn').click(); true" );
@@ -416,7 +416,7 @@ try
     // -----------------------------------------------------------------------
     console.log( "SETTINGS" );
     await c.evaluate( "document.getElementById('setBtn').click(); true" );
-    await waitFor( c, "document.getElementById('setSheet').classList.contains('open')" );
+    await waitFor( c, "document.getElementById('setSheet').open" );
     ok( await c.evaluate( "document.querySelectorAll('#acctList .card-row .btn').length === 2" ), "each account: a key and a bin" );
     await c.evaluate( "document.querySelector('#acctList .card-row .btn').click(); document.querySelector('.mail-newpass input').value = 'wrong'; document.querySelector('.mail-newpass .btn.text').click(); true" );
     ok( await waitFor( c, "!document.querySelector('.mail-newpass .field-error').hidden", 8000 ), "a wrong new password is refused",
@@ -432,7 +432,7 @@ try
     await sleep( 1400 );
     const st = await c.evaluate( "fetch('/api/mail/settings').then( r => r.json() )" );
     ok( st.signature === "Ana\nTel 1" && st.showImages === false, "the signature is saved (cleaned)", st );
-    await c.evaluate( "NayiveUI.close('setSheet'); true" );
+    await c.evaluate( "document.getElementById( 'setSheet' ).close(); true" );
 
     // -----------------------------------------------------------------------
     console.log( "SIGNATURE" );
@@ -469,7 +469,7 @@ try
     ok( await c.evaluate( "document.getElementById('searchWrap').classList.contains('is-open') && !!document.querySelector('#searchWrap .search-ends button.search-mark') && !document.querySelector('#searchWrap span.search-mark')" ),
         "the magnifier opens the box: a funnel inside, no dead magnifier" );
     await c.evaluate( "document.querySelector('#searchWrap .search-mark').click(); true" );
-    ok( await waitFor( c, "document.getElementById('advSheet').classList.contains('open')", 3000 ), "the funnel opens the dialog" );
+    ok( await waitFor( c, "document.getElementById('advSheet').open", 3000 ), "the funnel opens the dialog" );
     await c.evaluate( "document.getElementById('advFrom').value = 'bob'; document.getElementById('advAttach').checked = true; document.getElementById('advGoBtn').click(); true" );
     await sleep( 300 ); await idle();
     ok( JSON.stringify( await c.evaluate( SUBJS ) ) === JSON.stringify( [ "With a file" ] ), "From bob + attachments: the one mail", await c.evaluate( SUBJS ) );

@@ -14,7 +14,7 @@ const currentOk = f => f === "files/Old";
 
 section( "DRIVE · ICONS" );
 ok( await c.open( "/nayive/drive/?open=files/Docs", "/nayive/drive/" ) && await c.until( "document.querySelectorAll('#listing .row[data-path]').length === 4" ), "Drive opens Docs" );
-await c.evaluate( "document.querySelectorAll('.sheet-backdrop.open').forEach( b => b.classList.remove('open') ); true" );
+await c.evaluate( "document.querySelectorAll('dialog.panel[open]').forEach( b => b.classList.remove('open') ); true" );
 ok( await c.evaluate( "! document.getElementById('treePane') && ! document.getElementById('paneResizer')" ), "no folder tree, no pane divider" );
 ok( await c.evaluate( "!! document.querySelector('#listing .list-rows.is-grid') && document.getElementById('gridBtn').getAttribute('aria-pressed') === 'true'" ), "icons are the default view" );
 ok( await c.evaluate( "document.querySelector('.breadcrumb .crumb-root').textContent === 'Home'" ), "the first crumb says Home" );
@@ -68,7 +68,7 @@ await key( c, "Escape" );
 section( "DRIVE · KEYS" );
 await mouse( c, ROW( "files/Docs/b.txt" ), { dx: 120 } );
 await key( c, "F2" );
-ok( await c.until( "document.getElementById('renameBackdrop').classList.contains('open')" ), "F2 renames" );
+ok( await c.until( "document.getElementById('renameBackdrop').open" ), "F2 renames" );
 await c.evaluate( "document.getElementById('renameCancelBtn').click(); true" );
 await sleep( 200 );
 await mouse( c, ROW( "files/Docs/b.txt" ), { dx: 120 } );
@@ -88,7 +88,7 @@ section( "DRIVE · BIN, NO QUESTION" );
 await mouse( c, ROW( "files/Pics/a.txt" ), { dx: 120 } );
 await key( c, "Delete" );
 ok( await c.until( "! document.querySelector('#listing .row[data-path=\"files/Pics/a.txt\"]')" ) && ! exists( s, "files/Pics/a.txt" ), "Del: to the bin at once" );
-ok( await c.evaluate( "! document.querySelector('.sheet-backdrop.open')" ) && await c.until( "!! document.querySelector('#ayni-toasts .toast.undo .act')" ), "…no question, an Undo" );
+ok( await c.evaluate( "! document.querySelector('dialog.panel[open]')" ) && await c.until( "!! document.querySelector('#ayni-toasts .toast.undo .act')" ), "…no question, an Undo" );
 await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
 ok( await c.until( "!! document.querySelector('#listing .row[data-path=\"files/Pics/a.txt\"]')" ) && exists( s, "files/Pics/a.txt" ), "Undo brings it back" );
 await c.evaluate( "navigateTo('files'); true" );
@@ -97,7 +97,7 @@ await mouse( c, ROW( "files/Old" ), { button: "right", dx: 120 } );
 rows = await menuRows( c );
 ok( rows && rows.some( r => r.act === "bin" && ! r.off ) && rows.some( r => r.act === "rename" ), "a folder row's right-click: the same menu" );
 await c.evaluate( "document.querySelector('.item-menu [data-act=bin]').click(); true" );
-ok( await c.until( "! document.querySelector('#listing .row[data-path=\"files/Old\"]')" ) && ! exists( s, "files/Old" ) && await c.evaluate( "! document.querySelector('.sheet-backdrop.open')" ), "a folder goes to the bin at once too" );
+ok( await c.until( "! document.querySelector('#listing .row[data-path=\"files/Old\"]')" ) && ! exists( s, "files/Old" ) && await c.evaluate( "! document.querySelector('dialog.panel[open]')" ), "a folder goes to the bin at once too" );
 await c.until( "!! document.querySelector('#ayni-toasts .toast.undo .act')" );
 await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
 ok( await c.until( "!! document.querySelector('#listing .row[data-path=\"files/Old\"]')", 8000 ) && exists( s, "files/Old/x.txt" ), "…and Undo brings the folder back" );
@@ -114,9 +114,9 @@ await c.evaluate( "navigateTo('files/Docs'); true" );
 await c.until( "currentFolder === 'files/Docs' && ! listingLoading && document.querySelectorAll('#listing .row[data-path]').length === 3" );
 await mouse( c, ROW( "files/Docs/b.txt" ), { dx: 120 } );
 await c.evaluate( "browse.run('move'); true" );
-ok( await c.until( "!! document.querySelector('.sheet-backdrop.open .pick-tree .tree-row')" ), "Move to… shows the same tree" );
-ok( await c.evaluate( "! document.querySelector('.sheet-backdrop.open .pick-tree .tree-row[data-id=\"shared\"]')" ), "…Drive's folders only" );
-await c.evaluate( `( () => { const P = '.sheet-backdrop.open .pick-tree '; const d = document.querySelector( P + '.tree-row[data-id="files/Docs"]' ); if( d.getAttribute('aria-expanded') !== 'true' ) d.querySelector('[data-twisty]').click(); document.querySelector( P + '.tree-row[data-id="files/Docs/Work"]' ).click(); document.querySelector('.pick-ok').click(); } )(); true` );
+ok( await c.until( "!! document.querySelector('dialog.panel[open] .pick-tree .tree-row')" ), "Move to… shows the same tree" );
+ok( await c.evaluate( "! document.querySelector('dialog.panel[open] .pick-tree .tree-row[data-id=\"shared\"]')" ), "…Drive's folders only" );
+await c.evaluate( `( () => { const P = 'dialog.panel[open] .pick-tree '; const d = document.querySelector( P + '.tree-row[data-id="files/Docs"]' ); if( d.getAttribute('aria-expanded') !== 'true' ) d.querySelector('[data-twisty]').click(); document.querySelector( P + '.tree-row[data-id="files/Docs/Work"]' ).click(); document.querySelector('.pick-ok').click(); } )(); true` );
 ok( await c.until( "! document.querySelector('#listing .row[data-path=\"files/Docs/b.txt\"]')" ) && exists( s, "files/Docs/Work/b.txt" ), "…and moves there" );
 await c.until( "! listingLoading" );
 const lit = await drag( c, ROW( "files/Docs/c.md" ), '.breadcrumb .crumb-root' );
@@ -141,7 +141,7 @@ await c.evaluate( "document.getElementById('viewerBackdrop').classList.add('open
 await key( c, "F2" );
 await key( c, "Delete" );
 await sleep( 300 );
-ok( await c.evaluate( "! document.querySelector('.sheet-backdrop.open')" ) && exists( s, "files/Docs/Work/b.txt" ) && await sel() === "files/Docs/Work/b.txt",
+ok( await c.evaluate( "! document.querySelector('dialog.panel[open]')" ) && exists( s, "files/Docs/Work/b.txt" ) && await sel() === "files/Docs/Work/b.txt",
     "with the viewer open, F2 / Del do nothing to the list behind it" );
 await c.evaluate( "document.getElementById('viewerBackdrop').classList.remove('open'); true" );
 // CS4: Ctrl+A on a Russian keyboard ("ф"), Alt+N on a Mac (a dead key).
@@ -152,7 +152,7 @@ await rawKey( "ф", "KeyA", 65, 2 );
 ok( await sel() === "files/Docs/Work/b.txt", "Ctrl+A on a Cyrillic layout picks all", await sel() );
 await key( c, "Escape" );
 await rawKey( "Dead", "KeyN", 78, 1 );
-ok( await c.until( "document.getElementById('newFolderBackdrop').classList.contains('open')" ), "Mac ⌥N (a dead key) opens New folder" );
+ok( await c.until( "document.getElementById('newFolderBackdrop').open" ), "Mac ⌥N (a dead key) opens New folder" );
 await c.evaluate( "document.getElementById('newFolderCancelBtn').click(); true" );
 await sleep( 200 );
 // CS5: Tab is the browser's own (there is no tree to jump into).

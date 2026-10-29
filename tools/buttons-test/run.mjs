@@ -115,7 +115,7 @@ try
     console.log( "DIALOGS - Drive's New folder" );
     await open( "drive", 1280 );
     await ev( "document.getElementById( 'newFolderBtn' ).click(); true" );
-    ok( await until( "document.getElementById( 'newFolderBackdrop' )?.classList.contains( 'open' )" ), "New folder opens" );
+    ok( await until( "document.getElementById( 'newFolderBackdrop' )?.open" ), "New folder opens" );
     const okBtn = JSON.parse( await ev( `( b => JSON.stringify( [ b.className, getComputedStyle( b ).backgroundColor, getComputedStyle( document.documentElement ).getPropertyValue( '--accent' ).trim(), b.offsetWidth, b.getAttribute( 'aria-label' ) ] ) )( document.getElementById( 'newFolderConfirmBtn' ) )` ) );
     ok( /\bprimary\b/.test( okBtn[ 0 ] ) && okBtn[ 1 ] !== "rgba(0, 0, 0, 0)", "the ✓ is the filled default button", okBtn );
     ok( okBtn[ 3 ] === 36, "dialog buttons are 36 px with a mouse", okBtn[ 3 ] );
@@ -124,20 +124,20 @@ try
     ok( x[ 0 ] && x[ 1 ] === "rgba(0, 0, 0, 0)", "the × is marked data-close and has no fill at rest", x );
     await c.send( "Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 } );
     await c.send( "Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 } );
-    ok( await until( "! document.getElementById( 'newFolderBackdrop' ).classList.contains( 'open' )" ), "Escape closes it (through its ×)" );
+    ok( await until( "! document.getElementById( 'newFolderBackdrop' ).open" ), "Escape closes it (through its ×)" );
     await ev( "document.getElementById( 'newFolderBtn' ).click(); true" );
-    await until( "document.getElementById( 'newFolderBackdrop' ).classList.contains( 'open' )" );
+    await until( "document.getElementById( 'newFolderBackdrop' ).open" );
     await ev( "document.getElementById( 'newFolderCancelBtn' ).click(); true" );
-    ok( await until( "! document.getElementById( 'newFolderBackdrop' ).classList.contains( 'open' )" ), "a click on the × closes it" );
-    ok( await ev( "!! document.querySelector( '#propsBackdrop .sheet-header > #propsCloseBtn.btn.sheet-close' ) && ! document.querySelector( '#propsBackdrop .sheet-actions' )" ),
+    ok( await until( "! document.getElementById( 'newFolderBackdrop' ).open" ), "a click on the × closes it" );
+    ok( await ev( "!! document.querySelector( '#propsBackdrop > header > #propsCloseBtn[data-close]' ) && ! document.querySelector( '#propsBackdrop footer' )" ),
         "a lone × goes to the title line, the empty row is dropped" );
 
-    console.log( "DIALOGS - one built in code (NayiveUI.confirm)" );
-    await ev( "window.__a = NayiveUI.confirm( { title: 'T', body: 'B', confirm: 'Go', danger: true } ); true" );
-    ok( await until( "!! document.querySelector( '.sheet-backdrop.open:not([id]) .sheet-actions .btn.danger' )" ), "a danger confirm shows its trash button" );
-    const dz = JSON.parse( await ev( `( b => JSON.stringify( [ b.classList.contains( 'primary' ), b.dataset.tip, b.getAttribute( 'aria-label' ), !! b.querySelector( '.icon svg' ) ] ) )( document.querySelector( '.sheet-backdrop.open:not([id]) .btn.danger' ) )` ) );
+    console.log( "DIALOGS - one built in code (Ayni.confirm)" );
+    await ev( "window.__a = Ayni.confirm( { title: 'T', body: 'B', confirm: 'Go', danger: true } ); true" );
+    ok( await until( "!! document.querySelector( 'dialog.panel[open]:not([id]) footer .btn.danger' )" ), "a danger confirm shows its trash button" );
+    const dz = JSON.parse( await ev( `( b => JSON.stringify( [ b.classList.contains( 'primary' ), b.dataset.tip, b.getAttribute( 'aria-label' ), !! b.querySelector( '.icon svg' ) ] ) )( document.querySelector( 'dialog.panel[open]:not([id]) .btn.danger' ) )` ) );
     ok( ! dz[ 0 ] && dz[ 1 ] === "Go" && dz[ 2 ] === "Go" && dz[ 3 ], "it is never the default, says what it does and has its icon", dz );
-    await ev( "document.querySelector( '.sheet-backdrop.open:not([id]) [data-close]' ).click(); true" );
+    await ev( "document.querySelector( 'dialog.panel[open]:not([id]) [data-close]' ).click(); true" );
     ok( await ev( "window.__a.then( v => v === false )" ), "its × answers no" );
 
     console.log( "DISABLED - Music's Play with nothing loaded" );
@@ -173,7 +173,7 @@ try
     ok( await ev( `( () => { const b = document.getElementById( 'searchToggleBtn' ), r = b.getBoundingClientRect(); return document.elementFromPoint( r.left - 3, r.top + r.height / 2 )?.closest( '#searchToggleBtn' ) === b && r.width === 36; } )()` ),
         "a header button keeps 36 px and is hit 3 px outside it (44 px area)" );
     await ev( "document.getElementById( 'newFolderBtn' ).click(); true" );
-    await until( "document.getElementById( 'newFolderBackdrop' ).classList.contains( 'open' )" );
+    await until( "document.getElementById( 'newFolderBackdrop' ).open" );
     ok( await ev( "document.getElementById( 'newFolderConfirmBtn' ).offsetWidth === 44" ), "dialog buttons are 44 px on touch",
         await ev( "document.getElementById( 'newFolderConfirmBtn' ).offsetWidth" ) );
 }

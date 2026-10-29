@@ -112,7 +112,7 @@ ok( await c.until( "/ningún mensaje/.test( document.querySelector( '.days-count
     "1000 days: none", await c.evaluate( "document.querySelector( '.days-count' )?.textContent" ) );
 await c.evaluate( `( () => { const i = document.getElementById( 'autoDelDays' ); i.value = '1'; i.dispatchEvent( new InputEvent( 'input' ) ); return true; } )()` );
 await c.until( "/3 mensajes/.test( document.querySelector( '.days-count' )?.textContent || '' )" );
-const CLOSE = "document.getElementById( 'autoDelDays' )?.closest( '.sheet' )?.querySelector( '.sheet-close' )";
+const CLOSE = "document.getElementById( 'autoDelDays' )?.closest( 'dialog' )?.querySelector( 'header [data-close]' )";
 ok( await c.until( CLOSE ), "its × (close keeps)" );
 await c.evaluate( CLOSE + ".click(), true" );
 ok( await c.until( "/3 ahora/.test( ( ( document.getElementById( 'ayni-toasts' ) || {} ).textContent || '' ) )" ),

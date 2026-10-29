@@ -61,7 +61,7 @@
     function failPush( e )
     {
         if( e && e.name === "AbortError" && navigator.brave )
-            NayiveUI.alert( { title: T( "chat.notifications" ), body: T( "chat.pushBrave" ) } );
+            Ayni.alert( { title: T( "chat.notifications" ), body: T( "chat.pushBrave" ) } );
         else C.fail( e );
     }
 
@@ -191,7 +191,7 @@
         if( standalone() ) { C.toast( "info", "chat.alreadyHome" ); return; }
         if( installEvt ) { installEvt.prompt(); installEvt = null; return; }
         if( isIOS() ) { iosSteps( function () {} ); return; }
-        NayiveUI.alert( { title: T( "chat.homeIcon" ), body: T( "chat.androidHomeSteps" ) } );
+        Ayni.alert( { title: T( "chat.homeIcon" ), body: T( "chat.androidHomeSteps" ) } );
     };
 
     // The link was deleted or replaced.

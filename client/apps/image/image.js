@@ -189,7 +189,7 @@ function mimeOf( name ) { return 'image/' + formatFor( name ); }
 // can go to a NEW file beside it ("Save a copy").
 async function changedMeanwhile( path )
 {
-    if( await NayiveUI.confirm( {
+    if( await Ayni.confirm( {
         title:   T( 'ui.conflictTitle' ),
         body:    TF( 'ui.conflictBody', { name: nameOf( path ) } ),
         confirm: T( 'ui.conflictCopy' ) } ) ) openSaveCopy();
@@ -339,7 +339,7 @@ function openSaveCopy()
 
     const inp = $( 'saveCopyName' );
     inp.value = seed;
-    NayiveUI.setOpen( 'saveCopyBackdrop', true );
+    document.getElementById( 'saveCopyBackdrop' ).showModal();
     inp.focus();
     // preselect the base name, leaving the extension out of the selection
     try { inp.setSelectionRange( 0, dot > 0 ? seed.length - ( cur.length - dot ) : seed.length ); }
@@ -363,7 +363,7 @@ async function confirmSaveCopy()
     const dir  = dirOf( editorPath );
     const dest = dir ? dir + '/' + name : name;
 
-    NayiveUI.setOpen( 'saveCopyBackdrop', false );
+    document.getElementById( 'saveCopyBackdrop' ).close();
 
     // A PUT replaces the file outright, with no trip through the bin, so
     // the copy asks first what renaming and uploading in Drive ask.
@@ -371,7 +371,7 @@ async function confirmSaveCopy()
 
     if( dest !== editorPath && await nameTaken( dir, name ) )
     {
-        if( ! await NayiveUI.confirm( {
+        if( ! await Ayni.confirm( {
             title: T( 'drive.nameExistsTitle' ),
             body: TF( 'drive.nameExistsCopyBody', { name: name } ),
             confirm: T( 'drive.replace' ), danger: true } ) ) return;
@@ -448,7 +448,7 @@ async function canLeave()
     if( closing ) return true;
     if( saving ) return false;
     if( ! isDirty() ) return true;
-    return NayiveUI.confirm( {
+    return Ayni.confirm( {
         title: T( 'drive.unsavedTitle' ),
         body: T( 'drive.unsavedBody' ),
         confirm: T( 'drive.closeWithout' ), danger: true } );
@@ -485,18 +485,18 @@ $( 'editorSaveBtn'   ).addEventListener( 'click', save );
 $( 'editorSaveAsBtn' ).addEventListener( 'click', openSaveCopy );
 $( 'backBtn'         ).addEventListener( 'click', leave );
 
-$( 'saveCopyCancelBtn'  ).addEventListener( 'click', function() { NayiveUI.setOpen( 'saveCopyBackdrop', false ); } );
+$( 'saveCopyCancelBtn'  ).addEventListener( 'click', function() { document.getElementById( 'saveCopyBackdrop' ).close(); } );
 $( 'saveCopyConfirmBtn' ).addEventListener( 'click', confirmSaveCopy );
 $( 'saveCopyName'       ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) { e.preventDefault(); confirmSaveCopy(); } } );
 
 document.addEventListener( 'keydown', function( e )
 {
-    if( $( 'saveCopyBackdrop' ).classList.contains( 'open' ) )
+    if( $( 'saveCopyBackdrop' ).open )
     {
-        if( e.key === 'Escape' ) NayiveUI.setOpen( 'saveCopyBackdrop', false );
+        if( e.key === 'Escape' ) document.getElementById( 'saveCopyBackdrop' ).close();
         return;
     }
-    if( document.querySelector( '.sheet-backdrop.open' ) ) return;     // a question is up: its keys
+    if( document.querySelector( 'dialog.panel[open]' ) ) return;     // a question is up: its keys
     if( e.key === 'Escape' ) { leave(); return; }
     if( ( e.ctrlKey || e.metaKey ) && e.key === 'Enter' ) { e.preventDefault(); save(); }
 } );

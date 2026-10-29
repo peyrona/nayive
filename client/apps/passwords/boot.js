@@ -20,7 +20,7 @@ store.onMerged( onFileMerged );
 // open, something is being dragged, or Argon2id is running.
 NayiveUI.wireRefresh( { store: store, read: loadData, guard: function()
 {
-    return gateBusy || !! document.querySelector( '.sheet-backdrop.open' ) || !! NayiveUI.dragIds();
+    return gateBusy || !! document.querySelector( 'dialog.panel[open]' ) || !! NayiveUI.dragIds();
 } } );
 
 NayiveUI.firstRun( {

@@ -1,6 +1,6 @@
 /* trips.css - what is unique to Trips (the shared look is ../shared/app.css). */
 
-/* Base reset, .btn (+ .danger), .app-icon, .sheet,
+/* Base reset, .btn (+ .danger), .app-icon,
    .field, .section-label and the input look all come from
    ../shared/app.css. Only what is unique to Trips lives here. */
 
@@ -180,13 +180,13 @@ html.is-windowed .route-panel .trip-panel { min-height: 100%; border-radius: 0; 
 .stage-notes { font-size: 0.82rem; color: var(--text-dim); margin: 6px 0 8px; line-height: 1.4; white-space: pre-line; }
 .stage-docs { margin-top: 8px; }
 
-/* .sheet-backdrop / .sheet / .sheet-header / .field / inputs from app.css. */
-/* Phone route map (route.js openMapSheet): the whole screen, not a dialog. The
-   map fills it; the legend / "Now in ..." sits top-left and Plan / Journey / ×
-   top-right, each on a card-coloured pill so they read over the tiles. The
-   transform override stops shared/ui.js's dialog drag nudging it. */
-#mapSheetBackdrop { padding: 0; }
-#mapSheet { max-width: none; max-height: none; width: 100vw; height: 100vh; height: 100dvh; padding: 0; border: 0; border-radius: 0; box-shadow: none; overflow: hidden; transform: none !important; }
+/* Dialogs are Ayni's dialog.panel; .field / inputs from app.css. */
+/* Phone route map (route.js openMapSheet): the whole screen, not a floating
+   dialog. The map fills it; the legend / "Now in ..." sits top-left and Plan /
+   Journey / × top-right, each on a card-coloured pill so they read over the
+   tiles. It has no title row, so it never moves. */
+dialog.panel.map-dialog { width: 100vw; height: 100vh; height: 100dvh; max-width: none; max-height: none; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+#mapSheet { position: relative; flex: 1 1 auto; padding: 0; overflow: hidden; }
 #mapSheet .route-map { position: absolute; inset: 0; width: auto; height: auto; max-width: none; border: 0; border-radius: 0; }
 #mapSheet .map-bar { position: absolute; z-index: 1000; top: calc(10px + env(safe-area-inset-top)); left: 10px; right: 10px; margin: 0; align-items: flex-start; pointer-events: none; }
 #mapSheet .map-bar > * { pointer-events: auto; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-m); box-shadow: var(--elev-card); }
@@ -271,7 +271,6 @@ html.is-windowed .route-panel .trip-panel { min-height: 100%; border-radius: 0; 
 .map-legend-item { display: inline-flex; align-items: center; gap: 5px; }
 .map-legend-swatch { width: 16px; height: 3px; border-radius: 2px; flex: 0 0 auto; }
 
-/* .sheet-actions / .sheet-actions-left / .btn / .btn-* live in ../shared/theme.css */
 
 .route-map { border: 1px solid var(--line); border-radius: var(--radius-m); width: 100%; max-width: 1600px; height: min(70vh, 1200px); background: var(--card2); }
 .map-caption { font-size: 0.76rem; color: var(--text-dim); margin: 10px 2px 0; text-align: center; }
@@ -332,7 +331,7 @@ input:disabled { opacity: 0.5; cursor: not-allowed; }
 @media print
 {
     html, body { background: #fff !important; }
-    #app, .sheet-backdrop, #docUploadInput, #ayni-toasts { display: none !important; }
+    #app, dialog, #docUploadInput, #ayni-toasts { display: none !important; }
     /* On paper the sheet fills the page - undo the off-screen staging
        styles exportTripPdf() sets inline while the route map builds. */
     #printRoot { display: block !important; position: static !important; left: auto !important; top: auto !important; width: auto !important; }

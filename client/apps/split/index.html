@@ -20,6 +20,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -27,6 +28,7 @@
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
+    <script src="../shared/ayni/ayni-dialogs.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS (and localhost). -->
@@ -41,7 +43,7 @@
 
     <style>
         /* Base reset, card shell (.page/.page-inner/.card), .header, .btn,
-           .pill, .card-row, .sheet and inputs all come from ../shared/app.css.
+           .pill, .card-row and inputs all come from ../shared/app.css.
            Only what is unique to Split lives here. */
 
 
@@ -415,9 +417,11 @@
     </div>
 
     <!-- NEW / EDIT GROUP -->
-    <div class="sheet-backdrop" id="groupSheetBackdrop" role="dialog" aria-modal="true">
-        <div class="sheet">
+    <dialog class="panel" id="groupSheetBackdrop">
+        <header>
             <h2 id="groupSheetTitle" data-i18n="split.newGroup"></h2>
+        </header>
+        <div class="body">
             <div class="field">
                 <label for="groupNameInput" data-i18n="split.groupName"></label>
                 <input id="groupNameInput" type="text" autocomplete="off" data-i18n-attr="placeholder:split.groupNamePh">
@@ -437,17 +441,19 @@
                     <textarea id="othersInput" rows="3" data-i18n-attr="placeholder:split.othersPh"></textarea>
                 </div>
             </div>
-            <div class="sheet-actions">
-                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="groupSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="groupSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- NEW / EDIT ENTRY (expense or payment) -->
-    <div class="sheet-backdrop" id="entrySheetBackdrop" role="dialog" aria-modal="true">
-        <div class="sheet">
+    <dialog class="panel" id="entrySheetBackdrop">
+        <header>
             <h2 id="entrySheetTitle" data-i18n="split.newEntryTitle"></h2>
+        </header>
+        <div class="body">
             <div class="tabs kind-tabs" id="kindTabs">
                 <button class="pill is-active" type="button" data-kind="expense" data-i18n="split.kindExpense"></button>
                 <button class="pill" type="button" data-kind="payment" data-i18n="split.kindPayment"></button>
@@ -511,28 +517,29 @@
             </div>
 
             <p id="entryHint" class="hint"></p>
-
-            <div class="sheet-actions">
-                <button id="entryDelBtn" class="btn danger sheet-actions-left" type="button" hidden data-i18n-attr="data-tip:ui.delete"><span class="icon" data-icon="trash"></span></button>
-                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="entrySaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <div class="extra"><button id="entryDelBtn" class="btn danger" type="button" hidden data-i18n-attr="data-tip:ui.delete"><span class="icon" data-icon="trash"></span></button></div>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="entrySaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- PEOPLE -->
-    <div class="sheet-backdrop" id="membersSheetBackdrop" role="dialog" aria-modal="true">
-        <div class="sheet">
+    <dialog class="panel" id="membersSheetBackdrop">
+        <header>
             <h2 data-i18n="split.people"></h2>
-            <p class="dialog-text" data-i18n="split.peopleLead"></p>
+        </header>
+        <div class="body">
+            <p class="text" data-i18n="split.peopleLead"></p>
             <div id="memberRows"></div>
             <button id="addMemberBtn" class="btn text dashed people-add" type="button" data-i18n="split.addPerson"></button>
-            <div class="sheet-actions">
-                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="membersSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="membersSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- File-API client (access probe, retrying fetch, file ops). -->
     <script src="../shared/gum-api.js" defer></script>
@@ -837,7 +844,7 @@
 
         // Group sheet
         $( 'groupSaveBtn' ).addEventListener( 'click', saveGroup );
-        $( 'groupNameInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) saveGroup(); } );
+        $( 'groupNameInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) { e.preventDefault(); saveGroup(); } } );
 
         // Entry sheet
         $( 'kindTabs' ).addEventListener( 'click', function( e )
@@ -872,8 +879,8 @@
         } );
         $( 'entrySaveBtn' ).addEventListener( 'click', saveEntry );
         $( 'entryDelBtn' ).addEventListener( 'click', deleteEntry );
-        $( 'amountInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) saveEntry(); } );
-        $( 'textInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) saveEntry(); } );
+        $( 'amountInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) { e.preventDefault(); saveEntry(); } } );
+        $( 'textInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) { e.preventDefault(); saveEntry(); } } );
 
         // People sheet
         $( 'addMemberBtn' ).addEventListener( 'click', function()
@@ -888,13 +895,13 @@
 
         // The × of every one of OUR sheets (a button marked data-close;
         // closing it is the app's job). Escape
-        // presses that × too (shared/ui.js). The shared confirm/alert and share
-        // dialogs handle their own and carry no id.
+        // presses that × too (Ayni). Ayni's confirm / alert and the share
+        // dialog handle their own and carry no id.
         document.addEventListener( 'click', function( e )
         {
             const b = e.target.closest( 'button' );
             if( ! b || ! b.hasAttribute( 'data-close' ) ) return;
-            const back = b.closest( '.sheet-backdrop' );
+            const back = b.closest( 'dialog.panel' );
             if( back && back.id ) closeSheet( back.id );
         } );
 
@@ -1114,7 +1121,7 @@
         // Close one of our sheets and forget what it was editing.
         function closeSheet( id )
         {
-            NayiveUI.close( id );
+            document.getElementById( id ).close();
             if( id === 'entrySheetBackdrop' )   es = null;
             if( id === 'groupSheetBackdrop' )   gs = null;
             if( id === 'membersSheetBackdrop' ) ms = null;
@@ -1529,7 +1536,7 @@
             $( 'dateInput' ).value   = es.date;
 
             renderEntrySheet();
-            NayiveUI.open( 'entrySheetBackdrop' );
+            document.getElementById( 'entrySheetBackdrop' ).showModal();
             setTimeout( function() { $( 'amountInput' ).focus(); }, 60 );
         }
 
@@ -1849,7 +1856,7 @@
                 $( 'othersInput' ).value = '';
             }
 
-            NayiveUI.open( 'groupSheetBackdrop' );
+            document.getElementById( 'groupSheetBackdrop' ).showModal();
             setTimeout( function() { $( 'groupNameInput' ).focus(); }, 60 );
         }
 
@@ -1896,7 +1903,7 @@
             ms = members( g ).map( m => Object.assign( {}, m ) );
             msGone = [];
             renderMembersSheet();
-            NayiveUI.open( 'membersSheetBackdrop' );
+            document.getElementById( 'membersSheetBackdrop' ).showModal();
         }
 
         // The splits as Save will leave them: the people binned in this sheet
@@ -2042,7 +2049,7 @@
         {
             if( ! g || g._ro || ! g.archived ) return;
 
-            const ok = await NayiveUI.confirm( {
+            const ok = await Ayni.confirm( {
                 title:  T( 'split.deleteGroup' ),
                 body:   TF( 'split.deleteGroupBody', { name: g.name } ),
                 danger: true

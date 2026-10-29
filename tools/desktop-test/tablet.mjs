@@ -225,7 +225,7 @@ try
     // My account (the simple view): the same choice; Always goes to the desktop.
     await waitFor( "window.NayiveUI && document.documentElement.style.visibility !== 'hidden'", 8000, "launcher ready" );
     await ev( "document.getElementById( 'accountBtn' ).click(); true" );
-    await waitFor( "document.getElementById( 'pwBackdrop' ).classList.contains( 'open' )", 5000, "My account open" );
+    await waitFor( "document.getElementById( 'pwBackdrop' ).open", 5000, "My account open" );
     check( "My account: Open the desktop shows on a big screen", await ev( "! document.getElementById( 'deskModeWrap' ).hidden && document.getElementById( 'deskModeWrap' ).offsetHeight > 0" ) === true );
     check( "My account: it says Never", await ev( "document.getElementById( 'deskModeSel' ).value" ) === "never" );
     await shot( "account-mode" );
@@ -239,13 +239,13 @@ try
     const md = "document.querySelector( '.menu iframe' ).contentDocument";
     await waitFor( `( function () { try { return ${md}.documentElement.classList.contains( 'in-desktop' ) && !! ${md}.defaultView.NayiveUI; } catch( e ) { return false; } } )()`, 10000, "launcher in the menu" );
     await ev( `${md}.getElementById( 'accountBtn' ).click(); true` );
-    await waitFor( `${md}.getElementById( 'pwBackdrop' ).classList.contains( 'open' )`, 5000, "My account open in the menu" );
+    await waitFor( `${md}.getElementById( 'pwBackdrop' ).open`, 5000, "My account open in the menu" );
     check( "My account in the desktop's menu: Open the desktop shows", await ev( `${md}.getElementById( 'deskModeWrap' ).hidden` ) === false );
     await ev( `( function () { var s = ${md}.getElementById( 'deskModeSel' ); s.value = 'auto'; s.dispatchEvent( new Event( 'change' ) ); return true; } )()` );
     await sleep( 600 );
     check( "My account in the desktop's menu: Auto is stored, the desktop stays", atDesk( await path_() ) && await ev( "JSON.parse( localStorage.getItem( 'balata-desktop' ) ).mode" ) === "auto" );
     check( "My account in the desktop's menu: its page stays the launcher", await ev( `! /desktop\\//.test( ${md}.defaultView.location.pathname )` ) === true );
-    await ev( `${md}.defaultView.NayiveUI.close( 'pwBackdrop' ); true` );
+    await ev( `${md}.defaultView.document.getElementById( 'pwBackdrop' ).close(); true` );
     await settle();
 
     // ===== 2. THE MOUSE CHIP =====

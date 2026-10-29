@@ -193,7 +193,7 @@ async function importBackup( f )
 
 function finishImport( list, added, skipped, wasCsv )
 {
-    NayiveUI.close( 'importBackdrop' );
+    document.getElementById( 'importBackdrop' ).close();
     if( ! list.length )
     {
         Ayni.toast( ( skipped ? 'info' : 'warn' ), skipped ? TF( 'passwords.importNone', { n: skipped } ) : T( 'passwords.importEmpty' ) );
@@ -203,7 +203,7 @@ function finishImport( list, added, skipped, wasCsv )
     {
         render();
         const msg = TF( 'passwords.imported', { n: added } ) + ( skipped ? ' ' + TF( 'passwords.importSkipped', { n: skipped } ) : '' );
-        if( wasCsv ) NayiveUI.alert( { title: msg, body: T( 'passwords.deleteCsv' ) } );
+        if( wasCsv ) Ayni.alert( { title: msg, body: T( 'passwords.deleteCsv' ) } );
         else Ayni.toast( "ok", msg );
     }, function() {} );
 }
@@ -245,7 +245,7 @@ function exportEncrypted()
 {
     if( ! isOpen() ) return;
     NayiveUI.saveFile( serialize(), 'passwords-' + stamp() + '.json', 'application/json' );
-    NayiveUI.close( 'exportBackdrop' );
+    document.getElementById( 'exportBackdrop' ).close();
     Ayni.toast( 'ok', T( 'passwords.exportedEnc' ) );
 }
 
@@ -266,6 +266,6 @@ async function exportCsv()
         ].map( csvCell ).join( ',' ) );
     }
     NayiveUI.saveFile( lines.join( '\r\n' ) + '\r\n', 'passwords-' + stamp() + '.csv', 'text/csv' );
-    NayiveUI.close( 'exportBackdrop' );
-    NayiveUI.alert( { title: T( 'passwords.exportedCsv' ), body: T( 'passwords.deleteCsvAfter' ) } );
+    document.getElementById( 'exportBackdrop' ).close();
+    Ayni.alert( { title: T( 'passwords.exportedCsv' ), body: T( 'passwords.deleteCsvAfter' ) } );
 }

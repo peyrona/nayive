@@ -252,7 +252,7 @@
     {
         var dt = e.dataTransfer;
         return S.open && dt && Array.prototype.indexOf.call( dt.types || [], "Files" ) >= 0 &&
-               ! document.querySelector( ".sheet-backdrop.open, .editor-backdrop.open" );
+               ! document.querySelector( "dialog.panel[open], .editor-backdrop.open" );
     }
     document.addEventListener( "dragover", function ( e )
     {
@@ -442,7 +442,7 @@
         }
         var cap = h( "input", { attrs: { type: "text", placeholder: T( "chat.addCaption" ), "aria-label": T( "chat.addCaption" ) } } );
         body.appendChild( h( "div", { class: "field" }, cap ) );
-        var go = NayiveUI.sheetButton( "primary", T( "chat.sendMsg" ), "send" );
+        var go = Ayni.dialogButton( "primary", T( "chat.sendMsg" ), "send" );
         var sh = C.sheet( files.length === 1 ? T( "chat.photo" ) : C.TF( "chat.nPhotos", { n: files.length } ), body, go );
         function send()
         {
@@ -461,7 +461,7 @@
             } );
         }
         go.addEventListener( "click", send );
-        cap.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) send(); } );
+        cap.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); send(); } } );
         setTimeout( function () { cap.focus(); }, 50 );
     }
 
@@ -658,6 +658,18 @@
     // full screen: photos (with prev/next), a map
     // ---------------------------------------------------------------------
 
+    // A full screen opened from a dialog (the photo sheet's crop) lives in
+    // it, as a popover in the top layer: outside it, the modal dialog would
+    // cover it and keep its presses.
+    function onTopOfDialog( layer )
+    {
+        var dlg = [].slice.call( document.querySelectorAll( "dialog.panel[open]" ) ).pop();
+        if( ! dlg ) { document.body.appendChild( layer ); return; }
+        layer.popover = "manual";
+        dlg.appendChild( layer );
+        layer.showPopover();
+    }
+
     function fullLayer( title, extra )
     {
         var closeB = h( "button", { class: "btn on-media", attrs: { type: "button", "data-tip": T( "ui.close" ), "aria-label": T( "ui.close" ) } } );
@@ -666,14 +678,14 @@
         var titleEl = h( "div", { class: "editor-title", text: title } );
         var canvas  = h( "div", { class: "editor-canvas" } );
         var layer = h( "div", { class: "editor-backdrop full open" }, h( "div", { class: "editor-bar" }, titleEl, actions ), canvas );
-        document.body.appendChild( layer );
+        onTopOfDialog( layer );
         function close() { layer.remove(); document.removeEventListener( "keydown", key, true ); if( layer._onClose ) layer._onClose(); }
         // Keys belong to whatever is on top: the editor or a sheet opened from
         // here answers its own Escape.
         function onTop()
         {
             for( var n = layer.nextElementSibling; n; n = n.nextElementSibling )
-                if( n.matches( ".photo-editor, .full, .sheet-backdrop.open, .ctx" ) ) return false;
+                if( n.matches( ".photo-editor, .full, dialog.panel[open], .ctx" ) ) return false;
             return true;
         }
         function key( e )
@@ -977,7 +989,7 @@
         async function leave()
         {
             if( busy ) return;
-            if( dirty && ! await NayiveUI.confirm( { title: T( "chat.unsavedTitle" ), body: T( "chat.unsavedBody" ),
+            if( dirty && ! await Ayni.confirm( { title: T( "chat.unsavedTitle" ), body: T( "chat.unsavedBody" ),
                                                      confirm: T( "chat.closeWithout" ), danger: true } ) ) return;
             C.popNav( "photo-editor" );
             shut();
@@ -987,7 +999,7 @@
             if( e.key !== "Escape" ) return;
             // A sheet asked from here (close without saving?) answers its own.
             for( var el = layer.nextElementSibling; el; el = el.nextElementSibling )
-                if( el.matches( ".sheet-backdrop.open" ) ) return;
+                if( el.matches( "dialog.panel[open]" ) ) return;
             e.preventDefault();
             e.stopPropagation();
             leave();
@@ -1262,7 +1274,7 @@
         var body = h( "div", {},
             h( "div", { class: "field" }, h( "label", { attrs: { for: "ccName" }, text: T( "chat.name" ) } ), name ),
             h( "div", { class: "field" }, h( "label", { attrs: { for: "ccTel" }, text: T( "chat.phone" ) } ), tel ) );
-        var go = NayiveUI.sheetButton( "primary", T( "chat.sendMsg" ), "send" );
+        var go = Ayni.dialogButton( "primary", T( "chat.sendMsg" ), "send" );
         var sh = null;
 
         function send( card )
@@ -1350,7 +1362,7 @@
             h( "button", { class: "btn text dashed", attrs: { type: "button" }, text: T( "chat.addOption" ), on: { click: function () { addOpt( true ); } } } ),
             h( "label", { class: "scm-check", style: "display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:14px;cursor:pointer" },
                T( "chat.pollMultiLabel" ), h( "span", { class: "switch" }, multi ) ) );
-        var go = NayiveUI.sheetButton( "primary", T( "chat.sendMsg" ), "send" );
+        var go = Ayni.dialogButton( "primary", T( "chat.sendMsg" ), "send" );
         var sh = C.sheet( T( "chat.newPoll" ), body, go );
         go.addEventListener( "click", function ()
         {

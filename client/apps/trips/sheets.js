@@ -3,14 +3,24 @@
 //------------------------------------------------------------------------//
 // RENDERING - THE FRAME BOTH SHEETS SHARE
 
-// Empties the sheet and starts it: the <h2> title, then the last save's error.
+// The dialog around a sheet's body (#tripSheet is the .body of its <dialog>):
+// its title row and its bottom row.
+function sheetParts( sheet )
+{
+    const d = sheet.closest( 'dialog' );
+    return { dialog: d, head: d.querySelector( ':scope > header' ), foot: d.querySelector( ':scope > footer' ) };
+}
+
+// Empties the sheet and starts it: the title in the dialog's title row (its
+// buttons and the bottom row go: the render puts them back), then the last
+// save's error.
 function sheetTop( sheet, sTitle, sError )
 {
+    const parts = sheetParts( sheet );
     sheet.innerHTML = '';
-
-    const h2 = document.createElement( 'h2' );
-    h2.textContent = sTitle;
-    sheet.appendChild( h2 );
+    parts.head.querySelector( 'h2' ).textContent = sTitle;
+    parts.head.querySelectorAll( 'button' ).forEach( function( b ) { b.remove(); } );
+    parts.foot.innerHTML = '';
 
     if( sError )
     {
@@ -22,33 +32,34 @@ function sheetTop( sheet, sTitle, sError )
 }
 
 // The sheet's bottom row: [delete] (only with fnDelete) ... [cancel] [save].
+// Cancel is the dialog's × (data-close): Escape presses it, so fnCancel runs.
 function sheetActions( sheet, bBusy, sDeleteTitle, fnDelete, fnCancel, fnSave )
 {
-    const actions = document.createElement( 'div' );
-    actions.className = 'sheet-actions';
+    const actions = sheetParts( sheet ).foot;
 
     if( fnDelete )
     {
-        const delBtn = NayiveUI.sheetButton( 'danger', sDeleteTitle );
-        delBtn.classList.add( 'sheet-actions-left' );
+        const left   = document.createElement( 'div' );
+        left.className = 'extra';
+        const delBtn = Ayni.dialogButton( 'danger', sDeleteTitle );
         delBtn.ariaDisabled = bBusy;
         // Already inside a dialog: no second question, it goes at once with an Undo.
         delBtn.addEventListener( 'click', fnDelete );
-        actions.appendChild( delBtn );
+        left.appendChild( delBtn );
+        actions.appendChild( left );
     }
 
-    const cancelBtn = NayiveUI.sheetButton( '', Ayni.t( 'ui.cancel' ), 'close' );
+    const cancelBtn = Ayni.dialogButton( 'close', Ayni.t( 'ui.cancel' ) );
     cancelBtn.ariaDisabled = bBusy;
     cancelBtn.addEventListener( 'click', fnCancel );
 
     // While it saves: a spinner in the ✓, whose tooltip says so; clicks wait.
-    const saveBtn = NayiveUI.sheetButton( 'primary', T( 'ui.save' ) );
+    const saveBtn = Ayni.dialogButton( 'primary', T( 'ui.save' ) );
     if( bBusy ) Ayni.setBusy( saveBtn, T( 'ui.sync.saving' ) );
     saveBtn.addEventListener( 'click', fnSave );
 
     actions.appendChild( cancelBtn );
     actions.appendChild( saveBtn );
-    sheet.appendChild( actions );
 }
 
 //------------------------------------------------------------------------//

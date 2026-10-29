@@ -67,7 +67,7 @@ function openMapSheet()
     history.pushState( { tripsMap: true }, '' );
 }
 
-function mapSheetOpen() { return document.getElementById( 'mapSheetBackdrop' ).classList.contains( 'open' ); }
+function mapSheetOpen() { return document.getElementById( 'mapSheetBackdrop' ).open; }
 
 function closeMapSheet()
 {
@@ -114,6 +114,7 @@ function renderMapSheet()
     const closeBtn = document.createElement( 'button' );
     closeBtn.type      = 'button';
     closeBtn.className = 'btn sm';
+    closeBtn.setAttribute( 'data-close', '' );   // Escape presses it
     Ayni.setTip( closeBtn, Ayni.t( 'ui.close' ) );
     closeBtn.setAttribute( 'aria-label', closeBtn.dataset.tip );
     closeBtn.appendChild( svgIcon( ICON_X, 16 ) );
@@ -150,8 +151,7 @@ function openSettings()
         sheet.querySelectorAll( '[data-pane]' ).forEach( function( p ) { p.hidden = p.getAttribute( 'data-pane' ) !== key; } );
     }
 
-    const actions = sheet.querySelector( '.sheet-actions' );
-    sheet.insertBefore( tabs, actions );
+    sheet.appendChild( tabs );
     panes.forEach( function( p )
     {
         const b = document.createElement( 'button' );
@@ -164,7 +164,7 @@ function openSettings()
         tabs.appendChild( b );
 
         p[ 2 ].setAttribute( 'data-pane', p[ 0 ] );
-        sheet.insertBefore( p[ 2 ], actions );
+        sheet.appendChild( p[ 2 ] );
     } );
 
     show( 'location' );
@@ -234,29 +234,19 @@ function reminderSection()
     return box;
 }
 
-// Title + lone "close" for sheets whose only control is close. The close
-// button follows the shared Nayive convention: NayiveUI.applySheetButtons()
-// moves it to the sheet's top-right corner. (Sheets with other actions
-// keep their close in a .sheet-actions row.) Appends into `sheet`.
+// Title + lone "close" for sheets whose only control is close: the title and
+// the × in the dialog's title row (Ayni's rule for a lone close). Empties the
+// bottom row; the caller fills the body (`sheet`).
 function buildSheetHeader( title, backdropId, sheet )
 {
-    const header = document.createElement( 'div' );
-    header.className = 'sheet-header';
+    const parts = sheetParts( sheet );
+    parts.head.querySelector( 'h2' ).textContent = title;
+    parts.head.querySelectorAll( 'button' ).forEach( function( b ) { b.remove(); } );
+    parts.foot.innerHTML = '';
 
-    const h2 = document.createElement( 'h2' );
-    h2.textContent = title;
-    header.appendChild( h2 );
-    sheet.appendChild( header );
-
-    const actions = document.createElement( 'div' );
-    actions.className = 'sheet-actions';
-
-    const closeBtn = NayiveUI.sheetButton( 'close', Ayni.t( 'ui.close' ) );
+    const closeBtn = Ayni.dialogButton( 'close', Ayni.t( 'ui.close' ) );
     closeBtn.addEventListener( 'click', function() { closeSheet( backdropId ); } );
-    actions.appendChild( closeBtn );
-    sheet.appendChild( actions );
-
-    NayiveUI.applySheetButtons( sheet );
+    parts.head.appendChild( closeBtn );
 }
 
 const wideMql = window.matchMedia( '(min-width: 920px)' );

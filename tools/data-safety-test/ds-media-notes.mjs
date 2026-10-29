@@ -143,7 +143,7 @@ ok( notes()[ LENT + "/s1.png" ] === "my note s1", "our note on the photo SHE bin
 //----------------------------------------------------------------------------
 section( "G3 - a move with Replace parks the replaced photo's note; Undo brings both back" );
 
-await D.evaluate( "NayiveUI.confirm = () => Promise.resolve( true ); true" );     // "Replace" in the clash question
+await D.evaluate( "Ayni.confirm = () => Promise.resolve( true ); true" );     // "Replace" in the clash question
 await D.evaluate( "doMove( [ 'files/B/x.png', 'files/B/y.png' ], 'files/A' ).then( () => true )" );
 ok( await disk( () => onDisk( s, "files/A/x.png" ) === "BX" && onDisk( s, "files/A/y.png" ) === "BY" ), "B/x and B/y moved over A/x and A/y" );
 let n = notes();
@@ -194,7 +194,7 @@ ok( await I.until( "document.querySelector('[data-ie=rotate]:not([aria-disabled=
 async function saveCopy( name )
 {
     await I.evaluate( "document.getElementById('editorSaveAsBtn').click(), true" );
-    ok( await I.until( "document.getElementById('saveCopyBackdrop').classList.contains('open')" ), "the copy's name is asked" );
+    ok( await I.until( "document.getElementById('saveCopyBackdrop').open" ), "the copy's name is asked" );
     await I.evaluate( "document.getElementById('saveCopyName').value = " + JSON.stringify( name ) + ", document.getElementById('saveCopyConfirmBtn').click(), true" );
 }
 

@@ -394,7 +394,7 @@
     // The (?) beside "Play for everyone": how to set the karaoke up.
     function showHow()
     {
-        NayiveUI.alert( { title: T( "chat.watchHow" ), body: T( "chat.watchHowSteps" ) } );
+        Ayni.alert( { title: T( "chat.watchHow" ), body: T( "chat.watchHowSteps" ) } );
     }
 
     function pill( icon, key, fn )

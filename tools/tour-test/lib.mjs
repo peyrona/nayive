@@ -52,7 +52,7 @@ export async function startTour( c )
         await mouse( c, await c.evaluate( `( () => { const r = [ ...document.querySelectorAll( '.item-menu:not([hidden]) .menu-item' ) ].find( m => { const q = [ ...document.querySelectorAll( '[data-intro-open]' ) ].find( e => e.closest( '.fit-out' ) ); const l = q && ( q.getAttribute( 'aria-label' ) || q.title || '' ).trim(); return !! l && ( m.textContent.trim() === l || l.indexOf( m.textContent.trim() ) === 0 ); } ); if( ! r ) return null; const b = r.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; } )()` ) );
     }
     else await mouse( c, "[data-intro-open]" );
-    const CARD = ".sheet-backdrop.open .intro-tour", MENU = ".top-menu:not([hidden]) [data-menu=\"tourBtn\"]";
+    const CARD = "dialog.panel[open] .intro-tour", MENU = ".top-menu:not([hidden]) [data-menu=\"tourBtn\"]";
     if( ! await c.until( `!! document.querySelector( '${CARD}' ) || !! document.querySelector( '${MENU}' )` ) ) return false;
     await mouse( c, await c.evaluate( `!! document.querySelector( '${CARD}' )` ) ? CARD : MENU );
     const up = await c.until( "!! document.querySelector( '.tour-overlay .tour-bubble:not([hidden])' )" );

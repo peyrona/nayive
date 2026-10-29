@@ -21,7 +21,7 @@ async function parkedFirst( paths )
     if( list.length )
     {
         const one = paths.length === 1 && list.every( function( m ) { return m.path === paths[0]; } );
-        const r = await NayiveUI.confirm( {
+        const r = await Ayni.confirm( {
             title: T( 'ui.park.title' ),
             body: TF( 'ui.park.body', { name: one ? paths[0].split( '/' ).pop() : TF( 'drive.nItems', { n: paths.length } ),
                                         list: NayiveStore.pendingText( list ) } ),
@@ -104,7 +104,7 @@ async function confirmRename()
     // one in the way to the papelera first.
     if( newPath !== oldPath && rowNode( newPath ) )
     {
-        if( ! await NayiveUI.confirm( {
+        if( ! await Ayni.confirm( {
             title: T( 'drive.nameExistsTitle' ),
             body: TF( 'drive.nameExistsBody', { name: newName } ),
             confirm: T( 'drive.moveAndRename' ), danger: true } ) )
@@ -270,7 +270,7 @@ function walkTotals( nodes, fn )
 function propsShowing( token )
 {
     return token === propsToken &&
-           document.getElementById( 'propsBackdrop' ).classList.contains( 'open' );
+           document.getElementById( 'propsBackdrop' ).open;
 }
 
 // The node a row describes: the one-level listing FIRST — only there does
@@ -535,7 +535,7 @@ async function shortcutsLeftOk( targets )
     } ).length;
     if( ! n ) return true;
 
-    return NayiveUI.confirm( {
+    return Ayni.confirm( {
         title: T( 'drive.shortcutsLeftTitle' ),
         body: TF( 'drive.shortcutsLeftBody', { n: n } ),
         confirm: T( 'ui.toTrash' ), danger: true } );

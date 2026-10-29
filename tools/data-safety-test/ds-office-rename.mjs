@@ -41,7 +41,7 @@ async function untilDisk( rel, want, ms = 15000, u )
 }
 // Every question the shared sheet would ask, answered by the test:
 // __asks[ i ].r( true | false | "other" ).
-const ASK = `( function () { window.__asks = []; NayiveUI.confirm = function ( o ) {
+const ASK = `( function () { window.__asks = []; Ayni.confirm = function ( o ) {
     return new Promise( function ( r ) { window.__asks.push( { title: o.title, body: o.body, r: r } ); } ); }; return true; } )()`;
 // The page's PUTs: path, If-Match, If-None-Match, status. And a switch per
 // path that makes the server "answer" 507 (quota full) without sending.
@@ -163,7 +163,7 @@ section( "D6 · SAVE AS ONTO A NAME THE PAGE COULD NOT CHECK (THE LISTING FAILED
     await c.evaluate( NET );
     await c.evaluate( "GumApi.listDir = function () { var e = new Error( 'HTTP 500' ); e.status = 500; return Promise.reject( e ); }; true" );
     await type( "my new note\n" );
-    ok( await c.until( "document.getElementById('saveAsBackdrop').classList.contains('open')" ), "the new note asks for its name" );
+    ok( await c.until( "document.getElementById('saveAsBackdrop').open" ), "the new note asks for its name" );
     await c.evaluate( "document.getElementById('saveName').value = 'd6.txt'; document.getElementById('saveAsConfirmBtn').click(); true" );
     ok( await c.until( "window.__asks.length >= 1", 10000 ), "the name is taken on the server: asked", await c.evaluate( "window.__puts" ) );
     const q = await c.evaluate( "window.__asks[ 0 ] && window.__asks[ 0 ].body" );
@@ -189,7 +189,7 @@ section( "D6 · ...AND OFFLINE: NEVER WRITTEN OVER ON RECONNECT" );
     await c.evaluate( ASK );
     await c.evaluate( NET );
     await type( "written on the train\n" );
-    ok( await c.until( "document.getElementById('saveAsBackdrop').classList.contains('open')" ), "the new note asks for its name" );
+    ok( await c.until( "document.getElementById('saveAsBackdrop').open" ), "the new note asks for its name" );
     await c.send( "Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 } );
     await c.until( "! navigator.onLine" );
     await c.evaluate( "document.getElementById('saveName').value = 'd6off.txt'; document.getElementById('saveAsConfirmBtn').click(); true" );

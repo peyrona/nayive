@@ -68,7 +68,7 @@ await c.evaluate( `( function () {
     };
     return true; } )()` );
 await c.evaluate( "document.getElementById('editorSaveAsBtn').click(), true" );
-ok( await c.until( "document.getElementById('saveCopyBackdrop').classList.contains('open')" ), "the copy's name is asked" );
+ok( await c.until( "document.getElementById('saveCopyBackdrop').open" ), "the copy's name is asked" );
 await c.evaluate( "document.getElementById('saveCopyName').value = 'p-copy.png', document.getElementById('saveCopyConfirmBtn').click(), true" );
 ok( await c.until( "window.__sheet().indexOf( Ayni.t('drive.nameExistsTitle') ) !== -1" ), "it asks before replacing p-copy.png" );
 await c.evaluate( "window.__pressConfirm()" );

@@ -192,7 +192,7 @@ function sbRuleRow( rule, i )
 
     sel.addEventListener( 'change', function() { rule.op = sel.value; inp.placeholder = T( 'drive.opPh.' + rule.op ); sbChanged(); } );
     inp.addEventListener( 'input',  function() { rule.text = inp.value; sbChanged(); } );
-    inp.addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) applySearchBuilder(); } );
+    inp.addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) { e.preventDefault(); applySearchBuilder(); } } );
     del.addEventListener( 'click', function()
     {
         if( sbDraft.rules.length > 1 ) sbDraft.rules.splice( i, 1 );

@@ -796,7 +796,7 @@
         // ---- keys: before the app's own (window, capture) ----
         function key( e )
         {
-            if( ! root.isConnected || document.querySelector( ".sheet-backdrop.open" ) ) return;
+            if( ! root.isConnected || document.querySelector( "dialog.panel[open]" ) ) return;
             var typing = e.target && e.target.closest && e.target.closest( "input:not([type=range]), textarea, [contenteditable]" );
             var mod = e.ctrlKey || e.metaKey;
             if( mod && ! typing && ( e.key === "z" || e.key === "Z" || e.key === "y" || e.key === "Y" ) )

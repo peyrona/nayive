@@ -104,7 +104,7 @@ section( "L6 · SIGN-OUT WITH A LIST SAVE ONLY ITS APP CAN MERGE" );
     const L = await A.tab();
     await L.open( "/nayive/" );
     ok( await L.until( "window.NayiveStore && window.NayiveUI && document.getElementById( 'logoutBtn' )" ), "the launcher is up (online)" );
-    await L.evaluate( "window.asks = []; NayiveUI.confirm = o => new Promise( r => asks.push( { body: o.body, r } ) ); true" );
+    await L.evaluate( "window.asks = []; Ayni.confirm = o => new Promise( r => asks.push( { body: o.body, r } ) ); true" );
     await L.evaluate( "document.getElementById( 'logoutBtn' ).click(), true" );
     ok( await L.until( "asks.length === 1", 20000 ), "Sign out asks about the save still here" );
     const want = await L.evaluate( "Ayni.tf( 'launcher.unsavedBodyApps', { n: 1, apps: 'Planner \u203a Tasks' } )" );

@@ -24,6 +24,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -31,6 +32,7 @@
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
+    <script src="../shared/ayni/ayni-dialogs.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS (and localhost). -->
@@ -143,29 +145,31 @@
 
     <!-- History: the last 50 results; a tap puts one back on screen. The trash
          empties it at once (a delete inside a dialog needs no second ask). -->
-    <div id="histBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="histBackdrop" class="panel">
+        <header>
             <h2 data-i18n="calculator.history"></h2>
+        </header>
+        <div class="body">
             <ul class="hist-list" id="histList"></ul>
             <p class="hist-empty" id="histEmpty" data-i18n="calculator.historyEmpty"></p>
-            <div class="sheet-actions">
-                <button class="btn danger" id="histClearBtn" data-i18n-attr="data-tip:calculator.historyClear"><span class="icon" data-icon="trash"></span></button>
-                <button class="btn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn danger" id="histClearBtn" data-i18n-attr="data-tip:calculator.historyClear"><span class="icon" data-icon="trash"></span></button>
+            <button class="btn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </footer>
+    </dialog>
 
     <!-- Rate check: what each source said for the pair's currencies, and which
          pair of sources agreed - so a real disagreement is visible, not hidden. -->
-    <div id="fxCheckBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="fxCheckBackdrop" class="panel">
+        <header>
             <h2 data-i18n="calculator.fxCheck"></h2>
+            <button class="btn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
             <div id="fxCheckBody"></div>
-            <div class="sheet-actions">
-                <button class="btn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+    </dialog>
 
     <script src="calculator.js" defer></script>
 </body>

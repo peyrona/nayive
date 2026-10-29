@@ -34,7 +34,7 @@ section( "K5 · A SAVE MADE WHILE THE SIGN-OUT QUESTION IS UP" );
     // The question, answered by the test; the launcher offline too, so
     // nothing goes up before the count.
     await L.evaluate( `Object.defineProperty( navigator, 'onLine', { get: () => false, configurable: true } );
-        window.asks = []; NayiveUI.confirm = o => new Promise( r => asks.push( { body: o.body, r } ) ); true` );
+        window.asks = []; Ayni.confirm = o => new Promise( r => asks.push( { body: o.body, r } ) ); true` );
     ok( await A.evaluate( "offline( true ), SC.write( 'files/before.txt', 'counted\\n' ).then( r => r.offline )" ), "a save waits here (offline)" );
     await L.evaluate( "document.getElementById( 'logoutBtn' ).click(), true" );
     ok( await L.until( "asks.length === 1" ), "Sign out asks about the save still here" );

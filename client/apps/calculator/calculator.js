@@ -477,8 +477,8 @@ Ayni.i18n.ready.then( function()
     document.addEventListener( 'keydown', function( e )
     {
         if( e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey ) return;
-        if( e.target.closest && e.target.closest( 'input, select, textarea, .sheet-backdrop' ) ) return;
-        if( document.querySelector( '.sheet-backdrop.open' ) ) return;
+        if( e.target.closest && e.target.closest( 'input, select, textarea, dialog' ) ) return;
+        if( document.querySelector( 'dialog.panel[open]' ) ) return;
         const k = /^\d$/.test( e.key ) ? e.key : KEYMAP[ e.key ];
         if( ! k ) return;
         if( k === '=' && e.target.closest && e.target.closest( 'button:not(.key)' ) ) return;   // Enter on another button presses that button
@@ -493,15 +493,15 @@ Ayni.i18n.ready.then( function()
     $( 'fxFrom' ).addEventListener( 'change', function() { guessPlace = ''; setCurrencies( this.value, to ); } );
     $( 'fxTo'   ).addEventListener( 'change', function() { guessPlace = ''; setCurrencies( from, this.value ); } );
     $( 'fxSwap' ).addEventListener( 'click',  function() { setCurrencies( to, from ); } );
-    $( 'fxNote' ).addEventListener( 'click',  function() { renderCheck(); NayiveUI.setOpen( 'fxCheckBackdrop', true ); } );
-    NayiveFx.onChange( function() { render(); if( $( 'fxCheckBackdrop' ).classList.contains( 'open' ) ) renderCheck(); } );
+    $( 'fxNote' ).addEventListener( 'click',  function() { renderCheck(); document.getElementById( 'fxCheckBackdrop' ).showModal(); } );
+    NayiveFx.onChange( function() { render(); if( $( 'fxCheckBackdrop' ).open ) renderCheck(); } );
 
-    $( 'histBtn' ).addEventListener( 'click', function() { renderHistory(); NayiveUI.setOpen( 'histBackdrop', true ); } );
+    $( 'histBtn' ).addEventListener( 'click', function() { renderHistory(); document.getElementById( 'histBackdrop' ).showModal(); } );
     $( 'histList' ).addEventListener( 'click', function( e )
     {
         const b = e.target.closest( 'button' );
         if( ! b ) return;
-        NayiveUI.setOpen( 'histBackdrop', false );
+        document.getElementById( 'histBackdrop' ).close();
         useValue( b.dataset.value );
     } );
     $( 'histClearBtn' ).addEventListener( 'click', function() { hist = []; saveHistory(); renderHistory(); } );

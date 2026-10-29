@@ -30,7 +30,7 @@ function buildMapModeSwitch()
             if( mapMode === m[ 0 ] ) return;
             mapMode = m[ 0 ];
             renderRoutePanel();
-            if( document.getElementById( 'mapSheetBackdrop' ).classList.contains( 'open' ) ) renderMapSheet();
+            if( document.getElementById( 'mapSheetBackdrop' ).open ) renderMapSheet();
         });
         bar.appendChild( b );
     });

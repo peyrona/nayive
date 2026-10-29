@@ -186,7 +186,7 @@
     // editor - owns the screen: the list behind it takes no keys.
     function dialogOpen()
     {
-        return !! document.querySelector( ".sheet-backdrop.open, .viewer-backdrop.open, .media-backdrop.open, .editor-backdrop.open" );
+        return !! document.querySelector( "dialog.panel[open], .viewer-backdrop.open, .media-backdrop.open, .editor-backdrop.open" );
     }
 
     // Was a dialog open when this Escape was pressed? Read before any
@@ -1658,7 +1658,7 @@
         {
             var open = {};
             var lit = "lit" in cfg ? cfg.lit : ( cfg.current != null ? cfg.current : null );
-            var d = UI.modal( { title: cfg.title, cls: "pick-node-sheet", escape: function () { finish( null ); } } );
+            var d = Ayni.dialog( { title: cfg.title, cls: "pick-node-sheet" } );
             var done = false;
             function finish( v )
             {
@@ -1667,6 +1667,7 @@
                 d.close();
                 resolve( v );
             }
+            d.dialog.addEventListener( "close", function () { finish( null ); } );
 
             // Open every folder down to the one they are in.
             ( function walk( nodes, trail )
@@ -1683,27 +1684,25 @@
             if( cfg.note )
             {
                 noteEl = document.createElement( "p" );
-                noteEl.className = "dialog-text";
-                d.sheet.appendChild( noteEl );
+                noteEl.className = "text";
+                d.body.appendChild( noteEl );
             }
             var box = document.createElement( "div" );
             box.className = "pick-tree";
-            d.sheet.appendChild( box );
+            d.body.appendChild( box );
 
-            if( cfg.extra ) d.sheet.appendChild( cfg.extra( function () { sync(); } ) );
+            if( cfg.extra ) d.body.appendChild( cfg.extra( function () { sync(); } ) );
 
-            var row = document.createElement( "div" );
-            row.className = "sheet-actions";
-            var cancel = UI.sheetButton( "close", t( "ui.cancel" ) );
+            var row = d.footer;
+            var cancel = Ayni.dialogButton( "close", t( "ui.cancel" ) );
             cancel.classList.add( "pick-cancel" );
             cancel.addEventListener( "click", function () { finish( null ); } );
-            var ok = UI.sheetButton( "primary", cfg.okLabel || t( "ui.moveHere" ) );
+            var ok = Ayni.dialogButton( "primary", cfg.okLabel || t( "ui.moveHere" ) );
             ok.classList.add( "pick-ok" );
             ok.addEventListener( "click", function () { if( lit != null && ! bad( lit ) ) finish( lit ); } );
             row.appendChild( cancel );
             row.appendChild( ok );
-            d.sheet.appendChild( row );
-            UI.applySheetButtons( d.sheet );
+            UI.applySheetButtons( d.dialog );
 
             function bad( id ) { return !! ( cfg.disabled && cfg.disabled( id ) ); }
             function sync()

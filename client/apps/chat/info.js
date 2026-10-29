@@ -291,7 +291,7 @@
                                   value: String( S.deleteAfter || 0 ) } );
         var countEl = h( "p", { class: "days-count", attrs: { "aria-live": "polite" } } );
         var el = h( "div", {},
-            h( "p", { class: "dialog-text", text: T( "chat.autoDeleteLead" ) } ),
+            h( "p", { class: "text", text: T( "chat.autoDeleteLead" ) } ),
             // the number, then what it counts - one row
             h( "label", { class: "days-field", attrs: { for: "autoDelDays" } }, input, h( "span", { text: T( "chat.autoDeleteDays" ) } ) ),
             countEl,
@@ -384,7 +384,7 @@
 
     C.newLink = async function ( ct )
     {
-        var ok = await NayiveUI.confirm( { title: T( "chat.newLink" ), body: C.TF( "chat.newLinkAsk", { name: ct.name } ),
+        var ok = await Ayni.confirm( { title: T( "chat.newLink" ), body: C.TF( "chat.newLinkAsk", { name: ct.name } ),
                                            confirm: T( "chat.newLink" ) } );
         if( ! ok ) return;
         try
@@ -459,7 +459,7 @@
         var q = card ? "uid=" + encodeURIComponent( card.uid ) + "&name=" + encodeURIComponent( card.name ) : null;
         if( ! card )
         {
-            var ok = await NayiveUI.confirm( { title: T( "chat.notInContactsTitle" ), body: C.TF( "chat.notInContacts", { name: c.name } ),
+            var ok = await Ayni.confirm( { title: T( "chat.notInContactsTitle" ), body: C.TF( "chat.notInContacts", { name: c.name } ),
                                                confirm: T( "chat.addToContacts" ) } );
             if( ! ok ) return;
             q = "new=" + encodeURIComponent( c.name || "" );

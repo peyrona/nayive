@@ -393,7 +393,7 @@ function wireStaticUI()
     document.getElementById( 'imgInput'      ).addEventListener( 'change', function( e ) { insertPickedImage( e.target.files[0] ); e.target.value = ''; } );
     document.getElementById( 'linkCancelBtn' ).addEventListener( 'click', function() { setBackdrop( 'linkBackdrop', false ); } );
     document.getElementById( 'linkConfirmBtn' ).addEventListener( 'click', confirmLink );
-    document.getElementById( 'linkHref'      ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) confirmLink(); } );
+    document.getElementById( 'linkHref'      ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) { e.preventDefault(); confirmLink(); } } );
 
     // Tapping into the document folds the row away — the keyboard is about to
     // take half the screen. Only a tap INSIDE #editor: a toolbar button also
@@ -418,7 +418,7 @@ function wireStaticUI()
             if( document.getElementById( 'tbPopup'  ).classList.contains( 'open' ) ) { tbPopup.close();  return; }
             if( document.getElementById( 'symPopup' ).classList.contains( 'open' ) ) { symPopup.close(); return; }
 
-            const open = document.querySelector( '.sheet-backdrop.open' );
+            const open = document.querySelector( 'dialog.panel[open]' );
             if( open ) { setBackdrop( open.id, false ); return; }
 
             if( find && find.isOpen() ) { find.close(); return; }
@@ -426,7 +426,13 @@ function wireStaticUI()
     });
 }
 
-function setBackdrop( id, open ) { NayiveUI.setOpen( id, open ); }   // impl in shared/ui.js
+// Opens a dialog as modal, or closes it (Ayni's dialog.panel).
+function setBackdrop( id, open )
+{
+    const el = document.getElementById( id );
+    if( ! open )         el.close();
+    else if( ! el.open ) el.showModal();
+}
 
 //----------------------------------------------------------------------------//
 // EDITOR
@@ -1014,7 +1020,7 @@ async function useTemplate( path )
     // Edits to someone else's document: kept in their draft, and said so (as New does).
     const aside    = session.dirty() && !! session.path() && session.readOnly();
     let   kept     = dropping || aside ? await session.keepUntitled() : null;
-    if( dropping && ! kept && ! await NayiveUI.confirm( { title: Ayni.t( 'write.newDoc' ), body: Ayni.t( 'write.newDropsDraft' ),
+    if( dropping && ! kept && ! await Ayni.confirm( { title: Ayni.t( 'write.newDoc' ), body: Ayni.t( 'write.newDropsDraft' ),
                                                           confirm: Ayni.t( 'write.newDoc' ) } ) ) return;
 
     setBackdrop( 'tplBackdrop', false );
@@ -1907,7 +1913,7 @@ function onShortcutKey( e )
 
     // A sheet or a field of ours has the keys: the shortcut waits - but the
     // browser's own save / print / open dialog must not open over it either.
-    if( document.querySelector( '.sheet-backdrop.open' ) || inOwnField( e.target ) )
+    if( document.querySelector( 'dialog.panel[open]' ) || inOwnField( e.target ) )
     {
         if( s.browserDialog ) e.preventDefault();
         return;
@@ -2651,7 +2657,7 @@ let linkEditing = null;     // the link the sheet was opened on, or null for a n
 function openLinkDialog()
 {
     if( ! ready || ! editor ) { Ayni.toast( 'warn', Ayni.t( 'write.waitForDoc' ) ); return; }
-    if( document.getElementById( 'linkBackdrop' ).classList.contains( 'open' ) ) return;   // Ctrl+K: engine and table both ask
+    if( document.getElementById( 'linkBackdrop' ).open ) return;   // Ctrl+K: engine and table both ask
 
     const L = links();
     let at = null;

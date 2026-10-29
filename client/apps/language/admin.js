@@ -200,7 +200,7 @@ function openAddEngine()
     $( 'addName' ).value = '';
     $( 'addUrl' ).value = '';
     $( 'addError' ).hidden = true;
-    NayiveUI.open( 'addBackdrop' );
+    document.getElementById( 'addBackdrop' ).showModal();
 }
 
 function saveNewEngine()
@@ -213,7 +213,7 @@ function saveNewEngine()
     try
     {
         tr.addEngine( { id, name, adapter: kind, options: { baseUrl: $( 'addUrl' ).value } } );
-        NayiveUI.close( 'addBackdrop' );
+        document.getElementById( 'addBackdrop' ).close();
     }
     catch( e )
     {
@@ -253,7 +253,7 @@ function renderDicts()
 
 async function resetConfig()
 {
-    if( ! await NayiveUI.confirm( { title: T( 'language.reset' ), body: T( 'language.resetAsk' ), confirm: T( 'language.reset' ), danger: true } ) ) return;
+    if( ! await Ayni.confirm( { title: T( 'language.reset' ), body: T( 'language.resetAsk' ), confirm: T( 'language.reset' ), danger: true } ) ) return;
     tr.resetConfig();
     Ayni.toast( 'ok', T( 'language.resetDone' ) );
 }

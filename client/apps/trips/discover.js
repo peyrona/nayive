@@ -120,11 +120,7 @@ function closeDiscover()
 function renderDiscoverSheet()
 {
     const sheet = document.getElementById( 'discoverSheet' );
-    sheet.innerHTML = '';
-
-    const h2 = document.createElement( 'h2' );
-    h2.textContent = TF( 'trips.disc.title', { place: discoverPlace } );
-    sheet.appendChild( h2 );
+    sheetTop( sheet, TF( 'trips.disc.title', { place: discoverPlace } ), '' );
 
     const note = document.createElement( 'p' );
     note.className = 'share-note';
@@ -156,26 +152,20 @@ function renderDiscoverSheet()
 
     sheet.appendChild( grid );
 
-    const actions = document.createElement( 'div' );
-    actions.className = 'sheet-actions';
+    const actions = sheetParts( sheet ).foot;
 
-    const cancelBtn = NayiveUI.sheetButton( 'close', Ayni.t( 'ui.cancel' ) );
+    const cancelBtn = Ayni.dialogButton( 'close', Ayni.t( 'ui.cancel' ) );
     cancelBtn.addEventListener( 'click', closeDiscover );
 
     // The one control that leaves Nayive, so it says where it goes. Kept a plain
     // click handler (no await before window.open) - a popup blocker only trusts a
     // window opened inside the gesture that asked for it.
-    const goBtn = NayiveUI.sheetButton( 'primary', T( 'trips.disc.go' ), 'search' );
+    const goBtn = Ayni.dialogButton( 'primary', T( 'trips.disc.go' ), 'search' );
     goBtn.id = 'discoverGo';
     goBtn.addEventListener( 'click', runDiscover );
 
     actions.appendChild( cancelBtn );
     actions.appendChild( goBtn );
-    sheet.appendChild( actions );
-
-    // Styles both buttons the shared Nayive way. It only rewrites their class and
-    // innerHTML - it does not clone the nodes - so the listeners set above survive.
-    NayiveUI.applySheetButtons( sheet );
     refreshDiscoverGo();
 }
 

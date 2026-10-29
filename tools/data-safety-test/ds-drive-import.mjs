@@ -43,7 +43,7 @@ async function drive()
 {
     await c.open( "/nayive/drive/", "/nayive/drive/" );
     const up = await c.until( "typeof runAppImports === 'function' && typeof appStore === 'function' && window.NayiveUI", 20000 );
-    await c.evaluate( "window.__alerts = []; NayiveUI.alert = function ( o ) { window.__alerts.push( o.body ); return Promise.resolve(); }; window.__toasts = []; true" );
+    await c.evaluate( "window.__alerts = []; Ayni.alert = function ( o ) { window.__alerts.push( o.body ); return Promise.resolve(); }; window.__toasts = []; true" );
     return up;
 }
 // One dropped file, "Add" answered: resolves once the import is over.

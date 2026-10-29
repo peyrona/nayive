@@ -40,7 +40,7 @@ section( "CONTACTS · MOUSE" );
 ok( await c.open( "/nayive/contact/" ) && await c.until( "typeof contacts !== 'undefined' && contacts.length === 5 && document.querySelectorAll('#contactList .contact-row').length === 5" ), "Contacts opens the book" );
 await mouse( c, ROW( "a" ), { dx: 120 } );
 ok( await sel() === "a", "a click picks one row" );
-ok( await c.evaluate( "! document.getElementById('detailBackdrop').classList.contains('open')" ), "…and does not open it" );
+ok( await c.evaluate( "! document.getElementById('detailBackdrop').open" ), "…and does not open it" );
 ok( await c.evaluate( "!document.getElementById('selActions').hidden && document.querySelector('#selActions .sel-count').textContent.trim() === '1'" ), "the header group shows, count 1" );
 await mouse( c, ROW( "d" ), { dx: 120, mods: 8 } );
 ok( await sel() === "a,b,c,d", "Shift+click picks the range", await sel() );
@@ -55,9 +55,9 @@ ok( await c.evaluate( "browse.ids().length === 5" ), "Ctrl+A picks all" );
 await mouse( c, "#contactList .letter-head", { dx: 40 } );
 ok( await sel() === "", "a click off the rows clears" );
 await mouse( c, ROW( "c" ), { dx: 120, count: 2 } );
-ok( await c.until( "document.getElementById('detailBackdrop').classList.contains('open') && document.getElementById('detailName').textContent === 'Carla Gil'" ), "a double-click opens the card" );
+ok( await c.until( "document.getElementById('detailBackdrop').open && document.getElementById('detailName').textContent === 'Carla Gil'" ), "a double-click opens the card" );
 await key( c, "Escape" );
-ok( await c.until( "! document.getElementById('detailBackdrop').classList.contains('open')" ) && await sel() === "c", "Esc closes the card; the pick stays" );
+ok( await c.until( "! document.getElementById('detailBackdrop').open" ) && await sel() === "c", "Esc closes the card; the pick stays" );
 
 section( "CONTACTS · ONE MENU" );
 await mouse( c, ROW( "b" ), { dx: 120, button: "right" } );
@@ -92,7 +92,7 @@ await key( c, "Escape" );
 
 section( "CONTACTS · FIND THE PICKS" );
 await mouse( c, "#searchBtn" );
-await c.evaluate( "const i = document.getElementById('searchInput'); i.value = 'carla'; i.dispatchEvent( new Event( 'input' ) ); true" );
+await c.evaluate( "{ const i = document.getElementById('searchInput'); i.value = 'carla'; i.dispatchEvent( new Event( 'input' ) ); } true" );
 ok( await c.until( "document.querySelectorAll('#contactList .contact-row').length === 1" ), "a search shows only Carla" );
 await mouse( c, ROW( "c" ), { dx: 120 } );
 await mouse( c, ".search-fold .search-shut" );
@@ -108,12 +108,12 @@ await c.evaluate( "browse.clear(); true" );
 section( "CONTACTS · KEYS" );
 await mouse( c, ROW( "d" ), { dx: 120 } );
 await key( c, "F2" );
-ok( await c.until( "document.getElementById('editBackdrop').classList.contains('open') && document.getElementById('fGiven').value === 'David'" ), "F2 edits" );
+ok( await c.until( "document.getElementById('editBackdrop').open && document.getElementById('fGiven').value === 'David'" ), "F2 edits" );
 await c.evaluate( "document.getElementById('editCloseBtn').click(); true" );
 await sleep( 200 );
 await mouse( c, ROW( "a" ), { dx: 120 } );
 await key( c, "Enter" );
-ok( await c.until( "document.getElementById('detailBackdrop').classList.contains('open') && document.getElementById('detailName').textContent === 'Ana López'" ), "Enter opens the card" );
+ok( await c.until( "document.getElementById('detailBackdrop').open && document.getElementById('detailName').textContent === 'Ana López'" ), "Enter opens the card" );
 await c.evaluate( "document.getElementById('detailCloseBtn').click(); true" );
 await sleep( 200 );
 await mouse( c, ROW( "c" ), { dx: 120 } );
@@ -131,7 +131,7 @@ await mouse( c, ROW( "c" ), { dx: 120 } );
 await mouse( c, ROW( "d" ), { dx: 120, mods: 2 } );
 await key( c, "Delete" );
 ok( await disk( () => ! onCard( "c" ) && ! onCard( "d" ) && onCard( "a" ) ), "Del: both cards leave the file" );
-ok( await c.evaluate( "! document.querySelector('.sheet-backdrop.open') && ! document.querySelector('" + ROW( "c" ) + "')" ), "…at once, no question" );
+ok( await c.evaluate( "! document.querySelector('dialog.panel[open]') && ! document.querySelector('" + ROW( "c" ) + "')" ), "…at once, no question" );
 ok( await undo(), "…with an Undo" );
 ok( await disk( () => onCard( "c" ).includes( "carla@x.es" ) && onCard( "d" ) ) && await c.until( "!! document.querySelector('" + ROW( "d" ) + "')" ), "Undo puts both back, as they were" );
 
@@ -139,7 +139,7 @@ section( "CONTACTS · MERGE" );
 await mouse( c, ROW( "a" ), { dx: 120 } );
 await mouse( c, ROW( "b" ), { dx: 120, mods: 2 } );
 await c.evaluate( "document.querySelector('#selActions [data-sel-act=merge]').click(); true" );
-ok( await c.until( "document.getElementById('mergeBackdrop').classList.contains('open') && mergeModel.members.length === 2" ), "Merge (2 picked) opens the merge preview with both" );
+ok( await c.until( "document.getElementById('mergeBackdrop').open && mergeModel.members.length === 2" ), "Merge (2 picked) opens the merge preview with both" );
 await c.evaluate( "document.getElementById('mergeCloseBtn').click(); true" );
 await sleep( 200 );
 
@@ -168,13 +168,13 @@ ok( await undo() && await disk( () => cats( "e" ) === "Work" ) && await c.until(
 await mouse( c, NODE( "g:Family" ), { dx: 40, button: "right" } );
 await c.evaluate( "document.querySelector('.item-menu [data-act=renameGroup]').click(); true" );
 await c.until( "!! document.getElementById('groupNameInput')" );
-await c.evaluate( "document.getElementById('groupNameInput').value = 'Familia'; document.getElementById('groupNameOk').click(); true" );
+await c.evaluate( "{ const i = document.getElementById('groupNameInput'); i.value = 'Familia'; i.dispatchEvent( new Event( 'input' ) ); document.getElementById('groupNameOk').click(); } true" );
 ok( await disk( () => cats( "a" ) === "Familia" && cats( "b" ) === "Familia,starred" ) && await c.until( "!! document.querySelector('" + NODE( "g:Familia" ) + "') && ! document.querySelector('" + NODE( "g:Family" ) + "')" ), "Rename group: Family → Familia on both cards (Bruno stays a favourite)", [ cats( "a" ), cats( "b" ) ] );
 
 await mouse( c, ROW( "e" ), { dx: 120 } );
 await c.evaluate( "browse.run('group'); true" );
-ok( await c.until( "!! document.querySelector('.sheet-backdrop.open .pick-tree .tree-row[data-id=\"g:Familia\"]')" ), "Add to group… shows the groups in the same tree" );
-await c.evaluate( "document.querySelector('.sheet-backdrop.open .pick-tree .tree-row[data-id=\"g:Familia\"]').click(); document.querySelector('.pick-ok').click(); true" );
+ok( await c.until( "!! document.querySelector('dialog.panel[open] .pick-tree .tree-row[data-id=\"g:Familia\"]')" ), "Add to group… shows the groups in the same tree" );
+await c.evaluate( "document.querySelector('dialog.panel[open] .pick-tree .tree-row[data-id=\"g:Familia\"]').click(); document.querySelector('.pick-ok').click(); true" );
 ok( await disk( () => cats( "e" ) === "Work,Familia" ), "…and adds Elena to Familia", cats( "e" ) );
 await mouse( c, NODE( "g:Familia" ), { dx: 40 } );
 await c.until( "view === 'g:Familia'" );
@@ -187,7 +187,7 @@ ok( await disk( () => cats( "e" ) === "Work" ) && await c.until( "! document.que
 await mouse( c, NODE( "groups" ), { dx: 40, button: "right" } );
 await c.evaluate( "document.querySelector('.item-menu [data-act=newGroup]').click(); true" );
 await c.until( "!! document.getElementById('groupNameInput')" );
-await c.evaluate( "document.getElementById('groupNameInput').value = 'Club'; document.getElementById('groupNameOk').click(); true" );
+await c.evaluate( "{ const i = document.getElementById('groupNameInput'); i.value = 'Club'; i.dispatchEvent( new Event( 'input' ) ); document.getElementById('groupNameOk').click(); } true" );
 ok( await c.until( "!! document.querySelector('" + NODE( "g:Club" ) + "')" ), "New group: Club shows in the tree" );
 await mouse( c, NODE( "g:Club" ), { dx: 40 } );
 ok( await c.until( "view === 'g:Club' && getComputedStyle( document.getElementById('emptyState') ).display !== 'none'" ), "…empty, with a hint" );
@@ -201,11 +201,11 @@ await c.send( "Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoi
 await c.evaluate( "browse.clear(); document.head.insertAdjacentHTML( 'beforeend', '<style>.quota-card{display:none!important}</style>' ); true" );   // the scratch disk's "space almost full" card
 await sleep( 300 );
 await finger( c, ROW( "c" ) );
-ok( await c.until( "document.getElementById('detailBackdrop').classList.contains('open')" ), "a tap opens the card" );
+ok( await c.until( "document.getElementById('detailBackdrop').open" ), "a tap opens the card" );
 await c.evaluate( "document.getElementById('detailCloseBtn').click(); true" );
 await sleep( 300 );
 await finger( c, ROW( "d" ), 700 );
-ok( await c.until( "browse.ids().join() === 'd'" ) && await c.evaluate( "document.getElementById('contactList').classList.contains('is-picking') && ! document.getElementById('detailBackdrop').classList.contains('open')" ), "a long-press picks (ticks on), it does not open" );
+ok( await c.until( "browse.ids().join() === 'd'" ) && await c.evaluate( "document.getElementById('contactList').classList.contains('is-picking') && ! document.getElementById('detailBackdrop').open" ), "a long-press picks (ticks on), it does not open" );
 await sleep( 600 );                     // the long-press's own click is eaten for 700 ms
 await finger( c, ROW( "e" ) );
 ok( await sel() === "d,e", "…then a tap adds one", await sel() );

@@ -197,7 +197,7 @@ async function purgeTrash( ids, name )
     if( ids.length === 1 ) { purgeOneLater( ids ); return; }
 
     // Several at once: the question stays, and they go at once, no Undo.
-    if( ! await NayiveUI.confirm( {
+    if( ! await Ayni.confirm( {
         title: T( 'drive.deleteForever' ),
         body: TF( 'drive.deleteForeverBody', { name: name } ),
         confirm: T( 'drive.delete' ), danger: true } ) ) return;
@@ -257,7 +257,7 @@ async function emptyTrash()
 {
     if( ! trashItems.length ) return;
     const ids = trashItems.map( function( it ) { return it.id; } );   // what the question counts
-    if( ! await NayiveUI.confirm( {
+    if( ! await Ayni.confirm( {
         title: T( 'drive.emptyTrashTitle' ),
         body: TF( 'drive.emptyTrashBody', { n: ids.length } ),
         confirm: T( 'drive.emptyTrash' ), danger: true } ) ) return;

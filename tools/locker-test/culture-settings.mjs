@@ -30,7 +30,7 @@ try
     await p.evaluate( "document.getElementById('moreBtn').click();1" ); await sleep( 400 );
     ok( await p.evaluate( "!document.getElementById('salonBtn').hidden" ), "Salon settings in the ⋮ menu when Salon is chosen" );
     await p.evaluate( "document.getElementById('salonBtn').click();1" ); await sleep( 2500 );
-    ok( await p.evaluate( "!!document.querySelector('#salonSettings.open .salon-tabs')" ), "dialog opens" );
+    ok( await p.evaluate( "!!document.querySelector('#salonSettings[open] .salon-tabs')" ), "dialog opens" );
     const tabs = await p.evaluate( "[...document.querySelectorAll('.salon-tabs .pill')].map(b=>b.textContent).join('|')" );
     console.log( "tabs:", tabs );
     ok( tabs.split( "|" ).length === 4, "four tabs" );
@@ -39,7 +39,7 @@ try
     console.log( "default:", dflt );
     ok( dflt === "English,español,français,Deutsch,português", "by default all languages, the account's first" );
     // The rest of the test starts from es, en, pt.
-    await p.evaluate( "document.querySelector('#salonSettings .sheet-close').click();1" ); await sleep( 600 );
+    await p.evaluate( "document.querySelector('#salonSettings header [data-close]').click();1" ); await sleep( 600 );
     ok( await p.evaluate( "fetch('/api/files?file=data/salon.json').then(r=>r.status)" ) === 404, "closed with no change: nothing written" );
     await p.evaluate( `fetch('/api/files?file=data/salon.json',{method:'PUT',body:JSON.stringify({langs:['es','en','pt']})}).then(r=>r.status)` );
     await p.evaluate( "document.getElementById('moreBtn').click();1" ); await sleep( 400 );
@@ -76,7 +76,7 @@ try
     ok( await p.evaluate( "getComputedStyle(document.querySelector('.salon-preview .big')).fontFamily.includes('Atkinson')" ), "the sample shows the chosen letters" );
 
     // Close-only (no ✓): Escape closes it, and closing saves.
-    ok( await p.evaluate( "!document.querySelector('#salonSettings .btn.primary') && !document.querySelector('#salonSettings .sheet-actions')" ), "no ✓, only the corner ×" );
+    ok( await p.evaluate( "!document.querySelector('#salonSettings .btn.primary') && !document.querySelector('#salonSettings footer')" ), "no ✓, only the corner ×" );
     await p.evaluate( "document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));1" );
     await sleep( 1500 );
     ok( await p.evaluate( "!document.querySelector('#salonSettings')" ), "Escape closed it" );

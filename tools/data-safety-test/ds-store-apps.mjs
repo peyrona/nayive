@@ -30,7 +30,7 @@ section( "A1 · TEXT, ONE DOCUMENT IN TWO TABS" );
     const CM  = "document.querySelector('.CodeMirror') && document.querySelector('.CodeMirror').CodeMirror";
     const val = c => c.evaluate( `( ${CM} ) ? ${CM}.getValue() : null` );
     const typeIn = ( c, t ) => c.evaluate( `${CM}.replaceRange( ${JSON.stringify( t )}, { line: 0, ch: 0 } ), true` );
-    const conflictAsked = c => c.evaluate( "!! document.querySelector('.sheet-backdrop.open') && document.querySelector('.sheet-backdrop.open').textContent.indexOf( Ayni.t( 'ui.conflictTitle' ) ) !== -1" );
+    const conflictAsked = c => c.evaluate( "!! document.querySelector('dialog.panel[open]') && document.querySelector('dialog.panel[open]').textContent.indexOf( Ayni.t( 'ui.conflictTitle' ) ) !== -1" );
 
     await A.open( "/nayive/text/?file=files/a.txt", "/nayive/text/" );
     await B.open( "/nayive/text/?file=files/a.txt", "/nayive/text/" );
@@ -45,7 +45,7 @@ section( "A1 · TEXT, ONE DOCUMENT IN TWO TABS" );
     ok( await B.until( "document.getElementById('syncIndicator').dataset.syncState === 'conflict'", 20000 ),
         "tab B's save (made from the older text) is refused: its plug says so",
         await B.evaluate( "document.getElementById('syncIndicator').dataset.syncState" ) );
-    ok( await B.until( "!! document.querySelector('.sheet-backdrop.open')", 5000 ) && await conflictAsked( B ),
+    ok( await B.until( "!! document.querySelector('dialog.panel[open]')", 5000 ) && await conflictAsked( B ),
         "tab B is asked: changed in another window or device - save yours as a copy?" );
     ok( onDisk( s, "files/a.txt" ) === "A-line\nbase\n", "tab A's line is still in the file", onDisk( s, "files/a.txt" ) );
     ok( ( await val( B ) ) === "B-line\nbase\n", "and tab B's line is still on its screen" );

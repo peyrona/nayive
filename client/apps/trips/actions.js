@@ -12,8 +12,8 @@ function renderAll() { renderHeader(); renderContent(); renderRoutePanel(); }
 //------------------------------------------------------------------------//
 // SHEET HELPERS
 
-function openSheet( sId )  { NayiveUI.open( sId ); }     // impl in shared/ui.js
-function closeSheet( sId ) { NayiveUI.close( sId ); }
+function openSheet( sId )  { const d = document.getElementById( sId ); if( ! d.open ) d.showModal(); }
+function closeSheet( sId ) { document.getElementById( sId ).close(); }
 
 //------------------------------------------------------------------------//
 // TRIP ACTIONS

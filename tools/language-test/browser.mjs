@@ -36,8 +36,8 @@ try
     await c.send( "Page.navigate", { url: APP } );
     ok( await until( "location.pathname.endsWith('/language/index.html') && window.nayiveLanguage && document.getElementById('app').style.display !== 'none'" ), "the page opens" );
 
-    // Click the ✓ of the dialog NayiveUI.confirm opened (none: false).
-    const confirmYes = () => c.evaluate( `(() => { const b = document.querySelector( '.sheet-backdrop.open:not([id]) .sheet-actions button:last-child' ); if( b ) b.click(); return !! b; })()` );
+    // Click the ✓ of the dialog Ayni.confirm opened (none: false).
+    const confirmYes = () => c.evaluate( `(() => { const b = document.querySelector( 'dialog.panel[open]:not([id]) footer button:last-child' ); if( b ) b.click(); return !! b; })()` );
     const translate = async ( text, from, to ) =>
     {
         await c.evaluate( `(() => { const $ = id => document.getElementById( id );
@@ -54,7 +54,7 @@ try
 
     // es -> fr on the device (Bergamot): asks to download, then translates.
     await translate( "Hola, ¿cómo estás? ¿Dónde está la estación de tren más cercana?", "es", "fr" );
-    ok( await until( "document.querySelector('.sheet-backdrop.open:not([id])')", 70000 ), "Bergamot asks before downloading" );
+    ok( await until( "document.querySelector('dialog.panel[open]:not([id])')", 70000 ), "Bergamot asks before downloading" );
     await confirmYes();
     await settled();
     let r = await out(), s = await status();
@@ -63,7 +63,7 @@ try
 
     // es -> zh: Chinese, through the newer Mozilla models.
     await translate( "¿Dónde está la estación de tren más cercana?", "es", "zh" );
-    await until( "document.querySelector('.sheet-backdrop.open:not([id])')", 70000 );
+    await until( "document.querySelector('dialog.panel[open]:not([id])')", 70000 );
     await confirmYes();
     await settled();
     r = await out();
@@ -71,7 +71,7 @@ try
 
     // zh -> es back.
     await translate( "最近的火车站在哪里？", "zh", "es" );
-    if( await until( "document.querySelector('.sheet-backdrop.open:not([id])')", 70000 ) ) await confirmYes();
+    if( await until( "document.querySelector('dialog.panel[open]:not([id])')", 70000 ) ) await confirmYes();
     await settled();
     r = await out();
     ok( /estaci/i.test( r ), "zh→es on this device", JSON.stringify( r ) );
@@ -79,7 +79,7 @@ try
     // A second time es -> fr: no question, models cached.
     await translate( "Buenos días.", "es", "fr" );
     await settled();
-    ok( ! await c.evaluate( "!!document.querySelector('.sheet-backdrop.open:not([id])')" ) && /bonjour/i.test( await out() ), "cached models: no question the second time", await out() );
+    ok( ! await c.evaluate( "!!document.querySelector('dialog.panel[open]:not([id])')" ) && /bonjour/i.test( await out() ), "cached models: no question the second time", await out() );
 
     // Local mode off, Bergamot off: MyMemory.
     await c.evaluate( "nayiveLanguage.setEngineEnabled( 'bergamot', false ); nayiveLanguage.setLocalMode( false ); true" );
@@ -92,8 +92,8 @@ try
     // Local mode back on with Bergamot off: asks before using the internet.
     await c.evaluate( "nayiveLanguage.setEngineEnabled( 'bergamot', false ); nayiveLanguage.setLocalMode( true ); true" );
     await translate( "Hola", "es", "pt" );
-    ok( await until( "document.querySelector('.sheet-backdrop.open:not([id])')", 70000 ), "Local mode, no local engine: asks first" );
-    await c.evaluate( "(() => { const b = document.querySelector( '.sheet-backdrop.open:not([id]) .sheet-actions button:first-child' ); b && b.click(); return true; })()" );
+    ok( await until( "document.querySelector('dialog.panel[open]:not([id])')", 70000 ), "Local mode, no local engine: asks first" );
+    await c.evaluate( "(() => { const b = document.querySelector( 'dialog.panel[open]:not([id]) footer button:first-child' ); b && b.click(); return true; })()" );
     await settled();
     ok( ! ( await out() ) || true, "declined: nothing sent" );
     await c.evaluate( "nayiveLanguage.setEngineEnabled( 'bergamot', true ); nayiveLanguage.setLocalMode( false ); true" );

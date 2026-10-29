@@ -14,7 +14,7 @@ const shows = id => c.evaluate( `! document.getElementById( '${id}' ).hidden` );
 section( "HABITS · NO HABITS YET (ghosts)" );
 ok( await c.open( "/nayive/habits/" ) && await c.until( "! document.getElementById( 'homeEmpty' ).hidden" ), "Habits opens empty" );
 ok( await startTour( c ), "the help card's «Ver el tour» starts it" );
-ok( ! await c.evaluate( "!! document.querySelector( '.sheet-backdrop.open' )" ), "the help card closed" );
+ok( ! await c.evaluate( "!! document.querySelector( 'dialog.panel[open]' )" ), "the help card closed" );
 await walk( c, "empty", {
     1: s => /nayive-home-link/.test( s.lit ) || "starts at the app's name",
     2: s => /addBtn/.test( s.lit ) || "lights +",

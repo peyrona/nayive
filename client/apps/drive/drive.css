@@ -1,5 +1,5 @@
 /* drive.css - Drive's own styles. */
-/* Base reset, .app shell, .topbar, .btn, .sheet, .field and the
+/* Base reset, .app shell, .topbar, .btn, .field and the
    input look all come from ../shared/app.css. Drive overrides the page
    scroll (both axes hidden - the listing scrolls itself)
    and adds its file-browser chrome. */
@@ -231,8 +231,8 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
 
 /* Internal drag-and-drop: the shared marks (app.css .dragging / .drop-target). */
 
-/* Dialogs: .sheet-backdrop / .sheet / .field / inputs from app.css. */
-.sheet p { font-size: 0.9rem; color: var(--text-dim); margin: 0 0 14px; }
+/* Dialogs: Ayni's dialog.panel; .field / inputs from app.css. */
+dialog.panel .body p { font-size: 0.9rem; color: var(--text-dim); margin: 0 0 14px; }
 
 /* Upload dialog: big "pick with a dialog" icon choices.
    Desktop  -> Archivos + Carpeta.

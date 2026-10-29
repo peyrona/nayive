@@ -56,7 +56,7 @@ try
     const st = await a.evaluate( "localStorage.getItem('nayive-locker')+'|'+document.getElementById('lockMin').value+'|'+document.getElementById('lockTextWrap').hidden" );
     ok( st === '{"id":"clock","min":1,"text":"Back soon"}|1|false', "saved clock, min clamped to 1, text row shown: " + st );
     await a.shot( "account" );
-    await a.evaluate( "NayiveUI.close('pwBackdrop');1" );
+    await a.evaluate( "document.getElementById( 'pwBackdrop' ).close();1" );
 
     // --- idle lock: pretend the last activity was 61 s ago
     await a.evaluate( "localStorage.setItem('nayive-lock-seen', String(Date.now()-61000));1" );

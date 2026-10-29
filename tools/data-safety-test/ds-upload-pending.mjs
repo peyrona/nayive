@@ -229,7 +229,7 @@ section( "A REFUSED SAVE (409) IS DROPPED WITH ITS MARK" );
 
 //----------------------------------------------------------------------------//
 section( "DRIVE: THIS DEVICE'S PARKED CHANGES GO WITH THE FILE TO THE BIN" );
-const ASK = `( function () { window.__asks = []; NayiveUI.confirm = function ( o ) { window.__asks.push( o.title );
+const ASK = `( function () { window.__asks = []; Ayni.confirm = function ( o ) { window.__asks.push( o.title );
     return Promise.resolve( true ); }; return true; } )()`;
 {
     const F = "files/papelera.txt";

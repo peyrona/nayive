@@ -92,5 +92,16 @@ html.touch { --touch: 44px; }
 .tooltip { position: fixed; inset: auto; margin: 0; border: 0; pointer-events: none; background: var(--text); color: var(--card);
   font-size: .8rem; line-height: 1.35; padding: 4px 8px; border-radius: 4px; max-width: 240px; box-shadow: var(--panel-shadow); }
 
+/* ---------- Panel: the base surface of dialogs, menus, popups and windows ---------- */
+.panel { box-sizing: border-box; background: var(--panel-bg); color: var(--text); border: var(--panel-border); border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow); padding: 0; margin: 0; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.panel > header, .panel > form > header { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px var(--panel-pad); background: var(--panel-head-bg); border-bottom: var(--panel-border); }
+.panel > header h2, .panel > form > header h2 { font-size: 1.15rem; font-weight: 700; margin: 0 auto 0 0; }
+.panel > .body, .panel > form > .body { padding: var(--panel-pad); display: flex; flex-direction: column; gap: var(--panel-gap); overflow: auto; }
+.panel > footer, .panel > form > footer { display: flex; justify-content: flex-end; gap: 8px; padding: 10px var(--panel-pad); background: var(--panel-head-bg); border-top: var(--panel-border); }
+
+/* Bottom row: Close/Accept-type buttons sit at the right; any extra actions go in the same row, at the left */
+.panel footer > .extra, .panel > form > footer > .extra { display: flex; gap: 8px; margin-right: auto; }
+
 /* ---------- Motion shared by the families ---------- */
 @keyframes spin { to { transform: rotate(360deg); } }

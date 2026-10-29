@@ -68,7 +68,7 @@ section( "C4 · THE FIRST ✓, OVER A PICTURE CHANGED ELSEWHERE SINCE IT OPENED"
 
     // "Save my version as a copy": the copy's name is asked, and it goes up beside it.
     await c.evaluate( "window.__pressConfirm()" );
-    ok( await c.until( "document.getElementById('saveCopyBackdrop').classList.contains('open')" ), "it offers to save this edit as a copy" );
+    ok( await c.until( "document.getElementById('saveCopyBackdrop').open" ), "it offers to save this edit as a copy" );
     await c.evaluate( "document.getElementById('saveCopyName').value = 'q-mine.png', document.getElementById('saveCopyConfirmBtn').click(), true" );
     const mine = await untilBytes( "files/q-mine.png", b => b.length > 0 );
     ok( mine && ! mine.equals( BLUE ) && ! mine.equals( RED ), "the edit is saved as q-mine.png" );
@@ -110,7 +110,7 @@ section( "C4 · OPENED FROM THE OFFLINE COPY: ✓ NEVER WRITES OVER IT" );
     // Saved as a copy, the editor is on the copy - a file it wrote itself, not
     // the offline copy: ✓ saves it (review C4b #2).
     await c.evaluate( "document.getElementById('editorSaveAsBtn').click(), true" );
-    ok( await c.until( "document.getElementById('saveCopyBackdrop').classList.contains('open')" ), "\"Save a copy\" asks the name" );
+    ok( await c.until( "document.getElementById('saveCopyBackdrop').open" ), "\"Save a copy\" asks the name" );
     await c.evaluate( "document.getElementById('saveCopyName').value = 'o-copy.png', document.getElementById('saveCopyConfirmBtn').click(), true" );
     const copy1 = await untilBytes( "files/o-copy.png", b => b.length > 0 );
     ok( copy1 && ! copy1.equals( GREY ), "the edit is saved as o-copy.png" );

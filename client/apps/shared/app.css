@@ -70,10 +70,9 @@
  *     shared/i18n/*.json (see docs/i18n.md). App names keep their short label
  *     ("Calc", "Drive", ...) in every language.
  *   - A dialog closes on its own × / ✓ buttons and the Esc key only - never on
- *     a click on the backdrop. shared/ui.js wires both for every static
- *     .sheet-backdrop (a click on its data-act="close" button, Escape on the
- *     top-most open one), so an app only adds a handler when closing must
- *     also reset state.
+ *     a click on the backdrop. Ayni wires both for every dialog.panel (a
+ *     click on its data-close button, Escape on the innermost open one), so
+ *     an app only adds a handler when closing must also reset state.
  *   - An element with the `hidden` attribute is hidden, whatever display its
  *     class sets ([hidden] below is !important). Use it instead of a local
  *     `.x[hidden] { display: none }` line.
@@ -102,8 +101,8 @@
  *       "Aa" button in the header brings it back. Their file buttons move to a
  *       second "⋮" in the header, and the "?" is moved there with them so help
  *       survives the fold. See the phone block in write/ or calc/index.html;
- *     - a dialog taller than the screen scrolls inside, with its button row
- *       stuck to the bottom edge (.sheet-actions - see the PHONE block);
+ *     - a dialog taller than the screen scrolls inside, its title row and
+ *       button row always in view (Ayni's dialog.panel);
  *     - touch targets are at least 36px and every text field is at least
  *       16px, so iOS never zooms the page into a field;
  *     - nothing is ever wider than the screen (no sideways page scroll).
@@ -606,130 +605,39 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
 
 
 /* -----------------------------------------------------------------------------
- * DIALOG BUTTONS  (.sheet-actions)  - the row is in theme.css
+ * DIALOG  (Ayni's dialog.panel - shared/ayni/ayni-dialogs.css + .js)
  *
- * The bottom row of a dialog is a right-aligned line of round icon-only
- * buttons, 36 px (44 px on touch). Class and icon are in the markup:
+ *     <dialog class="panel" id="fooDialog">
+ *       <header><h2>Título</h2> [small tools] [× when it is the only button]</header>
+ *       <div class="body"> ... .field rows ... </div>
+ *       <footer>[<div class="extra">left-hand buttons</div>] × ✓</footer>
+ *     </dialog>
  *
- *     <div class="sheet-actions">
- *       <button class="btn" data-close data-tip="Cancelar"><span class="icon" data-icon="close"></span></button>
- *       <button class="btn primary" data-tip="Guardar"><span class="icon" data-icon="check"></span></button>
- *     </div>
+ * - Open: el.showModal() (or a button with data-open-dialog="id"); close:
+ *   el.close(); the dialog fires `close` whatever closed it.
+ * - Small (default): as wide as its content, 300-460 px, floating on every
+ *   screen. .big: 880 x 640, full screen below 1024 px.
+ * - Only the dialog's own buttons and Esc close it: Esc presses the button
+ *   marked data-close, a click on it closes the dialog after the app's own
+ *   handler (preventDefault() there keeps it open). Never a backdrop click.
+ * - The caret starts in the first field, never on a button; on PC / tablet
+ *   the dialog moves by its title row. All Ayni, nothing per dialog.
+ * - Built in code: Ayni.dialog / Ayni.dialogButton / Ayni.confirm /
+ *   Ayni.alert / Ayni.ask; NayiveUI.askPassword.
  *
- * In code: NayiveUI.sheetButton( "close" | "primary" | "danger" | "", tip, icon ).
- * data-close marks the button that closes the dialog (Escape presses it).
- * .sheet-actions-left pins a delete button to the far left.
- *
- * ONE ICON PER MEANING (dialogs and toolbars alike):
+ * Buttons: round icon-only, 36 px (44 px on touch). ONE ICON PER MEANING:
  *   check   = confirm / apply / save / rename / create - always, any verb.
  *   save-as = "save as a new copy" (check + a small +). Nothing else.
  *   trash   = a destructive confirm. Never looks like a save.
  *   A different verb keeps its own glyph: edit (opens a form), search (runs a
  *   query), plus (a compose bar).
- *
- * A dialog whose only action is "close" has NO bottom row - ui.js moves the
- * lone close button to the top-right corner, on the title's line, as
- * .sheet-close.
  * ---------------------------------------------------------------------------*/
 
-
-/* -----------------------------------------------------------------------------
- * DIALOG / SHEET  (.sheet-backdrop > .sheet)
- *
- *     <div class="sheet-backdrop" id="fooBackdrop">
- *       <div class="sheet">
- *         <h2>Título</h2>
- *         ... .field rows ...
- *         <div class="sheet-actions"> ... </div>
- *       </div>
- *     </div>
- *
- * - The backdrop is a fixed --scrim layer; add .open (or NayiveUI.open(id)) to
- *   show it. It centres the sheet on desktop.
- * - The sheet is a --card panel, --radius-l corners, --elev-dialog shadow,
- *   scrolls inside at tall content. Default max-width 460px; add .sheet--wide
- *   for 560px when the content is genuinely wide (a table, a wide form).
- * - .sheet--pack shrinks the dialog to the width its content actually needs
- *   (clamped to [300px, 460px] and to the screen). NayiveUI.setOpen() runs the
- *   fit on open; NayiveUI.pack(el, {min,max}) does it by hand with custom bounds.
- *   Use it for short forms (a few selects / a checkbox) that look lost at 460px.
- * - CLOSING: only the × / ✓ buttons and the Esc key close a dialog. Never wire
- *   a click on the backdrop to close - it loses half-typed input.
- * - The backdrop is a flex box that centres the sheet both ways, so every
- *   dialog sits in the middle of the visible area on any screen size.
- * - MOVABLE: on PC / tablet the dialog can be dragged anywhere on screen by
- *   pressing a free spot of it (not a control) - shared/ui.js does this for
- *   every .sheet, there is nothing to add to a dialog. It always reopens
- *   centred. Phones (<= 640px) never move a dialog.
- * - FOCUS: on open, shared/ui.js puts the caret in the dialog's FIRST field
- *   (input / select / textarea / contenteditable) - again for every .sheet,
- *   nothing to add. It never focuses a button, and it leaves alone any focus
- *   the app set itself, so a dialog that wants another field focused just
- *   focuses it when it opens. Fields that only appear after a fetch are waited
- *   for. Write the fields in the order they should be filled in.
- * ---------------------------------------------------------------------------*/
-.sheet-backdrop
-{
-    position: fixed;
-    inset: 0;
-    z-index: 100;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
-    background: var(--scrim);
-}
-.sheet-backdrop.open { display: flex; }
-
-.sheet
-{
-    position: relative;
-    width: 100%;
-    max-width: 460px;
-    max-height: 92vh;
-    max-height: 92dvh;            /* dvh: the visible height once iOS's URL bar is accounted for */
-    overflow-y: auto;
-    padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-l);
-    box-shadow: var(--elev-dialog);
-}
-.sheet--wide       { max-width: 560px; }
-
-/* Content-fit width. JS (NayiveUI) sets an exact px width on open; this is the
- * pre-JS / fallback look so the sheet never flashes at the full 460px first. */
-.sheet--pack       { width: max-content; min-width: 300px; }
-
-/* MOVING A DIALOG (shared/ui.js). The whole dialog is the handle - press on any
- * free spot and drag - so there is nothing to draw until a drag really starts.
- * Then: the "held" cursor everywhere, and text selection off so the pointer
- * does not paint the dialog blue on its way across. The sheet is moved with an
- * inline `transform: translate(...)`, which is dropped when it closes. */
-.sheet.is-dragging,
-.sheet.is-dragging *
-{
-    cursor: grabbing;
-    user-select: none;
-    -webkit-user-select: none;
-}
-
-.sheet h2
-{
-    margin: 0 0 14px;
-    font-size: 1.15rem;
-    font-weight: 700;
-}
-
-/* Body copy in a NayiveUI.confirm / NayiveUI.alert sheet (shared/ui.js). */
-.sheet > p.dialog-text
-{
-    margin: 0 0 14px;
-    color: var(--text-dim);
-    line-height: 1.45;
-    white-space: pre-wrap;
-}
-.sheet > p.dialog-text:last-of-type { margin-bottom: 4px; }
+/* A row of buttons inside a dialog's body (not its bottom row): Calendar's
+   export, the launcher's colour schemes, Write's templates. .extra pins the
+   left-hand ones, as in a footer. */
+.actions-row          { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); }
+.actions-row > .extra { display: flex; gap: var(--space-2); margin-right: auto; }
 
 /* Properties / Info dialog (Drive, Photos): a label / value grid. The dimmed
    label reads like a .field label; the exact byte count goes under its own
@@ -746,38 +654,12 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
 .props dd { margin: 0; overflow-wrap: anywhere; }
 .props dd .props-sub { display: block; font-size: 0.8rem; color: var(--text-dim); }
 
-/* A dialog header row: a title on the left, small controls on the right (an
- * "all day" switch, a step counter; .sheet-tool buttons, then the ×). The
- * title takes the room, so a long one wraps instead of running under them.
- * The × sits as near the corner as when it was pinned there, and its 32px
- * disc does not make the line taller than the title. */
-.sheet-header
-{
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin: 2px 0 16px;
-}
-.sheet-header h2   { margin: 0; flex: 1 1 auto; min-width: 0; }
-.sheet-header > .sheet-close,
-.sheet-header > .sheet-tool  { margin: -6px 0; }
-.sheet-header > .sheet-close:last-child { margin-right: -6px; }
-.sheet-header > .sheet-tool + .sheet-tool,
-.sheet-header > .sheet-tool + .sheet-close { margin-left: -8px; }
-
 /* SWITCH - Ayni's (ayni-buttons.css): <label class="switch end">Text
  * <input type="checkbox" role="switch"></label>. Every on / off option is one
  * (2026-09-30); a tick box is only for picking items from a list. In a list of
  * settings .end puts the switch at the row's end (text · (i) · switch). The
  * calculator's mode is the two-sided .switch-pair. */
 
-@media (max-width: 640px)
-{
-    /* Still a centred card on a phone - just let it use the full width and a
-     * touch more height. The backdrop keeps centring it vertically. */
-    .sheet { max-height: 90vh; max-height: 90dvh; }
-}
 
 
 /* -----------------------------------------------------------------------------
@@ -1229,8 +1111,9 @@ input[type="range"]
 
 .info-popup
 {
-    position: absolute;
-    z-index: 200;                /* above sheets (100), below nothing else */
+    position: fixed;             /* a popover, in the top layer: above dialogs too (ui.js) */
+    inset: auto;
+    margin: 0;
     max-width: 260px;
     padding: 10px 12px;
     font-size: 0.82rem;
@@ -1302,8 +1185,8 @@ button,
  * HELP DIALOG  (.intro-*)
  *
  * Opened by the "?" button at the end of an app's toolbar (a normal toolbar
- * button carrying [data-intro-open]) - never on its own. Built on the shared
- * .sheet by shared/ui.js (NayiveUI.firstRun / .showIntro): app name, an optional
+ * button carrying [data-intro-open]) - never on its own. Built on Ayni.dialog
+ * by shared/ui.js (NayiveUI.firstRun / .showIntro): app name, an optional
  * one-line summary, then one row per toolbar button (its glyph + name + a short
  * explanation). The launcher's copy adds the "volver a las apps" tip and a
  * "No volver a mostrar" button, and re-opens every visit until that is clicked.
@@ -1350,21 +1233,6 @@ button,
 .intro-btn-t b       { font-weight: 600; color: var(--text); }
 .intro-btn-t span    { color: var(--text-dim); }
 
-/* Close (x), top-right corner like every Nayive dialog. Floated so the title
-   flows beside it; sticky so it stays in the corner while a long list scrolls
-   under it (hence the --card backdrop). */
-.intro-close
-{
-    position: sticky;
-    top: 0;
-    float: right;
-    margin: -2px -4px 2px 10px;
-    background: var(--card);
-    border-radius: 50%;
-    box-shadow: 0 0 0 5px var(--card);   /* widen the mask over scrolling rows */
-    z-index: 2;
-}
-
 /* The optional `tip:` line under the list (launcher: "tap the app name / icon
    to go back"; calendar: the daily Tareas sync). */
 .intro-home-hint
@@ -1405,8 +1273,8 @@ button,
  *
  * The corner button counts 9..1 before it turns into a real (x): while it is
  * counting nothing on the page can be tapped, so the two lines get read.
- * Above .sheet (100) and .info-popup (200) - the help sheet must never open
- * underneath the very bubble that is pointing at its button.
+ * Above the page's own layers; dialogs and the info popup are in the top
+ * layer, above it (the help dialog opened from it covers it).
  * ---------------------------------------------------------------------------*/
 .coach-overlay
 {
@@ -1485,7 +1353,7 @@ button,
     border-bottom: 1px solid var(--accent);
 }
 
-/* Countdown, then the close (x). Same 32px disc as .sheet-close, but pinned in
+/* Countdown, then the close (x). A 32px disc, pinned in
    the corner and dimmed - and unclickable - while it is still a number. */
 .coach-close
 {
@@ -1534,8 +1402,9 @@ button,
  * (x) are the coach marks' own (.coach-*). A dashed ring is a "ghost": the
  * place where the button shows up once there is something to act on.
  * ---------------------------------------------------------------------------*/
-.tour-overlay           { position: fixed; inset: 0; z-index: 2000; pointer-events: none; }   /* over every menu, popup and sheet: Calc lifts those to 400-700 */
+.tour-overlay           { position: fixed; inset: 0; z-index: 2000; pointer-events: none; }   /* over every menu and popup (Calc lifts those to 400-700); over a dialog it moves into it (ui.js) */
 .tour-overlay > *       { pointer-events: auto; }
+.tour-overlay[popover]  { width: auto; height: auto; margin: 0; padding: 0; border: 0; background: none; overflow: visible; }   /* above an open dialog (ui.js hostOver) */
 .tour-pane              { position: fixed; background: var(--scrim); }
 .tour-lid               { position: fixed; }
 .tour-overlay.is-tap .tour-lid { display: none; }
@@ -1552,22 +1421,11 @@ button,
 /* ---------------------------------------------------------------------------
  * INSTALL-AS-APP DIALOG  (.install-*)
  *
- * Built by NayiveUI.offerInstall() on the shared .sheet, reusing the help
+ * Built by NayiveUI.offerInstall() on Ayni.dialog, reusing the help
  * dialog's row list (.intro-btns) for the three "what you get" lines and its
  * wide button (.intro-dismiss) for the actions. Only the app logo, the numbered
  * iOS steps and the filled primary button are new.
  * ---------------------------------------------------------------------------*/
-/* The corner x is pinned instead of floated here: floating it steals width from
-   the first line and pushes the centred logo off-centre. */
-.install-sheet .intro-close
-{
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    float: none;
-    margin: 0;
-    box-shadow: none;
-}
 .install-logo
 {
     display: block;
@@ -2626,27 +2484,6 @@ input[type=range]:disabled           { opacity: 0.5; }
     textarea           { font-size: 16px; }
 }
 
-/* A phone in either orientation (narrow, or short when turned sideways): a
-   dialog taller than the screen scrolls inside (.sheet has overflow-y), and
-   its button row sticks to the bottom edge so Save / Cancel / Close are always
-   within reach. The negative margins let the strip cover the sheet's own
-   padding, so it sits flush with the sheet's bottom edge. Only a row that closes
-   the sheet (:last-child) - the launcher's colour-scheme dialog has a Save row in
-   the middle of a longer form, and that one must stay in place. */
-@media (max-width: 640px), (max-height: 520px)
-{
-    .sheet .sheet-actions:last-child
-    {
-        position: sticky;
-        bottom: calc(-16px - env(safe-area-inset-bottom));   /* the sticky box is inset by the sheet's padding; this reaches its real edge */
-        z-index: 2;
-        margin: 18px -16px calc(-16px - env(safe-area-inset-bottom));
-        padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
-        background: var(--card);
-        border-top: 1px solid var(--line);
-    }
-}
-
 /* THE CLIP'S PANEL (NayiveUI.attachPanel): round coloured buttons, three to a
    row, each with its name under it - Chat's writer and eMail's. Where it sits
    is the app's (Chat: over its writer; eMail: under its clip). */
@@ -2718,7 +2555,8 @@ input[type=range]:disabled           { opacity: 0.5; }
 /* SCREEN LOCKER (shared/locker.js). html.nv-locked hides the page from its
    first paint; the locker is a full-screen modal <dialog> on black - black is
    the lockers' artwork, like a game board, not a theme colour. The password
-   box is a .sheet in the middle, shown by a key or a press. */
+   box is a card in the middle, shown by a key or a press. Its class `lock`
+   keeps it above any dialog opened later (Ayni). */
 html.nv-locked body { visibility: hidden; }
 .lock-dlg
 {
@@ -2732,13 +2570,19 @@ html.nv-locked body { visibility: hidden; }
 }
 .lock-dlg::backdrop { background: #000; }
 .lock-host { position: absolute; inset: 0; overflow: hidden; }
-.sheet.lock-card
+.lock-card
 {
     position: absolute; left: 50%; top: 50%;
     transform: translate(-50%, -50%);
     width: min(340px, calc(100% - 32px));
     display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    padding: 16px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    box-shadow: var(--elev-dialog);
 }
+.lock-card[hidden] { display: none; }
 .lock-card input { flex: 1 1 0; min-width: 0; }
 .lock-msg { flex-basis: 100%; margin: 0; font-size: 0.85rem; color: var(--danger); }
 
@@ -2969,7 +2813,7 @@ html.nv-locked body { visibility: hidden; }
     /* An app that locks the page (html, body { height: 100%; overflow: hidden })
        would clip the printed sheet to a single page. */
     .printing, .printing body { height: auto !important; overflow: visible !important; background: #fff !important; }
-    .printing #app, .printing .sheet-backdrop, .printing #ayni-toasts { display: none !important; }
+    .printing #app, .printing dialog, .printing #ayni-toasts { display: none !important; }
     .printing #printRoot { display: block !important; }
 }
 

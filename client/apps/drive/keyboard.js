@@ -67,7 +67,7 @@ function onShortcutKey( e )
     if( NayiveUI.menuOpen() ) return;
     // A dialog, the viewer or the player owns the screen:
     // the toolbar behind it is not what the key is for.
-    if( document.querySelector( '.sheet-backdrop.open, .viewer-backdrop.open, .media-backdrop.open' ) ) return;
+    if( document.querySelector( 'dialog.panel[open], .viewer-backdrop.open, .media-backdrop.open' ) ) return;
 
     // Swallowed even when the action itself cannot run, so the browser's
     // find bar / view-source / bookmark never appears over Drive.

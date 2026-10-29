@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -24,6 +25,7 @@
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
+    <script src="../shared/ayni/ayni-dialogs.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Vendored libs (all pinned, no build step). Order matters: classic scripts run before the deferred module script below. -->
@@ -348,25 +350,27 @@
          editors share, built here by shared/office.js (session, THE SHEETS). -->
 
     <!-- Insert-function dialog -->
-    <div id="fxBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="fxBackdrop" class="panel">
+        <header>
             <h2 data-i18n="calc.insertFx"></h2>
+            <button class="btn" id="fxCloseBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
             <div class="field">
                 <input type="text" id="fxSearch" autocomplete="off" data-i18n-attr="placeholder:calc.searchFxPh">
             </div>
             <div id="fxList" class="fx-list"></div>
-            <div class="sheet-actions">
-                <button class="btn" id="fxCloseBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+    </dialog>
 
     <!-- Settings (File > Settings) - close-only: each select is kept as it
          changes (calc.js, SETTINGS; what they do: grid.js, SETTINGS). -->
-    <div id="settingsBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="settingsBackdrop" class="panel">
+        <header>
             <h2 data-i18n="ui.settings"></h2>
-
+            <button class="btn" id="settingsCloseBtn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
             <div class="field">
                 <label for="setDec"><span data-i18n="calc.setDec"></span> <button class="info-dot" type="button" data-i18n-attr="data-info:calc.setDecInfo"></button></label>
                 <select id="setDec">
@@ -397,12 +401,8 @@
                     <select id="setSize"></select>     <!-- #fmtFontSize's options (calc.js wireSettings) -->
                 </div>
             </div>
-
-            <div class="sheet-actions">
-                <button class="btn" id="settingsCloseBtn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+    </dialog>
 
     <!-- The loss gate. Calc rewrites the whole file on every save, from a model
          that does not hold everything an .xlsx can carry, so a file with pivot
@@ -410,18 +410,20 @@
          back stripped (codec.js, detectLossy). This says so BEFORE the first
          write, once per open file. Three ways out, and the safe
          one is the primary: keep the original and write a copy. -->
-    <div id="lossyBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="lossyBackdrop" class="panel">
+        <header>
             <h2 data-i18n="calc.lossyTitle"></h2>
+        </header>
+        <div class="body">
             <p data-i18n="calc.lossyLead"></p>
             <ul id="lossyList" class="lossy-list"></ul>
-            <div class="sheet-actions">
-                <button class="btn" id="lossyCancelBtn" data-close             data-i18n-attr="data-tip:calc.lossyCancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn" id="lossyAnywayBtn" data-i18n-attr="data-tip:calc.lossyAnyway"><span class="icon" data-icon="forward"></span></button>
-                <button class="btn primary" id="lossyCopyBtn"      data-i18n-attr="data-tip:calc.lossyCopy"><span class="icon" data-icon="save-as"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" id="lossyCancelBtn" data-close             data-i18n-attr="data-tip:calc.lossyCancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn" id="lossyAnywayBtn" data-i18n-attr="data-tip:calc.lossyAnyway"><span class="icon" data-icon="forward"></span></button>
+            <button class="btn primary" id="lossyCopyBtn"      data-i18n-attr="data-tip:calc.lossyCopy"><span class="icon" data-icon="save-as"></span></button>
+        </footer>
+    </dialog>
 
     <!-- Formula editor - over the top-right of the cells while a cell's "=…" is
          typed (FORMULA EDITOR in the script). It takes no typing of its own: the
@@ -573,10 +575,11 @@
     </div>
 
     <!-- Number-format dialog — one per non-"General" category, fields adapt to the category -->
-    <div id="numFmtBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="numFmtBackdrop" class="panel">
+        <header>
             <h2 id="numFmtTitle" data-i18n="calc.numFormat"></h2>
-
+        </header>
+        <div class="body">
             <div class="field" data-nf="numero moneda porcentaje">
                 <label for="nfDecimals" data-i18n="calc.decimals"></label>
                 <select id="nfDecimals">
@@ -629,13 +632,12 @@
                 <label data-i18n="calc.preview"></label>
                 <div id="nfPreview" class="nf-preview">-1234.56</div>
             </div>
-
-            <div class="sheet-actions">
-                <button class="btn" id="numFmtCloseBtn"   data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="numFmtConfirmBtn" data-i18n-attr="data-tip:calc.apply"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" id="numFmtCloseBtn"   data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="numFmtConfirmBtn" data-i18n-attr="data-tip:calc.apply"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- The pull-down panels: one for an open menu, one for its submenu.
          .top-menu gives them the card and shadow (shared/app.css). -->

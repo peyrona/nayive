@@ -55,8 +55,23 @@ const initAlt = (b) => {
   b.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); run(true); } });
 };
 
+/* ---------- Default button ---------- */
+/* RULE: Enter inside a Panel clicks that Panel's default button (the .primary one in its own header or footer).
+   Not in a text area (new line), not on another button or item (Enter presses or picks that), and not while a list or
+   menu is open (the control handles Enter first and marks it handled). */
+const defaultButton = (panel) => $$(':scope > footer .btn.primary, :scope > form > footer .btn.primary, :scope > header .btn.primary, :scope > form > header .btn.primary', panel)[0];
+const onEnter = (e) => {
+  if (e.key !== 'Enter' || e.defaultPrevented || e.isComposing || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
+  const t = e.target;
+  if (t.closest('textarea, [contenteditable], button, a[href], summary, [role="button"], [role="tab"], [role^="menuitem"], [role="option"], [role="treeitem"], [role="listbox"], [role="tree"], [role="combobox"][aria-expanded="true"]')) return;
+  const panel = t.closest('.panel'), b = panel && defaultButton(panel);
+  if (!b || b.getAttribute('aria-disabled') === 'true') return;
+  e.preventDefault(); b.click();
+};
+
 /* ---------- Set up once ---------- */
 const setup = () => {
+  document.addEventListener('keydown', onEnter);
   /* Disabled buttons (aria-disabled) stay focusable but do nothing: clicks, Enter and Space are stopped here */
   addEventListener('click', (e) => { if (e.target.closest('button[aria-disabled="true"], button[aria-busy="true"]')) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
   /* Read-only check boxes, radios and switches show their value but cannot change */

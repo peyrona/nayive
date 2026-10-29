@@ -220,14 +220,14 @@
     function build()
     {
         dlg = document.createElement( "dialog" );
-        dlg.className = "lock-dlg";
+        dlg.className = "lock-dlg lock";        // Ayni keeps a dialog.lock above any dialog opened later
         dlg.tabIndex = -1;                       // hideCard gives it the focus back
 
         host = document.createElement( "div" );
         host.className = "lock-host";
 
         card = document.createElement( "div" );
-        card.className = "sheet lock-card";
+        card.className = "lock-card";
         card.hidden = true;
 
         inp = document.createElement( "input" );

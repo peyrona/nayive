@@ -19,6 +19,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -26,6 +27,7 @@
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
+    <script src="../shared/ayni/ayni-dialogs.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <link rel="manifest" href="manifest.json">
@@ -242,45 +244,49 @@
 
     <!-- The format bar's link: the address for the words picked (empty takes
          the link off). -->
-    <div class="sheet-backdrop" id="linkSheet" role="dialog" aria-modal="true">
-        <div class="sheet sheet--pack">
+    <dialog class="panel" id="linkSheet">
+        <header>
             <h2 data-i18n="write.sc.link"></h2>
+        </header>
+        <div class="body">
             <div class="field">
                 <label for="linkHref" data-i18n="write.linkAddress"></label>
                 <input id="linkHref" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://">
             </div>
-            <div class="sheet-actions">
-                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="linkOkBtn" type="button" data-i18n-attr="data-tip:write.apply"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="linkOkBtn" type="button" data-i18n-attr="data-tip:write.apply"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- LABELS for the messages picked (or the one open): a tap puts a label on
          all of them, or takes it off all of them (mixed = some have it). A new
          one can be made right here. It acts at once; ✗ only closes. -->
-    <div class="sheet-backdrop" id="labelSheet" role="dialog" aria-modal="true">
-        <div class="sheet">
+    <dialog class="panel" id="labelSheet">
+        <header>
             <h2 data-i18n="mail.labelsBtn"></h2>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
             <div id="labelPick" class="mail-label-pick"></div>
             <p id="labelPickEmpty" class="hint" data-i18n="mail.noLabels" hidden></p>
             <div class="mail-new-label">
                 <input id="labelNew" type="text" maxlength="40" autocomplete="off" data-i18n-attr="placeholder:mail.newLabelPh, aria-label:mail.newLabel">
                 <button id="labelNewBtn" class="btn" type="button" data-icon="plus" data-i18n-attr="data-tip:mail.newLabel, aria-label:mail.newLabel"></button>
             </div>
-            <div class="sheet-actions">
-                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+    </dialog>
 
     <!-- PICK, from the list's select button (or "Select…" on a right-click in
          the list): All (bottom left) picks every row (all picked: none); or the
          fields pick the rows that match ALL the fields filled - the list's next
          pages are read first - and only those stay in sight until the pick ends. -->
-    <div class="sheet-backdrop" id="pickSheet" role="dialog" aria-modal="true">
-        <div class="sheet mail-pick-sheet">
+    <dialog class="panel mail-pick-sheet" id="pickSheet">
+        <header>
             <h2 data-i18n="mail.pickGo"></h2>
+        </header>
+        <div class="body">
             <div class="field">
                 <label for="pickOlder" data-i18n="mail.pickOlder"></label>
                 <select id="pickOlder">
@@ -321,21 +327,23 @@
                 <span data-i18n="mail.pickStarred"></span>
                 <input role="switch" type="checkbox" id="pickStarred">
             </label>
-            <div class="sheet-actions">
-                <button id="pickAllBtn" class="btn text primary sm sheet-actions-left" type="button" data-i18n="mail.pickAll"></button>
-                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="pickGoBtn" type="button" data-i18n-attr="data-tip:mail.pickGo"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <div class="extra"><button id="pickAllBtn" class="btn text primary sm" type="button" data-i18n="mail.pickAll"></button></div>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="pickGoBtn" type="button" data-i18n-attr="data-tip:mail.pickGo"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- ADVANCED SEARCH, the funnel in the search box (search.js): the rows of
          the tray on screen that match ALL the fields filled. The server looks
          for the words (From, To and Subject go to it as words too); each row is
          then checked here field by field. Clear (bottom left) empties the fields. -->
-    <div class="sheet-backdrop" id="advSheet" role="dialog" aria-modal="true">
-        <div class="sheet mail-adv-sheet">
+    <dialog class="panel mail-adv-sheet" id="advSheet">
+        <header>
             <h2 data-i18n="mail.advTitle"></h2>
+        </header>
+        <div class="body">
             <p class="hint" data-i18n="mail.advNote"></p>
             <div class="field">
                 <label for="advFrom" data-i18n="mail.pickFrom"></label>
@@ -385,13 +393,13 @@
                 <span data-i18n="mail.pickStarred"></span>
                 <input role="switch" type="checkbox" id="advStarred">
             </label>
-            <div class="sheet-actions">
-                <button id="advClearBtn" class="btn sheet-actions-left" type="button" data-i18n-attr="data-tip:mail.advClear"><span class="icon" data-icon="eraser"></span></button>
-                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="advGoBtn" type="button" data-i18n-attr="data-tip:ui.search"><span class="icon" data-icon="search"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <div class="extra"><button id="advClearBtn" class="btn" type="button" data-i18n-attr="data-tip:mail.advClear"><span class="icon" data-icon="eraser"></span></button></div>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="advGoBtn" type="button" data-i18n-attr="data-tip:ui.search"><span class="icon" data-icon="search"></span></button>
+        </footer>
+    </dialog>
 
     <!-- SETTINGS, two tabs.
          Accounts: the ones there are (bin = remove, at once: the mail stays on
@@ -401,9 +409,12 @@
          step, with a link to where its app password is made.
          General: how many days mail stays in the Trash; the signature under every new message, reply and
          forward. Every change applies at once. -->
-    <div class="sheet-backdrop" id="setSheet" role="dialog" aria-modal="true">
-        <div class="sheet sheet--wide">
+    <dialog class="panel big" id="setSheet">
+        <header>
             <h2 data-i18n="mail.settings"></h2>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
             <div class="mail-tabs" role="tablist">
                 <button class="pill is-active" type="button" role="tab" data-tab="accounts" data-i18n="mail.tabAccounts"></button>
                 <button class="pill"           type="button" role="tab" data-tab="general"  data-i18n="mail.tabGeneral"></button>
@@ -499,19 +510,17 @@
                     <p class="hint" data-i18n="mail.signatureHint"></p>
                 </div>
             </div>
-
-            <div class="sheet-actions">
-                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+    </dialog>
 
     <!-- ONE LABEL: its name and colour. New from the "Labels" row's menu, edit
          from a label's menu (right-click, its ⋮, a long press); the bin (edit
          only) deletes it at once, with Undo - and takes it off every message. -->
-    <div class="sheet-backdrop" id="labelDlg" role="dialog" aria-modal="true">
-        <div class="sheet">
+    <dialog class="panel" id="labelDlg">
+        <header>
             <h2 id="labelDlgTitle"></h2>
+        </header>
+        <div class="body">
             <div class="field">
                 <label for="labelName" data-i18n="mail.labelName"></label>
                 <input id="labelName" type="text" maxlength="40" autocomplete="off" data-i18n-attr="placeholder:mail.newLabelPh">
@@ -521,13 +530,13 @@
                 <div id="labelColors" class="mail-swatches" role="radiogroup" data-i18n-attr="aria-label:mail.labelColor"></div>
             </div>
             <p id="labelDlgError" class="field-error" hidden></p>
-            <div class="sheet-actions">
-                <button id="labelDelBtn" class="btn danger sheet-actions-left" type="button" data-i18n-attr="data-tip:mail.removeLabel" hidden><span class="icon" data-icon="trash"></span></button>
-                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="labelSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <div class="extra"><button id="labelDelBtn" class="btn danger" type="button" data-i18n-attr="data-tip:mail.removeLabel" hidden><span class="icon" data-icon="trash"></span></button></div>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="labelSaveBtn" type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>

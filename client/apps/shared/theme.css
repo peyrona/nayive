@@ -76,8 +76,9 @@ button.sync-indicator:focus-visible { outline: 2px solid var(--accent); outline-
 }
 
 /* Top "your session expired" bar (shared/ui.js -> NayiveUI.sessionExpired()).
- * Sits above .sheet (100), .info-popup (200) and .coach-overlay (300):
- * whatever was open when the 401 arrived, this has to stay readable over it. */
+ * Sits above the page's own layers and .coach-overlay (300). A dialog open
+ * when the 401 arrives is in the top layer, over it: the bar shows once it
+ * closes. */
 .session-bar             { position: fixed; top: 0; left: 0; right: 0; z-index: 400;
                            display: flex; align-items: center; justify-content: center;
                            flex-wrap: wrap; gap: 12px; padding: 10px 16px;
@@ -105,25 +106,4 @@ button.sync-indicator:focus-visible { outline: 2px solid var(--accent); outline-
 .quota-card-head strong  { font-size: 1rem; }
 .quota-card-actions      { display: flex; justify-content: flex-end; margin-top: 12px; }
 
-/* Dialog action row - the one Nayive style (reference: Calendar -> "Ir a mes").
- * A right-aligned line of round, borderless, icon-only buttons. Mark up the buttons with
- * Ayni's class and icon (shared/app.css, DIALOG BUTTONS): .btn (close, X,
- * marked data-close), .btn.primary (apply/save, check), .btn.danger (trash). .sheet-actions-left pins a button - or a
- * <div> holding a few of them, as the folder picker does - to the far left. */
-.sheet-actions           { display: flex; align-items: center; justify-content: flex-end;
-                           gap: var(--space-2); margin-top: 18px; }
-.sheet-actions-left      { display: flex; align-items: center; gap: var(--space-2);
-                           margin-right: auto; }
-
-/* The buttons are Ayni's .btn (.primary, .danger): 36 px, 44 px on touch. */
-html.touch .sheet-actions .btn { --btn: var(--touch); }
-
-/* Top-right corner close - used when a dialog's ONLY action is "close" (a
- * bottom .sheet-actions row is for dialogs that also have an Apply/Save/…).
- * NayiveUI.applySheetButtons() moves a lone close button onto the title's line
- * (.sheet-header), or pins it to the corner when there is no title. Just the
- * round-button look here; apps that still carry their own .sheet-close in a
- * flex header keep that local copy.
- * .sheet-tool: the same look for a dialog's own icon button on that title
- * line, left of the × (My account's colour schemes). */
-.btn.sheet-close, .btn.sheet-tool { --btn: 32px; z-index: 1; }   /* the look is Ayni's .btn */
+/* A dialog's buttons: Ayni's (shared/ayni/ayni-dialogs.css, ayni-buttons.css). */

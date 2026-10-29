@@ -69,10 +69,10 @@ await c.evaluate( `( () => { window.__lie = true; const open = XMLHttpRequest.pr
     openSaveSheet(); document.getElementById( 'playlistName' ).value = 'E'; return true; } )()` );
 await c.evaluate( "window.__toasts = []; confirmName().then( () => true )" );
 ok( await c.evaluate( "( window.__toasts || [] ).some( t => t.indexOf( Ayni.t( 'music.listSaveFailed' ) ) !== -1 )" ), "the failed save is said", await c.toasts() );
-ok( await c.evaluate( "document.getElementById( 'saveBackdrop' ).classList.contains( 'open' ) && document.getElementById( 'playlistName' ).value === 'E'" ),
+ok( await c.evaluate( "document.getElementById( 'saveBackdrop' ).open && document.getElementById( 'playlistName' ).value === 'E'" ),
     "the sheet stays open, the name kept" );
 await c.evaluate( "window.__lie = false; confirmName().then( () => true )" );
-ok( await c.evaluate( "! document.getElementById( 'saveBackdrop' ).classList.contains( 'open' )" ), "✓ again: saved, the sheet closes" );
+ok( await c.evaluate( "! document.getElementById( 'saveBackdrop' ).open" ), "✓ again: saved, the sheet closes" );
 ok( ( json( LISTS ) || [] ).filter( p => p.name === "E" ).length === 1, "one list E, not two", json( LISTS ) );
 
 //----------------------------------------------------------------------------

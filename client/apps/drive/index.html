@@ -25,6 +25,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -32,6 +33,7 @@
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
+    <script src="../shared/ayni/ayni-dialogs.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
@@ -191,9 +193,12 @@
     </div>
 
     <!-- Upload dialog: drop hint + pick-with-a-dialog choices (file / folder) -->
-    <div id="uploadBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="uploadBackdrop" class="panel">
+        <header>
             <h2 data-i18n="ui.upload"></h2>
+            <button class="btn" id="uploadCancelBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
             <p><span data-i18n="drive.dragDropHint"></span><br><span data-i18n="drive.orPickBelow"></span></p>
             <div class="upload-choices">
                 <button id="uploadPickPhotosBtn" class="upload-choice upload-choice-photos">
@@ -210,17 +215,16 @@
                 </button>
             </div>
             <p class="upload-note" data-i18n="drive.uploadNote"></p>
-            <div class="sheet-actions">
-                <button class="btn" id="uploadCancelBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+    </dialog>
 
     <!-- Advanced search (advsearch.js): name rules, kinds and a date window,
          with a live count. The rows and the pills are built by the script. -->
-    <div id="searchBuilderBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--wide">
+    <dialog id="searchBuilderBackdrop" class="panel big">
+        <header>
             <h2 data-i18n="drive.sbTitle"></h2>
+        </header>
+        <div class="body">
             <div class="field">
                 <label><span data-i18n="drive.sbName"></span> <span class="sb-hint" data-i18n="drive.sbNote"></span></label>
                 <div id="sbRules" class="sb-rules"></div>
@@ -257,91 +261,102 @@
                 <div id="sbCount" class="sb-count" hidden></div>
                 <p id="sbSummary" class="share-note"></p>
             </div>
-            <div class="sheet-actions">
-                <button id="sbClearBtn" type="button" class="btn sheet-actions-left" data-i18n-attr="data-tip:drive.sbClear"><span class="icon" data-icon="eraser"></span></button>
-                <button class="btn" id="sbCancelBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="sbSearchBtn" data-i18n-attr="data-tip:ui.search"><span class="icon" data-icon="search"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <div class="extra"><button id="sbClearBtn" type="button" class="btn" data-i18n-attr="data-tip:drive.sbClear"><span class="icon" data-icon="eraser"></span></button></div>
+            <button class="btn" id="sbCancelBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="sbSearchBtn" data-i18n-attr="data-tip:ui.search"><span class="icon" data-icon="search"></span></button>
+        </footer>
+    </dialog>
 
     <!-- New folder dialog -->
-    <div id="newFolderBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--pack">
+    <dialog id="newFolderBackdrop" class="panel">
+        <header>
             <h2 data-i18n="ui.newFolder"></h2>
+        </header>
+        <div class="body">
             <div class="field">
                 <input type="text" id="newFolderName" autocomplete="off" data-i18n-attr="placeholder:drive.folderNamePh">
             </div>
-            <div class="sheet-actions">
-                <button class="btn" id="newFolderCancelBtn"  data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="newFolderConfirmBtn" data-i18n-attr="data-tip:drive.create"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" id="newFolderCancelBtn"  data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="newFolderConfirmBtn" data-i18n-attr="data-tip:drive.create"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- Rename dialog -->
-    <div id="renameBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--pack">
+    <dialog id="renameBackdrop" class="panel">
+        <header>
             <h2 data-i18n="ui.rename"></h2>
+        </header>
+        <div class="body">
             <div class="field">
                 <input type="text" id="renameName" autocomplete="off" data-i18n-attr="aria-label:drive.newName">
             </div>
             <p id="renameError" class="field-error" data-i18n="drive.noSlash" hidden></p>
-            <div class="sheet-actions">
-                <button class="btn" id="renameCancelBtn"  data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="renameConfirmBtn" data-i18n-attr="data-tip:ui.rename"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" id="renameCancelBtn"  data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="renameConfirmBtn" data-i18n-attr="data-tip:ui.rename"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- What is inside a .zip (zip.js): a double-click on one opens it.
          The list and the note are filled when the server answers. -->
-    <div id="zipBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="zipBackdrop" class="panel">
+        <header>
             <h2 id="zipTitle"></h2>
+        </header>
+        <div class="body">
             <p id="zipSummary" class="zip-summary"></p>
             <ul id="zipList" class="replace-list zip-list" hidden></ul>
             <p id="zipNote" class="zip-note"></p>
-            <div class="sheet-actions">
-                <button class="btn" id="zipCloseBtn"   data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="zipExtractBtn" data-i18n-attr="data-tip:drive.extractHere"><span class="icon" data-icon="unzip"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" id="zipCloseBtn"   data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="zipExtractBtn" data-i18n-attr="data-tip:drive.extractHere"><span class="icon" data-icon="unzip"></span></button>
+        </footer>
+    </dialog>
 
     <!-- Properties dialog (right-click -> "Propiedades"). Read-only: one close button. -->
-    <div id="propsBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--pack">
+    <dialog id="propsBackdrop" class="panel">
+        <header>
             <h2 data-i18n="drive.properties"></h2>
+            <button class="btn" id="propsCloseBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
             <dl id="propsBody" class="props"></dl>
-            <div class="sheet-actions">
-                <button class="btn" id="propsCloseBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+    </dialog>
 
     <!-- Upload: warn before overwriting files that already exist at the destination -->
-    <div id="replaceBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="replaceBackdrop" class="panel">
+        <header>
             <h2 id="replaceTitle" data-i18n="drive.alreadyExist"></h2>
+        </header>
+        <div class="body">
             <p id="replaceMsg"></p>
             <ul id="replaceList" class="replace-list"></ul>
             <label id="replaceOptWrap" class="replace-opt switch end">
                 <span data-i18n="drive.replaceExisting"></span>
                 <input role="switch" type="checkbox" id="replaceOverwrite">
             </label>
-            <div class="sheet-actions">
-                <button class="btn" id="replaceCancelBtn"  data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="replaceConfirmBtn" data-i18n-attr="data-tip:drive.continue"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" id="replaceCancelBtn"  data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="replaceConfirmBtn" data-i18n-attr="data-tip:drive.continue"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- Upload: videos a browser cannot play. Convert them to MP4 on the server?
          (server/go/convert.go; asked before anything is sent) -->
-    <div id="convertBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="convertBackdrop" class="panel">
+        <header>
             <h2 data-i18n="drive.convertTitle"></h2>
+            <button class="btn" id="convertCancelBtn" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
             <ul id="convertList" class="replace-list"></ul>
             <p data-i18n="drive.convertMsg"></p>
             <p id="convertNoPush" class="convert-nopush" hidden>
@@ -358,11 +373,8 @@
                     <span data-i18n="drive.convertNo"></span>
                 </button>
             </div>
-            <div class="sheet-actions">
-                <button class="btn" id="convertCancelBtn" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+    </dialog>
 
     <!-- Built-in image viewer (lightbox) -->
     <div id="viewerBackdrop" class="viewer-backdrop">
@@ -383,18 +395,23 @@
     </div>
 
     <!-- Indeterminate progress dialog (shown while Drive builds a ZIP) -->
-    <div id="progressBackdrop" class="sheet-backdrop">
-        <div class="sheet progress-sheet">
+    <dialog id="progressBackdrop" class="panel progress-sheet">
+        <header>
             <h2 id="progressTitle" data-i18n="drive.zipping"></h2>
+        </header>
+        <div class="body">
             <div class="progress-track"></div>
         </div>
-    </div>
+    </dialog>
 
     <!-- "Open with" dialog: a double-clicked file no app claims (and the
          Write-or-Calc tie). openWithDialog picks which buttons show. -->
-    <div id="importWithBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="importWithBackdrop" class="panel">
+        <header>
             <h2 data-i18n="drive.openWith"></h2>
+            <button class="btn" id="importWithCancelBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
             <p id="importWithMsg"></p>
             <!-- One labelled tile per app, the same shape the upload dialog uses.
                  App names are never translated, so the labels are literal. -->
@@ -424,11 +441,8 @@
                     <span>Movies</span>
                 </button>
             </div>
-            <div class="sheet-actions">
-                <button class="btn" id="importWithCancelBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+    </dialog>
 
     <!-- Drive's code, one file per feature. Classic scripts sharing one global
          scope, so keep this order. init.js is a module for its top-level

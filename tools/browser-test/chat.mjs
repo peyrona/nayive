@@ -142,16 +142,16 @@ await key( c, "Escape" );
 await c.until( "! document.querySelector( '.intro-btns' )?.offsetParent" );
 
 section( "CHAT · DELETE CHAT (LIST) vs DELETE ALL MESSAGES (OPEN CHAT)" );
-const sheetOn = "!! document.querySelector( '.sheet-backdrop.open' )";
-const pickDel = "document.querySelector( '.sheet-backdrop.open .del-opt button' ).click(); true";
+const sheetOn = "!! document.querySelector( 'dialog.panel[open]' )";
+const pickDel = "document.querySelector( 'dialog.panel[open] .del-opt button' ).click(); true";
 ok( ( await onServer( JA ) ).includes( "para borrar" ), "Javi's chat has its message on the server" );
 await c.evaluate( "NayiveChat.browse.clear(); true" );
 await mouse( c, ROW( JA ), { dx: 160, mods: 2 } );
 await key( c, "Delete" );
-ok( await c.until( sheetOn ) && await c.evaluate( "document.querySelectorAll( '.sheet-backdrop.open .del-opt' ).length === 1 && /messages/.test( document.querySelector( '.sheet-backdrop.open .del-opt .hint' ).textContent )" ),
+ok( await c.until( sheetOn ) && await c.evaluate( "document.querySelectorAll( 'dialog.panel[open] .del-opt' ).length === 1 && /messages/.test( document.querySelector( 'dialog.panel[open] .del-opt .hint' ).textContent )" ),
     "Del: a dialog with one choice that says the messages go too" );
 await key( c, "Escape" );
-ok( await c.until( "! document.querySelector( '.sheet-backdrop.open' )" ) && await c.evaluate( `!! document.querySelector( '${ROW( JA )}' )` ), "…Esc closes it, nothing gone" );
+ok( await c.until( "! document.querySelector( 'dialog.panel[open]' )" ) && await c.evaluate( `!! document.querySelector( '${ROW( JA )}' )` ), "…Esc closes it, nothing gone" );
 await mouse( c, ROW( JA ), { dx: 160, button: "right" } );
 await c.evaluate( "document.querySelector('.item-menu [data-act=del]').click(); true" );
 ok( await c.until( sheetOn ), "the menu's Delete chat: the same dialog" );
@@ -166,7 +166,7 @@ await mouse( c, ROW( JA ), { dx: 160 } );
 await c.until( `NayiveChat.S.open === ${JSON.stringify( JA )}` );
 ok( await c.evaluate( "document.getElementById( 'convDeleteBtn' ).dataset.tip === 'Delete all messages'" ), "the open chat's trash: \"Delete all messages\"" );
 await c.evaluate( "document.getElementById( 'convDeleteBtn' ).click(); true" );
-ok( await c.until( `! document.querySelector( '${ROW( JA )}' )` ) && await c.evaluate( "! document.querySelector( '.sheet-backdrop.open' )" ), "…clears at once, no question" );
+ok( await c.until( `! document.querySelector( '${ROW( JA )}' )` ) && await c.evaluate( "! document.querySelector( 'dialog.panel[open]' )" ), "…clears at once, no question" );
 ok( await c.until( "!! document.querySelector( '#ayni-toasts .toast.undo .act' )" ) && ( await onServer( JA ) ).includes( "para borrar" ), "…an Undo; the server still has the message" );
 await c.evaluate( "document.querySelector( '#ayni-toasts .toast.undo .act' ).click(); true" );
 ok( await c.until( `!! document.querySelector( '${ROW( JA )}' )` ), "Undo brings it back" );

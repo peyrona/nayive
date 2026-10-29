@@ -869,7 +869,7 @@
             catch( e ) { C.fail( e ); Ayni.setBusy( create, false ); }
         }
         create.addEventListener( "click", go );
-        input.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) go(); } );
+        input.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); go(); } } );
         input.addEventListener( "input", function () { showFace(); drawCards(); } );
         showFace();
         C.openSide( view );
@@ -1045,13 +1045,13 @@
     // small dialogs
     // ---------------------------------------------------------------------
 
-    // One text field in a dialog (shared/ui.js askText). Resolves to the
-    // text, or null when cancelled. Asked over the info sheet too: Escape
-    // closes only this one.
+    // One text field in a dialog (Ayni.ask). Resolves to the text, or null
+    // when cancelled. Asked over the info sheet too: Escape closes only this
+    // one (the innermost dialog).
     C.askText = function ( o )
     {
-        return NayiveUI.askText( { title: o.title, label: o.label, hint: o.hint, value: o.value, max: o.max || 60,
-                                   ids: { input: "askText" }, topOnly: true } );
+        return Ayni.ask( { title: o.title, label: o.label, hint: o.hint, value: o.value, max: o.max || 60,
+                           ids: { input: "askText" } } );
     };
 
     // Settings › Your profile: your name and your picture, as the others
@@ -1127,22 +1127,24 @@
     {
         var prof = C.profilePane(), del = C.autoDeletePane();
         var panes = { profile: prof, autodel: del };
-        var no = NayiveUI.sheetButton( "close", T( "ui.close" ) );
+        var no = Ayni.dialogButton( "close", T( "ui.close" ) );
         var tabs = h( "div", { class: "set-tabs", attrs: { role: "tablist" } } );
-        // Escape only while it is on top: the picture picker closes first.
-        var d = NayiveUI.modal( { cls: "chat-settings", title: T( "ui.settings" ), escape: save,
-                                  top: function () { return document.body.lastElementChild === d.back; } } );
-        d.sheet.appendChild( tabs );
+        // Escape presses its × (save); the picture picker, the innermost
+        // dialog, closes first.
+        var d = Ayni.dialog( { cls: "chat-settings", title: T( "ui.settings" ) } );
+        d.body.appendChild( tabs );
         [ [ "profile", "chat.yourProfile" ], [ "autodel", "chat.autoDelete" ] ].forEach( function ( t )
         {
             tabs.appendChild( h( "button", { class: "pill", attrs: { type: "button", role: "tab" }, data: { tab: t[ 0 ] },
                                              on: { click: function () { show( t[ 0 ] ); } } }, T( t[ 1 ] ) ) );
             panes[ t[ 0 ] ].el.dataset.pane = t[ 0 ];
-            d.sheet.appendChild( panes[ t[ 0 ] ].el );
+            d.body.appendChild( panes[ t[ 0 ] ].el );
             panes[ t[ 0 ] ].input.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); save(); } } );
         } );
-        d.sheet.appendChild( h( "div", { class: "sheet-actions" }, no ) );
-        d.show( function () { NayiveUI.applySheetButtons( d.back ); } );
+        d.place( [ no ] );                     // a lone × goes in the title row
+        d.dialog.addEventListener( "close", save );
+        d.show();
+        NayiveUI.applySheetButtons( d.dialog );
 
         function show( key )
         {

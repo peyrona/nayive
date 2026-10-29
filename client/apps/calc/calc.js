@@ -233,7 +233,7 @@ function wireStaticUI()
             if( ed && ed.isOpened() ) return;
             const a = document.activeElement;
             if( a && a.matches( 'input, select, textarea, [contenteditable=""], [contenteditable="true"]' ) && ! a.closest( '#gridHost' ) ) return;
-            if( document.querySelector( '.popup.open, .sheet-backdrop.open, .top-menu:not([hidden])' ) ) return;
+            if( document.querySelector( '.popup.open, dialog.panel[open], .top-menu:not([hidden])' ) ) return;
             table.listen();
             table.getFocusManager().focusOnHighlightedCell();
         }, 0 );
@@ -247,7 +247,7 @@ function wireStaticUI()
         if( e.code === 'KeyS' && ( e.ctrlKey || e.metaKey ) && ! e.altKey && ! e.shiftKey )
         {
             e.preventDefault();
-            if( ! document.querySelector( '.sheet-backdrop.open' ) ) saveNow();
+            if( ! document.querySelector( 'dialog.panel[open]' ) ) saveNow();
             return;
         }
         // Ctrl/Cmd+P: the sheet, not the page (grid.js, PRINT) - the browser's
@@ -255,7 +255,7 @@ function wireStaticUI()
         if( e.code === 'KeyP' && ( e.ctrlKey || e.metaKey ) && ! e.altKey && ! e.shiftKey )
         {
             e.preventDefault();
-            if( ! document.querySelector( '.sheet-backdrop.open' ) ) printSheet( false );
+            if( ! document.querySelector( 'dialog.panel[open]' ) ) printSheet( false );
             return;
         }
         // Ctrl/Cmd+B, I, U format the selection — unless something is being
@@ -338,17 +338,17 @@ function wireStaticUI()
         // For this file, until it is closed - or for the .csv it was about.
         if( gateHeld === session.path() )               doc.lossyAck = true;
         if( gateHeld && O.extOf( gateHeld ) === 'csv' ) doc.csvOk    = gateHeld;
-        NayiveUI.close( 'lossyBackdrop' );
+        document.getElementById( 'lossyBackdrop' ).close();
 
         // Asked from "Guardar como" (office.js asks the gate before it
         // writes, the sheet still open under it): that save goes on.
         const saveAs = document.getElementById( 'saveAsBackdrop' );
-        if( saveAs && saveAs.classList.contains( 'open' ) ) document.getElementById( 'saveAsConfirmBtn' ).click();
+        if( saveAs && saveAs.open ) document.getElementById( 'saveAsConfirmBtn' ).click();
         else                                                saveNow();
     } );
     document.getElementById( 'lossyCopyBtn' ).addEventListener( 'click', function()
     {
-        NayiveUI.close( 'lossyBackdrop' );
+        document.getElementById( 'lossyBackdrop' ).close();
         session.openSaveAs();                // a copy Calc CAN write, original intact
     } );
     document.getElementById( 'fxList'       ).addEventListener( 'click', function( e )
@@ -784,7 +784,7 @@ function openFxPicker()
 
     document.getElementById( 'fxSearch' ).value = '';
     renderFxList( '' );
-    NayiveUI.open( 'fxBackdrop' );
+    document.getElementById( 'fxBackdrop' ).showModal();
     document.getElementById( 'fxSearch' ).focus();
 }
 
@@ -818,7 +818,7 @@ function insertFunction( name )
 
     const s = lastSelection;
 
-    NayiveUI.close( 'fxBackdrop' );
+    document.getElementById( 'fxBackdrop' ).close();
 
     if( s.r1 === s.r2 && s.c1 === s.c2 )
     {
@@ -862,7 +862,7 @@ function insertFunction( name )
 function lossyDialogIsOpen()
 {
     const el = document.getElementById( 'lossyBackdrop' );
-    return !! el && el.classList.contains( 'open' );
+    return !! el && el.open;
 }
 
 // Restore's Undo (shared/office.js) puts Calc's own copy of what was on screen
@@ -956,7 +956,7 @@ function lossyBlocked( path )
             return li.outerHTML;
         } ).join( '' );
 
-        NayiveUI.open( 'lossyBackdrop' );
+        document.getElementById( 'lossyBackdrop' ).showModal();
     }
 
     return true;
@@ -1423,7 +1423,7 @@ function openSettings()
         document.getElementById( id ).value = v;
         if( setCtls[ id ] ) setCtls[ id ].saved( v );
     }
-    NayiveUI.open( 'settingsBackdrop' );
+    document.getElementById( 'settingsBackdrop' ).showModal();
 }
 
 function wireSettings()
@@ -1436,7 +1436,7 @@ function wireSettings()
 
     for( const id in SET_FIELDS )
     {
-        setCtls[ id ] = NayiveUI.autoSave( document.getElementById( id ), async function( v )
+        setCtls[ id ] = Ayni.autoSave( document.getElementById( id ), async function( v )
         {
             const was  = calcPrefs;
             const next = Object.assign( {}, was );

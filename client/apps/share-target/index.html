@@ -29,6 +29,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -36,6 +37,7 @@
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
+    <script src="../shared/ayni/ayni-dialogs.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
@@ -338,7 +340,7 @@ async function upload()
         $( "#changeDest" ).ariaDisabled = false;
         setDest( DEST );
 
-        NayiveUI.alert( {
+        Ayni.alert( {
             title: Ayni.tf( 'st.notUploaded', { n: failed.length } ),
             body:  ( quota ? Ayni.t( 'ui.quotaExceeded' ) + "\n\n" : "" ) +
                    ( unread ? Ayni.t( 'st.albumUnread' ) + "\n\n" : "" ) +

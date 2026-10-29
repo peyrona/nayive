@@ -726,7 +726,7 @@ function askAppImport( imports )
     const names = imports.slice( 0, SHOWN ).map( function( it ) { return it.relPath; } );
     if( imports.length > SHOWN ) names.push( TF( 'drive.andNMore', { n: imports.length - SHOWN } ) );
 
-    return NayiveUI.confirm( {
+    return Ayni.confirm( {
         title:     TF( 'drive.importAskTitle', { app: app } ),
         body:      names.join( '\n' ) + '\n\n' + TF( 'drive.importAskBody', { app: app } ),
         confirm:   T( 'drive.importAdd' ),
@@ -768,7 +768,7 @@ async function runAppImports( imports )
                 ( kept ? ( done.length ? ' · ' : '' ) + TF( 'drive.importKept', { n: kept } ) : '' );
     if( msg && undos.length ) Ayni.toast( "ok", msg, { undo: function() { undoAppImports( undos ); } } );
     else if( msg )            Ayni.toast( "ok", msg );
-    if( failed.length ) NayiveUI.alert( { title: T( 'drive.importFailedTitle' ), body: failed.join( '\n' ) } );
+    if( failed.length ) Ayni.alert( { title: T( 'drive.importFailedTitle' ), body: failed.join( '\n' ) } );
 }
 
 // The Undo of an import, newest first: each file read fresh from the server
@@ -782,7 +782,7 @@ async function undoAppImports( undos )
         try { await updateAppFile( u.path, u.app, u.fn ); }
         catch( err ) { failed.push( u.app + ( err && err.message ? ' (' + err.message + ')' : '' ) ); }
     }
-    if( failed.length ) NayiveUI.alert( { title: T( 'drive.importUndoFailed' ), body: failed.join( '\n' ) } );
+    if( failed.length ) Ayni.alert( { title: T( 'drive.importUndoFailed' ), body: failed.join( '\n' ) } );
     else Ayni.toast( 'ok', T( 'drive.importUndone' ) );
 }
 
@@ -900,7 +900,7 @@ async function sendNew( dest, relPath, blob, conv, used )
 
         if( status === 412 )
         {
-            const choice = await NayiveUI.confirm( {
+            const choice = await Ayni.confirm( {
                 title:     T( 'drive.alreadyExistOne' ),
                 body:      TF( 'drive.appearedBody', { name: relPath } ),
                 confirm:   T( 'drive.replace' ), danger: true,

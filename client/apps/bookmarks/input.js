@@ -68,10 +68,10 @@ function topMenuItems()
                  hidden: ! phone, run: function() { setMode( m ); } };
     };
     return [
-        { id: 'import', label: T( 'bookmarks.import' ),      icon: SVG.importI,  run: function() { NayiveUI.open( 'importBackdrop' ); } },
-        { id: 'export', label: T( 'bookmarks.export' ),      icon: SVG.exportI,  run: function() { NayiveUI.open( 'exportBackdrop' ); } },
+        { id: 'import', label: T( 'bookmarks.import' ),      icon: SVG.importI,  run: function() { document.getElementById( 'importBackdrop' ).showModal(); } },
+        { id: 'export', label: T( 'bookmarks.export' ),      icon: SVG.exportI,  run: function() { document.getElementById( 'exportBackdrop' ).showModal(); } },
         { id: 'dupes',  label: T( 'bookmarks.findDupes' ),   icon: SVG.dupes,    run: openDupSheet },
-        { id: 'bmlet',  label: T( 'bookmarks.bookmarklet' ), icon: SVG.bookmark, run: function() { NayiveUI.open( 'bmletBackdrop' ); } },
+        { id: 'bmlet',  label: T( 'bookmarks.bookmarklet' ), icon: SVG.bookmark, run: function() { document.getElementById( 'bmletBackdrop' ).showModal(); } },
         { sep: true },
         { caption: T( 'bookmarks.sort' ) }
     ].concat( SORTS.map( function( s )
@@ -239,7 +239,7 @@ function wireItems()
         const b = e.target.closest( '[data-empty]' );
         if( ! b ) return;
         if( b.dataset.empty === 'add' ) openBookmarkSheet( null );
-        else if( b.dataset.empty === 'import' ) NayiveUI.open( 'importBackdrop' );
+        else if( b.dataset.empty === 'import' ) document.getElementById( 'importBackdrop' ).showModal();
     } );
 }
 
@@ -284,7 +284,7 @@ function wireKeys()
     document.addEventListener( 'keydown', function( e )
     {
         if( ( e.ctrlKey || e.metaKey ) && e.key === '/' ) { e.preventDefault(); focusSearch(); return; }
-        if( e.key !== 'Escape' || e.defaultPrevented || document.querySelector( '.sheet-backdrop.open' ) || NayiveUI.menuOpen() ) return;
+        if( e.key !== 'Escape' || e.defaultPrevented || document.querySelector( 'dialog.panel[open]' ) || NayiveUI.menuOpen() ) return;
         if( query ) setQuery( '' );
     } );
 }
@@ -302,7 +302,7 @@ function wireSheets()
     $( 'bmDeleteBtn' ).addEventListener( 'click', function()
     {
         const id = editId;
-        NayiveUI.close( 'bmBackdrop' );
+        document.getElementById( 'bmBackdrop' ).close();
         if( id ) deleteNodes( [ id ] );
     } );
     enterSubmits( 'bmBackdrop', saveBookmarkSheet );
@@ -419,7 +419,7 @@ function wireDragDrop()
         marks( null );
         const f = e.target.closest && e.target.closest( DROP_SEL );
         const link = droppedLink( e.dataTransfer );
-        if( link && ! document.querySelector( '.sheet-backdrop.open' ) )
+        if( link && ! document.querySelector( 'dialog.panel[open]' ) )
             openBookmarkSheet( null, { url: link.url, title: link.title,
                                        folder: f && isFolder( node( f.dataset.id ) ) ? f.dataset.id : null } );
     } );

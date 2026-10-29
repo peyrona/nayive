@@ -222,9 +222,8 @@
         if( btn.querySelector( ".fp-btn-ic" ) )
             btn.querySelector( ".fp-btn-ic" ).innerHTML = Ayni.icon( "folder" );
 
-        // The picker builds its own id-less backdrop on top of the open save-as
-        // sheet, so the suite's Escape rule leaves the sheet alone (it only ever
-        // closes the top-most backdrop, and only when that one has an id).
+        // The picker is its own dialog on top of the open save-as one: Escape
+        // closes only the innermost dialog (Ayni).
         btn.addEventListener( "click", function ()
         {
             NayiveUI.pickFolder( { allowRoot: true, rootLabel: t( "ui.filesRoot" ) } )
@@ -280,7 +279,7 @@
     // "ABRIR DOCUMENTO"  -  a plain folder browser over the user's files/
     //
     //   var browser = NayiveOffice.openBrowser( {
-    //       backdropId: "openBackdrop",          // the .sheet-backdrop to open
+    //       backdropId: "openBackdrop",          // the dialog to open
     //       root:       OPEN_ROOT,               // never walks above this
     //       canOpen:    function ( path ) {...}, // which files are listed
     //       onOpen:     function ( path ) {...}, // a file was picked
@@ -326,7 +325,7 @@
 
         function pick( path )
         {
-            NayiveUI.close( opts.backdropId || "openBackdrop" );
+            document.getElementById( opts.backdropId || "openBackdrop" ).close();
             opts.onOpen( path );
         }
 
@@ -461,7 +460,7 @@
         function open( startDir )
         {
             cwd = startDir || opts.root;
-            NayiveUI.open( opts.backdropId || "openBackdrop" );
+            document.getElementById( opts.backdropId || "openBackdrop" ).showModal();
             renderRecent();
             render();
         }
@@ -1341,7 +1340,7 @@
             // on the server meanwhile - Replace it, or keep both (o.taken).
             if( fresh.has( p ) && o.taken ) { o.taken( p ); return; }
 
-            var copy = await NayiveUI.confirm( {
+            var copy = await Ayni.confirm( {
                 title:   t( "ui.conflictTitle" ),
                 body:    tf( why === "dismissed" ? "ui.park.dismissedBody" : "ui.conflictBody", { name: baseName( p ) } ),
                 confirm: t( "ui.conflictCopy" ),
@@ -1627,7 +1626,6 @@
     //       // optional:
     //       formats:     [ { value: "xlsx", text: "Excel (.xlsx)" }, { value: "", key: "text.extOther" } ],
     //       formatKey:   "calc.format",                 // with `formats`: the "Guardar como" format row
-    //       pack:        false,                         // "Guardar como" at the full sheet width (Calc)
     //       openExts:    [ "xlsx", "csv" ],             // the formats it opens: the Open dialog lists
     //                                                   //   these, and any other picked is turned away
     //       turnAwayEnd: ".",                           //   ...with this after the toast (Calc)
@@ -1702,41 +1700,47 @@
     {
         if( byId( "saveAsBackdrop" ) ) return;
 
-        function actions( id ) { return '<div class="sheet-actions">\n<button class="btn" id="' + id + '" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>\n</div>'; }
+        // A lone × sits in the title row, after the title (Ayni's rule).
+        function head( key, id ) { return '<header>\n<h2 data-i18n="' + key + '"></h2>\n' + ( id ? '<button class="btn" id="' + id + '" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>\n' : "" ) + '</header>'; }
         function field( forId, key, control ) { return '<div class="field">\n<label for="' + forId + '" data-i18n="' + key + '"></label>\n' + control + '\n</div>'; }
 
         var box = document.createElement( "div" );
         box.innerHTML = [
-            '<div id="scBackdrop" class="sheet-backdrop">', '<div class="sheet sheet--pack">',
-                '<h2 data-i18n="write.shortcuts"></h2>',
-                '<div id="scList" class="sc-list"></div>',
-                actions( "scCloseBtn" ),
-            '</div>', '</div>',
-            '<div id="statsBackdrop" class="sheet-backdrop">', '<div class="sheet sheet--pack">',
-                '<h2 data-i18n="write.stats"></h2>',
-                '<div id="stList" class="st-list"></div>',
-                '<p id="stNote" class="dialog-text st-note" hidden></p>',
-                actions( "statsCloseBtn" ),
-            '</div>', '</div>',
-            '<div id="saveAsBackdrop" class="sheet-backdrop">', '<div class="sheet' + ( o.pack === false ? "" : " sheet--pack" ) + '">',
-                '<h2 data-i18n="ui.saveAs"></h2>',
-                field( "saveName", "ui.fileName", '<input type="text" id="saveName" data-i18n-attr="placeholder:' + o.nameKey + '" autocomplete="off">' ),
-                o.formats ? field( "saveFormat", o.formatKey, '<select id="saveFormat"></select>' ) : "",
-                field( "saveDirBtn", "ui.folder", '<button type="button" id="saveDirBtn" class="folder-pick" data-i18n-attr="data-tip:ui.fp.pickFolder">\n' +
-                                                  '<span class="fp-btn-ic"></span><span id="saveDirName" class="fp-btn-nm"></span>\n</button>' ),
-                '<div class="sheet-actions">',
-                    '<button id="saveAsDeleteBtn" class="btn danger sheet-actions-left" type="button" hidden data-i18n-attr="data-tip:ui.discardDoc"><span class="icon" data-icon="trash"></span></button>',
+            '<dialog id="scBackdrop" class="panel">',
+                head( "write.shortcuts", "scCloseBtn" ),
+                '<div class="body">',
+                    '<div id="scList" class="sc-list"></div>',
+                '</div>',
+            '</dialog>',
+            '<dialog id="statsBackdrop" class="panel">',
+                head( "write.stats", "statsCloseBtn" ),
+                '<div class="body">',
+                    '<div id="stList" class="st-list"></div>',
+                    '<p id="stNote" class="text st-note" hidden></p>',
+                '</div>',
+            '</dialog>',
+            '<dialog id="saveAsBackdrop" class="panel">',
+                head( "ui.saveAs" ),
+                '<div class="body">',
+                    field( "saveName", "ui.fileName", '<input type="text" id="saveName" data-i18n-attr="placeholder:' + o.nameKey + '" autocomplete="off">' ),
+                    o.formats ? field( "saveFormat", o.formatKey, '<select id="saveFormat"></select>' ) : "",
+                    field( "saveDirBtn", "ui.folder", '<button type="button" id="saveDirBtn" class="folder-pick" data-i18n-attr="data-tip:ui.fp.pickFolder">\n' +
+                                                      '<span class="fp-btn-ic"></span><span id="saveDirName" class="fp-btn-nm"></span>\n</button>' ),
+                '</div>',
+                '<footer>',
+                    '<div class="extra"><button id="saveAsDeleteBtn" class="btn danger" type="button" hidden data-i18n-attr="data-tip:ui.discardDoc"><span class="icon" data-icon="trash"></span></button></div>',
                     '<button class="btn" id="saveAsCancelBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>',
                     '<button class="btn primary" id="saveAsConfirmBtn" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>',
+                '</footer>',
+            '</dialog>',
+            '<dialog id="openBackdrop" class="panel">',
+                head( "ui.openDoc", "openCloseBtn" ),
+                '<div class="body">',
+                    '<div id="openRecent" hidden></div>',          // the last ten documents opened, above the folder listing
+                    '<div id="openCrumb" class="open-crumb"></div>',
+                    '<ul id="openList" class="open-list"></ul>',
                 '</div>',
-            '</div>', '</div>',
-            '<div id="openBackdrop" class="sheet-backdrop">', '<div class="sheet">',
-                '<h2 data-i18n="ui.openDoc"></h2>',
-                '<div id="openRecent" hidden></div>',          // the last ten documents opened, above the folder listing
-                '<div id="openCrumb" class="open-crumb"></div>',
-                '<ul id="openList" class="open-list"></ul>',
-                actions( "openCloseBtn" ),
-            '</div>', '</div>'
+            '</dialog>'
         ].filter( Boolean ).join( "\n" );
 
         ( o.formats || [] ).forEach( function ( f )
@@ -1867,7 +1871,7 @@
             var list = [];
             try { list = await NayiveStore.pendingElsewhere( p ); } catch ( e ) {}
             if( ! list.length ) return true;
-            var r = await NayiveUI.confirm( { title:     t( "ui.park.title" ),
+            var r = await Ayni.confirm( { title:     t( "ui.park.title" ),
                                               body:      tf( "ui.park.body", { name: baseName( p ), list: NayiveStore.pendingText( list ) } ),
                                               confirm:   t( "ui.park.open" ),
                                               other:     t( "ui.park.forget" ),
@@ -2134,7 +2138,7 @@
                 var got = await unsealAsk( d.body, d.name || t( "ui.untitled" ) );
                 if( got ) return got;
 
-                var drop = await NayiveUI.confirm( { title:   t( "lock.draftTitle" ),
+                var drop = await Ayni.confirm( { title:   t( "lock.draftTitle" ),
                                                      body:    t( "lock.draftBody" ),
                                                      confirm: t( "ui.discardDoc" ),
                                                      cancel:  t( "lock.tryAgain" ),
@@ -2175,7 +2179,7 @@
             // drafts under a key of its own) and the toast says so.
             var aside    = saver.dirty() && !! path && readOnly;
             var kept     = dropping || aside ? await keepUntitled() : null;
-            if( dropping && ! kept && ! await NayiveUI.confirm( { title: t( "write.newDoc" ), body: t( "write.newDropsDraft" ),
+            if( dropping && ! kept && ! await Ayni.confirm( { title: t( "write.newDoc" ), body: t( "write.newDropsDraft" ),
                                                                   confirm: t( "write.newDoc" ) } ) ) return;
 
             if( ! await startBlank( dropping ) ) return;
@@ -2190,7 +2194,7 @@
         {
             if( path || notReady() ) return;
             var kept = await keepUntitled();
-            NayiveUI.close( "saveAsBackdrop" );
+            document.getElementById( "saveAsBackdrop" ).close();
             if( await startBlank( true ) && kept ) offerBack( kept );
         }
 
@@ -2315,7 +2319,7 @@
             // Not now: the editor is still starting (Write), the user is mid-way
             // through something (a Calc cell being typed), or a dialog is up.
             if( ( o.ready && ! o.ready() ) || ( o.busy && o.busy() ) ||
-                document.querySelector( ".sheet-backdrop.open" ) ) { askSoon(); return; }
+                document.querySelector( "dialog.panel[open]" ) ) { askSoon(); return; }
 
             openSaveAs();
         }
@@ -2325,20 +2329,14 @@
 
         // Back into the document when "Guardar como" closes, whichever way.
         var saveBack = byId( "saveAsBackdrop" );
-        var saveOpen = false;
         if( saveBack )
-            new MutationObserver( function ()
+            saveBack.addEventListener( "close", function ()
             {
-                var now = saveBack.classList.contains( "open" );
-                if( saveOpen && ! now )
-                {
-                    // Closed without writing: a "Copia limpia" that never
-                    // happened must not wipe anything on the NEXT save-as.
-                    wipeAfter = null;
-                    if( o.focus ) o.focus();
-                }
-                saveOpen = now;
-            } ).observe( saveBack, { attributes: true, attributeFilter: [ "class" ] } );
+                // Closed without writing: a "Copia limpia" that never
+                // happened must not wipe anything on the NEXT save-as.
+                wipeAfter = null;
+                if( o.focus ) o.focus();
+            } );
 
         // ---- "Guardar como" --------------------------------------------------
 
@@ -2393,7 +2391,7 @@
             // back to the folder of theirs it was read from.
             dirField.set( ( ! readOnly && path && dirName( path ) ) || o.appDir );
 
-            NayiveUI.open( "saveAsBackdrop" );
+            document.getElementById( "saveAsBackdrop" ).showModal();
             input.focus();
             input.select();
         }
@@ -2438,7 +2436,7 @@
                 try
                 {
                     var taken = await nameTaken( p );
-                    if( taken === true && ! await NayiveUI.confirm( { title:   t( "drive.nameExistsTitle" ),
+                    if( taken === true && ! await Ayni.confirm( { title:   t( "drive.nameExistsTitle" ),
                                                                       body:    tf( "ui.saveAsExists", { name: name } ),
                                                                       confirm: t( "drive.replace" ),
                                                                       danger:  true } ) ) return;
@@ -2452,7 +2450,7 @@
             var wipeThis = wipeAfter;
             wipeAfter = null;
 
-            NayiveUI.close( "saveAsBackdrop" );
+            document.getElementById( "saveAsBackdrop" ).close();
 
             // saveTo lands any waiting autosave under the OLD name first, then
             // writes here - and a new destination gets its own .bak copy.
@@ -2514,7 +2512,7 @@
         // plug says so); Ctrl+S asks again.
         async function askTaken( p )
         {
-            var r = await NayiveUI.confirm( { title:     t( "drive.nameExistsTitle" ),
+            var r = await Ayni.confirm( { title:     t( "drive.nameExistsTitle" ),
                                               body:      tf( "ui.saveAsAppeared", { name: baseName( p ) } ),
                                               confirm:   t( "drive.replace" ),
                                               danger:    true,
@@ -2680,7 +2678,7 @@
             var undoable = ! saver.lock() && ! NayiveCrypt.looksLocked( prev ) &&
                            ! ( o.store.isBlocked && o.store.isBlocked( p ) ) && ( ! o.lossless || o.lossless() );
 
-            if( ! undoable && ! await NayiveUI.confirm( { title:   t( "write.restore" ),
+            if( ! undoable && ! await Ayni.confirm( { title:   t( "write.restore" ),
                                                           body:    tf( "write.restoreBody", { size: NayiveUI.fmtBytes( prev.length ) } ),
                                                           confirm: t( "write.restore" ) } ) ) return;
 
@@ -2886,11 +2884,11 @@
         async function warnAlreadyWritten()
         {
             if( ! path )
-                return await NayiveUI.confirm( { title:   t( "lock.pastTitle" ),
+                return await Ayni.confirm( { title:   t( "lock.pastTitle" ),
                                                  body:    t( "lock.pastDraftBody" ),
                                                  confirm: t( "lock.protect" ) } ) ? "lock" : null;
 
-            var r = await NayiveUI.confirm( {
+            var r = await Ayni.confirm( {
                 title:     t( "lock.pastTitle" ),
                 body:      tf( "lock.pastBody", { name: baseName( path ) } ),
                 confirm:   t( "lock.cleanCopy" ),
@@ -2965,7 +2963,7 @@
 
         async function removeLock()
         {
-            var ok = await NayiveUI.confirm( { title:   t( "lock.offTitle" ),
+            var ok = await Ayni.confirm( { title:   t( "lock.offTitle" ),
                                                body:    t( "lock.offBody" ),
                                                confirm: t( "lock.remove" ),
                                                danger:  true } );
@@ -3000,7 +2998,7 @@
         on( "saveAsBtn",        "click",   function () { openSaveAs(); } );
         on( "saveAsConfirmBtn", "click",   function () { confirmSaveAs(); } );
         on( "saveAsDeleteBtn",  "click",   function () { discardUntitled(); } );
-        on( "saveName",         "keydown", function ( e ) { if( e.key === "Enter" ) confirmSaveAs(); } );
+        on( "saveName",         "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); confirmSaveAs(); } } );
         on( "saveFormat",       "change",  function () { nameToFormat(); } );
 
         // ---- a desktop window ---------------------------------------------------
@@ -3018,7 +3016,7 @@
             try { if( await saver.settle( CLOSE_WAIT_MS ) ) return true; }
             catch ( e ) {}
 
-            return NayiveUI.confirm( { title:   t( "drive.unsavedTitle" ),
+            return Ayni.confirm( { title:   t( "drive.unsavedTitle" ),
                                        body:    t( "drive.unsavedBody" ),
                                        confirm: t( "drive.closeWithout" ),
                                        danger:  true } );
@@ -3166,7 +3164,7 @@
             list.appendChild( row );
         } );
 
-        NayiveUI.open( "scBackdrop" );
+        document.getElementById( "scBackdrop" ).showModal();
     }
 
     //------------------------------------------------------------------------//
@@ -3205,7 +3203,7 @@
             n.hidden      = ! note;
         }
 
-        NayiveUI.open( "statsBackdrop" );
+        document.getElementById( "statsBackdrop" ).showModal();
     }
 
     //------------------------------------------------------------------------//

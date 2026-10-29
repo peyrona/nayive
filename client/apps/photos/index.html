@@ -55,6 +55,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -62,6 +63,7 @@
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
+    <script src="../shared/ayni/ayni-dialogs.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
@@ -1114,7 +1116,7 @@ async function sendPhoto( name, blob, taken, opts )
         try { await GumApi.createFileBytes( DIR + "/" + name, blob, opts ); return name; }
         catch( err ) { if( ! err || err.status !== 412 || tries >= 20 ) throw err; }
 
-        const choice = await NayiveUI.confirm( {
+        const choice = await Ayni.confirm( {
             title:     Ayni.t( 'drive.alreadyExistOne' ),
             body:      Ayni.tf( 'drive.appearedBody', { name: name } ),
             confirm:   Ayni.t( 'drive.replace' ), danger: true,
@@ -1864,7 +1866,7 @@ function unshownTileHtml( u )
 async function openUnshown( path )
 {
     const name = baseName( path );
-    const pick = await NayiveUI.confirm( {
+    const pick = await Ayni.confirm( {
         title:     name,
         body:      Ayni.t( 'photos.cantShowBody' ),
         confirm:   Ayni.t( 'photos.openInDrive' ),
@@ -2783,16 +2785,13 @@ function showInfo( id )
     const p = photoById( id );
     if( ! p || DEMO ) return;
     const T = k => Ayni.t( k ), TF = ( k, o ) => Ayni.tf( k, o );
-    const d  = NayiveUI.modal( { cls: "sheet--pack", title: T( "photos.info" ) } );
+    const d  = Ayni.dialog( { title: T( "photos.info" ) } );
     const dl = document.createElement( "dl" );
     dl.className = "props";
-    d.sheet.appendChild( dl );
-    const row = document.createElement( "div" ), close = NayiveUI.sheetButton( "close", T( "ui.close" ) );
-    row.className = "sheet-actions";
+    d.body.appendChild( dl );
+    const close = Ayni.dialogButton( "close", T( "ui.close" ) );
     close.addEventListener( "click", () => d.close() );
-    row.appendChild( close );
-    d.sheet.appendChild( row );
-    NayiveUI.applySheetButtons( d.sheet );
+    d.place( [ close ] );                       // a lone × goes in the title row
 
     const jpeg = EXIF_EXT.indexOf( extOf( p.name ) ) !== -1;
     let px = undefined, ex = jpeg ? undefined : null;     // undefined: still reading
@@ -2842,12 +2841,12 @@ function showInfo( id )
     if( jpeg ) exifHead( p ).then( b => parseJpegExif( b, true ), () => null ).then( e => { ex = e; paint(); } );
 }
 
-// A name for a new album or a rename: a small dialog (shared/ui.js askText).
+// A name for a new album or a rename: a small dialog (Ayni.ask).
 // Resolves the trimmed name, or null.
 function askName( title, value, okTitle )
 {
-    return NayiveUI.askText( { title: title, value: value, okTitle: okTitle, okClass: "name-ok",
-                               placeholder: Ayni.t( "photos.albumName" ) } );
+    return Ayni.ask( { title: title, value: value, okTip: okTitle, ids: { ok: "nameOk" },
+                       placeholder: Ayni.t( "photos.albumName" ) } );
 }
 function okName( name ) { return !! name && name !== "." && name !== ".." && ! /[\/\\]/.test( name ); }
 
@@ -2916,7 +2915,7 @@ async function movePaths( paths, dest )
         const clashes = items.filter( it => it.clash );
         let replace = false;
         if( clashes.length )
-            replace = await NayiveUI.confirm( {
+            replace = await Ayni.confirm( {
                 title:   Ayni.t( "drive.clashesTitle" ),
                 body:    ( clashes.length === 1 ? Ayni.tf( "drive.oneClashDest", { name: baseName( clashes[ 0 ].from ) } )
                                                 : Ayni.tf( "drive.nClashesDest", { n: clashes.length } ) ) +

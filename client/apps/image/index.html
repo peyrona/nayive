@@ -24,6 +24,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -31,6 +32,7 @@
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
+    <script src="../shared/ayni/ayni-dialogs.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <script src="../shared/gum-api.js" defer></script>
@@ -99,19 +101,21 @@
     </div>
 
     <!-- "Guardar copia" dialog. -->
-    <div id="saveCopyBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--pack">
+    <dialog id="saveCopyBackdrop" class="panel">
+        <header>
             <h2 data-i18n="ui.saveCopy"></h2>
+        </header>
+        <div class="body">
             <div class="field">
                 <label for="saveCopyName" data-i18n="ui.fileName"></label>
                 <input type="text" id="saveCopyName" autocomplete="off" spellcheck="false">
             </div>
-            <div class="sheet-actions">
-                <button class="btn" id="saveCopyCancelBtn"  data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="saveCopyConfirmBtn" data-i18n-attr="data-tip:ui.saveCopy"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" id="saveCopyCancelBtn"  data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="saveCopyConfirmBtn" data-i18n-attr="data-tip:ui.saveCopy"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- A module for its top-level await of the dictionary. -->
     <script type="module" src="image.js"></script>

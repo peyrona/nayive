@@ -67,7 +67,7 @@ async function openShortcut( node )
 {
     if( linkBroken( node ) )
     {
-        if( await NayiveUI.confirm( {
+        if( await Ayni.confirm( {
                 title: T( 'drive.brokenTitle' ),
                 body: TF( 'drive.brokenBody', { name: displayName( node ) } ),
                 confirm: T( 'ui.delete' ), danger: true } ) )

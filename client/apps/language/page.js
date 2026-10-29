@@ -202,7 +202,7 @@ async function confirmDownload( d )
 {
     const body = TF( d.bytes ? 'language.dlBody' : 'language.dlBodyNoSize',
                      { from: langName( d.source ), to: langName( d.target ), engine: d.engineName, size: d.bytes ? mb( d.bytes ) : '' } );
-    return NayiveUI.confirm( { title: T( 'language.dlTitle' ), body, confirm: T( 'language.dlYes' ) } );
+    return Ayni.confirm( { title: T( 'language.dlTitle' ), body, confirm: T( 'language.dlYes' ) } );
 }
 
 async function translate( allowRemote )
@@ -246,7 +246,7 @@ async function showError( err, allowRemote )
         setStatus( TF( 'language.noLocal', { from: langName( err.source ), to: langName( err.target ) } ), 'error' );
         if( ! err.remoteEngineIds.length || allowRemote ) return;
         const names = err.remoteEngineIds.map( engineName ).join( ', ' );
-        const yes = await NayiveUI.confirm( { title: T( 'language.noLocalTitle' ),
+        const yes = await Ayni.confirm( { title: T( 'language.noLocalTitle' ),
                                               body: TF( 'language.noLocalAsk', { from: langName( err.source ), to: langName( err.target ), engines: names } ),
                                               confirm: T( 'language.useOnline' ) } );
         if( yes ) translate( true );
@@ -468,7 +468,7 @@ async function renderModels()
 function openSettings()
 {
     renderModels();
-    NayiveUI.open( 'cfgBackdrop' );
+    document.getElementById( 'cfgBackdrop' ).showModal();
 }
 
 async function deleteModel( m )
@@ -488,7 +488,7 @@ async function onLocalSwitch()
     const remote = tr.getEngines().filter( ( e ) => e.enabled && e.location === 'remote' && ! p.remoteNoticeShown.includes( e.id ) );
     if( ! remote.length ) return;
     tr.setPreferences( { remoteNoticeShown: p.remoteNoticeShown.concat( remote.map( ( e ) => e.id ) ) } );
-    NayiveUI.alert( { title: T( 'language.remoteTitle' ), body: TF( 'language.remoteBody', { engines: remote.map( ( e ) => e.name ).join( ', ' ) } ) } );
+    Ayni.alert( { title: T( 'language.remoteTitle' ), body: TF( 'language.remoteBody', { engines: remote.map( ( e ) => e.name ).join( ', ' ) } ) } );
 }
 
 //------------------------------------------------------------------------//

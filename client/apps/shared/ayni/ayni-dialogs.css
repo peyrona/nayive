@@ -1,0 +1,58 @@
+/* Ayni library 0.1.0, dialogs family: dialog.panel, small and big, modal and modeless. Load it after ayni-base.css
+   (the Panel) and ayni-buttons.css (its buttons are .btn). Behaviour: ayni-dialogs.js. Rules: guidelines ch. 10. */
+
+/* ---------- The dialog ---------- */
+/* RULE: dialog size. A dialog is small by default: as wide as its content needs, 300 to 460 px; .big marks a big one
+   (forms, lists, editors), 880 x 640 px. Neither is ever larger than the screen: the body scrolls inside, so the title
+   row and the bottom row stay in reach. */
+dialog.panel { margin: auto; width: fit-content; min-width: min(300px, calc(100vw - 32px)); max-width: min(460px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px); }
+dialog.panel.big { width: min(880px, calc(100vw - 32px)); max-width: none; height: min(640px, calc(100dvh - 32px)); }
+dialog.panel:not([open]) { display: none; }
+dialog.panel:modal { box-shadow: var(--elev-dialog); }
+dialog.panel::backdrop { background: var(--scrim); }
+dialog.panel:not(:modal) { position: fixed; inset: auto 24px 24px auto; margin: 0; z-index: 50; }
+/* Ayni focuses the dialog itself when it has no field to start in: no ring around the whole dialog */
+dialog.panel:focus-visible { outline: none; }
+
+/* RULE: a floating dialog shows its title row and bottom row plain, on the dialog's own colour */
+dialog.panel > header, dialog.panel > form > header, dialog.panel > footer, dialog.panel > form > footer { background: none; border: 0; }
+dialog.panel > header, dialog.panel > form > header { padding-top: 10px; justify-content: flex-end; }   /* no title: Close still at the right */
+/* A long title wraps; it never runs under the buttons */
+dialog.panel > header h2, dialog.panel > form > header h2 { min-width: 0; overflow-wrap: anywhere; }
+dialog.panel > .body, dialog.panel > form > .body { padding-top: 4px; flex: 1 1 auto; min-height: 0; }   /* the body takes the free height: a full-screen dialog's bottom row sits at the bottom */
+/* An empty title row or bottom row does not show; a dialog without a title row starts its body at the top edge */
+dialog.panel > header:empty, dialog.panel > footer:empty, dialog.panel > form > header:empty, dialog.panel > form > footer:empty { display: none; }
+dialog.panel > .body:first-child, dialog.panel > form > .body:first-child, dialog.panel > header:empty + .body { padding-top: var(--panel-pad); }
+/* A phone (narrow, or short when turned sideways): a line marks the bottom row, which stays at the bottom edge while
+   the body scrolls */
+@media (max-width: 640px), (max-height: 520px) {
+  dialog.panel > footer, dialog.panel > form > footer { border-top: var(--panel-border); }
+}
+
+/* RULE: a small dialog floats on every screen; a big dialog fills the screen below 1024 px, with no border, corners or
+   shadow, and its title row and bottom row become tinted strips with a line */
+@media (max-width: 1023.98px) {
+  dialog.panel.big { width: 100%; height: 100%; max-width: none; max-height: none; inset: 0; margin: 0; border: 0; border-radius: 0;
+    box-shadow: none; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  dialog.panel.big > header, dialog.panel.big > form > header { background: var(--panel-head-bg); border-bottom: var(--panel-border); padding-top: 8px; }
+  dialog.panel.big > footer, dialog.panel.big > form > footer { background: var(--panel-head-bg); border-top: var(--panel-border); }
+  dialog.panel.big > .body, dialog.panel.big > form > .body { padding-top: var(--panel-pad); }
+  /* The page behind a full-screen dialog does not scroll, and its scrollbar does not show beside it */
+  html:has(dialog.panel.big:modal) { overflow: hidden; }
+}
+
+/* ---------- Content ---------- */
+/* The text of a confirmation or a message built in code keeps its line breaks */
+dialog.panel .body > p.text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* A message with its icon (info, warn) */
+.msg { display: flex; gap: 12px; align-items: flex-start; }
+.msg .icon { --icon: 28px; }
+.msg.warn .icon { color: var(--warn); } .msg.info .icon { color: var(--accent); }
+
+/* ---------- Moving ---------- */
+/* RULE: a floating modal dialog moves by its title row (ayni-dialogs.js); while it moves nothing in it gets selected */
+@media (min-width: 640.02px) { dialog.panel:modal > header, dialog.panel:modal > form > header { cursor: grab; } }
+dialog.panel.dragging, dialog.panel.dragging * { cursor: grabbing !important; user-select: none; }
+
+@media (prefers-reduced-motion: no-preference) { dialog.panel[open] { animation: dialog-rise .14s ease-out; } @keyframes dialog-rise { from { opacity: 0; transform: translateY(6px); } } }

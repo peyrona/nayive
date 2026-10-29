@@ -46,9 +46,9 @@ async function openAlbum( dir, n )
         "Photos opens " + dir + " (" + n + " photos)" );
     await c.until( "document.querySelectorAll( '#tree .tree-row' ).length > 1" );
 }
-const pickIn = async ( row ) => c.evaluate( `( () => { const P = '.sheet-backdrop.open .pick-tree ';
+const pickIn = async ( row ) => c.evaluate( `( () => { const P = 'dialog.panel[open] .pick-tree ';
     const r = document.querySelector( P + '.tree-row[data-id="${row}"]' ); if( ! r ) return false;
-    r.click(); document.querySelector( '.sheet-backdrop.open .pick-ok' ).click(); return true; } )()` );
+    r.click(); document.querySelector( 'dialog.panel[open] .pick-ok' ).click(); return true; } )()` );
 const undo = () => c.evaluate( "( () => { const b = document.querySelector( '#ayni-toasts .toast.undo .act' ); if( b ) b.click(); return !! b; } )()" );
 
 section( "PHOTOS · MOUSE" );
@@ -111,7 +111,7 @@ section( "PHOTOS · BIN, NO QUESTION" );
 await mouse( c, TILE( "Lisbon/c.png" ) );
 await key( c, "Delete" );
 ok( await c.until( "! document.querySelector( '" + TILE( "Lisbon/c.png" ) + "' )" ) && ! exists( s, L( "c.png" ) ), "Del: to the bin at once" );
-ok( await c.evaluate( "! document.querySelector( '.sheet-backdrop.open' )" ) && await c.until( "!! document.querySelector( '#ayni-toasts .toast.undo .act' )" ), "…no question, an Undo" );
+ok( await c.evaluate( "! document.querySelector( 'dialog.panel[open]' )" ) && await c.until( "!! document.querySelector( '#ayni-toasts .toast.undo .act' )" ), "…no question, an Undo" );
 ok( notes()[ L( "c.png" ) ] === "note c", "…its note is kept for a restore", notes() );
 ok( await undo(), "Undo pressed" );
 ok( await c.until( "!! document.querySelector( '" + TILE( "Lisbon/c.png" ) + "' )" ) && exists( s, L( "c.png" ) ) && notes()[ L( "c.png" ) ] === "note c", "Undo brings it back, with its note" );
@@ -119,8 +119,8 @@ ok( await c.until( "!! document.querySelector( '" + TILE( "Lisbon/c.png" ) + "' 
 section( "PHOTOS · MOVE / COPY TO…, AND DRAG" );
 await mouse( c, TILE( "Lisbon/a.png" ) );
 await c.evaluate( "browse.run( 'move' ); true" );
-ok( await c.until( "!! document.querySelector( '.sheet-backdrop.open .pick-tree .tree-row' )" ), "Move to… shows the folders tree" );
-ok( await c.evaluate( "document.querySelector( '.sheet-backdrop.open .pick-tree .tree-row[data-id=\"files/Pics/Lisbon\"]' ).classList.contains( 'is-off' )" ), "…the album it is in is off" );
+ok( await c.until( "!! document.querySelector( 'dialog.panel[open] .pick-tree .tree-row' )" ), "Move to… shows the folders tree" );
+ok( await c.evaluate( "document.querySelector( 'dialog.panel[open] .pick-tree .tree-row[data-id=\"files/Pics/Lisbon\"]' ).classList.contains( 'is-off' )" ), "…the album it is in is off" );
 await shot( "desktop-move" );
 ok( await pickIn( "files/Pics/Granada" ), "Granada picked" );
 ok( await c.until( "! document.querySelector( '" + TILE( "Lisbon/a.png" ) + "' )" ) && exists( s, "files/Pics/Granada/a.png" ) && ! exists( s, L( "a.png" ) ), "…and moved there" );
@@ -131,13 +131,13 @@ ok( notes()[ L( "a.png" ) ] === "note a" && ! notes()[ "files/Pics/Granada/a.png
 
 await mouse( c, TILE( "Lisbon/b.png" ) );
 await c.evaluate( "browse.run( 'copyTo' ); true" );
-await c.until( "!! document.querySelector( '.sheet-backdrop.open .pick-tree .tree-row[data-id=\"files/Pics/Lisbon/Tiles\"]' ) || !! document.querySelector( '.sheet-backdrop.open .pick-tree .tree-row[data-id=\"files/Pics/Lisbon\"]' )" );
-await c.evaluate( `( () => { const r = document.querySelector( '.sheet-backdrop.open .pick-tree .tree-row[data-id="files/Pics/Lisbon"]' );
+await c.until( "!! document.querySelector( 'dialog.panel[open] .pick-tree .tree-row[data-id=\"files/Pics/Lisbon/Tiles\"]' ) || !! document.querySelector( 'dialog.panel[open] .pick-tree .tree-row[data-id=\"files/Pics/Lisbon\"]' )" );
+await c.evaluate( `( () => { const r = document.querySelector( 'dialog.panel[open] .pick-tree .tree-row[data-id="files/Pics/Lisbon"]' );
     if( r && r.getAttribute( 'aria-expanded' ) !== 'true' ) r.querySelector( '[data-twisty]' ).click(); return true; } )()` );
 ok( await pickIn( "files/Pics/Lisbon/Tiles" ), "Copy to…: Tiles picked" );
 ok( await c.until( "( window.__toasts || [] ).some( t => /copied/.test( t ) )" ) && exists( s, "files/Pics/Lisbon/Tiles/b.png" ) && exists( s, L( "b.png" ) ), "…a copy is there, the photo stays" );
 
-await c.until( "! document.querySelector( '.sheet-backdrop.open' )" );
+await c.until( "! document.querySelector( 'dialog.panel[open]' )" );
 const lit = await drag( c, TILE( "Lisbon/b.png" ), TREE( "Granada" ) );
 ok( lit === true && await c.until( "! document.querySelector( '" + TILE( "Lisbon/b.png" ) + "' )" ) && exists( s, "files/Pics/Granada/b.png" ) && ! exists( s, L( "b.png" ) ),
     "a tile dragged onto an album moves it (album lit)", lit );
@@ -148,15 +148,15 @@ const pngSize = rel => { const b = fs.readFileSync( path.join( s.home(), rel ) )
 const W0 = pngSize( L( "a.png" ) ).split( "x" ).map( Number );
 await mouse( c, TILE( "Lisbon/a.png" ) );
 await c.evaluate( "browse.run( 'info' ); true" );
-ok( await c.until( "( () => { const d = document.querySelector( '.sheet-backdrop.open .props' ); return !! d && /a\\.png/.test( d.textContent ) && d.textContent.indexOf( '" + W0[ 0 ] + " × " + W0[ 1 ] + " px' ) !== -1 && /note a/.test( d.textContent ); } )()" ),
-    "Info: name, pixel size and note", await c.evaluate( "( document.querySelector( '.sheet-backdrop.open .props' ) || {} ).textContent" ) );
+ok( await c.until( "( () => { const d = document.querySelector( 'dialog.panel[open] .props' ); return !! d && /a\\.png/.test( d.textContent ) && d.textContent.indexOf( '" + W0[ 0 ] + " × " + W0[ 1 ] + " px' ) !== -1 && /note a/.test( d.textContent ); } )()" ),
+    "Info: name, pixel size and note", await c.evaluate( "( document.querySelector( 'dialog.panel[open] .props' ) || {} ).textContent" ) );
 await shot( "desktop-info" );
 await key( c, "Escape" );
-ok( await c.until( "! document.querySelector( '.sheet-backdrop.open' )" ), "…Esc closes it" );
+ok( await c.until( "! document.querySelector( 'dialog.panel[open]' )" ), "…Esc closes it" );
 
 await mouse( c, TILE( "Lisbon/c.png" ) );
 await c.evaluate( "browse.run( 'move' ); true" );
-ok( await c.until( "!! document.querySelector( '.sheet-backdrop.open .pick-tree .tree-row[data-id=\"files/Other\"]' )" ), "Move to… shows folders outside the albums too" );
+ok( await c.until( "!! document.querySelector( 'dialog.panel[open] .pick-tree .tree-row[data-id=\"files/Other\"]' )" ), "Move to… shows folders outside the albums too" );
 ok( await pickIn( "files/Other" ), "files/Other picked" );
 ok( await c.until( "! document.querySelector( '" + TILE( "Lisbon/c.png" ) + "' )" ) && exists( s, "files/Other/c.png" ) && ! exists( s, L( "c.png" ) ), "…and moved there" );
 ok( notes()[ "files/Other/c.png" ] === "note c", "…its note followed it", notes() );
@@ -174,20 +174,20 @@ rows = await menuRows( c );
 ok( rows && [ "newAlbum", "rename", "move", "bin" ].every( a => rows.some( r => r.act === a && ! r.off ) ), "an album's right-click: New album, Rename, Move to…, To the bin", rows );
 await shot( "desktop-tree-menu" );
 await c.evaluate( "document.querySelector( '.item-menu [data-act=bin]' ).click(); true" );
-ok( await c.until( "! document.querySelector( '" + TREE( "Old" ) + "' )" ) && ! exists( s, "files/Pics/Old" ) && await c.evaluate( "! document.querySelector( '.sheet-backdrop.open' )" ), "an album goes to the bin at once" );
+ok( await c.until( "! document.querySelector( '" + TREE( "Old" ) + "' )" ) && ! exists( s, "files/Pics/Old" ) && await c.evaluate( "! document.querySelector( 'dialog.panel[open]' )" ), "an album goes to the bin at once" );
 ok( await undo(), "Undo pressed" );
 ok( await c.until( "!! document.querySelector( '" + TREE( "Old" ) + "' )", 8000 ) && exists( s, "files/Pics/Old/o.png" ), "…and comes back" );
 
 await mouse( c, "#grid", { dx: 20, button: "right" } );
 await c.evaluate( "document.querySelector( '.item-menu [data-act=newAlbum]' ).click(); true" );
-ok( await c.until( "!! document.querySelector( '.sheet-backdrop.open input' )" ), "New album asks a name" );
-await c.evaluate( "document.querySelector( '.sheet-backdrop.open input' ).value = 'Summer'; document.querySelector( '.sheet-backdrop.open .name-ok' ).click(); true" );
+ok( await c.until( "!! document.querySelector( 'dialog.panel[open] input' )" ), "New album asks a name" );
+await c.evaluate( "{ const i = document.querySelector( 'dialog.panel[open] input' ); i.value = 'Summer'; i.dispatchEvent( new Event( 'input' ) ); document.querySelector( '#nameOk' ).click(); } true" );
 ok( await c.until( "!! document.querySelector( '" + TREE( "Lisbon/Summer" ) + "' )" ) && exists( s, "files/Pics/Lisbon/Summer" ), "…and makes it inside the open album" );
 
 await mouse( c, TREE( "Granada" ), { button: "right", dx: 40 } );
 await c.evaluate( "document.querySelector( '.item-menu [data-act=rename]' ).click(); true" );
-await c.until( "!! document.querySelector( '.sheet-backdrop.open input' )" );
-await c.evaluate( "document.querySelector( '.sheet-backdrop.open input' ).value = 'Alhambra'; document.querySelector( '.sheet-backdrop.open .name-ok' ).click(); true" );
+await c.until( "!! document.querySelector( 'dialog.panel[open] input' )" );
+await c.evaluate( "{ const i = document.querySelector( 'dialog.panel[open] input' ); i.value = 'Alhambra'; i.dispatchEvent( new Event( 'input' ) ); document.querySelector( '#nameOk' ).click(); } true" );
 ok( await c.until( "!! document.querySelector( '" + TREE( "Alhambra" ) + "' )" ) && exists( s, "files/Pics/Alhambra/x.png" ) && ! exists( s, "files/Pics/Granada" ), "Rename an album" );
 ok( notes()[ "files/Pics/Alhambra/b.png" ] === "note b" && Object.keys( notes() ).every( k => k.indexOf( "files/Pics/Granada/" ) !== 0 ), "…the notes of its photos follow the new name", notes() );
 
@@ -205,8 +205,8 @@ ok( await c.until( "new URLSearchParams( location.search ).get( 'dir' ) === 'fil
     "Undo brings the album back and opens it" );
 await mouse( c, TREE( "Lisbon" ), { button: "right", dx: 40 } );
 await c.evaluate( "document.querySelector( '.item-menu [data-act=rename]' ).click(); true" );
-await c.until( "!! document.querySelector( '.sheet-backdrop.open input' )" );
-await c.evaluate( "document.querySelector( '.sheet-backdrop.open input' ).value = 'Lisboa'; document.querySelector( '.sheet-backdrop.open .name-ok' ).click(); true" );
+await c.until( "!! document.querySelector( 'dialog.panel[open] input' )" );
+await c.evaluate( "{ const i = document.querySelector( 'dialog.panel[open] input' ); i.value = 'Lisboa'; i.dispatchEvent( new Event( 'input' ) ); document.querySelector( '#nameOk' ).click(); } true" );
 ok( await c.until( "new URLSearchParams( location.search ).get( 'dir' ) === 'files/Pics/Lisboa' && typeof PHOTOS !== 'undefined' && PHOTOS.length === 2", 20000 ) && exists( s, "files/Pics/Lisboa/a.png" ),
     "renaming the open album opens it under its new name" );
 ok( notes()[ "files/Pics/Lisboa/a.png" ] === "note a", "…its notes follow", notes() );

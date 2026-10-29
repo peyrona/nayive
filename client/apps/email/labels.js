@@ -68,7 +68,7 @@
         if( ! picking.length ) return;
         renderPicker();
         E.$( "labelNew" ).value = "";
-        NayiveUI.open( "labelSheet" );
+        document.getElementById( "labelSheet" ).showModal();
     };
 
     function renderPicker()
@@ -157,7 +157,7 @@
         E.$( "labelDelBtn" ).hidden = ! l;
         E.$( "labelDlgError" ).hidden = true;
         renderSwatches();
-        NayiveUI.open( "labelDlg" );
+        document.getElementById( "labelDlg" ).showModal();
         setTimeout( function () { E.$( "labelName" ).focus(); }, 50 );
     };
 
@@ -198,7 +198,7 @@
                 if( S.open ) E.renderReadLabels( S.open.labels );
             }
             else S.labels.push( await E.api( "POST", "labels", { name: name, color: colour } ) );
-            NayiveUI.close( "labelDlg" );
+            document.getElementById( "labelDlg" ).close();
             E.renderSide();
         }
         catch( e ) { err.textContent = labelError( e ); err.hidden = false; }
@@ -225,7 +225,7 @@
         S.goneLabels.add( l.id );
         S.labels = S.labels.filter( function ( x ) { return x.id !== l.id; } );
         redrawWith( l.id );
-        NayiveUI.close( "labelDlg" );
+        document.getElementById( "labelDlg" ).close();
         if( wasOn ) E.openTray( "inbox" );
         else E.renderSide();
 

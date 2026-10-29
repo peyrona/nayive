@@ -238,7 +238,7 @@
         document.addEventListener( "keydown", function ( e )
         {
             if( e.defaultPrevented || ! S.open || E.split || E.isComposing() ) return;
-            if( document.querySelector( ".sheet-backdrop.open" ) || NayiveUI.menuOpen() ) return;
+            if( document.querySelector( "dialog.panel[open]" ) || NayiveUI.menuOpen() ) return;
             if( e.key === "Backspace" ) return;         // in the reader it is no "delete"
             var t = document.activeElement;
             if( t && t.closest && t.closest( "input, textarea, select, [contenteditable]" ) ) return;

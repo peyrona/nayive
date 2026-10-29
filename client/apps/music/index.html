@@ -50,6 +50,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -57,6 +58,7 @@
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
+    <script src="../shared/ayni/ayni-dialogs.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
@@ -89,7 +91,7 @@
     <style>
     /* ===================================================================
      * MUSIC - per-app layout only. Chrome (header, .btn, .field,
-     * .sheet, .btn) comes from shared/theme.css + app.css; this block holds
+     * dialogs) comes from shared/theme.css + app.css + Ayni; this block holds
      * the library / queue split and the player bar, none of which exists
      * anywhere else yet.
      * =================================================================*/
@@ -382,30 +384,31 @@
 
     <!-- QUEUE SHEET (phones): #queuePane is moved in here by openQueueSheet().
          Before the playlist sheets, so theirs open on top of it. -->
-    <div class="sheet-backdrop" id="queueBackdrop">
-        <div class="sheet queue-sheet" id="queueSheet">
-            <div class="sheet-actions">
-                <button class="btn" data-close id="queueCloseBtn" data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
-        </div>
-    </div>
+    <dialog class="panel queue-sheet" id="queueBackdrop">
+        <header>
+            <button class="btn" data-close id="queueCloseBtn" data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body" id="queueSheet"></div>
+    </dialog>
 
     <!-- SAVE PLAYLIST SHEET - also names a new playlist and renames one
          (openNameSheet): the same name field. -------------------------------- -->
-    <div class="sheet-backdrop" id="saveBackdrop">
-        <div class="sheet">
+    <dialog class="panel" id="saveBackdrop">
+        <header>
             <h2 id="saveTitle" data-i18n="music.saveList"></h2>
-            <p class="dialog-text" id="saveHint"></p>
+        </header>
+        <div class="body">
+            <p class="text" id="saveHint"></p>
             <div class="field">
                 <label for="playlistName" data-i18n="music.listName"></label>
                 <input id="playlistName" type="text" autocomplete="off" data-i18n-attr="placeholder:music.listNamePh">
             </div>
-            <div class="sheet-actions">
-                <button class="btn" data-close id="saveCancelBtn" data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="saveConfirmBtn" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" data-close id="saveCancelBtn" data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="saveConfirmBtn" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
 </div>
 
@@ -1645,13 +1648,13 @@ function openQueueSheet()
 {
     var sheet = $( "#queueSheet" );
     sheet.insertBefore( $( "#queuePane" ), sheet.firstChild );
-    NayiveUI.open( "queueBackdrop" );
+    document.getElementById( "queueBackdrop" ).showModal();
 }
 
 function dockQueuePane()
 {
     var pane = $( "#queuePane" );
-    NayiveUI.close( "queueBackdrop" );
+    document.getElementById( "queueBackdrop" ).close();
     if( pane.parentNode !== $( "#mainRow" ) ) $( "#paneResizer" ).after( pane );
 }
 
@@ -1847,7 +1850,7 @@ function openNameSheet( o )
     $( "#saveHint" ).textContent = o.kind === "queue" ? Ayni.tf( "music.saveHint", { n: st.queue.length } )
                                  : o.kind === "new" && o.paths.length ? Ayni.tf( "music.newListHint", { n: o.paths.length } ) : "";
     $( "#playlistName" ).value = pl ? pl.name : "";
-    NayiveUI.open( "saveBackdrop" );
+    document.getElementById( "saveBackdrop" ).showModal();
     $( "#playlistName" ).focus();
     $( "#playlistName" ).select();
 }
@@ -1890,7 +1893,7 @@ async function confirmName()
         return;
     }
     finally { savingList = false; }
-    NayiveUI.setOpen( "saveBackdrop", false );
+    document.getElementById( "saveBackdrop" ).close();
     nameSheet = null;
     if( o.kind === "queue" ) Ayni.toast( 'ok', Ayni.t( 'music.listSaved' ) );
     else if( o.kind === "new" )
@@ -2019,7 +2022,7 @@ function wireBrowser()
     document.addEventListener( "keydown", function ( e )
     {
         if( e.key !== "Enter" || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || ! browse ) return;
-        if( browse.ids().length < 2 || NayiveUI.menuOpen() || document.querySelector( ".sheet-backdrop.open" ) ) return;
+        if( browse.ids().length < 2 || NayiveUI.menuOpen() || document.querySelector( "dialog.panel[open]" ) ) return;
         var a = document.activeElement;
         if( a && a !== document.body && ! $( "#libContent" ).contains( a ) ) return;   // a button, a field, the tree: theirs
         e.preventDefault();
@@ -2095,9 +2098,9 @@ function wireStaticUI()
     } );
 
     $( "#saveListBtn" ).addEventListener( "click", openSaveSheet );
-    $( "#saveCancelBtn" ).addEventListener( "click", function () { NayiveUI.setOpen( "saveBackdrop", false ); } );
+    $( "#saveCancelBtn" ).addEventListener( "click", function () { document.getElementById( "saveBackdrop" ).close(); } );
     $( "#saveConfirmBtn" ).addEventListener( "click", confirmName );
-    $( "#playlistName" ).addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) confirmName(); } );
+    $( "#playlistName" ).addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); confirmName(); } } );
 
     $( "#prevBtn" ).addEventListener( "click", function () { advance( -1 ); } );
     $( "#nextBtn" ).addEventListener( "click", function () { advance( 1 ); } );

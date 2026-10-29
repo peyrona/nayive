@@ -32,13 +32,13 @@ section( "D4 · SHARE TO NAYIVE WHILE THE ALBUM CANNOT BE READ" );
     // The listing fails (a 5xx, a hiccup); the PUTs would work.
     await c.evaluate( `GumApi.listDir = function() { const e = new Error( 'HTTP 502: Bad Gateway' ); e.status = 502; return Promise.reject( e ); }; true` );
     await c.evaluate( "document.getElementById('goBtn').click(); true" );
-    ok( await c.until( "document.querySelector( '.sheet-backdrop.open .dialog-text' )" ), "it says so" );
-    const said = await c.evaluate( "( document.querySelector( '.sheet-backdrop.open .dialog-text' ) || {} ).textContent || ''" );
+    ok( await c.until( "document.querySelector( 'dialog.panel[open] .body > p.text' )" ), "it says so" );
+    const said = await c.evaluate( "( document.querySelector( 'dialog.panel[open] .body > p.text' ) || {} ).textContent || ''" );
     ok( said.includes( await c.evaluate( "Ayni.t( 'st.albumUnread' )" ) ), "...that the album could not be read and nothing was sent", said );
     ok( onDisk( s, "files/Album/IMG_1.jpg" ) === "THE ALBUM'S PHOTO", "the album's photo is untouched", onDisk( s, "files/Album/IMG_1.jpg" ) );
     ok( await c.evaluate( "( async () => !! await ( await caches.open( 'nayive-share-inbox' ) ).match( new URL( 'inbox/0', location.href ).toString() ) )()" ),
         "the shared photo is still in the inbox, to try again" );
-    await c.evaluate( "document.querySelector( '.sheet-backdrop.open .sheet-close' )?.click(); true" );
+    await c.evaluate( "document.querySelector( 'dialog.panel[open] header [data-close]' )?.click(); true" );
 
     // Again, with a listing that does not know the name yet (another device
     // put it there after the look): create-only gets a 412 -> the next free name.

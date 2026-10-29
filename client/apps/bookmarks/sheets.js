@@ -57,7 +57,7 @@ function openBookmarkSheet( id, preset )
     document.getElementById( 'bmUrlError' ).hidden  = true;
     checkDupUrl();
 
-    NayiveUI.open( 'bmBackdrop' );
+    document.getElementById( 'bmBackdrop' ).showModal();
     if( preset && preset.url && ! preset.title ) autofillTitle();
     if( ! b && ! ( preset && preset.url ) )
     {
@@ -97,7 +97,7 @@ function autofillTitle()
     askTitle( url ).then( function( title )
     {
         if( ! title || seq !== titleSeq ) return;
-        if( ! document.getElementById( 'bmBackdrop' ).classList.contains( 'open' ) ) return;
+        if( ! document.getElementById( 'bmBackdrop' ).open ) return;
         if( nameEl.value !== autoTitle ) return;
         autoTitle    = title;
         nameEl.value = title;
@@ -181,7 +181,7 @@ function saveBookmarkSheet()
         b = makeBookmark( f, dest );
 
     if( ! save() ) return;
-    NayiveUI.close( 'bmBackdrop' );
+    document.getElementById( 'bmBackdrop' ).close();
     render();
     if( auto ) titleLater( b.id, b.url, b.title );
 }
@@ -197,7 +197,7 @@ function openFolderSheet( id, parentId )
     document.getElementById( 'folderName' ).value = f ? f.title : '';
     fillFolderSelect( document.getElementById( 'folderParent' ),
                       f ? f.parentId : ( parentId || targetFolder() ), f ? [ f.id ] : [] );
-    NayiveUI.open( 'folderBackdrop' );
+    document.getElementById( 'folderBackdrop' ).showModal();
     const input = document.getElementById( 'folderName' );
     setTimeout( function() { input.focus(); input.select(); }, 0 );
 }
@@ -222,7 +222,7 @@ function saveFolderSheet()
         revealInTree( f.id );
     }
     if( ! save() ) return;
-    NayiveUI.close( 'folderBackdrop' );
+    document.getElementById( 'folderBackdrop' ).close();
     render();
 }
 

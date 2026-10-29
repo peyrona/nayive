@@ -89,7 +89,7 @@ await c.evaluate( "document.getElementById('lockBtn').click(), true" );
 ok( await c.until( "window.__sheet().indexOf( Ayni.t('lock.pastTitle') ) !== -1" ), "the padlock warns about the copy already written" );
 await c.evaluate( "window.__pressConfirm()" );                       // "Clean copy"
 ok( await c.evaluate( "window.__typePassword( 'una-clave-larga-1' )" ), "a new password" );
-ok( await c.until( "document.getElementById('saveAsBackdrop').classList.contains('open')" ), "a new name is asked" );
+ok( await c.until( "document.getElementById('saveAsBackdrop').open" ), "a new name is asked" );
 await c.evaluate( "document.getElementById('saveName').value = 'carta-protegida.txt', document.getElementById('saveAsConfirmBtn').click(), true" );
 
 ok( await untilDisk( s, "files/carta.txt", t => t === null, 15000 ) === null, "the plain carta.txt is gone from Drive" );

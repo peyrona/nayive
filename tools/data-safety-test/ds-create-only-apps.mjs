@@ -34,11 +34,11 @@ section( "D3 · PHOTOS: UPLOAD A PHOTO NAMED LIKE ONE THE PHONE PUT THERE SINCE"
     await c.evaluate( `( async () => { const b = await ( await fetch( '../icons/icon-192.png' ) ).arrayBuffer();
         window.__up = 'busy'; handleAddPhotos( [ new File( [ b, 'MINE' ], 'new.png', { type: 'image/png' } ) ] ).then( () => { window.__up = 'done'; }, e => { window.__up = 'error ' + e; } );
         return true; } )()` );
-    const SHEET = "document.querySelector( '.sheet-backdrop.open .sheet' )";
+    const SHEET = "document.querySelector( 'dialog.panel[open]' )";
     ok( await c.until( SHEET + " && " + SHEET + ".textContent.indexOf( Ayni.t( 'drive.alreadyExistOne' ) ) !== -1" ), "the upload asks: the name is taken on the server" );
     ok( tail( "files/F/new.png" ) === "PHONE", "the phone's photo is untouched while it asks" );
     // The sheet's buttons are icons: their words are in the title.
-    ok( await c.evaluate( `( () => { const b = [ ...document.querySelectorAll( '.sheet-backdrop.open .sheet-actions button' ) ]
+    ok( await c.evaluate( `( () => { const b = [ ...document.querySelectorAll( 'dialog.panel[open] footer button' ) ]
         .find( x => x.dataset.tip === Ayni.t( 'drive.keepBoth' ) ); if( b ) b.click(); return !! b; } )()` ), "Keep both pressed" );
     ok( await c.until( "window.__up === 'done'" ), "Keep both: the upload ends" );
     ok( tail( "files/F/new.png" ) === "PHONE", "the phone's photo is still there" );
@@ -57,7 +57,7 @@ section( "D2 · TRIPS: A DOCUMENT NAMED LIKE ONE ANOTHER DEVICE PUT THERE AFTER 
     ok( await c.open( "/nayive/trips/" ), "Trips opens" );
     ok( await c.until( "typeof trips !== 'undefined' && trips.some( t => t.id === 9100 )" ), "the trip is listed" );
     await c.evaluate( "goToDetail( 9100 ); openEditStage( 91 ); true" );
-    ok( await c.until( "document.getElementById( 'stageSheetBackdrop' ).classList.contains( 'open' )" ), "the stage sheet is open" );
+    ok( await c.until( "document.getElementById( 'stageSheetBackdrop' ).open" ), "the stage sheet is open" );
 
     const TMP = fs.mkdtempSync( path.join( os.tmpdir(), "ds-co-" ) );
     const f = path.join( TMP, "ticket.pdf" );

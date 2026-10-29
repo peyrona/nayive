@@ -23,7 +23,7 @@ store.onMerged( onFileMerged );
 // is open or something is being dragged: the re-read repaints the list.
 NayiveUI.wireRefresh( { store: store, read: loadData, guard: function()
 {
-    return !! document.querySelector( '.sheet-backdrop.open' ) || !! NayiveUI.dragIds();
+    return !! document.querySelector( 'dialog.panel[open]' ) || !! NayiveUI.dragIds();
 } } );
 
 NayiveUI.firstRun( {

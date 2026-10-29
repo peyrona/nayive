@@ -39,11 +39,11 @@ await c.evaluate( `( async () => {
     const dt = new DataTransfer(); dt.items.add( f );
     document.dispatchEvent( new DragEvent( "drop", { dataTransfer: dt, bubbles: true, cancelable: true } ) );
     return true; } )()` );
-const IMG = "document.querySelector( '.sheet-backdrop.open .prev-one' )";
+const IMG = "document.querySelector( 'dialog.panel[open] .prev-one' )";
 ok( await c.until( IMG + " && " + IMG + ".naturalWidth === 400" ), "the dropped photo shows, 400 wide" );
-const tools = await c.evaluate( `[ ...document.querySelectorAll( '.sheet-backdrop.open .prev-tools .btn' ) ].map( b => b.title )` );
+const tools = await c.evaluate( `[ ...document.querySelectorAll( 'dialog.panel[open] .prev-tools .btn' ) ].map( b => b.title )` );
 ok( tools.length === 2, "two buttons under it", tools );
-const mid = await c.evaluate( `( () => { const p = document.querySelector( '.prev-tools' ).getBoundingClientRect(), s = document.querySelector( '.sheet-backdrop.open .sheet' ).getBoundingClientRect();
+const mid = await c.evaluate( `( () => { const p = document.querySelector( '.prev-tools' ).getBoundingClientRect(), s = document.querySelector( 'dialog.panel[open]' ).getBoundingClientRect();
     return Math.abs( ( p.left + p.right ) / 2 - ( s.left + s.right ) / 2 ) < 2 && document.querySelector( '.prev-tools' ).children[ 0 ].getBoundingClientRect().left > s.left + 40; } )()` );
 ok( mid, "they are centred" );
 
@@ -53,12 +53,12 @@ const colourAt = ( x, y ) => c.evaluate( `( () => { const i = ${IMG}; const cv =
     return p[ 0 ] > 180 && p[ 2 ] < 80 ? "r" : p[ 2 ] > 180 && p[ 0 ] < 80 ? "b" : "?"; } )()` );
 
 section( "ROTATE" );
-await click( c, ".sheet-backdrop.open .prev-tools .btn:nth-child(2)" );
+await click( c, "dialog.panel[open] .prev-tools .btn:nth-child(2)" );
 ok( await c.until( IMG + ".naturalWidth === 300 && " + IMG + ".naturalHeight === 400" ), "turned: 300 x 400" );
 ok( await colourAt( 150, 20 ) === "r" && await colourAt( 150, 380 ) === "b", "turned RIGHT: red on top, blue below" );
 
 section( "CROP" );
-await click( c, ".sheet-backdrop.open .prev-tools .btn:nth-child(1)" );
+await click( c, "dialog.panel[open] .prev-tools .btn:nth-child(1)" );
 ok( await c.until( "document.querySelector( '.cropper .crop-box:not([hidden])' )" ), "the crop screen opens with its box" );
 const se = await c.evaluate( `( () => { const r = document.querySelector( '.crop-box .se' ).getBoundingClientRect(), i = document.querySelector( '.cropper img' ).getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2, ih: i.height }; } )()` );
@@ -89,15 +89,15 @@ if( shot )
 }
 
 section( "CROP, LEFT WITH ×" );
-await click( c, ".sheet-backdrop.open .prev-tools .btn:nth-child(1)" );
+await click( c, "dialog.panel[open] .prev-tools .btn:nth-child(1)" );
 ok( await c.until( "document.querySelector( '.cropper .crop-box:not([hidden])' )" ), "opens again" );
 await click( c, ".cropper .editor-actions .btn.on-media:last-child" );
 ok( await c.until( "! document.querySelector( '.cropper' )" ), "× closes it" );
-ok( await c.until( "document.querySelector( '.sheet-backdrop.open' )" ), "the sheet is still open" );
+ok( await c.until( "document.querySelector( 'dialog.panel[open]' )" ), "the sheet is still open" );
 ok( await c.evaluate( IMG + ".naturalHeight" ) <= 201, "the photo is as it was" );
 
 section( "SEND" );
-await click( c, ".sheet-backdrop.open .sheet-actions button:last-child" );
+await click( c, "dialog.panel[open] footer button:last-child" );
 const LAST = "[ ...NayiveChat.S.msgs.values() ].filter( m => m.kind === 'photo' && m.id > 0 ).pop()";
 ok( await c.until( LAST, 20000 ), "the photo message arrives" );
 const got = await c.evaluate( `( async () => { const m = ${LAST};

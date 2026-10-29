@@ -174,14 +174,14 @@ export async function untilDraft( c, text, ms = 20000 )
 // Page helpers for the shared sheets (shared/ui.js): the password box, and
 // the confirm button of whatever question is up. In `w` (a window or a frame's).
 export const PW = `( function ( w ) {
-    w.__sheet = function () { var s = w.document.querySelector( '.sheet-backdrop.open .sheet' ); return s ? s.textContent : ''; };
+    w.__sheet = function () { var s = w.document.querySelector( 'dialog.panel[open]' ); return s ? s.textContent : ''; };
     w.__typePassword = async function ( pw ) {
         for( var i = 0; i < 120; i++ ) {
             var one = w.document.getElementById( 'askPw1' );
-            if( one && one.closest( '.sheet-backdrop.open' ) ) {
+            if( one && one.closest( 'dialog.panel[open]' ) ) {
                 one.value = pw;
                 var two = w.document.getElementById( 'askPw2' ); if( two ) two.value = pw;
-                one.closest( '.sheet' ).querySelector( '.sheet-actions button:last-child' ).click();
+                one.closest( 'dialog' ).querySelector( 'footer button:last-child' ).click();
                 return true;
             }
             await new Promise( function ( r ) { setTimeout( r, 50 ); } );
@@ -190,8 +190,8 @@ export const PW = `( function ( w ) {
     };
     w.__pressConfirm = async function () {
         for( var i = 0; i < 120; i++ ) {
-            var s = w.document.querySelector( '.sheet-backdrop.open .sheet' );
-            var b = s && s.querySelector( '.sheet-actions button:last-child' );
+            var s = w.document.querySelector( 'dialog.panel[open]' );
+            var b = s && s.querySelector( 'footer button:last-child' );
             if( b ) { b.click(); return true; }
             await new Promise( function ( r ) { setTimeout( r, 50 ); } );
         }

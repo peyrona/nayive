@@ -29,8 +29,8 @@ async function openFile( name )
 async function note( text )
 {
     await type( text );
-    await c.until( "document.getElementById('saveAsBackdrop').classList.contains('open')" );
-    await c.evaluate( "NayiveUI.close('saveAsBackdrop'), true" );
+    await c.until( "document.getElementById('saveAsBackdrop').open" );
+    await c.evaluate( "document.getElementById( 'saveAsBackdrop' ).close(), true" );
     return untilDraft( c, text );
 }
 

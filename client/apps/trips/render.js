@@ -134,11 +134,11 @@ function renderHeader()
             tools.appendChild( editBtn );
 
             const delBtn = iconBtn( 'btn danger', T( 'trips.deleteTrip' ), ICON_TRASH, 16 );
-            // A whole trip asks first (NayiveUI.confirm); a stage or a document
+            // A whole trip asks first (Ayni.confirm); a stage or a document
             // goes at once, with an Undo instead.
             delBtn.addEventListener( 'click', async function()
             {
-                if( await NayiveUI.confirm( { title: T( 'trips.deleteTrip' ), body: TF( 'trips.deleteTripBody', { name: trip.destination } ),
+                if( await Ayni.confirm( { title: T( 'trips.deleteTrip' ), body: TF( 'trips.deleteTripBody', { name: trip.destination } ),
                                               confirm: Ayni.t( 'ui.delete' ), danger: true } ) )
                     deleteTrip();
             });
@@ -575,7 +575,7 @@ async function pickTripPhotoFolder( trip )
         const sub  = T( 'trips.tripsFolder' );
         const name = trip.dirName || trip.destination || 'trip';
         const want = lib + '/' + sub + '/' + name;
-        const pick = await NayiveUI.confirm( {
+        const pick = await Ayni.confirm( {
             title:     T( 'trips.outsidePhotosTitle' ),
             body:      TF( 'trips.outsidePhotosBody', { lib: photoDirDisplay( lib ), want: photoDirDisplay( want ) } ),
             confirm:   T( 'trips.outsidePhotosUse' ),

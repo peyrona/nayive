@@ -773,7 +773,7 @@ function openNumFmtDialog( cat )
     });
 
     updateNumFmtPreview();
-    NayiveUI.open( 'numFmtBackdrop' );
+    document.getElementById( 'numFmtBackdrop' ).showModal();
 }
 
 // Assembles an Excel number-format code from the dialog's current field values.
@@ -826,12 +826,12 @@ function updateNumFmtPreview()
 function confirmNumFmt()
 {
     setOrClearStyleField( 'numFmt', buildNumFmtCode() );
-    NayiveUI.close( 'numFmtBackdrop' );
+    document.getElementById( 'numFmtBackdrop' ).close();
 }
 
 function cancelNumFmt()
 {
-    NayiveUI.close( 'numFmtBackdrop' );
+    document.getElementById( 'numFmtBackdrop' ).close();
 }
 
 export

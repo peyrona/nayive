@@ -46,7 +46,7 @@ ok( b === "EDIT typed just before closing\nkeep\n", "what was typed is in the fi
 
 ok( await textWindow( "/nayive/text/index.html?new=1", null ), "New: a blank Text window" );
 await c.evaluate( `${CM}.replaceRange( 'my new note, never named\\n', { line: 0, ch: 0 } ), true` );
-ok( await c.until( `${FRAME}.document.getElementById('saveAsBackdrop').classList.contains('open')` ), "its name sheet is up" );
+ok( await c.until( `${FRAME}.document.getElementById('saveAsBackdrop').open` ), "its name sheet is up" );
 const n2 = await c.evaluate( WINS );
 await c.evaluate( closeFront );
 ok( await c.until( `${WINS} === ${n2 - 1}` ), "the window closes" );

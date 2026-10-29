@@ -47,11 +47,11 @@ const upload = items => c.evaluate( `( () => { window.__up = null;
     uploadItems( ${JSON.stringify( items )}.map( function( it ) { return { relPath: it[ 0 ], file: new File( [ it[ 1 ] ], it[ 0 ].split( '/' ).pop() ) }; } ) )
         .then( function() { window.__up = 'done'; }, function( e ) { window.__up = 'error ' + e; } ); return true; } )()` );
 const ended = () => c.until( "window.__up !== null", 15000 );
-const replaceAsked = () => c.until( "document.getElementById('replaceBackdrop').classList.contains('open')", 5000 );
+const replaceAsked = () => c.until( "document.getElementById('replaceBackdrop').open", 5000 );
 const listed = () => c.evaluate( "Array.from( document.querySelectorAll( '#replaceList li' ) ).map( function( li ) { return li.textContent; } )" );
-// The shared NayiveUI.confirm sheet: its buttons, by title.
-const sheetUp = ( ms = 5000 ) => c.until( "document.querySelector( '.sheet-backdrop.open:not([id]) .sheet-actions button' )", ms );
-const press = title => c.evaluate( `( () => { const b = Array.from( document.querySelectorAll( '.sheet-backdrop.open:not([id]) .sheet-actions button' ) )
+// The shared Ayni.confirm sheet: its buttons, by title.
+const sheetUp = ( ms = 5000 ) => c.until( "document.querySelector( 'dialog.panel[open]:not([id]) footer button' )", ms );
+const press = title => c.evaluate( `( () => { const b = Array.from( document.querySelectorAll( 'dialog.panel[open]:not([id]) footer button' ) )
     .find( function( x ) { return x.dataset.tip === ${JSON.stringify( title )}; } ); if( ! b ) return false; b.click(); return true; } )()` );
 const T = k => c.evaluate( `Ayni.t( ${JSON.stringify( k )} )` );
 
@@ -164,7 +164,7 @@ section( "D3 · A FILE ANOTHER DEVICE PUT THERE AFTER DRIVE LOOKED" );
                                                        NayivePhoto.prepare = real; return real( f, m ); }; return true; } )()` );
     await upload( [ [ "race.jpg", "THIS WINDOW" ] ] );
     const asked = await sheetUp();
-    const body  = asked ? await c.evaluate( "document.querySelector( '.sheet-backdrop.open:not([id]) .dialog-text' ).textContent" ) : "";
+    const body  = asked ? await c.evaluate( "document.querySelector( 'dialog.panel[open]:not([id]) .body > p.text' ).textContent" ) : "";
     ok( asked && /race\.jpg/.test( body ), "a name taken after the check gets its own question", body );
     if( asked ) ok( await press( await T( "drive.keepBoth" ) ), "Keep both" );
     ok( await ended(), "the upload ends" );

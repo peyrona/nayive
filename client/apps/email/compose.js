@@ -368,14 +368,14 @@
         var a = linkAt && linkAt.startContainer;
         a = a && ( a.nodeType === 1 ? a : a.parentNode ).closest( "a" );
         E.$( "linkHref" ).value = a && E.$( "cText" ).contains( a ) ? a.getAttribute( "href" ) || "" : "";
-        NayiveUI.open( "linkSheet" );
+        document.getElementById( "linkSheet" ).showModal();
         setTimeout( function () { E.$( "linkHref" ).focus(); }, 50 );
     }
 
     function applyLink()
     {
         var href = E.$( "linkHref" ).value.trim();
-        NayiveUI.close( "linkSheet" );
+        document.getElementById( "linkSheet" ).close();
         if( ! ed || ! linkAt ) return;
         ed.focus();
         ed.setSelection( linkAt );
@@ -1329,7 +1329,7 @@
     {
         var f = d.fields || {};
         var what = words( f.subject ) || words( htmlText( f.html ) ).slice( 0, 60 ) || E.T( "mail.noSubject" );
-        return NayiveUI.confirm( { title: E.T( "mail.orphanTitle" ), body: E.TF( "mail.orphanBody", { what: what } ),
+        return Ayni.confirm( { title: E.T( "mail.orphanTitle" ), body: E.TF( "mail.orphanBody", { what: what } ),
                                    confirm: E.T( "mail.orphanKeep" ), other: E.T( "mail.orphanDrop" ), otherIcon: "trash",
                                    cancel: E.T( "mail.orphanLater" ) } );
     }
@@ -1463,7 +1463,7 @@
             }
             if( C !== mine || ! pending( mine ) ) return true;
             localNow( mine );
-            return await NayiveUI.confirm( { title: E.T( "mail.unsavedTitle" ),
+            return await Ayni.confirm( { title: E.T( "mail.unsavedTitle" ),
                                              body: E.TF( "mail.unsavedBody", { why: E.errText( mine.failed ) } ),
                                              confirm: E.T( "mail.closeAnyway" ) } );
         }

@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -25,6 +26,7 @@
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
+    <script src="../shared/ayni/ayni-dialogs.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
@@ -385,10 +387,11 @@
          how many days it takes, and which of its siblings have to be done first.
          Opened by the thin dots button on the sub-task row - there is no other way
          in, so ADDING a sub-task stays exactly what it always was: type the text. -->
-    <div class="sheet-backdrop" id="planSheetBackdrop" role="dialog" aria-modal="true">
-        <div class="sheet">
+    <dialog class="panel" id="planSheetBackdrop">
+        <header>
             <h2 data-i18n="tasks.planTitle"></h2>
-
+        </header>
+        <div class="body">
             <!-- The sub-task's own text, editable here as well: someone who opened
                  this sheet to say how long it takes should not have to close it
                  again to fix a typo in the name. -->
@@ -410,17 +413,16 @@
                 <div class="pick" id="planAfterList"></div>
                 <p style="margin: 8px 0 0; font-size: 0.72rem; color: var(--text-faint); line-height: 1.45;" data-i18n="tasks.planAfterHint"></p>
             </div>
-
-            <div class="sheet-actions">
-                <!-- The house "remove" action: a red bin, same as everywhere else. It
-                     takes the duration and the order off this sub-task and closes -
-                     it never deletes the sub-task: that is the bin on a done sub-task's row. -->
-                <button type="button" id="planClearBtn" class="btn danger sheet-actions-left" data-i18n-attr="data-tip:tasks.planClear"><span class="icon" data-icon="trash"></span></button>
-                <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" type="button" id="planSaveBtn" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <!-- The house "remove" action: a red bin, same as everywhere else. It
+                 takes the duration and the order off this sub-task and closes -
+                 it never deletes the sub-task: that is the bin on a done sub-task's row. -->
+            <div class="extra"><button type="button" id="planClearBtn" class="btn danger" data-i18n-attr="data-tip:tasks.planClear"><span class="icon" data-icon="trash"></span></button></div>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" type="button" id="planSaveBtn" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- The help dialog builds each row from the real button on screen, and the
          sub-task dots button only exists while a group is open. This hidden copy is
@@ -1720,7 +1722,7 @@
 
                 if( waiting.length )
                 {
-                    const ok = await NayiveUI.confirm(
+                    const ok = await Ayni.confirm(
                     {
                         title: T( 'tasks.planAskTitle' ),
                         body:  waiting.length === 1
@@ -2454,7 +2456,7 @@
                 list.appendChild( row );
             });
 
-            NayiveUI.open( 'planSheetBackdrop' );
+            document.getElementById( 'planSheetBackdrop' ).showModal();
         }
 
         // Writes the whole sheet at once: whatever it says is what the sub-task has.
@@ -2504,7 +2506,7 @@
 
         function closePlanSheet()
         {
-            NayiveUI.close( 'planSheetBackdrop' );
+            document.getElementById( 'planSheetBackdrop' ).close();
             planSheet = null;
         }
 

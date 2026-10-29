@@ -83,12 +83,12 @@ ok( await txt( "display" ) === "36", "keypad clicks", await txt( "display" ) );
 section( "HISTORY" );
 await click( '#keys [data-k="clear"]' );
 await click( "#histBtn" );
-ok( await c.until( "document.getElementById( 'histBackdrop' ).classList.contains( 'open' )" ), "the history opens" );
+ok( await c.until( "document.getElementById( 'histBackdrop' ).open" ), "the history opens" );
 const rows = await c.evaluate( "[ ...document.querySelectorAll( '#histList button' ) ].map( b => b.textContent )" );
 ok( same( rows, [ "12 × 3 =36" ] ), "the result is listed", rows );
 ok( await c.evaluate( "document.getElementById( 'histEmpty' ).hidden" ), "no 'empty' note" );
 await click( "#histList button" );
-ok( await txt( "display" ) === "36" && ! await c.evaluate( "document.getElementById( 'histBackdrop' ).classList.contains( 'open' )" ),
+ok( await txt( "display" ) === "36" && ! await c.evaluate( "document.getElementById( 'histBackdrop' ).open" ),
     "a tap puts it back and closes the dialog" );
 await click( "#histBtn" );
 await click( "#histClearBtn" );
@@ -126,10 +126,10 @@ ok( await txt( "displayTo" ) === "16,010", "JPY has no decimals", await txt( "di
 await pick( "fxTo", "BRL" );
 ok( await txt( "displayTo" ) === "—" && await txt( "fxNote" ) === "No verified rate for EUR/BRL · 2026-10-27", "BRL: '—' and why", [ await txt( "displayTo" ), await txt( "fxNote" ) ] );
 await click( "#fxNote" );
-ok( await c.until( "document.getElementById( 'fxCheckBackdrop' ).classList.contains( 'open' )" ), "the note opens the rate check" );
+ok( await c.until( "document.getElementById( 'fxCheckBackdrop' ).open" ), "the note opens the rate check" );
 const chk = await c.evaluate( "[ document.querySelectorAll( '#fxCheckBody .fx-source-row' ).length, !! document.querySelector( '#fxCheckBody .warn-box' ) ]" );
 ok( same( chk, [ 3, true ] ), "...with the three sources and the warning", chk );
-await click( "#fxCheckBackdrop .sheet-close" );
+await click( "#fxCheckBackdrop header [data-close]" );
 ok( await c.evaluate( "NayiveFx.rate( 'EUR', 'XXX' ) === null && ! /1INCH/.test( localStorage.getItem( 'balata-fx' ) )" ), "only the offered currencies are kept" );
 
 section( "CURRENCY - OFFLINE" );

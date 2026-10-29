@@ -59,8 +59,8 @@ function topMenuItems()
     const off = ! vaultShown();
     return [
         { id: 'gen',      label: T( 'passwords.generator' ), icon: SVG.dice,    hidden: off, run: function() { openGenerator( null ); } },
-        { id: 'import',   label: T( 'passwords.import' ),    icon: SVG.importI, hidden: off, run: function() { NayiveUI.open( 'importBackdrop' ); } },
-        { id: 'export',   label: T( 'passwords.export' ),    icon: SVG.exportI, hidden: off, run: function() { NayiveUI.open( 'exportBackdrop' ); } },
+        { id: 'import',   label: T( 'passwords.import' ),    icon: SVG.importI, hidden: off, run: function() { document.getElementById( 'importBackdrop' ).showModal(); } },
+        { id: 'export',   label: T( 'passwords.export' ),    icon: SVG.exportI, hidden: off, run: function() { document.getElementById( 'exportBackdrop' ).showModal(); } },
         { id: 'settings', label: T( 'passwords.settings' ),  icon: 'settings',      hidden: off, run: openSettings },
         { sep: true, hidden: off },
         { caption: T( 'passwords.sort' ), hidden: off }
@@ -183,7 +183,7 @@ function wireItems()
         const b = e.target.closest( '[data-empty]' );
         if( ! b ) return;
         if( b.dataset.empty === 'add' ) openItemSheet( null );
-        else if( b.dataset.empty === 'import' ) NayiveUI.open( 'importBackdrop' );
+        else if( b.dataset.empty === 'import' ) document.getElementById( 'importBackdrop' ).showModal();
     } );
 }
 
@@ -220,7 +220,7 @@ function wireKeys()
     {
         if( ! isOpen() ) return;
         if( ( e.ctrlKey || e.metaKey ) && e.key === '/' ) { e.preventDefault(); focusSearch(); return; }
-        if( e.key !== 'Escape' || e.defaultPrevented || document.querySelector( '.sheet-backdrop.open' ) || NayiveUI.menuOpen() ) return;
+        if( e.key !== 'Escape' || e.defaultPrevented || document.querySelector( 'dialog.panel[open]' ) || NayiveUI.menuOpen() ) return;
         if( query ) setQuery( '' );
     } );
 }
@@ -261,13 +261,21 @@ function wireSecrets()
 //------------------------------------------------------------------------//
 // THE ENTRY SHEET
 
+// fn() each time the dialog `id` closes, by any road (its ×, Escape, the
+// code). Not when it was opened again before the `close` event came.
+function onClosed( id, fn )
+{
+    const d = $( id );
+    d.addEventListener( 'close', function() { if( ! d.open ) fn(); } );
+}
+
 function wireItemSheet()
 {
     $( 'itSaveBtn' ).addEventListener( 'click', saveItemSheet );
     $( 'itDeleteBtn' ).addEventListener( 'click', function()
     {
         const id = editId;
-        NayiveUI.close( 'itemBackdrop' );
+        document.getElementById( 'itemBackdrop' ).close();
         if( id ) deleteNodes( [ id ] );
     } );
     enterSubmits( 'itemBackdrop', saveItemSheet );
@@ -301,7 +309,7 @@ function wireItemSheet()
         if( b ) copyHistory( +b.dataset.hist );
     } );
     // Closed by any road: nothing of the entry stays in the boxes.
-    NayiveUI.onSheetClose( 'itemBackdrop', function()
+    onClosed( 'itemBackdrop', function()
     {
         [ 'itName', 'itUser', 'itPass', 'itUrls', 'itNotes', 'itTotp' ].forEach( function( id ) { $( id ).value = ''; } );
         $( 'itFields' ).innerHTML = '';
@@ -315,7 +323,7 @@ function wireItemSheet()
 
 function openSettings()
 {
-    NayiveUI.open( 'settingsBackdrop' );
+    document.getElementById( 'settingsBackdrop' ).showModal();
 }
 
 function wireOtherSheets()
@@ -341,18 +349,18 @@ function wireOtherSheets()
     $( 'genCopyBtn' ).innerHTML = Ayni.icon( 'copy' );
     $( 'genCopyBtn' ).addEventListener( 'click', function() { copySecret( $( 'genOut' ).value, 'passwords.passCopied' ); } );
     $( 'genUseBtn' ).addEventListener( 'click', useGenerated );
-    NayiveUI.onSheetClose( 'genBackdrop', function() { $( 'genOut' ).value = ''; genFor = null; } );
+    onClosed( 'genBackdrop', function() { $( 'genOut' ).value = ''; genFor = null; } );
 
     // Settings: close-only, each choice kept on change (this device's).
     const fill = function( sel, list, key, unit )
     {
         sel.innerHTML = list.map( function( v ) { return '<option value="' + v + '">' + esc( TF( unit, { n: v } ) ) + '</option>'; } ).join( '' );
         sel.value = String( ui[ key ] );
-        NayiveUI.autoSave( sel, function( v ) { ui[ key ] = +v; saveUi(); markActive(); } );
+        Ayni.autoSave( sel, function( v ) { ui[ key ] = +v; saveUi(); markActive(); } );
     };
     fill( $( 'setLock' ), LOCK_CHOICES, 'lockMin', 'passwords.minutesN' );
     fill( $( 'setClip' ), CLIP_CHOICES, 'clipSec', 'passwords.secondsN' );
-    $( 'chpwOpenBtn' ).addEventListener( 'click', function() { NayiveUI.close( 'settingsBackdrop' ); openChangePw( false ); } );
+    $( 'chpwOpenBtn' ).addEventListener( 'click', function() { document.getElementById( 'settingsBackdrop' ).close(); openChangePw( false ); } );
     $( 'newRecBtn' ).addEventListener( 'click', newRecoveryKey );
 
     // A new master password
@@ -376,16 +384,16 @@ function wireOtherSheets()
     {
         $( id ).addEventListener( 'input', function() { phraseRows(); sayError( 'hintErr', '' ); } );
     } );
-    NayiveUI.onSheetClose( 'hintBackdrop', phraseClosed );
-    NayiveUI.onSheetClose( 'chpwBackdrop', chpwClosed );
+    onClosed( 'hintBackdrop', phraseClosed );
+    onClosed( 'chpwBackdrop', chpwClosed );
 
     // The recovery key: typed in; a new one shown
     $( 'recGoBtn' ).addEventListener( 'click', useRecovery );
     enterSubmits( 'recBackdrop', useRecovery );
     $( 'recShowCopy' ).addEventListener( 'click', function() { copySecret( recShown, 'passwords.recCopied' ); } );
     $( 'recShowPrint' ).addEventListener( 'click', function() { printRecovery( recShown ); } );
-    $( 'recShowDone' ).addEventListener( 'click', function() { NayiveUI.close( 'recShowBackdrop' ); } );
-    NayiveUI.onSheetClose( 'recShowBackdrop', function() { $( 'recShowCode' ).textContent = ''; recShown = ''; } );
+    $( 'recShowDone' ).addEventListener( 'click', function() { document.getElementById( 'recShowBackdrop' ).close(); } );
+    onClosed( 'recShowBackdrop', function() { $( 'recShowCode' ).textContent = ''; recShown = ''; } );
 
     // Import / export
     $( 'importPickBtn' ).addEventListener( 'click', pickImportFile );

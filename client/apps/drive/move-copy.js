@@ -123,7 +123,7 @@ async function doMove( paths, dest )
     let replace = false;
     if( clashes.length )
     {
-        replace = await NayiveUI.confirm( {
+        replace = await Ayni.confirm( {
             title: T( 'drive.clashesTitle' ),
             body: ( clashes.length === 1
                         ? TF( 'drive.oneClashDest', { name: clashes[0].split( '/' ).pop() } )

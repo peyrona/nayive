@@ -119,7 +119,7 @@ section( "H3 · CONTACTS: merge two duplicates over a stale book, Undo" );
     ok( st === 200, "the phone adds Pepe", st );
 
     await c.evaluate( "openMergeFor( contacts.filter( c => c.uid === 'a1' || c.uid === 'a2' ) ); true" );
-    await c.until( "document.getElementById('mergeBackdrop').classList.contains('open')" );
+    await c.until( "document.getElementById('mergeBackdrop').open" );
     await c.evaluate( "document.getElementById('mergeConfirmBtn').click(); true" );
     ok( await disk( () => uids() === "a1,p" ), "merged; the save met the phone's and kept Pepe", uids() );
     ok( await undo(), "Undo is there" );
@@ -164,10 +164,10 @@ section( "H3 · BOOKMARKS: Replace all, a re-read brings the phone's, Undo" );
 
     const file = path.join( TMP, "z.html" );
     fs.writeFileSync( file, '<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<DL><p>\n<DT><A HREF="https://z.example/">Z</A>\n</DL><p>\n' );
-    await c.evaluate( "NayiveUI.open( 'importBackdrop' ); document.getElementById( 'importInput' ).value = ''; document.querySelector( 'input[name=importMode][value=replace]' ).checked = true; true" );
+    await c.evaluate( "document.getElementById( 'importBackdrop' ).showModal(); document.getElementById( 'importInput' ).value = ''; document.querySelector( 'input[name=importMode][value=replace]' ).checked = true; true" );
     await setFile( "#importInput", file );
-    await c.until( "document.querySelector( '.sheet-backdrop.open:not([id]) .sheet-actions button:last-child' )" );
-    await c.evaluate( "document.querySelector( '.sheet-backdrop.open:not([id]) .sheet-actions button:last-child' ).click(); true" );
+    await c.until( "document.querySelector( 'dialog.panel[open]:not([id]) footer button:last-child' )" );
+    await c.evaluate( "document.querySelector( 'dialog.panel[open]:not([id]) footer button:last-child' ).click(); true" );
     ok( await disk( () => titles() === "Z" ), "Replace all: the file holds Z only", titles() );
 
     const st = await phoneEdit( BF, t => { const d = JSON.parse( t ); const y = bm( "y", "Y" ); d.nodes.y = y; d.nodes.root.children.push( "y" ); return JSON.stringify( d, null, 2 ); } );

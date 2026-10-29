@@ -57,12 +57,12 @@ async function unlock( p, pw )
 // Clicks the ✓ of the dialog on top (askPassword, alert): types `pw` first when it asks one.
 async function answerDialog( p, pw )
 {
-    await p.until( "!! document.querySelector( '.sheet-backdrop.open #askPw1' ) || !! document.querySelector( '.sheet-backdrop.open .dialog-text' )" );
+    await p.until( "!! document.querySelector( 'dialog.panel[open] #askPw1' ) || !! document.querySelector( 'dialog.panel[open] .body > p.text' )" );
     return p.evaluate( `( function () {
-        var i = document.querySelector( '.sheet-backdrop.open #askPw1' );
+        var i = document.querySelector( 'dialog.panel[open] #askPw1' );
         if( i ) i.value = ${JSON.stringify( pw || "" )};
-        var backs = document.querySelectorAll( '.sheet-backdrop.open' ), b = backs[ backs.length - 1 ];
-        var row = b.querySelectorAll( '.sheet-actions button' );
+        var backs = document.querySelectorAll( 'dialog.panel[open]' ), b = backs[ backs.length - 1 ];
+        var row = b.querySelectorAll( 'footer button' );
         var ok = b.querySelector( '.btn.primary' ) || row[ row.length - 1 ] || b.querySelector( 'button' );
         ok.click(); return true; } )()` );
 }
@@ -199,7 +199,7 @@ let canaryId;
 {
     // Typed into the real sheet, saved with its ✓.
     await c.evaluate( "document.getElementById( 'addBtn' ).click(); true" );
-    ok( await c.until( "document.getElementById( 'itemBackdrop' ).classList.contains( 'open' )" ), "+ opens the entry sheet" );
+    ok( await c.until( "document.getElementById( 'itemBackdrop' ).open" ), "+ opens the entry sheet" );
     await c.evaluate( `( function () {
         var v = ${JSON.stringify( CANARY )};
         document.getElementById( 'itName' ).value = v.title; document.getElementById( 'itUser' ).value = v.user;
@@ -281,7 +281,7 @@ section( "LOCK · NOTHING LEFT ON THE PAGE; WRONG PASSWORDS NEVER WRITE" );
     const page = await c.evaluate( "document.body.innerHTML + Array.from( document.querySelectorAll( 'input, textarea' ) ).map( function ( i ) { return i.value; } ).join( '|' )" );
     ok( noSecret( page ) && page.indexOf( "new-pass-2" ) < 0 && page.indexOf( "mail-pass-1" ) < 0, "no title, user, password or note left in the page or its boxes" );
     ok( await c.evaluate( "Object.keys( items ).length === 0 && opened.size === 0 && keys === null" ), "the model and the keys are gone" );
-    ok( await c.evaluate( "! document.querySelector( '.sheet-backdrop.open' )" ), "the open sheet closed with it" );
+    ok( await c.evaluate( "! document.querySelector( 'dialog.panel[open]' )" ), "the open sheet closed with it" );
     ok( await c.evaluate( "! document.getElementById( 'hintBtn' ).hidden && document.getElementById( 'hintText' ).hidden" ),
         "the reminder phrase waits behind its button" );
     await c.evaluate( "document.getElementById( 'hintBtn' ).click(); true" );
@@ -515,7 +515,7 @@ section( "MASTER PASSWORD · CHANGE, RECOVERY KEY, NEW RECOVERY KEY" );
     ok( await c.until( "/reminder phrase has every word|todas las palabras y signos de esta/i.test( document.getElementById( 'chpwErr' ).textContent )" ),
         "a new master password whose every word is in the phrase: refused" );
     await c.evaluate( `document.getElementById( 'chpwNew' ).value = document.getElementById( 'chpwNew2' ).value = ${JSON.stringify( PW2 )}; saveChangePw(); true` );
-    ok( await c.until( "! document.getElementById( 'chpwBackdrop' ).classList.contains( 'open' )", 30000 ), "Change master password: saved" );
+    ok( await c.until( "! document.getElementById( 'chpwBackdrop' ).open", 30000 ), "Change master password: saved" );
     await sleep( 1500 );
     ok( JSON.stringify( json().hint ) === hint0, "the reminder phrase stays as it was" );
     await sleep( 500 );
@@ -528,29 +528,29 @@ section( "MASTER PASSWORD · CHANGE, RECOVERY KEY, NEW RECOVERY KEY" );
     await c.evaluate( "openRecoverySheet(); document.getElementById( 'recInput' ).value = 'ABCD-EFGH-JKMN-PQRS-TVWX-YZ01-2345-6789'; useRecovery(); true" );
     ok( await c.until( "! document.getElementById( 'recErr' ).hidden", 15000 ), "a wrong recovery key: refused" );
     await c.evaluate( `document.getElementById( 'recInput' ).value = ${JSON.stringify( recovery.toLowerCase().replace( /-/g, " " ) )}; useRecovery(); true` );
-    ok( await c.until( "isOpen() && document.getElementById( 'chpwBackdrop' ).classList.contains( 'open' ) && document.getElementById( 'chpwCurRow' ).hidden", 15000 ),
+    ok( await c.until( "isOpen() && document.getElementById( 'chpwBackdrop' ).open && document.getElementById( 'chpwCurRow' ).hidden", 15000 ),
         "the recovery key (typed in lower case, with spaces) opens it and asks for a new master password" );
 
     // His bug (2026-10-15): that sheet cancelled = in the vault, old password kept, nothing said.
-    const unchanged = "Array.from( document.querySelectorAll( '.sheet-backdrop.open h2' ) ).some( function ( h ) { return /unchanged|no ha cambiado/i.test( h.textContent ); } )";
-    const pressInDialog = cls => c.evaluate( `( function () { var backs = document.querySelectorAll( '.sheet-backdrop.open' ), b = backs[ backs.length - 1 ];
+    const unchanged = "Array.from( document.querySelectorAll( 'dialog.panel[open] h2' ) ).some( function ( h ) { return /unchanged|no ha cambiado/i.test( h.textContent ); } )";
+    const pressInDialog = cls => c.evaluate( `( function () { var backs = document.querySelectorAll( 'dialog.panel[open]' ), b = backs[ backs.length - 1 ];
         b.querySelector( '${cls}' ).click(); return true; } )()` );
-    await c.evaluate( "NayiveUI.close( 'chpwBackdrop' ); true" );
+    await c.evaluate( "document.getElementById( 'chpwBackdrop' ).close(); true" );
     ok( await c.until( unchanged ), "cancelled with no new password: \"Master password unchanged\" says the old one still opens it" );
     await pressInDialog( ".btn.primary" );
-    ok( await c.until( "document.getElementById( 'chpwBackdrop' ).classList.contains( 'open' ) && document.getElementById( 'chpwCurRow' ).hidden && !! rawAfterRec" ),
+    ok( await c.until( "document.getElementById( 'chpwBackdrop' ).open && document.getElementById( 'chpwCurRow' ).hidden && !! rawAfterRec" ),
         "✓ \"Set a new one\": the sheet again, no current password asked" );
-    await c.evaluate( "NayiveUI.close( 'chpwBackdrop' ); true" );
+    await c.evaluate( "document.getElementById( 'chpwBackdrop' ).close(); true" );
     await c.until( unchanged );
     await pressInDialog( "[data-close]" );
-    ok( await c.until( "rawAfterRec === null && isOpen() && ! document.querySelector( '.sheet-backdrop.open' )" ), "× \"Keep the old one\": the vault stays open, the recovery's key is wiped" );
+    ok( await c.until( "rawAfterRec === null && isOpen() && ! document.querySelector( 'dialog.panel[open]' )" ), "× \"Keep the old one\": the vault stays open, the recovery's key is wiped" );
     await c.evaluate( "lock(); true" );
     ok( await unlock( c, PW2 ), "…and the old master password still opens it" );
     await c.evaluate( "lock(); true" );
     await c.evaluate( `openRecoverySheet(); document.getElementById( 'recInput' ).value = ${JSON.stringify( recovery )}; useRecovery(); true` );
-    ok( await c.until( "isOpen() && document.getElementById( 'chpwBackdrop' ).classList.contains( 'open' )", 15000 ), "the recovery key again" );
+    ok( await c.until( "isOpen() && document.getElementById( 'chpwBackdrop' ).open", 15000 ), "the recovery key again" );
     await c.evaluate( `document.getElementById( 'chpwNew' ).value = document.getElementById( 'chpwNew2' ).value = ${JSON.stringify( PW3 )}; saveChangePw(); true` );
-    ok( await c.until( "! document.getElementById( 'chpwBackdrop' ).classList.contains( 'open' )", 30000 ), "new master password set" );
+    ok( await c.until( "! document.getElementById( 'chpwBackdrop' ).open", 30000 ), "new master password set" );
     ok( await c.until( "rawAfterRec === null" ) && await c.evaluate( `! ( ${unchanged} )` ), "…and saved: no \"unchanged\" question" );
     await sleep( 500 );
     await c.evaluate( "lock(); true" );
@@ -567,16 +567,16 @@ section( "MASTER PASSWORD · CHANGE, RECOVERY KEY, NEW RECOVERY KEY" );
 
     await c.evaluate( "newRecoveryKey(); true" );
     await answerDialog( c, PW3 );
-    ok( await c.until( "document.getElementById( 'recShowBackdrop' ).classList.contains( 'open' ) && recShown.length === 39", 30000 ), "New recovery key: shown once" );
+    ok( await c.until( "document.getElementById( 'recShowBackdrop' ).open && recShown.length === 39", 30000 ), "New recovery key: shown once" );
     const recovery2 = await c.evaluate( "recShown" );
-    await c.evaluate( "NayiveUI.close( 'recShowBackdrop' ); true" );
+    await c.evaluate( "document.getElementById( 'recShowBackdrop' ).close(); true" );
     await sleep( 500 );
     await c.evaluate( "lock(); true" );
     await c.evaluate( `openRecoverySheet(); document.getElementById( 'recInput' ).value = ${JSON.stringify( recovery )}; useRecovery(); true` );
     ok( await c.until( "! document.getElementById( 'recErr' ).hidden", 15000 ), "the old recovery key stopped working" );
     await c.evaluate( `document.getElementById( 'recInput' ).value = ${JSON.stringify( recovery2 )}; useRecovery(); true` );
     ok( await c.until( "isOpen()", 15000 ), "the new one works" );
-    await c.evaluate( "NayiveUI.close( 'chpwBackdrop' ); true" );
+    await c.evaluate( "document.getElementById( 'chpwBackdrop' ).close(); true" );
 }
 
 //----------------------------------------------------------------------------//
@@ -596,7 +596,7 @@ section( "REMINDER PHRASE · SETTINGS, A NEW NAYIVE PASSWORD, REMOVED" );
     ok( await c.until( "/wrong nayive|nayive incorrecta/i.test( document.getElementById( 'hintErr' ).textContent )", 20000 ), "a wrong Nayive password: refused" );
     const before = JSON.stringify( json().hint );
     await fill( "my new reminder", PW3, "test" );
-    ok( await c.until( "! document.getElementById( 'hintBackdrop' ).classList.contains( 'open' )", 30000 ), "saved" );
+    ok( await c.until( "! document.getElementById( 'hintBackdrop' ).open", 30000 ), "saved" );
     ok( await disk( () => JSON.stringify( json().hint ) !== before ) && await nodeHint( json(), "test" ) === "my new reminder", "the file holds the new one (Node opens it)" );
 
     // The Nayive password changes: the phrase opens with the OLD one until it is saved again.
@@ -614,7 +614,7 @@ section( "REMINDER PHRASE · SETTINGS, A NEW NAYIVE PASSWORD, REMOVED" );
     await c.until( "document.getElementById( 'hintEdit' ).value === 'my new reminder'" );
     const sealedOld = json().hint.c;
     await fill( "my new reminder", PW3, "test-two-longer" );
-    ok( await c.until( "! document.getElementById( 'hintBackdrop' ).classList.contains( 'open' )", 30000 ), "saved again with the new Nayive password" );
+    ok( await c.until( "! document.getElementById( 'hintBackdrop' ).open", 30000 ), "saved again with the new Nayive password" );
     ok( await disk( () => json().hint.c !== sealedOld ) && await nodeHint( json(), "test-two-longer" ).then( h => h === "my new reminder", () => false ), "now it opens with the new one" );
 
     // Removed: empty box, nothing asked.
@@ -704,7 +704,7 @@ section( "GENERATOR · UNIFORM, EVERY SET, WORDS FROM THE LIST" );
     await c.evaluate( "openGenerator( null ); true" );
     ok( await c.until( "document.getElementById( 'genOut' ).value.length >= 8" ), "the generator sheet makes one at once" );
     await shot( c, "06-generator" );
-    await c.evaluate( "NayiveUI.close( 'genBackdrop' ); true" );
+    await c.evaluate( "document.getElementById( 'genBackdrop' ).close(); true" );
 }
 
 //----------------------------------------------------------------------------//
@@ -729,7 +729,7 @@ section( "LOOK · PHONE, DARK" );
     await p.evaluate( `openItemSheet( Object.keys( items ).filter( function ( id ) { return items[ id ].type === 'login'; } )[ 0 ] ); true` );
     await sleep( 400 );
     await shot( p, "08-phone-sheet" );
-    await p.evaluate( "NayiveUI.close( 'itemBackdrop' ); lock(); true" );
+    await p.evaluate( "document.getElementById( 'itemBackdrop' ).close(); lock(); true" );
     await shot( p, "09-phone-locked" );
     await p.evaluate( "localStorage.setItem( 'ayni-theme', 'dark' ); true" );
     await openApp( p );

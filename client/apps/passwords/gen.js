@@ -157,7 +157,7 @@ function openGenerator( target )
     $( 'genCaps' ).checked = o.caps; $( 'genNum' ).checked = o.num;
     $( 'genUseBtn' ).hidden = ! genFor;
     showGenMode( o.mode );
-    NayiveUI.open( 'genBackdrop' );
+    document.getElementById( 'genBackdrop' ).showModal();
     regenerate();
 }
 
@@ -209,5 +209,5 @@ function useGenerated()
         genFor.value = v;
         genFor.dispatchEvent( new Event( 'input', { bubbles: true } ) );
     }
-    NayiveUI.close( 'genBackdrop' );
+    document.getElementById( 'genBackdrop' ).close();
 }

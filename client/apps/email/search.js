@@ -180,7 +180,7 @@
     {
         fill( S.adv );
         E.$( "advWords" ).value = E.$( "searchInput" ).value.trim();
-        NayiveUI.open( "advSheet" );
+        document.getElementById( "advSheet" ).showModal();
         E.$( "advFrom" ).focus();
     };
 
@@ -195,7 +195,7 @@
         if( a.since && a.until && a.since > a.until ) { var t = a.since; a.since = a.until; a.until = t; }
         if( E.$( "advAttach" ).checked )  { a.attach = true; any = true; }
         if( E.$( "advStarred" ).checked ) { a.starred = true; any = true; }
-        NayiveUI.close( "advSheet" );
+        document.getElementById( "advSheet" ).close();
         S.adv = any ? a : null;
         S.words = E.$( "advWords" ).value.trim();
         E.$( "searchInput" ).value = S.words;

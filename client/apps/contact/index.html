@@ -21,6 +21,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -28,6 +29,7 @@
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
+    <script src="../shared/ayni/ayni-dialogs.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
@@ -84,15 +86,12 @@
 
     <style>
         /* Base reset, card shell (.page/.page-inner/.card), .header, .app-icon,
-           .btn, .sheet, .field and the input look all come from
-           ../shared/app.css. Only what is unique to the address book lives here. */
+           .btn, .field and the input look all come from
+           ../shared/app.css; dialogs are Ayni's dialog.panel. Only what is unique to the address book lives here. */
 
-        #detailBackdrop { z-index: 110; }   /* a contact opened from the Duplicates sheet floats above it */
-        #editBackdrop   { z-index: 115; }   /* ...and so does its Edit, which replaces it */
-        /* ...but a dialog built on the fly by shared/ui.js (confirm, alert,
-           folder picker - the only backdrops that carry role="dialog") is
-           always the top-most thing on screen, above the detail card. */
-        .sheet-backdrop[role="dialog"] { z-index: 120; }
+        /* Dialogs stack in the order they open (the top layer): a contact
+           opened from the Duplicates sheet, its Edit, a question asked from
+           either - each floats above the one it came from. */
 
         /* Text inputs that sit outside a .field (multi-value rows) — app.css
            styles the look; they only need their width set here. */
@@ -296,7 +295,6 @@
         .detail-item .di-value { font-size: 0.98rem; color: var(--text); word-break: break-word; }
         .detail-item .di-value.multiline { white-space: pre-wrap; }
 
-        /* .sheet-actions / .btn / .btn-* live in ../shared/theme.css */
 
         /* Duplicates */
         .dedup-count { font-size: 0.82rem; font-weight: 400; color: var(--text-dim); margin-left: 6px; }
@@ -426,8 +424,8 @@
     </div>
 
     <!-- Detail view -->
-    <div id="detailBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="detailBackdrop" class="panel">
+        <div class="body">
             <div class="detail-head">
                 <div id="detailAvatar" class="avatar lg"></div>
                 <div>
@@ -437,20 +435,20 @@
             </div>
 
             <div id="detailBody"></div>
-
-            <div class="sheet-actions">
-                <button id="detailDeleteBtn" class="btn danger sheet-actions-left" data-i18n-attr="data-tip:ui.delete"><span class="icon" data-icon="trash"></span></button>
-                <button class="btn primary" id="detailEditBtn"   data-i18n-attr="data-tip:contact.edit"><span class="icon" data-icon="edit"></span></button>
-                <button class="btn" id="detailCloseBtn"  data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <div class="extra"><button id="detailDeleteBtn" class="btn danger" data-i18n-attr="data-tip:ui.delete"><span class="icon" data-icon="trash"></span></button></div>
+            <button class="btn primary" id="detailEditBtn"   data-i18n-attr="data-tip:contact.edit"><span class="icon" data-icon="edit"></span></button>
+            <button class="btn" id="detailCloseBtn"  data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </footer>
+    </dialog>
 
     <!-- Add / edit form -->
-    <div id="editBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="editBackdrop" class="panel">
+        <header>
             <h2 id="editTitle" data-i18n="contact.newContact"></h2>
-
+        </header>
+        <div class="body">
             <!-- The card's picture: the circle takes one from this device; Nayive's
                  files sit under it, a red bin on its corner removes it (see PICTURE in the script). -->
             <div class="face-pick">
@@ -547,36 +545,37 @@
                     <textarea id="fNote"></textarea>
                 </div>
             </div>
-
-            <div class="sheet-actions">
-                <button class="btn" id="editCloseBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="editSaveBtn"  data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" id="editCloseBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="editSaveBtn"  data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- Duplicates -->
-    <div id="dedupBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="dedupBackdrop" class="panel">
+        <header>
             <h2><span data-i18n="contact.dupes"></span><span id="dedupCount" class="dedup-count"></span></h2>
+            <button class="btn" id="dedupCloseBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
             <div id="dedupList"></div>
-            <div class="sheet-actions">
-                <button class="btn" id="dedupCloseBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+    </dialog>
 
     <!-- Merge preview -->
-    <div id="mergeBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="mergeBackdrop" class="panel">
+        <header>
             <h2 data-i18n="contact.mergeContacts"></h2>
+        </header>
+        <div class="body">
             <div id="mergeBody"></div>
-            <div class="sheet-actions">
-                <button class="btn" id="mergeCloseBtn"   data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="mergeConfirmBtn" data-i18n-attr="data-tip:contact.merge"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" id="mergeCloseBtn"   data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="mergeConfirmBtn" data-i18n-attr="data-tip:contact.merge"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <input type="file" id="importInput" accept=".vcf,text/vcard,text/x-vcard" style="display:none;">
 
@@ -914,7 +913,7 @@
             unparsedCards = unparsed;
             nextPos       = contacts.length + unparsed.length;
             bookRead      = true;
-            if( ! document.querySelector( '.sheet-backdrop.open' ) ) render();
+            if( ! document.querySelector( 'dialog.panel[open]' ) ) render();
         }
 
         function saveContacts()
@@ -2234,8 +2233,8 @@
         // toast) and asked again; the name it already has answers null.
         function askGroupName( title, was )
         {
-            return NayiveUI.askText( {
-                title: title, value: was || '', label: T( 'contact.groupName' ), okTitle: T( 'ui.save' ), max: 60, wide: true,
+            return Ayni.ask( {
+                title: title, value: was || '', label: T( 'contact.groupName' ), okTip: T( 'ui.save' ), max: 60,
                 ids:   { input: 'groupNameInput', ok: 'groupNameOk', cancel: 'groupNameCancel' },
                 check: function( v )
                 {
@@ -3066,7 +3065,7 @@
 
         function refreshDedupIfOpen()
         {
-            if( document.getElementById( 'dedupBackdrop' ).classList.contains( 'open' ) )
+            if( document.getElementById( 'dedupBackdrop' ).open )
             {
                 dupGroups = findDuplicateGroups( contacts );
                 renderDedupSheet();
@@ -3740,8 +3739,8 @@
             });
         }
 
-        function openBackdrop( id )  { NayiveUI.open( id ); }     // impl in shared/ui.js
-        function closeBackdrop( id ) { NayiveUI.close( id ); }
+        function openBackdrop( id )  { document.getElementById( id ).showModal(); }     // impl in shared/ui.js
+        function closeBackdrop( id ) { document.getElementById( id ).close(); }
 
         // An Undo for a change to the contacts; with no `undo`, the merge's.
         function flashUndo( msg, undo ) { Ayni.toast( 'ok', msg, { undo: undo || undoMerge } ); }

@@ -60,6 +60,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -67,6 +68,7 @@
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
+    <script src="../shared/ayni/ayni-dialogs.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/ui.js" defer></script>
     <script src="../shared/store.js" defer></script>
@@ -447,7 +449,7 @@
 
         /* THE COUNTDOWN DIALOG - hours / minutes / seconds side by side, the text below.
            Not centred: it opens by the clock (or its chip), like the month (cdOpen). */
-        #cdBackdrop > .sheet { position: fixed; }
+        #cdBackdrop:modal { position: fixed; inset: auto; margin: 0; }
         .cd-nums      { flex-wrap: nowrap; contain: inline-size; }   /* the number boxes never widen the dialog: it packs to its 300px minimum */
         .cd-nums .field { flex: 1 1 0; min-width: 76px; }
         .cd-nums .field input { width: 100%; text-align: center; font-variant-numeric: tabular-nums; }
@@ -655,9 +657,11 @@
     <!-- COUNTDOWN - opened by the clock (a new one, beside the others) or by a
          countdown's chip (to change that one): hours / minutes / seconds + an
          optional text; Play starts it. Pause / Play and Stop live on the chip. -->
-    <div class="sheet-backdrop" id="cdBackdrop">
-        <div class="sheet sheet--pack" role="dialog" aria-modal="true" aria-labelledby="cdTitle">
+    <dialog class="panel" id="cdBackdrop" aria-labelledby="cdTitle">
+        <header>
             <h2><span id="cdTitle"></span> <button class="info-dot" id="cdNote" type="button" data-i18n-attr="data-info:desktop.cdNote"></button></h2>
+        </header>
+        <div class="body">
             <div class="field-row cd-nums">
                 <div class="field"><label for="cdH" data-i18n="desktop.cdHours"></label><input id="cdH" type="number" min="0" max="99" step="1" inputmode="numeric"></div>
                 <div class="field"><label for="cdM" data-i18n="desktop.cdMins"></label><input id="cdM" type="number" min="0" max="59" step="1" inputmode="numeric"></div>
@@ -667,12 +671,12 @@
                 <label for="cdText" data-i18n="desktop.cdText"></label>
                 <input id="cdText" type="text" maxlength="120" autocomplete="off" spellcheck="false">
             </div>
-            <div class="sheet-actions">
-                <button class="btn" data-close type="button" data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="cdPlay" type="button" data-i18n-attr="data-tip:desktop.cdStart"><span class="icon" data-icon="play"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <button class="btn" data-close type="button" data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="cdPlay" type="button" data-i18n-attr="data-tip:desktop.cdStart"><span class="icon" data-icon="play"></span></button>
+        </footer>
+    </dialog>
 
 <script>
 ( function ()
@@ -1090,13 +1094,13 @@
         } ).observe( cw.document.documentElement, { childList: true, subtree: true } );
     }
 
-    // DIALOG MARK - a dialog (the shared .sheet-backdrop.open) open in the
+    // DIALOG MARK - a dialog (Ayni's dialog.panel[open]) open in the
     // window's page, or in a frame inside it (Planner's Calendar...), marks its
     // bar button while the window is behind others or minimised, so a question
     // left waiting is not forgotten. Dialogs stay modal to their own window.
     function hasDialog( doc )
     {
-        if( doc.querySelector( '.sheet-backdrop.open' ) ) return true;
+        if( doc.querySelector( 'dialog.panel[open]' ) ) return true;
         var fs = doc.querySelectorAll( 'iframe' );
         for( var i = 0; i < fs.length; i++ )
         {
@@ -1120,7 +1124,7 @@
     {
         function queue() { if( ! w.dialogQueued ) { w.dialogQueued = true; requestAnimationFrame( function () { markDialog( w ); } ); } }
         new cw.MutationObserver( queue )
-            .observe( cw.document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: [ 'class' ] } );
+            .observe( cw.document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: [ 'class', 'open' ] } );
         queue();
     }
 
@@ -2265,12 +2269,12 @@
         // so the menu shows the very card of a big screen's launcher.
         doc.documentElement.classList.add( 'in-desktop' );
         var st = doc.createElement( 'style' );
-        st.textContent = 'html,body{overflow:hidden auto;scrollbar-width:thin}.launcher{min-height:0;padding:0}.panel{border:0;border-radius:0;box-shadow:none;background:transparent}' +
+        st.textContent = 'html,body{overflow:hidden auto;scrollbar-width:thin}.launcher{min-height:0;padding:0}.apps-panel{border:0;border-radius:0;box-shadow:none;background:transparent}' +
                          // full screen for a dialog: the desk shows behind it, not the launcher's tiles
                          'html.desk-full,html.desk-full body{background:transparent}html.desk-full .launcher{visibility:hidden}';
         doc.head.appendChild( st );
         // The menu is exactly the launcher's panel, once that has laid out (not while hidden).
-        var panel = doc.querySelector( '.panel' );
+        var panel = doc.querySelector( '.apps-panel' );
         if( panel ) new cw.ResizeObserver( function ()
         {
             var r = panel.getBoundingClientRect();
@@ -2297,11 +2301,9 @@
         // help card is not one of these: it stays in the menu, as it always was.
         function menuSheets()
         {
-            // shared dialogs (ui.js) open with a class; the launcher's own drop `hidden`
-            var up = [].some.call( doc.querySelectorAll( '.sheet-backdrop' ), function ( b )
+            var up = [].some.call( doc.querySelectorAll( 'dialog.panel[open]' ), function ( b )
             {
-                if( b.querySelector( '.intro-sheet' ) ) return false;
-                return b.classList.contains( 'open' ) || ( ! b.hidden && cw.getComputedStyle( b ).display !== 'none' );
+                return ! b.classList.contains( 'intro-sheet' );
             } );
             if( up && ! menu.classList.contains( 'full' ) )
             {
@@ -2319,7 +2321,7 @@
                 menuAuto = false;
             }
         }
-        new cw.MutationObserver( menuSheets ).observe( doc.body, { attributes: true, attributeFilter: [ 'class', 'hidden' ], subtree: true, childList: true } );
+        new cw.MutationObserver( menuSheets ).observe( doc.body, { attributes: true, attributeFilter: [ 'class', 'hidden', 'open' ], subtree: true, childList: true } );
         menuSheets();
     }
 
@@ -2421,7 +2423,7 @@
 
     function openSwitcher()
     {
-        if( ! wins.length || menu.classList.contains( 'full' ) || document.querySelector( '.sheet-backdrop.open' ) ) return;
+        if( ! wins.length || menu.classList.contains( 'full' ) || document.querySelector( 'dialog.panel[open]' ) ) return;
         closeMenu();
         var list = swList();
         switcher.innerHTML = '';
@@ -2823,14 +2825,13 @@
         cdText.value = c ? c.text : '';
         cdTitle.textContent = t( c ? 'desktop.cdChange' : 'desktop.cdNew' );
         cdNote.hidden = !! c;
-        if( window.NayiveUI ) NayiveUI.open( 'cdBackdrop' );
-        else cdBack.classList.add( 'open' );
+        cdBack.showModal();
         cdBy = by || clock;
-        placeBy( cdBy, cdBack.querySelector( '.sheet' ) );
+        placeBy( cdBy, cdBack );
     }
     window.addEventListener( 'resize', function ()
     {
-        if( cdBack.classList.contains( 'open' ) ) placeBy( cdBy.isConnected ? cdBy : clock, cdBack.querySelector( '.sheet' ) );
+        if( cdBack.open ) placeBy( cdBy.isConnected ? cdBy : clock, cdBack );
     } );
 
     function num( el, max ) { var n = Math.floor( +el.value ); return n > 0 ? Math.min( n, max ) : 0; }
@@ -2850,7 +2851,7 @@
         Object.assign( c, { end: Date.now() + secs * 1000, left: 0, done: false, text: cdText.value.trim(), len: secs } );
         cds.last = secs;
         cdSave();
-        if( window.NayiveUI ) NayiveUI.close( 'cdBackdrop' );
+        cdBack.close();
         cdTick();
     }
 

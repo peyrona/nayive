@@ -81,7 +81,7 @@ function renderGate()
     show( 'setupBox', box === 'setupBox' );
     show( 'recoveryBox', box === 'recoveryBox' );
     if( box === 'setupBox' ) drawChecks( 'setupChecks', $( 'setupPw' ).value, $( 'setupPw2' ).value );
-    if( box === 'unlockBox' && ! gateBusy && ! NayiveUI.menuOpen() && ! document.querySelector( '.sheet-backdrop.open' ) )
+    if( box === 'unlockBox' && ! gateBusy && ! NayiveUI.menuOpen() && ! document.querySelector( 'dialog.panel[open]' ) )
         setTimeout( function() { if( ! $( 'unlockBox' ).hidden ) $( 'unlockPw' ).focus(); }, 0 );
 }
 
@@ -208,12 +208,12 @@ async function showPhrase()
 function openPhraseSheet()
 {
     if( ! isOpen() ) return;
-    NayiveUI.close( 'settingsBackdrop' );
+    document.getElementById( 'settingsBackdrop' ).close();
     [ 'hintEdit', 'hintMaster', 'hintLogin' ].forEach( function( id ) { $( id ).value = ''; } );
     hideSecrets( $( 'hintBackdrop' ) );
     sayError( 'hintErr', '' );
     phraseRows();
-    NayiveUI.open( 'hintBackdrop' );
+    document.getElementById( 'hintBackdrop' ).showModal();
     PwVault.readHint( keys, env ).then( function( p ) { if( p && ! $( 'hintEdit' ).value ) { $( 'hintEdit' ).value = p; phraseRows(); } } );
 }
 
@@ -233,7 +233,7 @@ async function savePhrase()
     if( ! phrase )
     {
         if( env.hint ) try { await putHeader( async function() { return { hint: null }; } ); Ayni.toast( 'ok', T( 'passwords.hintRemoved' ) ); } catch( e ) { return; }
-        NayiveUI.close( 'hintBackdrop' );
+        document.getElementById( 'hintBackdrop' ).close();
         return;
     }
     if( ! master ) { $( 'hintMaster' ).focus(); return; }
@@ -248,7 +248,7 @@ async function savePhrase()
     {
         const k = keys;
         await putHeader( async function() { return { hint: await PwVault.sealHint( k, phrase, login ) }; } );
-        NayiveUI.close( 'hintBackdrop' );
+        document.getElementById( 'hintBackdrop' ).close();
         Ayni.toast( 'ok', T( 'passwords.hintSaved' ) );
     }
     catch( e ) { sayError( 'hintErr', T( 'passwords.saveFailed' ) ); }
@@ -401,7 +401,7 @@ function openRecoverySheet()
     if( fileState !== 'ok' ) return;
     $( 'recInput' ).value = '';
     sayError( 'recErr', '' );
-    NayiveUI.open( 'recBackdrop' );
+    document.getElementById( 'recBackdrop' ).showModal();
     setTimeout( function() { $( 'recInput' ).focus(); }, 0 );
 }
 
@@ -417,7 +417,7 @@ async function useRecovery()
     catch( e ) { setBusy( '', 'recBusy' ); sayError( 'recErr', T( 'passwords.recWrong' ) ); return; }
     setBusy( '', 'recBusy' );
     $( 'recInput' ).value = '';
-    NayiveUI.close( 'recBackdrop' );
+    document.getElementById( 'recBackdrop' ).close();
     try { await enterVault( await PwVault.keysFor( raw, env.vault ) ); }
     catch( e ) { raw.fill( 0 ); return; }
     rawAfterRec = raw;
@@ -447,7 +447,7 @@ function openChangePw( afterRec )
     PwVault.readHint( keys, env ).then( function( p ) { chpwPhrase = p; drawPhraseWarn( 'chpwHintWarn', $( 'chpwNew' ).value, p ); } );
     drawChecks( 'chpwChecks', '', '' );
     sayError( 'chpwErr', '' );
-    NayiveUI.open( 'chpwBackdrop' );
+    document.getElementById( 'chpwBackdrop' ).showModal();
     setTimeout( function() { $( afterRec ? 'chpwNew' : 'chpwCur' ).focus(); }, 0 );
 }
 
@@ -463,7 +463,7 @@ function chpwClosed()
     // Closed after the recovery key with no new master password: the old one
     // still opens the vault - and whoever came in by the recovery key has
     // most likely forgotten it. Say so, and offer the sheet again.
-    NayiveUI.confirm( { title: T( 'passwords.pwKeptTitle' ), body: T( 'passwords.pwKeptBody' ),
+    Ayni.confirm( { title: T( 'passwords.pwKeptTitle' ), body: T( 'passwords.pwKeptBody' ),
                         confirm: T( 'passwords.pwKeptNew' ), cancel: T( 'passwords.pwKeptOld' ) } ).then( function( again )
     {
         if( again && isOpen() && rawAfterRec === raw ) openChangePw( true );
@@ -495,7 +495,7 @@ async function saveChangePw()
         if( raw !== rawAfterRec ) raw.fill( 0 );
         setBusy( '', 'chpwBusy' );
         chpwSaved = true;
-        NayiveUI.close( 'chpwBackdrop' );
+        document.getElementById( 'chpwBackdrop' ).close();
         Ayni.toast( 'ok', T( 'passwords.pwChanged' ) );
     }
     catch( e )
@@ -532,10 +532,10 @@ async function newRecoveryKey()
     }
     catch( e ) { return; }
     finally { raw.fill( 0 ); }
-    NayiveUI.close( 'settingsBackdrop' );
+    document.getElementById( 'settingsBackdrop' ).close();
     recShown = code;
     showCode( $( 'recShowCode' ), code );
-    NayiveUI.open( 'recShowBackdrop' );
+    document.getElementById( 'recShowBackdrop' ).showModal();
 }
 
 // The master password again, for something that shows every secret (the
@@ -571,7 +571,7 @@ function lock()
     if( rawAfterRec ) { rawAfterRec.fill( 0 ); rawAfterRec = null; }
     editId = null;
     // Every open sheet shows (or holds) something of the vault.
-    document.querySelectorAll( '.sheet-backdrop.open' ).forEach( function( b ) { if( b.id ) NayiveUI.close( b.id ); } );
+    document.querySelectorAll( 'dialog.panel[open]' ).forEach( function( b ) { if( b.id ) document.getElementById( b.id ).close(); } );
     [ 'itName', 'itUser', 'itPass', 'itUrls', 'itNotes', 'itTotp', 'genOut', 'recShowCode', 'chpwCur', 'chpwNew', 'chpwNew2',
       'hintEdit', 'hintMaster', 'hintLogin', 'hintText' ].forEach( function( id )
     {

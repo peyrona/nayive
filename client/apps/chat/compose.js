@@ -574,7 +574,7 @@
         var start = new Date( Date.now() + 60 * 60 * 1000 );
         var input = h( "input", { attrs: { type: "datetime-local", id: "laterAt", step: "60", min: localValue( new Date() ) },
                                   value: localValue( start ) } );
-        var ok = NayiveUI.sheetButton( "primary", T( "chat.schedule" ) );
+        var ok = Ayni.dialogButton( "primary", T( "chat.schedule" ) );
         var sh = C.sheet( T( "chat.schedule" ), h( "div", {},
             h( "div", { class: "field" }, h( "label", { attrs: { for: "laterAt" }, text: T( "chat.scheduleWhen" ) } ), input ),
             h( "p", { class: "hint", text: T( "chat.scheduleHint" ) } ) ), ok, null, "later-sheet" );
@@ -1315,22 +1315,23 @@
     // ---------------------------------------------------------------------
 
     // A sheet with a title and a body; closes on its × or Escape (and then
-    // calls onClose, when given). Escape only while it is the last thing on
-    // the page: a sheet or a full-screen layer opened from it goes first.
+    // calls onClose, when given). Escape closes the innermost dialog only: a
+    // sheet opened from it goes first. A lone × sits in the title row.
     C.sheet = function ( title, body, actions, onClose, cls )
     {
-        var close = NayiveUI.sheetButton( "close", T( "ui.close" ) );
-        var row = h( "div", { class: "sheet-actions" }, close, actions || null );
-        var d = NayiveUI.modal( { cls: cls, title: title, escape: done, top: function () { return document.body.lastElementChild === d.back; } } );
-        d.sheet.appendChild( body );
-        d.sheet.appendChild( row );
-        d.show( function () { NayiveUI.applySheetButtons( d.back ); } );
+        var close = Ayni.dialogButton( "close", T( "ui.close" ) );
+        var d = Ayni.dialog( { cls: cls, title: title } );
+        d.body.appendChild( body );
+        d.place( actions ? [ close, actions ] : [ close ] );
         function done()
         {
             if( d.close() && onClose ) onClose();
         }
-        d.back.querySelectorAll( "[data-close]" ).forEach( function ( b ) { b.addEventListener( "click", done ); } );
-        return { el: d.back, close: done };
+        close.addEventListener( "click", done );
+        d.dialog.addEventListener( "close", done );
+        d.show();
+        NayiveUI.applySheetButtons( d.dialog );
+        return { el: d.dialog, close: done };
     };
 
     C.showReactions = function ( m )

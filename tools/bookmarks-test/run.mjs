@@ -136,13 +136,13 @@ try
 
     console.log( "ADD / EDIT" );
     await c.evaluate( "document.getElementById('addBtn').click()" );
-    ok( await c.evaluate( "document.getElementById('bmBackdrop').classList.contains('open')" ), "add sheet opens" );
+    ok( await c.evaluate( "document.getElementById('bmBackdrop').open" ), "add sheet opens" );
     await c.evaluate( "var u = document.getElementById('bmUrl'); u.value = 'example.com'; u.dispatchEvent( new Event('blur') ); true" );
     ok( await c.evaluate( "document.getElementById('bmName').value === 'example.com'" ), "title autofills the domain at once" );
     ok( await waitFor( c, "document.getElementById('bmName').value === 'Example Domain'", 12000 ), "then the page's own <title> (server)",
         await c.evaluate( "document.getElementById('bmName').value" ) );
     await c.evaluate( "document.getElementById('bmTags').value = 'docs, #web, docs'; document.getElementById('bmNotes').value = 'A test note'; document.getElementById('bmSaveBtn').click(); true" );
-    ok( await c.evaluate( "!document.getElementById('bmBackdrop').classList.contains('open')" ), "sheet closes on ✓" );
+    ok( await c.evaluate( "!document.getElementById('bmBackdrop').open" ), "sheet closes on ✓" );
     const b1 = await c.evaluate( "JSON.stringify( allBookmarks()[0] )" );
     const bm = JSON.parse( b1 );
     ok( bm.url === "https://example.com/" && bm.title === "Example Domain" && bm.tags.join() === "docs,web", "saved with https://, title, clean tags", bm );
@@ -157,8 +157,8 @@ try
     await c.evaluate( "document.getElementById('bmUrl').value = 'http://www.example.com'; document.getElementById('bmUrl').dispatchEvent( new Event('input') ); true" );
     ok( await c.evaluate( "!document.getElementById('bmDupNote').hidden" ), "duplicate note: 'Already saved in…'", await c.evaluate( "document.getElementById('bmDupNote').textContent" ) );
     await c.evaluate( "document.getElementById('bmUrl').value = 'javascript:alert(1)'; document.getElementById('bmSaveBtn').click(); true" );
-    ok( await c.evaluate( "!document.getElementById('bmUrlError').hidden && document.getElementById('bmBackdrop').classList.contains('open')" ), "javascript: refused" );
-    await c.evaluate( "NayiveUI.close('bmBackdrop'); true" );
+    ok( await c.evaluate( "!document.getElementById('bmUrlError').hidden && document.getElementById('bmBackdrop').open" ), "javascript: refused" );
+    await c.evaluate( "document.getElementById( 'bmBackdrop' ).close(); true" );
 
     // Edit through the row's right-click menu (no row ⋮ since 2026-10-05).
     await c.evaluate( "( () => { const r = document.querySelector('.bm-item').getBoundingClientRect(); document.querySelector('.bm-item .bm-title').dispatchEvent( new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 60, clientY: r.top + 10 }) ); } )(); true" );
@@ -180,14 +180,14 @@ try
     const bid = bm.id;
     // "Move to…" is the shared tree in a dialog (NayiveUI.pickNode).
     await c.evaluate( `openMoveSheet( ['${bid}'] ); true` );
-    ok( await waitFor( c, "!!document.querySelector('.sheet-backdrop.open .pick-tree .tree-row')" ), "move dialog shows the folder tree" );
-    await c.evaluate( `( () => { const P = '.sheet-backdrop.open .pick-tree '; const d = document.querySelector( P + '.tree-row[data-id="${dev}"]' ); if( d.getAttribute('aria-expanded') !== 'true' ) d.querySelector('[data-twisty]').click(); document.querySelector( P + '.tree-row[data-id="${fe}"]' ).click(); document.querySelector('.sheet-backdrop.open .pick-ok').click(); } )(); true` );
+    ok( await waitFor( c, "!!document.querySelector('dialog.panel[open] .pick-tree .tree-row')" ), "move dialog shows the folder tree" );
+    await c.evaluate( `( () => { const P = 'dialog.panel[open] .pick-tree '; const d = document.querySelector( P + '.tree-row[data-id="${dev}"]' ); if( d.getAttribute('aria-expanded') !== 'true' ) d.querySelector('[data-twisty]').click(); document.querySelector( P + '.tree-row[data-id="${fe}"]' ).click(); document.querySelector('dialog.panel[open] .pick-ok').click(); } )(); true` );
     ok( await waitFor( c, `node('${bid}').parentId === '${fe}'` ), "Move to… moves the bookmark" );
     await c.evaluate( `openMoveSheet( ['${dev}'] ); true` );
-    await waitFor( c, "!!document.querySelector('.sheet-backdrop.open .pick-tree .tree-row')" );
-    await c.evaluate( `( () => { const d = document.querySelector('.sheet-backdrop.open .pick-tree .tree-row[data-id="${dev}"]'); if( d.getAttribute('aria-expanded') !== 'true' ) d.querySelector('[data-twisty]').click(); } )(); true` );
-    ok( await c.evaluate( `[ '${dev}', '${fe}' ].every( id => document.querySelector('.sheet-backdrop.open .pick-tree .tree-row[data-id="' + id + '"]').classList.contains('is-off') ) && !document.querySelector('.sheet-backdrop.open .pick-tree .tree-row[data-id="root"]').classList.contains('is-off')` ), "move dialog greys the folder and its subfolders" );
-    await c.evaluate( "document.querySelector('.sheet-backdrop.open .pick-cancel').click(); true" );
+    await waitFor( c, "!!document.querySelector('dialog.panel[open] .pick-tree .tree-row')" );
+    await c.evaluate( `( () => { const d = document.querySelector('dialog.panel[open] .pick-tree .tree-row[data-id="${dev}"]'); if( d.getAttribute('aria-expanded') !== 'true' ) d.querySelector('[data-twisty]').click(); } )(); true` );
+    ok( await c.evaluate( `[ '${dev}', '${fe}' ].every( id => document.querySelector('dialog.panel[open] .pick-tree .tree-row[data-id="' + id + '"]').classList.contains('is-off') ) && !document.querySelector('dialog.panel[open] .pick-tree .tree-row[data-id="root"]').classList.contains('is-off')` ), "move dialog greys the folder and its subfolders" );
+    await c.evaluate( "document.querySelector('dialog.panel[open] .pick-cancel').click(); true" );
 
     // Drag Dev onto its own subfolder: refused with a toast, nothing moves.
     await c.evaluate( `revealInTree('${fe}'); renderTree(); window.__toasts = []; true` );
@@ -297,7 +297,7 @@ try
     await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
     ok( await c.evaluate( `!!node('${bid}')` ), "Undo brings it back" );
     await c.evaluate( `deleteNodes( ['${dev}'] ); true` );
-    ok( await c.evaluate( "!document.querySelector('.sheet-backdrop.open[role=dialog]')" ), "folder delete does not ask (Undo instead)" );
+    ok( await c.evaluate( "!document.querySelector('dialog.panel[open][role=dialog]')" ), "folder delete does not ask (Undo instead)" );
     ok( await waitFor( c, `!node('${dev}') && !node('${fe}') && !node('${bid}')` ), "folder + contents deleted" );
     await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
     ok( await c.evaluate( `!!node('${dev}') && !!node('${fe}') && !!node('${bid}') && node('${fe}').parentId === '${dev}'` ), "Undo restores the whole folder" );
@@ -307,7 +307,7 @@ try
     async function importFixture( file, mode )
     {
         // value = '': the same file twice in a row would fire no "change".
-        await c.evaluate( `NayiveUI.open('importBackdrop'); document.getElementById('importInput').value = ''; document.querySelector('input[name=importMode][value=${mode}]').checked = true; true` );
+        await c.evaluate( `document.getElementById( 'importBackdrop' ).showModal(); document.getElementById('importInput').value = ''; document.querySelector('input[name=importMode][value=${mode}]').checked = true; true` );
         const doc = await c.send( "DOM.getDocument", {} );
         const q = await c.send( "DOM.querySelector", { nodeId: doc.result.root.nodeId, selector: "#importInput" } );
         await c.send( "DOM.setFileInputFiles", { nodeId: q.result.nodeId, files: [ file ] } );
@@ -327,12 +327,12 @@ try
             ok( await c.evaluate( `window.__toasts.some( t => t.indexOf( ${JSON.stringify( said )} ) === 0 )` ), "result toast", await c.evaluate( "window.__toasts" ) );
             await sleep( 700 );
             const dupes = await c.evaluate( "findDuplicates().length" );
-            ok( ! dupes || await c.evaluate( "document.getElementById('dupBackdrop').classList.contains('open')" ), "duplicates sheet opens after an import (when there are any)", dupes );
+            ok( ! dupes || await c.evaluate( "document.getElementById('dupBackdrop').open" ), "duplicates sheet opens after an import (when there are any)", dupes );
             await shot( c, "02-import-pc" );
             firstImport = false;
         }
         await sleep( 500 );
-        await c.evaluate( "NayiveUI.close('dupBackdrop'); true" );
+        await c.evaluate( "document.getElementById( 'dupBackdrop' ).close(); true" );
     }
 
     const b3 = await c.evaluate( counts );
@@ -343,7 +343,7 @@ try
     ok( await c.evaluate( `node( allBookmarks().find( b => b.title === 'MDN Web Docs' ).parentId ).title === 'Reading & Docs'` ), "a folder whose <DL> sits inside its <DD>" );
     ok( await c.evaluate( "allBookmarks().find( b => b.title === 'Example again' ).createdAt.slice( 0, 4 ) === '2023'" ), "microsecond ADD_DATE" );
     ok( await c.evaluate( "allBookmarks().some( b => b.title === 'Example <home>' )" ), "entities in titles" );
-    await c.evaluate( "NayiveUI.close('dupBackdrop'); true" );
+    await c.evaluate( "document.getElementById( 'dupBackdrop' ).close(); true" );
 
     console.log( "EXPORT -> RE-IMPORT" );
     const all1 = await c.evaluate( counts );
@@ -359,7 +359,7 @@ try
     // Real round trip through the importer, in Add mode.
     await importFixture( `${RUN}/exported.html`, "add" );
     ok( await waitFor( c, `${counts}.b === ${all1.b} * 2` ), "export → import doubles the bookmarks exactly", await c.evaluate( counts ) );
-    await c.evaluate( "NayiveUI.close('dupBackdrop'); true" );
+    await c.evaluate( "document.getElementById( 'dupBackdrop' ).close(); true" );
 
     console.log( "DUPLICATES" );
     const groups = await c.evaluate( "findDuplicates().length" );
@@ -370,7 +370,7 @@ try
     // so the fixture's www / http / case / trailing variants arrive as these.
     ok( ex.includes( "https://www.example.com/" ) && ex.includes( "http://example.com/" ) && ex.includes( "https://example.com/" ), "www / http / case / trailing / count as the same", ex );
     await c.evaluate( "openDupSheet(); true" );
-    ok( await c.evaluate( "document.getElementById('dupBackdrop').classList.contains('open') && document.querySelectorAll('.dup-group').length === findDuplicates().length" ), "duplicates sheet lists the groups" );
+    ok( await c.evaluate( "document.getElementById('dupBackdrop').open && document.querySelectorAll('.dup-group').length === findDuplicates().length" ), "duplicates sheet lists the groups" );
     const beforeDup = await c.evaluate( counts );
     await c.evaluate( "document.getElementById('dupRemoveBtn').click(); true" );
     ok( await c.evaluate( "findDuplicates().length === 0 && allBookmarks().length === " + keys ), "one button removes the rest (one per address left)" );
@@ -385,10 +385,10 @@ try
     console.log( "REPLACE ALL" );
     const beforeReplace = await c.evaluate( counts );
     await importFixture( `${FX}/firefox-shapes.html`, "replace" );
-    ok( await waitFor( c, "document.querySelector('.sheet-backdrop.open[role=dialog]')" ), "Replace all asks (danger)" );
-    await c.evaluate( "document.querySelector('.sheet-backdrop.open:not([id]) .sheet-actions button:last-child').click(); true" );
+    ok( await waitFor( c, "!! document.querySelector('body > dialog.panel:not([id])[open] .btn.danger')" ), "Replace all asks (danger)" );
+    await c.evaluate( "document.querySelector('dialog.panel[open]:not([id]) footer button:last-child').click(); true" );
     ok( await waitFor( c, `JSON.stringify( ${counts} ) === JSON.stringify( { b: 3, f: 2 } )` ), "Replace all leaves only the file's bookmarks", await c.evaluate( counts ) );
-    await c.evaluate( "NayiveUI.close('dupBackdrop'); document.querySelector('#ayni-toasts .toast.undo .act') && document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
+    await c.evaluate( "document.getElementById( 'dupBackdrop' ).close(); document.querySelector('#ayni-toasts .toast.undo .act') && document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
     ok( JSON.stringify( await c.evaluate( counts ) ) === JSON.stringify( beforeReplace ), "…and Undo brings everything back", await c.evaluate( counts ) );
     await flushed( c );
     ok( diskCounts() && diskCounts().b === ( await c.evaluate( counts ) ).b, "disk file matches", diskCounts() );
@@ -403,7 +403,8 @@ try
     ok( await c.evaluate( "browse.ids().length === 4" ), "Shift+click picks a range" );
     await c.evaluate( "document.querySelector('#selActions [data-sel=all]').click(); true" );
     ok( await c.evaluate( "browse.ids().length === document.querySelectorAll('#items .bm-item').length && browse.ids().length > 0" ), "Select all" );
-    await c.evaluate( "document.body.focus(); document.dispatchEvent( new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }) ); true" );
+    // A closed dialog gives the focus back to where it was (the search box): drop it first.
+    await c.evaluate( "document.activeElement && document.activeElement.blur(); document.dispatchEvent( new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }) ); true" );
     ok( await c.evaluate( "!browse.ids().length && document.getElementById('selActions').hidden" ), "Esc clears the pick" );
     await c.evaluate( `${card(0)}.dispatchEvent( new MouseEvent('contextmenu', { bubbles: true, clientX: 300, clientY: 300 }) ); true` );
     ok( await c.evaluate( "browse.ids().length === 1 && !document.querySelector('.item-menu').hidden && !!document.querySelector('.item-menu [data-act=delete]')" ), "right-click picks that card and opens the same menu" );
@@ -486,12 +487,12 @@ try
     await c.evaluate( "openBookmarkSheet( null ); true" );
     await sleep( 150 );
     ok( await c.evaluate( "document.activeElement.id === 'bmUrl'" ), "#21 a new bookmark starts in the address field" );
-    await c.evaluate( "NayiveUI.close('bmBackdrop'); true" );
+    await c.evaluate( "document.getElementById( 'bmBackdrop' ).close(); true" );
 
     // #12: saved before the page's title came - it still lands.
     await c.evaluate( "window.__realFetch = window.fetch; window.fetch = function( u, o ) { if( /\\/api\\/bookmarks\\/title/.test( String( u ) ) ) return new Promise( r => setTimeout( () => r( new Response( JSON.stringify( { title: 'Late title' } ), { headers: { 'Content-Type': 'application/json' } } ) ), 800 ) ); return window.__realFetch( u, o ); }; true" );
-    await c.evaluate( "( () => { openBookmarkSheet( null ); const u = document.getElementById('bmUrl'); u.value = 'https://late-title.example/page'; u.dispatchEvent( new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }) ); } )(); true" );
-    ok( await c.evaluate( "!document.getElementById('bmBackdrop').classList.contains('open') && allBookmarks().some( b => b.url === 'https://late-title.example/page' && b.title === 'late-title.example' )" ),
+    await c.evaluate( "( () => { openBookmarkSheet( null ); const u = document.getElementById('bmUrl'); u.value = 'https://late-title.example/page'; u.dispatchEvent( new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }) ); } )(); true" );
+    ok( await c.evaluate( "!document.getElementById('bmBackdrop').open && allBookmarks().some( b => b.url === 'https://late-title.example/page' && b.title === 'late-title.example' )" ),
         "#12 Enter saves at once, with the domain…" );
     ok( await waitFor( c, "allBookmarks().some( b => b.url === 'https://late-title.example/page' && b.title === 'Late title' )", 4000 ), "#12 …and the page's own title lands after" );
     await c.evaluate( "window.fetch = window.__realFetch; true" );
@@ -509,14 +510,14 @@ try
     const b27 = await c.evaluate( counts );
     await importFixture( `${FX}/firefox-shapes.html`, "add" );
     ok( await waitFor( c, `${counts}.b === ${b27.b} + 3` ), "#27 the file is added", { b27, now: await c.evaluate( counts ), t: await c.evaluate( "window.__toasts" ) } );
-    await c.evaluate( "NayiveUI.close('dupBackdrop'); document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
+    await c.evaluate( "document.getElementById( 'dupBackdrop' ).close(); document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
     await sleep( 600 );
-    await c.evaluate( "NayiveUI.close('dupBackdrop'); true" );
+    await c.evaluate( "document.getElementById( 'dupBackdrop' ).close(); true" );
     ok( JSON.stringify( await c.evaluate( counts ) ) === JSON.stringify( b27 ), "#27 'Add them in a new folder' has an Undo", await c.evaluate( counts ) );
     await c.evaluate( "window.__toasts = []; true" );
     await importFixture( `${FX}/firefox-shapes.html`, "add" );
     await waitFor( c, `${counts}.b === ${b27.b} + 3` );
-    ok( await waitFor( c, "document.getElementById('dupBackdrop').classList.contains('open')", 3000 ), "#28 the copies sheet opens" );
+    ok( await waitFor( c, "document.getElementById('dupBackdrop').open", 3000 ), "#28 the copies sheet opens" );
     await c.evaluate( "window.__toasts = []; document.getElementById('dupRemoveBtn').click(); true" );
     // The fixture: Imported › { Reading & Docs › 2 links, Empty › nothing, 1 link }. Reading & Docs
     // goes (emptied by the removal); "Empty" was empty in the browser too and stays, so its
@@ -528,19 +529,19 @@ try
     await c.evaluate( "openDupSheet(); document.getElementById('dupRemoveBtn').click(); removeNodes( [ node( ROOT ).children[ node( ROOT ).children.length - 1 ] ] ); save(); render(); true" );
 
     // #30 Export into a Nayive folder (the picker answers "files").
-    await c.evaluate( "window.__pick = NayiveUI.pickFolder; NayiveUI.pickFolder = function() { return Promise.resolve( 'files' ); }; document.querySelector('input[name=exportWhere][value=nayive]').checked = true; NayiveUI.open('exportBackdrop'); document.getElementById('exportHtmlBtn').click(); true" );
-    await waitFor( c, "!document.getElementById('exportBackdrop').classList.contains('open')", 5000 );
-    await c.evaluate( "NayiveUI.open('exportBackdrop'); document.getElementById('exportJsonBtn').click(); true" );
-    await waitFor( c, "!document.getElementById('exportBackdrop').classList.contains('open')", 5000 );
-    await c.evaluate( "NayiveUI.open('exportBackdrop'); document.getElementById('exportJsonBtn').click(); true" );
-    await waitFor( c, "!document.getElementById('exportBackdrop').classList.contains('open')", 5000 );
+    await c.evaluate( "window.__pick = NayiveUI.pickFolder; NayiveUI.pickFolder = function() { return Promise.resolve( 'files' ); }; document.querySelector('input[name=exportWhere][value=nayive]').checked = true; document.getElementById( 'exportBackdrop' ).showModal(); document.getElementById('exportHtmlBtn').click(); true" );
+    await waitFor( c, "!document.getElementById('exportBackdrop').open", 5000 );
+    await c.evaluate( "document.getElementById( 'exportBackdrop' ).showModal(); document.getElementById('exportJsonBtn').click(); true" );
+    await waitFor( c, "!document.getElementById('exportBackdrop').open", 5000 );
+    await c.evaluate( "document.getElementById( 'exportBackdrop' ).showModal(); document.getElementById('exportJsonBtn').click(); true" );
+    await waitFor( c, "!document.getElementById('exportBackdrop').open", 5000 );
     const saved = fs.readdirSync( `${RUN}/homes/test/files` ).filter( n => /^bookmarks-/.test( n ) ).sort();
     ok( saved.length === 3 && saved.some( n => /\.html$/.test( n ) ) && saved.some( n => / \(2\)\.json$/.test( n ) ), "#30 Export can save into a Nayive folder (a name taken gets (2))", saved );
-    await c.evaluate( "NayiveUI.pickFolder = window.__pick; document.querySelector('input[name=exportWhere][value=device]').checked = true; NayiveUI.open('exportBackdrop'); true" );
+    await c.evaluate( "NayiveUI.pickFolder = window.__pick; document.querySelector('input[name=exportWhere][value=device]').checked = true; document.getElementById( 'exportBackdrop' ).showModal(); true" );
     await shot( c, "11-export-sheet" );
-    await c.evaluate( "NayiveUI.close('exportBackdrop'); NayiveUI.open('bmletBackdrop'); true" );
+    await c.evaluate( "document.getElementById( 'exportBackdrop' ).close(); document.getElementById( 'bmletBackdrop' ).showModal(); true" );
     await shot( c, "12-save-from-any-page" );
-    await c.evaluate( "NayiveUI.close('bmletBackdrop'); true" );
+    await c.evaluate( "document.getElementById( 'bmletBackdrop' ).close(); true" );
 
     // #10: another device changed the file since this page last read it.
     console.log( "TWO DEVICES" );
@@ -562,14 +563,14 @@ try
 
     // #29 ?add= (the "Save from any page" button) and a link dropped in.
     await nav( c, APP + "?add=" + encodeURIComponent( "https://from-bookmarklet.example/x" ) + "&title=Hi%20there", "/nayive/bookmarks/index.html" );
-    ok( await waitFor( c, "document.getElementById('bmBackdrop').classList.contains('open') && document.getElementById('bmUrl').value === 'https://from-bookmarklet.example/x' && document.getElementById('bmName').value === 'Hi there' && location.search === ''" ),
+    ok( await waitFor( c, "document.getElementById('bmBackdrop').open && document.getElementById('bmUrl').value === 'https://from-bookmarklet.example/x' && document.getElementById('bmName').value === 'Hi there' && location.search === ''" ),
         "#29 ?add= opens the sheet with that page" );
-    await c.evaluate( "NayiveUI.close('bmBackdrop'); true" );
+    await c.evaluate( "document.getElementById( 'bmBackdrop' ).close(); true" );
     ok( await c.evaluate( "/^javascript:.*\\?add=/.test( document.getElementById('bmletLink').getAttribute('href') ) && topMenuItems().filter( i => i.id === 'bmlet' ).length === 1" ),
         "#29 …which the 'Save from any page' button (⋮) sends" );
-    ok( await c.evaluate( "( () => { const dt = new DataTransfer(); dt.setData( 'text/uri-list', 'https://dropped.example/' ); dt.setData( 'text/html', '<a href=\"https://dropped.example/\">Dropped page</a>' ); const t = document.getElementById('items'); t.dispatchEvent( new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }) ); t.dispatchEvent( new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }) ); return document.getElementById('bmBackdrop').classList.contains('open') && document.getElementById('bmUrl').value === 'https://dropped.example/' && document.getElementById('bmName').value === 'Dropped page'; } )()" ),
+    ok( await c.evaluate( "( () => { const dt = new DataTransfer(); dt.setData( 'text/uri-list', 'https://dropped.example/' ); dt.setData( 'text/html', '<a href=\"https://dropped.example/\">Dropped page</a>' ); const t = document.getElementById('items'); t.dispatchEvent( new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }) ); t.dispatchEvent( new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }) ); return document.getElementById('bmBackdrop').open && document.getElementById('bmUrl').value === 'https://dropped.example/' && document.getElementById('bmName').value === 'Dropped page'; } )()" ),
         "#29 a link dropped from another tab opens the sheet with it" );
-    await c.evaluate( "NayiveUI.close('bmBackdrop'); true" );
+    await c.evaluate( "document.getElementById( 'bmBackdrop' ).close(); true" );
 
 
     // Dark.
@@ -608,10 +609,10 @@ try
     ok( await c.evaluate( "!! document.querySelector('.item-menu:not([hidden]) [data-act=\"mode:list\"]')" ), "phone: grid/list in the ⋮" );
     await c.evaluate( "document.body.click(); openBookmarkSheet( allBookmarks()[0].id ); true" );
     await shot( c, "08-phone-edit-sheet-light" );
-    await c.evaluate( "NayiveUI.close('bmBackdrop'); true" );
+    await c.evaluate( "document.getElementById( 'bmBackdrop' ).close(); true" );
 
     await c.evaluate( "document.querySelector('[data-intro-open]').click(); true" );
-    ok( await waitFor( c, "[...document.querySelectorAll('.sheet-backdrop.open')].some( b => /Import, export/.test( b.textContent ) )", 4000 ), "? opens the help card with the toolbar rows" );
+    ok( await waitFor( c, "[...document.querySelectorAll('dialog.panel[open]')].some( b => /Import, export/.test( b.textContent ) )", 4000 ), "? opens the help card with the toolbar rows" );
     await shot( c, "10-help-phone" );
     // 404: the first read of a new file; 412: the two-devices check (#10).
     const errs = c.logs.filter( l => /EXCEPTION|LOGERR|error/i.test( l ) && ! /(404|412) .*api\/files\?file=data%2Fbookmarks%2Fbookmarks\.json/.test( l ) ); console.log( errs.slice( 0, 12 ).join( "\n" ) );

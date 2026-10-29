@@ -68,7 +68,7 @@ function openItemSheet( id )
     hideSecrets( $( 'itemBackdrop' ) );
     fitUrls();
 
-    NayiveUI.open( 'itemBackdrop' );
+    document.getElementById( 'itemBackdrop' ).showModal();
     if( ! n ) setTimeout( function() { $( 'itName' ).focus(); }, 0 );
 }
 
@@ -204,13 +204,13 @@ function saveItemSheet()
     // Nothing changed: nothing written (and no new revision).
     if( old && JSON.stringify( sealedForm( Object.assign( {}, n, { updated: old.updated } ) ) ) === JSON.stringify( sealedForm( old ) ) )
     {
-        NayiveUI.close( 'itemBackdrop' );
+        document.getElementById( 'itemBackdrop' ).close();
         return;
     }
 
     putItems( [ n ] ).then( function()
     {
-        NayiveUI.close( 'itemBackdrop' );
+        document.getElementById( 'itemBackdrop' ).close();
         render();
     }, function() {} );
 }
@@ -226,7 +226,7 @@ function openFolderSheet( id, parentId )
     $( 'folderTitle' ).textContent = T( f ? 'ui.rename' : 'ui.newFolder' );
     $( 'folderName' ).value = f ? f.title : '';
     fillFolderSelect( $( 'folderParent' ), f ? parentOf[ f.id ] : ( parentId != null ? parentId : targetFolder() ), f ? f.id : null );
-    NayiveUI.open( 'folderBackdrop' );
+    document.getElementById( 'folderBackdrop' ).showModal();
     const input = $( 'folderName' );
     setTimeout( function() { input.focus(); input.select(); }, 0 );
 }
@@ -245,7 +245,7 @@ function saveFolderSheet()
     putItems( [ f ] ).then( function()
     {
         if( ! old ) revealInTree( f.id );
-        NayiveUI.close( 'folderBackdrop' );
+        document.getElementById( 'folderBackdrop' ).close();
         render();
     }, function() {} );
 }

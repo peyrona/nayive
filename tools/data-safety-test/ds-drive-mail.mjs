@@ -57,10 +57,10 @@ async function saveToRoot()
 {
     await c.evaluate( "window.__toasts = []; document.querySelector('#readParts .mail-part').click(); true" );
     // The folder picker draws the shared tree (.fp-tree .tree-row); the first row is the Files root.
-    if( ! await c.until( "document.querySelector('.sheet-backdrop.open .fp-tree .tree-row')" ) ) return false;
-    await c.evaluate( "document.querySelector('.sheet-backdrop.open .fp-tree .tree-row').click(); true" );
-    await c.until( "document.querySelector('.sheet-backdrop.open .btn.primary').ariaDisabled !== 'true'" );
-    await c.evaluate( "document.querySelector('.sheet-backdrop.open .btn.primary').click(); true" );
+    if( ! await c.until( "document.querySelector('dialog.panel[open] .fp-tree .tree-row')" ) ) return false;
+    await c.evaluate( "document.querySelector('dialog.panel[open] .fp-tree .tree-row').click(); true" );
+    await c.until( "document.querySelector('dialog.panel[open] .btn.primary').ariaDisabled !== 'true'" );
+    await c.evaluate( "document.querySelector('dialog.panel[open] .btn.primary').click(); true" );
     return true;
 }
 

@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -25,6 +26,7 @@
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
+    <script src="../shared/ayni/ayni-dialogs.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
@@ -95,8 +97,8 @@
     <script src="../shared/store.js" defer></script>
 
     <style>
-        /* Base reset, .app shell, .topbar, .btn, .sheet, .sheet-header,
-           .field and the input look all come from ../shared/app.css. Calendar
+        /* Base reset, .app shell, .topbar, .btn, .field and the input look all
+           come from ../shared/app.css; dialogs are Ayni's dialog.panel. Calendar
            overrides the page scroll and adds its toolbar + dialog specifics. */
         html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
 
@@ -112,15 +114,15 @@
         /* Calendar host */
         #calHost { flex: 1 1 auto; min-height: 0; padding: 0 6px 6px; overflow: hidden; }
 
-        /* Event dialog - wider than the default sheet (many fields, 2-col rows). */
-        .sheet { max-width: 520px; }
-        .sheet-header .allday-inline { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
-        .sheet-header .allday-inline span:first-child { font-size: 0.82rem; color: var(--text-dim); white-space: nowrap; }
+        /* Event dialog - wider than the default dialog (many fields, 2-col rows). */
+        #sheetBackdrop { max-width: min(520px, calc(100vw - 32px)); }
+        dialog.panel > header .allday-inline { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+        dialog.panel > header .allday-inline span:first-child { font-size: 0.82rem; color: var(--text-dim); white-space: nowrap; }
 
         /* "Ir a..." dialog: narrower box; fields in ANSI order (Año / Mes / Día),
            Año and Día kept narrow, Mes takes the slack. Widths key off the input ids,
            not the position, so reordering the row cannot swap them again. */
-        #goToBackdrop .sheet { max-width: 360px; }
+        #goToBackdrop { max-width: min(360px, calc(100vw - 32px)); }
         #goToRow .field:has( #gYear )  { flex: 0 1 88px; }
         #goToRow .field:has( #gMonth ) { flex: 1 1 130px; }
         #goToRow .field:has( #gDay )   { flex: 0 1 68px; }
@@ -131,9 +133,8 @@
 
         /* Settings is a narrow card on every device: "Export to file" puts From + To
            on one line, Format + ✓ on the next. Inputs may shrink below their own
-           width so nothing pushes the card past the screen. The button row is not
-           the sheet's bottom bar, so it never takes the phone's sticky look. */
-        #settingsBackdrop .sheet     { max-width: min(340px, calc(100vw - 32px)); }
+           width so nothing pushes the card past the screen. */
+        #settingsBackdrop            { max-width: min(340px, calc(100vw - 32px)); }
         .remind-row                  { display: flex; align-items: center; gap: 8px; }
         .remind-row input            { width: 90px; flex: 0 0 auto; }
         .remind-row label            { margin: 0; }
@@ -141,7 +142,6 @@
         #setExportRow .field         { flex: 1 1 120px; min-width: 0; margin-bottom: 0; }
         #setExportRow input,
         #setExportRow select         { width: 100%; min-width: 0; }
-        #setExportRow .sheet-actions { position: static; margin: 0; padding: 0; border-top: 0; background: none; }
 
         /* The "all day" switch is the shared .switch (shared/app.css). */
 
@@ -166,8 +166,8 @@
         .dt-field-inline { position: relative; display: inline-block; vertical-align: middle; }
         .dt-field-inline .dt-display { padding: 0 8px; font-size: 0.94rem; }
 
-        /* .sheet-actions / .btn / .btn-* live in ../shared/theme.css (this app is
-           the reference for that style — see Calendar -> "Ir a fecha"). */
+        /* A dialog's buttons are Ayni's (this app is the reference for that
+           style — see Calendar -> "Ir a fecha"). */
 
         .section-divider { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
 
@@ -271,9 +271,6 @@
 
             .fc-daygrid-event .tz-tag { display: none; }   /* no room for the zone tag in a phone's month cell */
 
-            /* Dialogs stay centred cards, just wider on a phone */
-            .sheet { width: 100%; max-width: none; max-height: 90vh; }
-            #goToBackdrop .sheet { max-width: none; }
         }
 
         /* --- PHONE MONTH (phone only) -----------------------------------------
@@ -414,16 +411,15 @@
     </div>
 
     <!-- Add/Edit event sheet -->
-    <div id="sheetBackdrop" class="sheet-backdrop">
-        <div class="sheet">
-            <div class="sheet-header">
-                <h2 id="sheetTitle" data-i18n="calendar.newEvent"></h2>
-                <label class="allday-inline switch">
-                    <span data-i18n="calendar.allDay"></span>
-                    <input role="switch" type="checkbox" id="fAllDay">
-                </label>
-            </div>
-
+    <dialog id="sheetBackdrop" class="panel">
+        <header>
+            <h2 id="sheetTitle" data-i18n="calendar.newEvent"></h2>
+            <label class="allday-inline switch">
+                <span data-i18n="calendar.allDay"></span>
+                <input role="switch" type="checkbox" id="fAllDay">
+            </label>
+        </header>
+        <div class="body">
             <div class="field">
                 <label for="fTitle" data-i18n="calendar.title"></label>
                 <input type="text" id="fTitle" autocomplete="off" data-i18n-attr="placeholder:calendar.titlePh">
@@ -532,23 +528,22 @@
                 </div>
 
             </div>
-
-            <div class="sheet-actions">
-                <button id="deleteBtn" class="btn danger sheet-actions-left" style="display:none" data-i18n-attr="data-tip:ui.delete"><span class="icon" data-icon="trash"></span></button>
-                <button class="btn" id="helpBtn"   data-i18n-attr="data-tip:ui.help"><span class="icon" data-icon="help"></span></button>
-                <button class="btn" id="cancelBtn" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="saveBtn"   data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <div class="extra"><button id="deleteBtn" class="btn danger" style="display:none" data-i18n-attr="data-tip:ui.delete"><span class="icon" data-icon="trash"></span></button></div>
+            <button class="btn" id="helpBtn"   data-i18n-attr="data-tip:ui.help"><span class="icon" data-icon="help"></span></button>
+            <button class="btn" id="cancelBtn" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="saveBtn"   data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- Help sheet: timezone handling only, per user request -->
-    <div id="helpBackdrop" class="sheet-backdrop">
-        <div class="sheet">
-            <div class="sheet-header">
-                <h2 data-i18n="calendar.timezones"></h2>
-            </div>
-
+    <dialog id="helpBackdrop" class="panel">
+        <header>
+            <h2 data-i18n="calendar.timezones"></h2>
+            <button class="btn" id="helpCloseBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
             <p style="margin-top:0; color: var(--text); line-height:1.5;">
                 <span data-i18n="calendar.tzHelpLead"></span> <em data-i18n="calendar.tzField"></em>:
             </p>
@@ -564,20 +559,15 @@
             <p style="line-height:1.5;">
                 <strong data-i18n="calendar.tzInCal"></strong> <span data-i18n="calendar.tzInCalHelp"></span>
             </p>
-
-            <div class="sheet-actions">
-                <button class="btn" id="helpCloseBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+    </dialog>
 
     <!-- Jump to a given month/year -->
-    <div id="goToBackdrop" class="sheet-backdrop">
-        <div class="sheet">
-            <div class="sheet-header">
-                <h2 data-i18n="calendar.goTo"></h2>
-            </div>
-
+    <dialog id="goToBackdrop" class="panel">
+        <header>
+            <h2 data-i18n="calendar.goTo"></h2>
+        </header>
+        <div class="body">
             <div class="field-row" id="goToRow">
                 <div class="field">
                     <label for="gYear" data-i18n="calendar.year"></label>
@@ -596,21 +586,23 @@
 
             <!-- "Hoy" is the shortcut this dialog replaced the toolbar button with, so it is
                  a LABELLED button (not one more round icon): the one control here you can hit
-                 without filling in the three fields above. .sheet-actions-left pins it to the
+                 without filling in the three fields above. Its .extra box pins it to the
                  left margin, away from the cancel / go pair. -->
-            <div class="sheet-actions">
-                <button id="goToTodayBtn" type="button" class="btn text primary sheet-actions-left" data-i18n="calendar.today"></button>
-                <button class="btn" id="goToCancelBtn" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
-                <button class="btn primary" id="goToGoBtn"     data-i18n-attr="data-tip:calendar.go"><span class="icon" data-icon="check"></span></button>
-            </div>
         </div>
-    </div>
+        <footer>
+            <div class="extra"><button id="goToTodayBtn" type="button" class="btn text primary" data-i18n="calendar.today"></button></div>
+            <button class="btn" id="goToCancelBtn" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
+            <button class="btn primary" id="goToGoBtn"     data-i18n-attr="data-tip:calendar.go"><span class="icon" data-icon="check"></span></button>
+        </footer>
+    </dialog>
 
     <!-- Settings: event alerts + export to a file. -->
-    <div id="settingsBackdrop" class="sheet-backdrop">
-        <div class="sheet">
+    <dialog id="settingsBackdrop" class="panel">
+        <header>
             <h2 data-i18n="ui.settings"></h2>
-
+            <button class="btn" id="settingsCloseBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
             <!-- How long before each event the push comes (/api/push window_minutes;
                  moved here from the launcher's My account 2026-09-27). Saves on
                  change; works with this device's alerts off. Hidden when the
@@ -647,7 +639,7 @@
                             <option value="ics">ICS</option>
                         </select>
                     </div>
-                    <div class="sheet-actions">
+                    <div class="actions-row">
                         <button class="btn primary" id="exportGoBtn" data-i18n-attr="data-tip:ui.download"><span class="icon" data-icon="download"></span></button>
                     </div>
                 </div>
@@ -655,11 +647,8 @@
 
             <!-- The only other action is closing, so shared/ui.js lifts it into the
                  sheet's top-right corner and this row goes away. -->
-            <div class="sheet-actions">
-                <button class="btn" id="settingsCloseBtn" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-            </div>
         </div>
-    </div>
+    </dialog>
 
     <!-- Filled by exportPdf() (NayiveUI.printPage) just before window.print(), cleared on afterprint.
          display:none on screen; the @media print block shows it and hides the app. -->
@@ -1345,7 +1334,7 @@
         function anyBackdropOpen()
         {
             return [ 'sheetBackdrop', 'helpBackdrop', 'goToBackdrop', 'settingsBackdrop' ]
-                   .some( id => document.getElementById( id ).classList.contains( 'open' ) );
+                   .some( id => document.getElementById( id ).open );
         }
 
         function updateRangeLabel( view )
@@ -1659,7 +1648,7 @@
 
             document.getElementById( 'helpBtn' ).addEventListener( 'click', function()
             {
-                document.getElementById( 'helpBackdrop' ).classList.add( 'open' );
+                document.getElementById( 'helpBackdrop' ).showModal();
             });
             document.getElementById( 'helpCloseBtn' ).addEventListener( 'click', closeHelp );
 
@@ -1677,7 +1666,7 @@
             {
                 fillExportRange();
                 loadRemind();
-                NayiveUI.open( 'settingsBackdrop' );
+                document.getElementById( 'settingsBackdrop' ).showModal();
             });
             document.getElementById( 'settingsCloseBtn' ).addEventListener( 'click', closeSettings );
             document.getElementById( 'exportGoBtn' ).addEventListener( 'click', commitExport );
@@ -1693,7 +1682,7 @@
                                                 step: stepSearch } );
         }
 
-        function closeHelp() { document.getElementById( 'helpBackdrop' ).classList.remove( 'open' ); }
+        function closeHelp() { document.getElementById( 'helpBackdrop' ).close(); }
 
         function openGoTo()
         {
@@ -1701,10 +1690,10 @@
             document.getElementById( 'gDay' ).value   = base.getDate();
             document.getElementById( 'gMonth' ).value = base.getMonth();
             document.getElementById( 'gYear' ).value  = base.getFullYear();
-            document.getElementById( 'goToBackdrop' ).classList.add( 'open' );
+            document.getElementById( 'goToBackdrop' ).showModal();
         }
 
-        function closeGoTo() { document.getElementById( 'goToBackdrop' ).classList.remove( 'open' ); }
+        function closeGoTo() { document.getElementById( 'goToBackdrop' ).close(); }
 
         function commitGoTo()
         {
@@ -1888,7 +1877,7 @@
             refreshAllDtDisplays();
         }
 
-        function closeSettings() { NayiveUI.close( 'settingsBackdrop' ); }
+        function closeSettings() { document.getElementById( 'settingsBackdrop' ).close(); }
 
         // "Remind me N min before each event": one number per account, the same
         // for every device (/api/push). Read each time Settings opens.
@@ -2374,10 +2363,10 @@
 
         function openSheet()
         {
-            document.getElementById( 'sheetBackdrop' ).classList.add( 'open' );
+            document.getElementById( 'sheetBackdrop' ).showModal();
             setTimeout( () => document.getElementById( 'fTitle' ).focus(), 0 );
         }
-        function closeSheet() { document.getElementById( 'sheetBackdrop' ).classList.remove( 'open' ); }
+        function closeSheet() { document.getElementById( 'sheetBackdrop' ).close(); }
 
         function commitSheet()
         {
@@ -2477,7 +2466,7 @@
                 const occ  = editingOcc;
                 const seen = gone.allDay || gone.floating ? occ.replace( 'T', ' ' )     // the day / time as this screen shows it
                            : DateTime.fromISO( occ, { zone: gone.tzid } ).setZone( VIEWER_TZ ).toFormat( 'yyyy-MM-dd HH:mm' );
-                const how  = await NayiveUI.confirm( { title: T( 'calendar.delRepeatTitle' ), body: TF( 'calendar.delRepeatBody', { date: seen } ),
+                const how  = await Ayni.confirm( { title: T( 'calendar.delRepeatTitle' ), body: TF( 'calendar.delRepeatBody', { date: seen } ),
                                                       other: T( 'calendar.delThisOne' ), otherIcon: 'trash',
                                                       confirm: T( 'calendar.delThisAndAfter' ), danger: true } );
                 if( ! how ) return;                                   // cancelled: the sheet stays open

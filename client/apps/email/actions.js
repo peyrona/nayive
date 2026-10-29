@@ -83,7 +83,7 @@
         S.labels.forEach( function ( l ) { sel.appendChild( h( "option", { text: l.name, attrs: { value: l.id } } ) ); } );
         sel.value = S.labels.some( function ( l ) { return l.id === was; } ) ? was : "";
         E.$( "pickLabel" ).parentNode.hidden = ! S.labels.length;
-        NayiveUI.open( "pickSheet" );
+        document.getElementById( "pickSheet" ).showModal();
     }
 
     // Every page of this list, so the fields see all of it (a label's list
@@ -125,7 +125,7 @@
         var from = NayiveUI.matcher( E.$( "pickFrom" ).value ), subj = NayiveUI.matcher( E.$( "pickSubject" ).value );
         var label = E.$( "pickLabel" ).value, attach = E.$( "pickAttach" ).checked, starred = E.$( "pickStarred" ).checked;
         var before = days ? Date.now() - days * 86400000 : 0;
-        NayiveUI.close( "pickSheet" );
+        document.getElementById( "pickSheet" ).close();
         if( ! await loadAll() ) return;
         var list = S.items.filter( function ( m )
         {
@@ -150,7 +150,7 @@
 
     E.$( "pickAllBtn" ).addEventListener( "click", function ()
     {
-        NayiveUI.close( "pickSheet" );
+        document.getElementById( "pickSheet" ).close();
         pickAll( ! everyPicked() );
     } );
     E.$( "pickGoBtn" ).addEventListener( "click", pickMatching );
@@ -430,7 +430,7 @@
         emptyTray: async function ()
         {
             var spam = S.tray === "spam";
-            var yes = await NayiveUI.confirm( { title: E.T( spam ? "mail.emptySpamAsk" : "mail.emptyTrashAsk" ), body: E.T( "mail.cannotUndo" ),
+            var yes = await Ayni.confirm( { title: E.T( spam ? "mail.emptySpamAsk" : "mail.emptyTrashAsk" ), body: E.T( "mail.cannotUndo" ),
                                                 confirm: E.T( spam ? "mail.emptySpam" : "mail.emptyTrash" ), danger: true } );
             if( ! yes ) return;
             // one call does it all: the bar slides while it works (E.job)

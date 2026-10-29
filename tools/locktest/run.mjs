@@ -54,15 +54,15 @@ try
     // Two helpers the tests drive the REAL sheets with.
     await p.evaluate( `window.pressTitled = async function ( title ) {
       for( var i = 0; i < 80; i++ ) {
-        var s = document.querySelector( '.sheet-backdrop.open .sheet' );
-        var b = s && Array.prototype.find.call( s.querySelectorAll( '.sheet-actions button' ),
+        var s = document.querySelector( 'dialog.panel[open]' );
+        var b = s && Array.prototype.find.call( s.querySelectorAll( 'footer button' ),
                   function ( x ) { return ( x.dataset.tip || '' ) === title; } );
         if( b ) { b.click(); return true; }
         await new Promise( function ( r ) { setTimeout( r, 25 ); } );
       }
       return false;
     };
-    window.sheetText = function () { var s = document.querySelector('.sheet-backdrop.open .sheet'); return s ? s.textContent : null; };
+    window.sheetText = function () { var s = document.querySelector('dialog.panel[open]'); return s ? s.textContent : null; };
     window.T = function ( k ) { return Ayni.t( k ); };` );
 
     console.log('\n--- crypto in the page ---');
@@ -266,7 +266,7 @@ try
       const booting = s.boot();
       await cancelSheet();                       // give up on the password
       await new Promise(r=>setTimeout(r,200));
-      const asked = !!document.querySelector('.sheet-backdrop.open');   // "throw it away?"
+      const asked = !!document.querySelector('dialog.panel[open]');   // "throw it away?"
       await clickConfirm('cancel');              // no: try again
       await new Promise(r=>setTimeout(r,200));
       const backToPassword = !!document.getElementById('askPw1');
@@ -331,7 +331,7 @@ try
 
       document.getElementById('lockBtn').click();
       await new Promise(r=>setTimeout(r,400));
-      return { warned: !!document.querySelector('.sheet-backdrop.open'),
+      return { warned: !!document.querySelector('dialog.panel[open]'),
                text: sheetText(), plainUp: new TextDecoder().decode(SRV['files/carta.docx']) };
     })()`);
     ok('the plain original is on the server', w2.plainUp.includes('quince minutos'));
@@ -340,15 +340,15 @@ try
     ok('it says a password does not erase the past', /NO|not/.test(w2.text || ''));
     ok('it offers the three answers', ['lock.cleanCopy','lock.lockAnyway','ui.cancel'].length === 3);
 
-    const wLabels = await p.evaluate(`(()=>{ var s=document.querySelector('.sheet-backdrop.open .sheet');
-      return Array.prototype.map.call(s.querySelectorAll('.sheet-actions button'), b=>b.title); })()`);
+    const wLabels = await p.evaluate(`(()=>{ var s=document.querySelector('dialog.panel[open]');
+      return Array.prototype.map.call(s.querySelectorAll('footer button'), b=>b.title); })()`);
     ok('cancel / just protect / clean copy', wLabels.length === 3, wLabels);
 
     console.log('\n--- "Clean copy" -> new name, old file wiped out of the Bin too ---');
     const w3 = await p.evaluate(`(async()=>{
       await pressTitled( T('lock.cleanCopy') );
       await typePassword('clave-de-verdad');
-      const askedName = await until(()=> document.getElementById('saveAsBackdrop').classList.contains('open'));
+      const askedName = await until(()=> document.getElementById('saveAsBackdrop').open);
 
       document.getElementById('saveName').value = 'carta-protegida.docx';
       document.getElementById('saveAsConfirmBtn').click();
@@ -430,7 +430,7 @@ try
       document.getElementById('lockBtn').click();
       await pressTitled( T('lock.cleanCopy') );
       await typePassword('clave-abandonada');
-      await until(()=> document.getElementById('saveAsBackdrop').classList.contains('open'));
+      await until(()=> document.getElementById('saveAsBackdrop').open);
       document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));   // back out of the name sheet
       await new Promise(r=>setTimeout(r,300));
 
@@ -457,7 +457,7 @@ try
       document.getElementById('lockBtn').click();
       await new Promise(r=>setTimeout(r,400));
       const txt = sheetText();
-      const btns = Array.prototype.map.call(document.querySelectorAll('.sheet-backdrop.open .sheet-actions button'), b=>b.title);
+      const btns = Array.prototype.map.call(document.querySelectorAll('dialog.panel[open] footer button'), b=>b.title);
       return { txt, btns };
     })()`);
     ok('the draft case warns too', (w7.txt || '').length > 0, w7.txt);

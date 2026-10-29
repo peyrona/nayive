@@ -232,4 +232,12 @@ async function doPaste()
     else                  await doCopy( paths, dest );
 }
 
-function setBackdrop( id, open ) { NayiveUI.setOpen( id, open ); }   // impl in shared/ui.js
+// A dialog opens as modal / closes (Ayni's dialog.panel); the full-screen
+// viewers (#viewerBackdrop, #mediaBackdrop) just take .open.
+function setBackdrop( id, open )
+{
+    const el = document.getElementById( id );
+    if( el.tagName !== 'DIALOG' ) el.classList.toggle( 'open', open );
+    else if( ! open )             el.close();
+    else if( ! el.open )          el.showModal();
+}

@@ -172,7 +172,7 @@ function locationSection()
             input.disabled = true;
             const done = input.checked
                 ? NayiveUI.jsonApi( '/api/location', 'POST' )
-                : NayiveUI.confirm( { title: t( 'trips.loc.stopTitle' ), body: t( 'trips.loc.stopBody' ),
+                : Ayni.confirm( { title: t( 'trips.loc.stopTitle' ), body: t( 'trips.loc.stopBody' ),
                                       confirm: t( 'trips.loc.stopOk' ) } )
                       .then( function( yes ) { if( yes ) return NayiveUI.jsonApi( '/api/location', 'DELETE' ); } );
             done.then( load, function( e ) { Ayni.toast( 'err', e.message || t( 'ui.loadFailed' ) ); load(); } );

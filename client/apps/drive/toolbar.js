@@ -84,7 +84,7 @@ function offerEmptyTrash( on, held )
         if( ! items.length ) { reload(); return; }
         const ids  = items.map( function( it ) { return it.id; } );
         const size = binHeld( items );
-        if( ! await NayiveUI.confirm( {
+        if( ! await Ayni.confirm( {
                 title:   T( 'drive.emptyTrashTitle' ),
                 body:    TF( 'drive.diskFullBody', { held: fmtSize( size ) } ) + '\n\n' + TF( 'drive.emptyTrashBody', { n: ids.length } ),
                 confirm: T( 'drive.emptyTrash' ), danger: true } ) ) return;

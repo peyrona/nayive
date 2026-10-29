@@ -9,17 +9,8 @@ Ayni.i18n.ready.then( function()
     store     = NayiveStore.createStore( { apiBase: API_FILES, conflicts: true, merge: mergeTrip } );
     store.onMerged( onTripMerged );   // see persistence.js
 
-    document.addEventListener( 'keydown', function( e )
-    {
-        if( e.key !== 'Escape' ) return;
-
-        if(      document.getElementById( 'filePickerSheetBackdrop' ).classList.contains( 'open' ) ) closeFilePicker();
-        else if( document.getElementById( 'stageSheetBackdrop'    ).classList.contains( 'open' ) ) closeStageSheet();
-        else if( document.getElementById( 'tripSheetBackdrop'     ).classList.contains( 'open' ) ) closeTripSheet();
-        else if( document.getElementById( 'mapSheetBackdrop'      ).classList.contains( 'open' ) ) closeMapSheet();
-        else if( document.getElementById( 'setSheetBackdrop'      ).classList.contains( 'open' ) ) closeSheet( 'setSheetBackdrop' );
-        else if( document.getElementById( 'discoverSheetBackdrop' ).classList.contains( 'open' ) ) closeDiscover();
-    });
+    // Escape: Ayni presses the open dialog's × (its data-close button), which
+    // runs that sheet's own close (closeTripSheet, closeStageSheet...).
 
     // Crossing the 920px breakpoint toggles whether the route panel is visible at all
     // (see renderRoutePanel()) - re-render on the transition so resizing/rotating into
@@ -163,5 +154,5 @@ function hereStageId( trip )
 function anySheetOpen()
 {
     return ['tripSheetBackdrop', 'stageSheetBackdrop', 'mapSheetBackdrop', 'setSheetBackdrop', 'discoverSheetBackdrop', 'filePickerSheetBackdrop']
-        .some( function( id ) { return document.getElementById( id ).classList.contains( 'open' ); } );
+        .some( function( id ) { return document.getElementById( id ).open; } );
 }
