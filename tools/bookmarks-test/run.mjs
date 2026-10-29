@@ -109,7 +109,7 @@ async function shot( c, name )
 }
 
 // Toasts, recorded as they show.
-const TOASTS = `window.__toasts = []; new MutationObserver( () => { const t = document.getElementById('toast'); if( t.classList.contains('show') ) window.__toasts.push( t.firstChild ? t.firstChild.textContent : t.textContent ); } ).observe( document.getElementById('toast'), { attributes: true, childList: true, characterData: true, subtree: true } ); true`;
+const TOASTS = `window.__toasts = []; new MutationObserver( ms => ms.forEach( m => m.addedNodes.forEach( n => { if( n.nodeType === 1 && n.matches( '#ayni-toasts > .toast:not(.progress)' ) ) window.__toasts.push( n.querySelector( 'p' ).firstChild.textContent ); } ) ) ).observe( document.body, { childList: true, subtree: true } ); true`;
 
 const counts = `( () => { const all = descendants( ROOT ); return { b: all.filter( n => n.type === 'bookmark' ).length, f: all.filter( n => n.type === 'folder' ).length }; } )()`;
 const diskCounts = () =>
@@ -293,13 +293,13 @@ try
 
     console.log( "DELETE + UNDO" );
     await c.evaluate( `window.__toasts = []; deleteNodes( ['${bid}'] ); true` );
-    ok( await c.evaluate( `!node('${bid}') && document.getElementById('toast').classList.contains('actionable')` ), "bookmark deleted at once, with Undo" );
-    await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
+    ok( await c.evaluate( `!node('${bid}') && !! document.querySelector( '#ayni-toasts .toast.undo' )` ), "bookmark deleted at once, with Undo" );
+    await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
     ok( await c.evaluate( `!!node('${bid}')` ), "Undo brings it back" );
     await c.evaluate( `deleteNodes( ['${dev}'] ); true` );
     ok( await c.evaluate( "!document.querySelector('.sheet-backdrop.open[role=dialog]')" ), "folder delete does not ask (Undo instead)" );
     ok( await waitFor( c, `!node('${dev}') && !node('${fe}') && !node('${bid}')` ), "folder + contents deleted" );
-    await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
+    await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
     ok( await c.evaluate( `!!node('${dev}') && !!node('${fe}') && !!node('${bid}') && node('${fe}').parentId === '${dev}'` ), "Undo restores the whole folder" );
     await flushed( c );
 
@@ -376,7 +376,7 @@ try
     ok( await c.evaluate( "findDuplicates().length === 0 && allBookmarks().length === " + keys ), "one button removes the rest (one per address left)" );
     const mdnTags = await c.evaluate( "allBookmarks().filter( b => b.url === 'https://developer.mozilla.org/' ).length" );
     ok( mdnTags === 1, "one MDN left", mdnTags );
-    await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
+    await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
     ok( JSON.stringify( await c.evaluate( counts ) ) === JSON.stringify( beforeDup ), "Undo puts them back" );
     await c.evaluate( "document.getElementById('dupRemoveBtn').click(); true" );
     await c.evaluate( "window.__toasts = []; openDupSheet(); true" );
@@ -388,7 +388,7 @@ try
     ok( await waitFor( c, "document.querySelector('.sheet-backdrop.open[role=dialog]')" ), "Replace all asks (danger)" );
     await c.evaluate( "document.querySelector('.sheet-backdrop.open:not([id]) .sheet-actions button:last-child').click(); true" );
     ok( await waitFor( c, `JSON.stringify( ${counts} ) === JSON.stringify( { b: 3, f: 2 } )` ), "Replace all leaves only the file's bookmarks", await c.evaluate( counts ) );
-    await c.evaluate( "NayiveUI.close('dupBackdrop'); document.querySelector('#toast .toast-undo') && document.querySelector('#toast .toast-undo').click(); true" );
+    await c.evaluate( "NayiveUI.close('dupBackdrop'); document.querySelector('#ayni-toasts .toast.undo .act') && document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
     ok( JSON.stringify( await c.evaluate( counts ) ) === JSON.stringify( beforeReplace ), "…and Undo brings everything back", await c.evaluate( counts ) );
     await flushed( c );
     ok( diskCounts() && diskCounts().b === ( await c.evaluate( counts ) ).b, "disk file matches", diskCounts() );
@@ -448,7 +448,7 @@ try
     // #2: Undo puts back only what the delete took.
     const u2 = JSON.parse( await c.evaluate( "( () => { const a = makeBookmark( { url: 'https://undo-a.example/', title: 'UA' }, ROOT ), b = makeBookmark( { url: 'https://undo-b.example/', title: 'UB' }, ROOT ); save(); render(); return JSON.stringify( [ a.id, b.id, node( ROOT ).children.indexOf( a.id ) ] ); } )()" ) );
     await c.evaluate( `deleteNodes( [ '${u2[ 0 ]}' ] ); toggleFavourite( '${u2[ 1 ]}' ); true` );
-    await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
+    await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
     ok( await c.evaluate( `!!node('${u2[ 0 ]}') && node( ROOT ).children.indexOf( '${u2[ 0 ]}' ) === ${u2[ 2 ]} && node('${u2[ 1 ]}').favorite === true` ),
         "#2 Undo brings the bookmark back to its place and keeps the star given after" );
 
@@ -509,7 +509,7 @@ try
     const b27 = await c.evaluate( counts );
     await importFixture( `${FX}/firefox-shapes.html`, "add" );
     ok( await waitFor( c, `${counts}.b === ${b27.b} + 3` ), "#27 the file is added", { b27, now: await c.evaluate( counts ), t: await c.evaluate( "window.__toasts" ) } );
-    await c.evaluate( "NayiveUI.close('dupBackdrop'); document.querySelector('#toast .toast-undo').click(); true" );
+    await c.evaluate( "NayiveUI.close('dupBackdrop'); document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
     await sleep( 600 );
     await c.evaluate( "NayiveUI.close('dupBackdrop'); true" );
     ok( JSON.stringify( await c.evaluate( counts ) ) === JSON.stringify( b27 ), "#27 'Add them in a new folder' has an Undo", await c.evaluate( counts ) );
@@ -523,7 +523,7 @@ try
     // "Imported" folder stays with it.
     ok( JSON.stringify( await c.evaluate( counts ) ) === JSON.stringify( { b: b27.b, f: b27.f + 2 } ) && await c.evaluate( "window.__toasts.some( t => /1 empty folder removed/.test( t ) )" ),
         "#28 …the copies go, and so do the folders they leave empty (said in the toast)", { now: await c.evaluate( counts ), b27, t: await c.evaluate( "window.__toasts" ) } );
-    await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
+    await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
     ok( JSON.stringify( await c.evaluate( counts ) ) === JSON.stringify( { b: b27.b + 3, f: b27.f + 3 } ), "#28 …and Undo puts copies and folders back", await c.evaluate( counts ) );
     await c.evaluate( "openDupSheet(); document.getElementById('dupRemoveBtn').click(); removeNodes( [ node( ROOT ).children[ node( ROOT ).children.length - 1 ] ] ); save(); render(); true" );
 

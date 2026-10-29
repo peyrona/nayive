@@ -171,7 +171,7 @@ async function importFromNayive()
     if( ! f ) return;
     let text;
     try { text = await GumApi.readFile( f.path ); }
-    catch( e ) { NayiveUI.toast( T( 'ui.openFailed' ) ); return; }
+    catch( e ) { Ayni.toast( 'err', T( 'ui.openFailed' ) ); return; }
     await applyImport( text, f.name );
 }
 
@@ -179,13 +179,13 @@ async function importFile( file )
 {
     let text;
     try { text = await file.text(); }
-    catch( e ) { NayiveUI.toast( T( 'ui.openFailed' ) ); return; }
+    catch( e ) { Ayni.toast( 'err', T( 'ui.openFailed' ) ); return; }
     await applyImport( text, file.name );
 }
 
 async function applyImport( text, name )
 {
-    if( ! loaded ) { NayiveUI.toast( T( 'ui.store.notRead' ) ); return; }
+    if( ! loaded ) { Ayni.toast( 'err', T( 'ui.store.notRead' ) ); return; }
 
     let tree;
     try { tree = parseImport( text, name ); }
@@ -193,7 +193,7 @@ async function applyImport( text, name )
     const counts = tree ? countTree( tree.items ) : { folders: 0, bookmarks: 0 };
     if( ! counts.bookmarks && ! counts.folders )
     {
-        NayiveUI.toast( T( 'bookmarks.importNone' ) );
+        Ayni.toast( 'warn', T( 'bookmarks.importNone' ) );
         return;
     }
     if( ! canEdit() ) return;
@@ -239,9 +239,9 @@ async function applyImport( text, name )
     // The three as the file has them (repair, no "_" fields), as mergeFile
     // merges them: a node is "untouched" only when it reads the same.
     const asFile = function( d ) { return repair( JSON.parse( JSON.stringify( d, function( k, v ) { return k.charAt( 0 ) === '_' ? undefined : v; } ) ) ); };
-    NayiveUI.undoToast( msg, mode === 'replace'
+    Ayni.toast( "ok", msg, { undo: mode === 'replace'
         ? function() { if( ! canEdit() ) return; data = merge3( asFile( after ), asFile( before ), asFile( data ) ); save(); pruneState(); render(); }
-        : function() { removeNodes( [ dest ] ); save(); pruneState(); render(); } );
+        : function() { removeNodes( [ dest ] ); save(); pruneState(); render(); } } );
 
     // Contacts does the same after a .vcf import: show the copies at once.
     const fresh = mode === 'replace' ? null : dest;
@@ -351,9 +351,9 @@ async function saveInNayive( text, name )
         free = await GumApi.createFresh( dir, function() { const n = GumApi.uniqueName( name, taken ); taken.add( n ); return n; },
                                          new TextEncoder().encode( text ), { on409: true } );
     }
-    catch( e ) { NayiveUI.toast( T( 'ui.saveFailed' ) ); return false; }
+    catch( e ) { Ayni.toast( 'err', T( 'ui.saveFailed' ) ); return false; }
     const rel = dir.replace( /^files\/?/, '' );
-    NayiveUI.toast( TF( 'bookmarks.savedIn', { path: ( rel ? rel + '/' : '' ) + free } ) );
+    Ayni.toast( 'ok', TF( 'bookmarks.savedIn', { path: ( rel ? rel + '/' : '' ) + free } ) );
     return true;
 }
 
@@ -374,7 +374,7 @@ function openDupSheet( auto, newFolder )
 {
     if( auto && document.querySelector( '.sheet-backdrop.open' ) ) return;
     dupGroups = findDuplicates( newFolder );
-    if( ! dupGroups.length ) { if( auto !== true ) NayiveUI.toast( T( 'bookmarks.noDupes' ) ); return; }
+    if( ! dupGroups.length ) { if( auto !== true ) Ayni.toast( 'info', T( 'bookmarks.noDupes' ) ); return; }
 
     document.getElementById( 'dupCount' ).textContent = '(' + dupGroups.length + ')';
     document.getElementById( 'dupList' ).innerHTML = dupGroups.map( function( g, gi )
@@ -412,5 +412,5 @@ function removeDuplicates()
     render();
     const msg = ( gone === 1 ? T( 'bookmarks.dupesRemovedOne' ) : TF( 'bookmarks.dupesRemoved', { n: gone } ) ) +
                 ( emptied ? ' · ' + ( emptied === 1 ? T( 'bookmarks.emptyFolderGone' ) : TF( 'bookmarks.emptyFoldersGone', { n: emptied } ) ) : '' );
-    NayiveUI.undoToast( msg, function() { unmerge( rec ); save(); pruneState(); render(); } );
+    Ayni.toast( "ok", msg, { undo: function() { unmerge( rec ); save(); pruneState(); render(); } } );
 }

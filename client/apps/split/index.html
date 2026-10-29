@@ -19,12 +19,14 @@
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
+    <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS (and localhost). -->
@@ -531,8 +533,6 @@
             </div>
         </div>
     </div>
-
-    <div id="toast" class="toast" role="status"></div>
 
     <!-- File-API client (access probe, retrying fetch, file ops). -->
     <script src="../shared/gum-api.js" defer></script>
@@ -1818,14 +1818,14 @@
             // plug) swaps every group for a fresh copy, maybe with another
             // device's entries, and saving the old `g` dropped them - and never
             // reached the screen.
-            showUndo( T( 'split.deleted' ), function()
+            Ayni.toast( 'ok', T( 'split.deleted' ), { undo: function()
             {
                 const cur = groups.find( x => x._base === g._base );
                 if( ! cur || cur.entries.some( x => x.id === removed.id ) ) return;
                 cur.entries.splice( Math.min( at, cur.entries.length ), 0, removed );
                 persist( cur );
                 if( current && current._base === cur._base ) renderGroup();
-            } );
+            } } );
         }
 
         //------------------------------------------------------------------------//
@@ -1883,7 +1883,7 @@
             persist( g );
             closeSheet( 'groupSheetBackdrop' );
             openGroup( g );
-            toast( T( 'split.groupCreated' ) );
+            Ayni.toast( 'ok', T( 'split.groupCreated' ) );
         }
 
         //------------------------------------------------------------------------//
@@ -1977,7 +1977,7 @@
             const g = current;
             if( ! g || ! ms ) return;
             const clean = ms.map( m => Object.assign( {}, m, { name: ( m.name || '' ).trim() } ) );
-            if( clean.some( m => ! m.name ) ) { toast( T( 'split.nameAll' ) ); return; }
+            if( clean.some( m => ! m.name ) ) { Ayni.toast( 'warn', T( 'split.nameAll' ) ); return; }
 
             // Never an expense left shared by nobody: the entries may have
             // changed (another device) since the sheet was drawn (AA2).
@@ -1985,7 +1985,7 @@
             const after = withoutGone( g ).entries;
             if( all.some( ( e, i ) => M.participants( e ).ids.length && ! M.participants( after[ i ] ).ids.length ) )
             {
-                toast( T( 'split.lastSharer' ) );
+                Ayni.toast( 'warn', T( 'split.lastSharer' ) );
                 return;
             }
 
@@ -2021,14 +2021,14 @@
             // Undo flips it back. By folder, not by object: a reload in between
             // (focus, the plug) swaps every group for a fresh copy.
             const now = g.archived;
-            showUndo( now ? T( 'split.archived' ) : T( 'split.unarchived' ), function()
+            Ayni.toast( 'ok', now ? T( 'split.archived' ) : T( 'split.unarchived' ), { undo: function()
             {
                 const cur = groups.find( x => x._base === g._base );
                 if( ! cur ) return;
                 cur.archived = ! now;
                 persist( cur );
                 render();
-            } );
+            } } );
         }
 
         // Called from the trash button on a group's row in the list - never from
@@ -2049,10 +2049,10 @@
             } );
             if( ! ok ) return;
 
-            if( ! navigator.onLine ) { toast( T( 'split.needOnline' ) ); return; }
+            if( ! navigator.onLine ) { Ayni.toast( 'warn', T( 'split.needOnline' ) ); return; }
             let ids;                                    // bin ids for the Undo (null: an old server)
             try { ids = await GumApi.binPaths( g._base ); }
-            catch( _ ) { toast( T( 'split.deleteFailed' ) ); return; }
+            catch( _ ) { Ayni.toast( 'err', T( 'split.deleteFailed' ) ); return; }
 
             await store.forget( g._base + '/' + FILE );
             groups  = groups.filter( x => x !== g );
@@ -2063,13 +2063,13 @@
             // the Undo covers the slip. The folder went to the bin whole, and
             // its shares live on the server pointing at that folder, so a
             // restore brings the group back for everyone it was shared with.
-            if( ! ids || ! ids.length ) { toast( T( 'split.groupDeleted' ) ); return; }
-            showUndo( T( 'split.groupDeleted' ), function()
+            if( ! ids || ! ids.length ) { Ayni.toast( 'ok', T( 'split.groupDeleted' ) ); return; }
+            Ayni.toast( 'ok', T( 'split.groupDeleted' ), { undo: function()
             {
                 GumApi.trashRestore( ids )
                     .then( loadGroups )
-                    .catch( function() { toast( T( 'split.restoreFailed' ) ); } );
-            } );
+                    .catch( function() { Ayni.toast( 'err', T( 'split.restoreFailed' ) ); } );
+            } } );
         }
 
         //------------------------------------------------------------------------//
@@ -2145,15 +2145,6 @@
             return html + '</table>';
         }
 
-        //------------------------------------------------------------------------//
-        // TOASTS
-
-        // Both toasts are the shared ones (shared/ui.js + the .toast rules in
-        // shared/theme.css); these two names are kept only because the app calls them a lot.
-        // Plain functions, not `const x = NayiveUI.y`: shared/ui.js is deferred, so NayiveUI
-        // does not exist yet while this script is parsed.
-        function toast( msg )         { NayiveUI.toast( msg ); }
-        function showUndo( msg, fn )  { NayiveUI.undoToast( msg, fn ); }
     </script>
 </body>
 </html>

@@ -59,12 +59,14 @@
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
+    <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/ui.js" defer></script>
     <script src="../shared/store.js" defer></script>
@@ -349,7 +351,15 @@
         #wxBtn svg  { width: 22px; height: 22px; }
         #wxPop      { z-index: 100000; min-width: 0; padding: 10px 12px 12px; gap: 8px; }
         .wx-head    { font-size: 0.8rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 330px; }
-        #wxPop .transfer-row { width: 300px; }
+        /* the sliding bar until the forecast comes; with less motion asked, a still striped fill */
+        .wx-busy    { display: block; width: 300px; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
+        .wx-busy > span { display: block; height: 100%; width: 30%; background: var(--accent); animation: wx-slide 1.2s ease-in-out infinite; }
+        @keyframes wx-slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+        @media (prefers-reduced-motion: reduce)
+        {
+            .wx-busy > span { width: 100%; animation: none;
+                background: repeating-linear-gradient(-45deg, var(--accent) 0 6px, color-mix(in srgb, var(--accent) 35%, transparent) 6px 12px); }
+        }
         .wx-cols    { display: flex; gap: 4px; }
         .wx-col     { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 60px; }
         .wx-col > span { font-size: 0.8rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
@@ -663,9 +673,6 @@
             </div>
         </div>
     </div>
-
-    <!-- NayiveUI.toast / undoToast (styled by shared/theme.css). -->
-    <div id="toast" class="toast" role="status"></div>
 
 <script>
 ( function ()
@@ -1851,7 +1858,7 @@
     function onFineChange()
     {
         if( finePtr.matches || set.mode !== 'auto' || ! window.NayiveUI ) return;
-        NayiveUI.undoToast( t( 'desktop.toSimpleAsk' ), toSimple, { label: t( 'desktop.toSimpleGo' ), ms: 10000 } );
+        Ayni.toast( 'info', t( 'desktop.toSimpleAsk' ), { action: { label: t( 'desktop.toSimpleGo' ), icon: 'apps', run: toSimple } } );
     }
     if( finePtr.addEventListener ) finePtr.addEventListener( 'change', onFineChange );
 
@@ -2097,9 +2104,9 @@
         var g = ++wxPopGen;
         wxPop.innerHTML = '';
         var head = wxEl( 'div', 'wx-head', t( 'desktop.weather' ), wxPop );
-        var busy = wxEl( 'div', 'transfer-row is-sliding', null, wxPop );
+        var busy = wxEl( 'span', 'wx-busy', null, wxPop );
         busy.setAttribute( 'role', 'progressbar' );
-        wxEl( 'span', 'transfer-fill', null, wxEl( 'span', 'transfer-track', null, busy ) );
+        wxEl( 'span', null, null, busy );
         placeBy( wxBtn, wxPop );
         wxGet( true ).then( function ( d )
         {
@@ -2880,14 +2887,14 @@
             cds.list.splice( at, 1 );
             // Undo: back in its place with the same end moment (never one gone by
             // meanwhile), the same time left when paused, or its time's-up chip.
-            if( window.NayiveUI ) NayiveUI.undoToast( t( what === 'stop' ? 'desktop.cdStopped' : 'ui.toast.removed' ), function ()
+            if( window.NayiveUI ) Ayni.toast( 'ok', t( what === 'stop' ? 'desktop.cdStopped' : 'ui.toast.removed' ), { undo: function ()
             {
                 if( cdById( was.id ) || ( was.end && was.end <= Date.now() ) ) return;
                 if( was.end ) wakeAudio();
                 cds.list.splice( Math.min( at, cds.list.length ), 0, was );
                 cdSave();
                 cdTick();
-            } );
+            } } );
         }
         cdSave();
         cdTick();

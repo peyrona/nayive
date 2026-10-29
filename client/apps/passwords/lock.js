@@ -232,7 +232,7 @@ async function savePhrase()
     sayError( 'hintErr', '' );
     if( ! phrase )
     {
-        if( env.hint ) try { await putHeader( async function() { return { hint: null }; } ); NayiveUI.toast( T( 'passwords.hintRemoved' ) ); } catch( e ) { return; }
+        if( env.hint ) try { await putHeader( async function() { return { hint: null }; } ); Ayni.toast( 'ok', T( 'passwords.hintRemoved' ) ); } catch( e ) { return; }
         NayiveUI.close( 'hintBackdrop' );
         return;
     }
@@ -249,7 +249,7 @@ async function savePhrase()
         const k = keys;
         await putHeader( async function() { return { hint: await PwVault.sealHint( k, phrase, login ) }; } );
         NayiveUI.close( 'hintBackdrop' );
-        NayiveUI.toast( T( 'passwords.hintSaved' ) );
+        Ayni.toast( 'ok', T( 'passwords.hintSaved' ) );
     }
     catch( e ) { sayError( 'hintErr', T( 'passwords.saveFailed' ) ); }
     finally { setBusy( '', 'hintBusy' ); }
@@ -496,7 +496,7 @@ async function saveChangePw()
         setBusy( '', 'chpwBusy' );
         chpwSaved = true;
         NayiveUI.close( 'chpwBackdrop' );
-        NayiveUI.toast( T( 'passwords.pwChanged' ), { ms: 7000 } );
+        Ayni.toast( 'ok', T( 'passwords.pwChanged' ) );
     }
     catch( e )
     {
@@ -518,7 +518,7 @@ async function newRecoveryKey()
     if( pw === null || ! isOpen() ) return;
     let raw;
     try { raw = await PwVault.openRaw( env, { password: pw } ); }
-    catch( e ) { NayiveUI.toast( T( e && e.message === 'wrong' ? 'passwords.wrongPw' : 'passwords.kdfFailed' ) ); return; }
+    catch( e ) { Ayni.toast( ( e && e.message === 'wrong' ? 'warn' : 'err' ), T( e && e.message === 'wrong' ? 'passwords.wrongPw' : 'passwords.kdfFailed' ) ); return; }
     let code = '';
     try
     {
@@ -550,7 +550,7 @@ async function confirmMaster( title, body )
         raw.fill( 0 );
         return true;
     }
-    catch( e ) { NayiveUI.toast( T( e && e.message === 'wrong' ? 'passwords.wrongPw' : 'passwords.kdfFailed' ) ); return false; }
+    catch( e ) { Ayni.toast( ( e && e.message === 'wrong' ? 'warn' : 'err' ), T( e && e.message === 'wrong' ? 'passwords.wrongPw' : 'passwords.kdfFailed' ) ); return false; }
 }
 
 //------------------------------------------------------------------------//

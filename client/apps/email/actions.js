@@ -139,7 +139,7 @@
             if( starred && ! m.flagged ) return false;
             return true;
         } );
-        NayiveUI.toast( E.TF( "mail.pickedN", { n: list.length } ) );
+        Ayni.toast( "info", E.TF( "mail.pickedN", { n: list.length } ) );
         if( ! list.length ) return;
         // only the matches in sight, all picked: a tap unpicks the ones to spare
         if( E.browse ) E.browse.clear();
@@ -233,14 +233,14 @@
     function tell( r )
     {
         if( r.err ) throw r.err;
-        if( r.refused ) NayiveUI.toast( E.TF( "mail.failedN", { n: r.refused } ), { ms: 4000 } );
+        if( r.refused ) Ayni.toast( "err", E.TF( "mail.failedN", { n: r.refused } ) );
     }
 
     async function run( fn )
     {
         E.plug( "saving" );
         try { await fn(); E.plug( "synced" ); }
-        catch( err ) { E.plug( "offline" ); NayiveUI.toast( E.errText( err ), { ms: 3500 } ); }
+        catch( err ) { E.plug( "offline" ); Ayni.toast( "err", E.errText( err ) ); }
         E.loadTrays().catch( function () {} );
     }
 
@@ -325,12 +325,12 @@
                 gone( r.done );
                 // a refusal's toast would take the Undo's place at once: no Undo then
                 if( ! r.err && ! r.refused && back.every( function ( b ) { return b.ref; } ) )
-                    NayiveUI.undoToast( E.T( "mail.movedSpam" ), function () { unspam( back ); } );
-                else NayiveUI.toast( E.T( "mail.movedSpam" ) );
+                    Ayni.toast( "ok", E.T( "mail.movedSpam" ), { undo: function () { unspam( back ); } } );
+                else Ayni.toast( "ok", E.T( "mail.movedSpam" ) );
                 tell( r );
             } );
         },
-        notSpam: function ( list ) { moveTo( list || targets(), "inbox", function () { NayiveUI.toast( E.T( "mail.movedInbox" ) ); } ); },
+        notSpam: function ( list ) { moveTo( list || targets(), "inbox", function () { Ayni.toast( "ok", E.T( "mail.movedInbox" ) ); } ); },
         label:   function ( list ) { E.openLabelPicker( list || targets() ); },
 
         // to the Trash, with Undo: back to where each came from, by Message-ID.
@@ -347,7 +347,7 @@
             var whose = new Map( list.map( function ( m ) { return [ m, E.acctOf( m ) ]; } ) );
             moveTo( list, "trash", function ( list )
             {
-                NayiveUI.undoToast( E.TF( "mail.deletedN", { n: list.length } ), function ()
+                Ayni.toast( "ok", E.TF( "mail.deletedN", { n: list.length } ), { undo: function ()
                 {
                     run( async function ()
                     {
@@ -367,9 +367,9 @@
                         }
                         finally { job.end(); }
                         E.loadList( false );
-                        if( back < list.length ) NayiveUI.toast( E.TF( "mail.notRestoredN", { n: list.length - back } ), { ms: 6000 } );
+                        if( back < list.length ) Ayni.toast( "err", E.TF( "mail.notRestoredN", { n: list.length - back } ) );
                     } );
-                } );
+                } } );
             } );
         },
         restore: function ( list )
@@ -378,7 +378,7 @@
             run( async function ()
             {
                 var r = await perAccount( list, "restore" );
-                if( r.done.length ) { gone( r.done ); NayiveUI.toast( E.T( "mail.restored" ) ); }
+                if( r.done.length ) { gone( r.done ); Ayni.toast( "ok", E.T( "mail.restored" ) ); }
                 tell( r );
             } );
         },
@@ -417,13 +417,13 @@
                     tell( r );
                 } );
             };
-            NayiveUI.undoToast( E.T( "mail.forgotten" ), function ()
+            Ayni.toast( "ok", E.T( "mail.forgotten" ), { undo: function ()
             {
                 settled = true;
                 if( forgetOnLeave === expire ) forgetOnLeave = null;
                 keys.forEach( function ( k ) { S.goneRows.delete( k ); } );
                 if( here() ) E.loadList( false );
-            }, { keepOnLeave: true, onExpire: function () { expire( false ); } } );
+            }, keepOnLeave: true, final: function () { expire( false ); } } );
             forgetOnLeave = expire;      // after the toast: it settled the Undo before it
         },
         // the Trash's or Spam's bar: everything there, for good (asks once)
@@ -441,7 +441,7 @@
                 var job = E.job( n, E.T( spam ? "mail.emptyingSpam" : "mail.emptyingTrash" ) ), r;
                 try { r = await E.api( "POST", encodeURIComponent( S.acct ) + ( spam ? "/spam/empty" : "/trash/empty" ), {} ); }
                 finally { job.end(); }
-                NayiveUI.toast( E.TF( spam ? "mail.emptiedSpam" : "mail.emptied", { n: r.deleted || 0 } ) );
+                Ayni.toast( "ok", E.TF( spam ? "mail.emptiedSpam" : "mail.emptied", { n: r.deleted || 0 } ) );
                 E.loadList( false );
             } );
         }

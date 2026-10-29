@@ -218,7 +218,7 @@ async function openAll()
     }
     for( const id of Array.from( opened.keys() ) ) if( ! next[ id ] ) opened.delete( id );
     items = next;
-    if( bad !== damaged && bad ) NayiveUI.toast( TF( 'passwords.damagedN', { n: bad } ) );
+    if( bad !== damaged && bad ) Ayni.toast( 'warn', TF( 'passwords.damagedN', { n: bad } ) );
     damaged = bad;
     reindex();
     if( f.copies && f.copies.length ) takeCopies();
@@ -233,7 +233,7 @@ async function openAll()
 function canEdit()
 {
     if( isOpen() ) return true;
-    NayiveUI.toast( T( fileState === 'ok' ? 'passwords.locked' : 'ui.store.notRead' ) );
+    Ayni.toast( ( fileState === 'ok' ? 'warn' : 'err' ), T( fileState === 'ok' ? 'passwords.locked' : 'ui.store.notRead' ) );
     return false;
 }
 
@@ -280,7 +280,7 @@ function queue( fn )
     chain = p.catch( function() {} );
     return p.catch( function( e )
     {
-        NayiveUI.toast( T( e && e.message === 'locked' ? 'passwords.locked' : 'passwords.saveFailed' ) );
+        Ayni.toast( ( e && e.message === 'locked' ? 'warn' : 'err' ), T( e && e.message === 'locked' ? 'passwords.locked' : 'passwords.saveFailed' ) );
         throw e;
     } );
 }
@@ -397,7 +397,7 @@ function takeCopies()
         reindex();
         save();
         render();
-        NayiveUI.toast( TF( 'passwords.copiesMade', { n: made.length } ) );
+        Ayni.toast( 'warn', TF( 'passwords.copiesMade', { n: made.length } ) );
     } ).catch( function() {} );
 }
 
@@ -424,7 +424,7 @@ function onFileMerged( path, body )
     ( isOpen() ? openAll() : Promise.resolve() ).then( function()
     {
         render();
-        NayiveUI.toast( T( 'passwords.merged' ), { keepUndo: true } );
+        Ayni.toast( 'info', T( 'passwords.merged' ) );
     } );
 }
 

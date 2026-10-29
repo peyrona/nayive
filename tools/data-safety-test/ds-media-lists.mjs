@@ -32,7 +32,7 @@ seed( "files/G/a.png", PNG );
 const c = await browser( s );
 const phone = await s.client();
 const put = async ( rel, obj ) => { const r = await phone.put( rel, JSON.stringify( obj ) ); if( r.status !== 200 ) throw new Error( "phone " + rel + ": " + r.status ); };
-const undo = () => c.evaluate( "( () => { const b = document.querySelector( '#toast .toast-undo' ); if( b ) b.click(); return !! b; } )()" );
+const undo = () => c.evaluate( "( () => { const b = document.querySelector( '#ayni-toasts .toast.undo .act' ); if( b ) b.click(); return !! b; } )()" );
 const ids = () => ( json( LISTS ) || [] ).map( p => p.id ).sort().join( "," );
 
 //----------------------------------------------------------------------------

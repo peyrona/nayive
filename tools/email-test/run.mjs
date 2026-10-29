@@ -77,7 +77,7 @@ async function shot( c, name )
     fs.writeFileSync( `${SHOTS}/${name}.png`, Buffer.from( r.result.data, "base64" ) );
 }
 const get = async p => ( await fetch( BASE + p ) ).json();
-const TOASTS = `window.__toasts = []; new MutationObserver( () => { const t = document.getElementById('toast'); if( t.classList.contains('show') ) window.__toasts.push( t.firstChild ? t.firstChild.textContent : t.textContent ); } ).observe( document.getElementById('toast'), { attributes: true, childList: true, characterData: true, subtree: true } ); true`;
+const TOASTS = `window.__toasts = []; new MutationObserver( ms => ms.forEach( m => m.addedNodes.forEach( n => { if( n.nodeType === 1 && n.matches( '#ayni-toasts > .toast:not(.progress)' ) ) window.__toasts.push( n.querySelector( 'p' ).firstChild.textContent ); } ) ) ).observe( document.body, { childList: true, subtree: true } ); true`;
 const lastToast = c => c.evaluate( "window.__toasts[ window.__toasts.length - 1 ] || ''" );
 
 async function openMail( c, extra = "" )
@@ -207,8 +207,8 @@ try
     await c.evaluate( TYPE( "<div>Casi lo pierdo</div>" ) );
     await c.evaluate( "document.getElementById('cDiscard').click(); true" );
     ok( await waitFor( c, "document.getElementById('composeView').hidden" ), "Discard leaves at once" );
-    ok( await c.evaluate( "!!document.querySelector('#toast .toast-undo')" ), "…with an Undo" );
-    await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
+    ok( await c.evaluate( "!!document.querySelector('#ayni-toasts .toast.undo .act')" ), "…with an Undo" );
+    await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
     ok( await waitFor( c, "!document.getElementById('composeView').hidden && " + TEXT + " === 'Casi lo pierdo'" ), "Undo brings the text back" );
 
     // the format bar: bold on the words picked, a list, a link; the placeholder
@@ -253,9 +253,9 @@ try
     await c.evaluate( "var e = document.getElementById('cTo'); e.value = 'juan'; e.dispatchEvent( new Event('input') ); window.__toasts = []; document.getElementById('cSend').click(); true" );
     ok( await waitFor( c, "document.getElementById('composeView').hidden", 500 ), "Send: the writer closes at once, its save still on its way" );
     ok( await waitFor( c, "! document.getElementById('busyLine').hidden", 2000 ), "…the busy line runs meanwhile" );
-    ok( await waitFor( c, "!! document.querySelector('#toast .toast-undo')", 10000 ), "…then the Undo" );
+    ok( await waitFor( c, "!! document.querySelector('#ayni-toasts .toast.undo .act')", 10000 ), "…then the Undo" );
     await fetch( BASE + "/e2e/draft?slow=0" );
-    await c.evaluate( "NayiveUI.undoSettle(); true" );
+    await c.evaluate( "Ayni.settleUndo(); true" );
     ok( await waitFor( c, "!document.getElementById('composeView').hidden && document.getElementById('cTo').value === 'juan'", 10000 ), "refused: the writer is back as it was" );
     ok( /No se envió/.test( await lastToast( c ) ), "…saying so", await lastToast( c ) );
     ok( await waitFor( c, "document.getElementById('busyLine').hidden", 3000 ), "…the busy line is gone" );
@@ -267,14 +267,14 @@ try
         var set = ( id, v ) => { var e = document.getElementById( id ); e.value = v; e.dispatchEvent( new Event('input') ); };
         set( 'cTo', '"Pérez, Ana" <perez@example.com>' ); set( 'cBcc', 'carol@example.com' ); set( 'cSubject', 'Hola' );
         document.getElementById('cSend').click(); true` );
-    ok( await waitFor( c, "document.getElementById('composeView').hidden && document.querySelector('#toast .toast-undo')", 10000 ), "Send leaves at once, with an Undo" );
-    await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
+    ok( await waitFor( c, "document.getElementById('composeView').hidden && document.querySelector('#ayni-toasts .toast.undo .act')", 10000 ), "Send leaves at once, with an Undo" );
+    await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
     ok( await waitFor( c, "!document.getElementById('composeView').hidden && document.getElementById('cBcc').value === 'carol@example.com'" ), "Undo: the writer is back, all fields" );
     await sleep( 7000 );
     ok( ( await get( "/e2e/sent" ) || [] ).length === sentBefore, "…and nothing was sent" );
     await c.evaluate( "document.getElementById('cSend').click(); true" );
-    ok( await waitFor( c, "document.getElementById('composeView').hidden && document.querySelector('#toast .toast-undo')", 10000 ), "sent (Undo on show)" );
-    await c.evaluate( "NayiveUI.undoSettle(); true" );
+    ok( await waitFor( c, "document.getElementById('composeView').hidden && document.querySelector('#ayni-toasts .toast.undo .act')", 10000 ), "sent (Undo on show)" );
+    await c.evaluate( "Ayni.settleUndo(); true" );
     let out = false;
     for( let i = 0; i < 100 && ! out; i++ ) { out = ( await get( "/e2e/sent" ) || [] ).length > sentBefore; if( ! out ) await sleep( 100 ); }
     ok( out, "no Undo: it goes out" );
@@ -403,8 +403,8 @@ try
     await waitFor( c, row( "Hello 8" ) );
     await c.evaluate( `${row( "Hello 8" )}.click(); ${PICKACT( "forget" )}; true` );
     ok( await c.evaluate( "!" + row( "Hello 8" ) ), "delete for good: the row goes at once" );
-    ok( await c.evaluate( "!!document.querySelector('#toast .toast-undo')" ), "…with an Undo" );
-    await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
+    ok( await c.evaluate( "!!document.querySelector('#ayni-toasts .toast.undo .act')" ), "…with an Undo" );
+    await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
     ok( await waitFor( c, row( "Hello 8" ), 5000 ), "Undo: it is back" );
     await c.evaluate( `${row( "Hello 8" )}.click(); ${PICKACT( "forget" )}; true` );
     await sleep( 7500 );
@@ -455,7 +455,7 @@ try
         await c.evaluate( "document.activeElement.id + ' ' + " + AT ) );
     await c.evaluate( "document.getElementById('cDiscard').click(); true" );
     await waitFor( c, "document.getElementById('composeView').hidden" );
-    await c.evaluate( "NayiveUI.undoSettle(); true" );
+    await c.evaluate( "Ayni.settleUndo(); true" );
     await c.evaluate( "fetch('/api/mail/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({signature:''})}).then( r => r.status )" );
 
     // -----------------------------------------------------------------------

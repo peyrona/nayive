@@ -129,10 +129,10 @@ section( "C2 · ITS UNDO" );
     await drop( "u.ics", CAL( VEV( "u1", "Theirs, newer", "20261005T120000Z" ), VEV( "u3", "Added", "20261005T120000Z" ),
                               VEV( "u4", "Added, then edited", "20261005T120000Z" ) ) );
     ok( await untilNode( () => has( CALF, "SUMMARY:Added" ) && has( CALF, "SUMMARY:Theirs, newer" ) ), "imported: one replaced, two added" );
-    ok( await c.until( "document.querySelector( '#toast .toast-undo' )", 5000 ), "the toast has an Undo" );
+    ok( await c.until( "document.querySelector( '#ayni-toasts .toast.undo .act' )", 5000 ), "the toast has an Undo" );
     // Before the Undo, Calendar (the phone) edits one of the added events.
     await seed( CALF, onDisk( s, CALF ).replace( "SUMMARY:Added, then edited", "SUMMARY:Edited after the import" ) );
-    await c.evaluate( "( document.querySelector( '#toast .toast-undo' ) || { click: function () {} } ).click(), true" );
+    await c.evaluate( "( document.querySelector( '#ayni-toasts .toast.undo .act' ) || { click: function () {} } ).click(), true" );
     ok( await untilNode( () => ! has( CALF, "SUMMARY:Added\r\n" ) && has( CALF, "SUMMARY:Mine" ) ), "Undo: the added event goes, the replaced one is back",
         onDisk( s, CALF ) );
     ok( has( CALF, "SUMMARY:Edited after the import" ), "...the one edited since the import stays", onDisk( s, CALF ) );

@@ -165,7 +165,7 @@
         if( w && w.mine.draftAcct === acct && ( w.mine.draftRef === m.ref || ( m.mid && m.mid === w.mine.mid ) ) )
         {
             w.off = true;
-            if( w.toast ) NayiveUI.undoSettle();    // its toast goes; its onExpire sends nothing
+            if( w.toast ) Ayni.settleUndo();    // its toast goes; its `final` sends nothing
             reopen( w.mine, w.fields );
             return;
         }
@@ -197,7 +197,7 @@
                     html: msg.html ? bodyOf( msg.html ) : null, text: msg.text || "" } );
             C.typed = true;
         }
-        catch( err ) { E.plug( "offline" ); NayiveUI.toast( E.errText( err ) ); }
+        catch( err ) { E.plug( "offline" ); Ayni.toast( "err", E.errText( err ) ); }
     };
 
     // An address as the To field takes it back: a name with anything but
@@ -530,7 +530,7 @@
         var added = 0;
         list.forEach( function ( f )
         {
-            if( totalSize() + ( f.size || 0 ) > MAX ) { NayiveUI.toast( E.T( "mail.err.big" ), { ms: 3500 } ); return; }
+            if( totalSize() + ( f.size || 0 ) > MAX ) { Ayni.toast( "warn", E.T( "mail.err.big" ) ); return; }
             C.files.push( f );
             if( f.kind === "up" ) localFile( C, f );     // its bytes, once (not on every keystroke)
             added++;
@@ -746,7 +746,7 @@
     {
         if( C !== mine || mine.closing || mine.sending || mine.warned === err.code ) return;
         mine.warned = err.code;
-        NayiveUI.toast( E.TF( "mail.draftNotSaved", { why: E.errText( err ) } ), { ms: 6000 } );
+        Ayni.toast( "warn", E.TF( "mail.draftNotSaved", { why: E.errText( err ) } ) );
     }
 
     function dropDraft( acct, ref )
@@ -773,13 +773,13 @@
             if( mine.dirty )
             {
                 E.$( "cStatus" ).textContent = E.errText( mine.failed );
-                NayiveUI.toast( E.T( "mail.notSaved" ), { ms: 4000 } );
+                Ayni.toast( "err", E.T( "mail.notSaved" ) );
                 // the phone's Back already took its step: put it back, so the
                 // next Back tries again instead of leaving the app
                 if( ! fromCode ) { try { history.pushState( { mailWrite: 1 }, "" ); } catch( e ) {} }
                 return;
             }
-            NayiveUI.toast( E.T( "mail.savedToDrafts" ) );
+            Ayni.toast( "ok", E.T( "mail.savedToDrafts" ) );
         }
         else if( mine.draftRef ) dropDraft( mine.draftAcct, mine.draftRef );    // emptied: nothing to keep
         leave( fromCode );
@@ -828,11 +828,11 @@
         clearTimeout( mine.timer );
         var fields = fieldsNow();
         leave( true );
-        NayiveUI.undoToast( E.T( "mail.discarded" ), function ()
+        Ayni.toast( "ok", E.T( "mail.discarded" ), { undo: function ()
         {
             if( C ) return;                 // already writing another one
             reopen( mine, fields );
-        }, { onExpire: function ()
+        }, final: function ()
         {
             var drop = function ()
             {
@@ -856,7 +856,7 @@
         var mine = C;
         if( ! E.$( "cTo" ).value.trim() && ! E.$( "cCc" ).value.trim() && ! E.$( "cBcc" ).value.trim() )
         {
-            NayiveUI.toast( E.T( "mail.err.norcpt" ), { ms: 3000 } );
+            Ayni.toast( "warn", E.T( "mail.err.norcpt" ) );
             E.$( "cTo" ).focus();
             return;
         }
@@ -916,12 +916,12 @@
         {
             dropLid( mine );
             var inDrafts = ! mine.dirty && mine.draftRef && mine.draftAcct === mine.acct;
-            NayiveUI.toast( E.T( inDrafts ? "mail.notSent" : "mail.notSentHere" ) + " " + E.errText( err ), { ms: 6000 } );
+            Ayni.toast( "err", E.T( inDrafts ? "mail.notSent" : "mail.notSentHere" ) + " " + E.errText( err ) );
             return;
         }
         reopen( mine, fields );
         E.$( "cStatus" ).textContent = E.errText( err );
-        NayiveUI.toast( E.T( "mail.sendFailed" ) + " " + E.errText( err ), { ms: 6000 } );
+        Ayni.toast( "err", E.T( "mail.sendFailed" ) + " " + E.errText( err ) );
     }
 
     // Not saved first (offline, refused, a "From" changed): sent at once.
@@ -943,19 +943,19 @@
                 // time eMail opens (restoreLocal) (data-safety I5).
                 if( ! mine.dirty && mine.draftRef && mine.draftAcct === mine.acct )
                 {
-                    NayiveUI.toast( E.T( "mail.sentNoCopy" ), { ms: 8000 } );
+                    Ayni.toast( "warn", E.T( "mail.sentNoCopy" ) );
                     sentOk( mine );
                     return;
                 }
                 mine.dirty = true;
                 localNow( mine, fields );
-                NayiveUI.toast( E.T( "mail.sentNoCopyHere" ), { ms: 10000 } );
+                Ayni.toast( "warn", E.T( "mail.sentNoCopyHere" ) );
                 dropLid( mine );
                 return;
             }
             if( mine.draftAcct && mine.draftAcct !== mine.acct ) dropDraft( mine.draftAcct, mine.draftRef );   // written in the other account
             if( mine.staleDraft ) dropDraft( mine.staleDraft.acct, mine.staleDraft.ref );
-            NayiveUI.toast( E.T( "mail.sent" ) );
+            Ayni.toast( "ok", E.T( "mail.sent" ) );
             sentOk( mine );
         }
         catch( err ) { sendFailed( mine, fields, err ); }
@@ -972,13 +972,13 @@
         dropLid( mine );                // its words are in Drafts now
         E.plug( "synced" );
         w.toast = true;
-        NayiveUI.undoToast( E.T( "mail.sending" ), function ()
+        Ayni.toast( "info", E.T( "mail.sending" ), { undo: function ()
         {
             if( waiting === w ) waiting = null;
             mine.sending = false;
-            if( C ) { NayiveUI.toast( E.T( "mail.savedToDrafts" ) ); return; }     // writing another one: this one waits in Drafts
+            if( C ) { Ayni.toast( "ok", E.T( "mail.savedToDrafts" ) ); return; }     // writing another one: this one waits in Drafts
             reopen( mine, fields );
-        }, { keepOnLeave: true, onExpire: function ()
+        }, keepOnLeave: true, final: function ()
         {
             if( waiting === w ) waiting = null;
             if( ! w.off ) sendNow( mine, fields );       // off: its draft was opened meanwhile
@@ -999,7 +999,7 @@
         {
             mine.sending = false;
             E.plug( "synced" );
-            if( r && r.noCopy ) NayiveUI.toast( E.T( "mail.sentNoCopy" ), { ms: 8000 } );
+            if( r && r.noCopy ) Ayni.toast( "warn", E.T( "mail.sentNoCopy" ) );
             sentOk( mine );
         }, function ( err ) { sendFailed( mine, fields, err ); } ).finally( function () { E.busy( false ); } );
     }
@@ -1319,7 +1319,7 @@
             if( all.length ) repoint( mine, d.acct, all[ 0 ], function ( f ) { return E.roleOf( f ) === "drafts" && f.ref !== all[ 0 ].ref; }, true );
         }
         reopen( mine, d.fields );
-        NayiveUI.toast( E.T( how === "apart" ? "mail.restoredApart" : "mail.restoredLocal" ), { ms: 6000 } );
+        Ayni.toast( "info", E.T( how === "apart" ? "mail.restoredApart" : "mail.restoredLocal" ) );
         return true;
     }
 
@@ -1424,7 +1424,7 @@
                 mine.draftRef = mine.draftAcct = "";
             }
             if( C === mine ) { renderFiles(); E.$( "cStatus" ).textContent = ""; }
-            if( lost.length ) NayiveUI.toast( E.TF( "mail.filesGone", { names: lost.join( ", " ) } ), { ms: 8000 } );
+            if( lost.length ) Ayni.toast( "warn", E.TF( "mail.filesGone", { names: lost.join( ", " ) } ) );
             mine.dirty = true;
             // now (with files the next save would wait a minute) - not while
             // Send is on: it saves by itself

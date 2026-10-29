@@ -52,9 +52,9 @@ section( "BIN 1,300 PICKED PHOTOS, THEN ONE UNDO" );
 {
     await c.evaluate( `binPaths( ${paths} ); true` );
     ok( await until( () => jpgsOnDisk() === 0, 60000 ), "all 1,300 go to the bin", jpgsOnDisk() );
-    ok( await c.until( "document.querySelector( '.toast-undo' ) && ! binBusy", 30000 ), "...with one Undo" );
+    ok( await c.until( "document.querySelector( '#ayni-toasts .toast.undo .act' ) && ! binBusy", 30000 ), "...with one Undo" );
     ok( await c.evaluate( "PHOTOS.length" ) === 0, "...and the album shows none", await c.evaluate( "PHOTOS.length" ) );
-    await c.evaluate( "document.querySelector( '.toast-undo' ).click(); true" );
+    await c.evaluate( "document.querySelector( '#ayni-toasts .toast.undo .act' ).click(); true" );
     ok( await until( () => jpgsOnDisk() === N, 60000 ), "the Undo brings all 1,300 back", jpgsOnDisk() );
     ok( await c.until( "PHOTOS.length === " + N, 30000 ), "...and the album shows them again", await c.evaluate( "PHOTOS.length" ) );
 }
@@ -72,8 +72,8 @@ section( "A BATCH THAT HALF WENT: WHAT WENT STILL HAS ITS UNDO" );
     await c.evaluate( "binPaths( [ 'files/Half/a.jpg', 'files/Half/ro/b.jpg' ] ); true" );
     ok( await until( () => ! fs.existsSync( half + "/a.jpg" ) ), "a.jpg goes to the bin" );
     ok( fs.existsSync( half + "/ro/b.jpg" ), "(b.jpg cannot, and stays)" );
-    ok( await c.until( "document.querySelector( '.actionable .toast-undo' ) && ! binBusy", 30000 ), "the failure toast still has an Undo" );
-    await c.evaluate( "document.querySelector( '.actionable .toast-undo' ).click(); true" );
+    ok( await c.until( "document.querySelector( '#ayni-toasts .toast.undo .act' ) && ! binBusy", 30000 ), "the failure toast still has an Undo" );
+    await c.evaluate( "document.querySelector( '#ayni-toasts .toast.undo .act' ).click(); true" );
     ok( await until( () => fs.existsSync( half + "/a.jpg" ) ), "the Undo brings a.jpg back" );
     fs.chmodSync( half + "/ro", 0o755 );
 }

@@ -271,7 +271,7 @@
         return Array.prototype.map.call( a, function ( b ) { return ( b & 63 ).toString( 36 ); } ).join( "" ) + Date.now().toString( 36 );
     };
 
-    C.toast = function ( key, ms ) { NayiveUI.toast( C.T( key ), { ms: ms || 2200 } ); };
+    C.toast = function ( kind, key ) { Ayni.toast( kind, C.T( key ) ); };
     C.fail  = function ( e )
     {
         var msg = ( e && e.status === 404 ) ? C.T( "chat.gone" )
@@ -279,7 +279,7 @@
                 : ( e && e.status === 429 ) ? C.T( "chat.tooFast" )
                 : ( e && e.status === 507 ) ? C.T( "chat.noRoom" )
                 : C.T( "chat.failed" );
-        NayiveUI.toast( msg, { ms: 3000 } );
+        Ayni.toast( "err", msg );
     };
 
     // ---------------------------------------------------------------------

@@ -255,18 +255,18 @@ try
     await waitFor( "!! window.NayiveUI", 5000, "ui.js" );
     await ev( "__setPtr( false, true ); true" );
     await settle();
-    check( "Mouse taken away (Auto): the chip asks to go back", await ev( "document.getElementById( 'toast' ).classList.contains( 'show' ) && !! document.querySelector( '#toast .toast-undo' )" ) === true,
-           await ev( "document.getElementById( 'toast' ).textContent" ) );
+    check( "Mouse taken away (Auto): the chip asks to go back", await ev( "!! document.querySelector( '#ayni-toasts .toast .act' )" ) === true,
+           await ev( "( ( document.getElementById( 'ayni-toasts' ) || {} ).textContent || '' )" ) );
     check( "...still on the desktop: nothing moves on its own", atDesk( await path_() ) );
     await shot( "chip-simple" );
-    await ev( "document.querySelector( '#toast .toast-undo' ).click(); true" );
+    await ev( "document.querySelector( '#ayni-toasts .toast .act' ).click(); true" );
     await sleep( 1500 );
     check( "The chip's button: the simple view (and it stays)", await path_() === LAUNCHER, await path_() );
     await waitFor( "!! window.NayiveUI", 5000, "ui.js" );
     await ev( "__setPtr( true, true ); true" );
     await settle();
-    check( "Mouse plugged in (Auto, simple view): the chip offers the desktop", await ev( "document.getElementById( 'toast' ).classList.contains( 'show' ) && !! document.querySelector( '#toast .toast-undo' )" ) === true );
-    await ev( "document.querySelector( '#toast .toast-undo' ).click(); true" );
+    check( "Mouse plugged in (Auto, simple view): the chip offers the desktop", await ev( "!! document.querySelector( '#ayni-toasts .toast .act' )" ) === true );
+    await ev( "document.querySelector( '#ayni-toasts .toast .act' ).click(); true" );
     await sleep( 1200 );
     check( "The chip's button: the desktop", atDesk( await path_() ), await path_() );
     // Always: no chip.
@@ -276,7 +276,7 @@ try
     await waitFor( "!! window.NayiveUI", 5000, "ui.js" );
     await ev( "__setPtr( false, true ); true" );
     await settle();
-    check( "Mouse taken away (Always): no chip", await ev( "document.getElementById( 'toast' ).classList.contains( 'show' )" ) === false );
+    check( "Mouse taken away (Always): no chip", await ev( "!! document.querySelector( '#ayni-toasts > .toast' )" ) === false );
 
     // ===== 3. UPRIGHT -> TILE =====
     const open2 = async () => { await ev( "NayiveDesktop.open( '/nayive/fixture/box.html?n=A' ); NayiveDesktop.open( '/nayive/fixture/box.html?n=B' ); true" ); await settle(); };

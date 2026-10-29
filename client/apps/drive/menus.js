@@ -222,7 +222,7 @@ async function doPaste()
 
     if( intoOwnTree( paths, dest ) )
     {
-        NayiveUI.toast( T( 'drive.pasteIntoItself' ) );
+        Ayni.toast( 'warn', T( 'drive.pasteIntoItself' ) );
         return;
     }
 

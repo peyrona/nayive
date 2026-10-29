@@ -252,7 +252,7 @@ function wireSecrets()
         {
             const input = $( b.dataset.copyField );
             if( ! input.value ) return;
-            if( input.id === 'itUser' ) NayiveUI.copyText( input.value ).then( function() { NayiveUI.toast( T( 'passwords.userCopied' ) ); }, function() {} );
+            if( input.id === 'itUser' ) NayiveUI.copyText( input.value ).then( function() { Ayni.toast( 'ok', T( 'passwords.userCopied' ) ); }, function() {} );
             else copySecret( input.value, input.id === 'itPass' ? 'passwords.passCopied' : 'passwords.secretCopied' );
         } );
     } );

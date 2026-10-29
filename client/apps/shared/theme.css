@@ -75,65 +75,8 @@ button.sync-indicator:focus-visible { outline: 2px solid var(--accent); outline-
     .sync-indicator.sy-show    { animation: none; transition: none; }
 }
 
-/* Bottom-centre transient toast (every app). The page needs a
- * <div id="toast" class="toast"></div>; add .show to reveal it. contact adds
- * its own .toast.actionable / .toast-undo on top of this. */
-.toast                   { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
-                           background: var(--card2); color: var(--text); border: 1px solid var(--line);
-                           border-radius: var(--radius-s); padding: 10px 16px; font-size: 0.9rem; z-index: 200;
-                           max-width: 90vw; text-align: center;
-                           opacity: 0; pointer-events: none; transition: opacity 0.2s; }
-.toast.show              { opacity: 1; }
-
-/* A toast with an "Undo" button, kept up longer (NayiveUI.undoToast - habits,
- * split, contact). The button is plain accent text, no box. */
-.toast.actionable        { display: flex; align-items: center; gap: 14px; pointer-events: auto; }
-.toast-undo              { border: none; background: none; padding: 0; font: inherit; font-weight: 700;
-                           color: var(--accent); cursor: pointer; }
-
-/* Transfer bar: uploads and downloads (every app; shared/ui.js -> transfer(),
- * the uploads drawn from GumApi.putBinary's "nayive:upload" events). Floating,
- * it sits above the toast (bottom: 90px), so a "Guardado" that follows it stays
- * readable. .in-slot: flat, inside an app's toolbar (.transfer-slot) when that
- * has room. Only the ✕ takes clicks - the rest lets them through. */
-.transfer-bar            { position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%);
-                           width: min(320px, 90vw); box-sizing: border-box;
-                           display: flex; flex-direction: column; gap: 10px;
-                           background: var(--card2); color: var(--text); border: 1px solid var(--line);
-                           border-radius: var(--radius-s); padding: 10px 16px; font-size: 0.9rem; z-index: 200;
-                           text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
-.transfer-bar.show       { opacity: 1; }
-.transfer-bar.show .transfer-stop { pointer-events: auto; }
-.transfer-row            { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-items: center; }
-.transfer-row.can-stop   { grid-template-columns: minmax(0, 1fr) auto; }
-.transfer-text           { grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.transfer-track          { grid-column: 1; display: block; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
-.transfer-fill           { display: block; height: 100%; width: 0; background: var(--accent);
-                           transition: width 0.2s; }
-.transfer-stop           { grid-column: 2; grid-row: 1 / span 2; }
-/* .is-sliding: busy, no end known (eMail's Empty Trash) - a short fill runs
- * across; with less motion asked, a still striped fill says the same. */
-.transfer-row.is-sliding .transfer-fill { width: 30%; transition: none; animation: transfer-slide 1.2s ease-in-out infinite; }
-@keyframes transfer-slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
-@media (prefers-reduced-motion: reduce)
-{
-    .transfer-row.is-sliding .transfer-fill { width: 100%; animation: none;
-        background: repeating-linear-gradient(-45deg, var(--accent) 0 6px,
-                    color-mix(in srgb, var(--accent) 35%, transparent) 6px 12px); }
-}
-
-.transfer-slot           { flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: center; }
-.transfer-bar.in-slot    { position: static; transform: none; width: 100%; max-width: 380px;
-                           background: none; border: none; border-radius: 0; padding: 0 6px; gap: 2px;
-                           font-size: 0.8rem; color: var(--text-dim); z-index: auto; }
-.in-slot .transfer-row          { grid-template-columns: auto minmax(40px, 1fr); }
-.in-slot .transfer-row.can-stop { grid-template-columns: auto minmax(40px, 1fr) auto; }
-.in-slot .transfer-track        { grid-column: 2; grid-row: 1; }
-.in-slot .transfer-stop         { grid-column: 3; grid-row: 1; width: 24px; height: 24px; }
-.in-slot .transfer-stop svg     { width: 14px; height: 14px; }
-
 /* Top "your session expired" bar (shared/ui.js -> NayiveUI.sessionExpired()).
- * Sits above .sheet (100), .toast / .info-popup (200) and .coach-overlay (300):
+ * Sits above .sheet (100), .info-popup (200) and .coach-overlay (300):
  * whatever was open when the 401 arrived, this has to stay readable over it. */
 .session-bar             { position: fixed; top: 0; left: 0; right: 0; z-index: 400;
                            display: flex; align-items: center; justify-content: center;
@@ -146,9 +89,9 @@ button.sync-indicator:focus-visible { outline: 2px solid var(--accent); outline-
 .session-bar-btn:hover   { filter: brightness(1.13); }
 .session-bar-btn:active  { filter: brightness(0.92); }
 
-/* "Space almost full" card (shared/ui.js -> checkQuota). A toast that stays
- * until closed: bottom-centre, just under the toast's layer so a "Guardado"
- * still shows over it. Its buttons are the shared .btn / .btn.text. */
+/* "Space almost full" card (shared/ui.js -> checkQuota). It stays until
+ * closed, bottom-centre; Ayni's notifications show over it (their own top
+ * layer). Its buttons are the shared .btn / .btn.text. */
 .quota-card              { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 190;
                            width: min(440px, calc(100vw - 32px)); box-sizing: border-box;
                            max-height: calc(100vh - 32px); overflow-y: auto;

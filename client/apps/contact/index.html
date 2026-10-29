@@ -20,12 +20,14 @@
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
+    <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
@@ -295,9 +297,6 @@
         .detail-item .di-value.multiline { white-space: pre-wrap; }
 
         /* .sheet-actions / .btn / .btn-* live in ../shared/theme.css */
-
-        /* .toast, .toast.show, .toast.actionable and .toast-undo all live in
-           ../shared/theme.css - the same "Deshacer" as Habits and Split. */
 
         /* Duplicates */
         .dedup-count { font-size: 0.82rem; font-weight: 400; color: var(--text-dim); margin-left: 6px; }
@@ -580,7 +579,6 @@
     </div>
 
     <input type="file" id="importInput" accept=".vcf,text/vcard,text/x-vcard" style="display:none;">
-    <div id="toast" class="toast"></div>
 
     <script src="../shared/vcard.js"></script>     <!-- NOT deferred: the script below takes it on its first lines -->
     <script>
@@ -716,7 +714,7 @@
             else if( ! bookRead && ! loadFailSaid )
             {
                 loadFailSaid = true;    // once: the focus re-reads would repeat it
-                flashToast( T( 'ui.store.notRead' ) );
+                Ayni.toast( 'err', T( 'ui.store.notRead' ) );
             }
 
             if( vcf.body !== null || vcf.source === 'empty' )
@@ -938,7 +936,7 @@
             if( bookRead && ! why )
                 return true;
 
-            flashToast( T( why === 'bad' ? 'ui.store.badFile' : why === 'unread' ? 'ui.store.notRead' : 'ui.store.loading' ) );
+            Ayni.toast( ( why === 'unread' ? 'err' : 'warn' ), T( why === 'bad' ? 'ui.store.badFile' : why === 'unread' ? 'ui.store.notRead' : 'ui.store.loading' ) );
             return false;
         }
 
@@ -2167,7 +2165,7 @@
             }
 
             if( msg && was.length ) flashUndo( msg, function() { if( canSave() ) undoCards( was, made, [] ); } );
-            else if( msg )          flashToast( msg );
+            else if( msg )          Ayni.toast( 'ok', msg );
             return true;
         }
 
@@ -2244,7 +2242,7 @@
                     if( was && sameCat( v, was ) && v === was ) return null;
                     if( HIDDEN_CATS.has( v.toLowerCase() ) || ( ! ( was && sameCat( v, was ) ) && groupExists( v ) ) )
                     {
-                        flashToast( T( 'contact.groupTaken' ) );
+                        Ayni.toast( 'warn', T( 'contact.groupTaken' ) );
                         return false;
                     }
                     return v;
@@ -2281,7 +2279,7 @@
             if( view === 'g:' + g ) view = 'all';
 
             if( members.length ) changeCats( members, withoutCat( g ), TF( 'contact.groupDeleted', { g: g } ) );
-            else { render(); flashToast( TF( 'contact.groupDeleted', { g: g } ) ); }
+            else { render(); Ayni.toast( 'ok', TF( 'contact.groupDeleted', { g: g } ) ); }
         }
 
         function toggleFav( uids )
@@ -2686,7 +2684,7 @@
                 });
                 showFormPhoto();
             }
-            catch( _ ) { flashToast( T( 'contact.notImage' ) ); }
+            catch( _ ) { Ayni.toast( 'warn', T( 'contact.notImage' ) ); }
         }
 
         async function formPhotoFromNayive()
@@ -2696,10 +2694,10 @@
 
             const f = await NayiveUI.pickFile( { title: T( 'contact.changePhoto' ), dir: dir, only: name => IMAGE_EXT.test( name ) } );
             if( ! f ) return;
-            if( ! IMAGE_EXT.test( f.name ) ) { flashToast( T( 'contact.notImage' ) ); return; }
+            if( ! IMAGE_EXT.test( f.name ) ) { Ayni.toast( 'warn', T( 'contact.notImage' ) ); return; }
 
             try   { await takeFormPhoto( new Blob( [ await GumApi.readFileBytes( f.path ) ] ) ); }
-            catch { flashToast( T( 'ui.store.notRead' ) ); }
+            catch { Ayni.toast( 'err', T( 'ui.store.notRead' ) ); }
         }
 
         function wireFormPhoto()
@@ -2926,7 +2924,7 @@
 
             if( ! given && ! family && ! org && ! tels.length && ! emails.length )
             {
-                flashToast( T( 'contact.needSomething' ) );
+                Ayni.toast( 'warn', T( 'contact.needSomething' ) );
                 return;
             }
 
@@ -3243,7 +3241,7 @@
 
             if( members.length < 2 )
             {
-                flashToast( T( 'contact.groupClean' ) );
+                Ayni.toast( 'info', T( 'contact.groupClean' ) );
                 refreshDedupIfOpen();
                 return;
             }
@@ -3571,7 +3569,7 @@
         {
             if( ! contacts.length )
             {
-                flashToast( T( 'contact.nothingToExport' ) );
+                Ayni.toast( 'warn', T( 'contact.nothingToExport' ) );
                 return;
             }
 
@@ -3584,13 +3582,13 @@
 
             let text;
             try   { text = await file.text(); }
-            catch { flashToast( T( 'contact.readFailed' ) ); return; }
+            catch { Ayni.toast( 'err', T( 'contact.readFailed' ) ); return; }
 
             const incoming = vcfToContacts( text );
 
             if( ! incoming.length )
             {
-                flashToast( T( 'contact.noVcards' ) );
+                Ayni.toast( 'warn', T( 'contact.noVcards' ) );
                 return;
             }
 
@@ -3745,12 +3743,8 @@
         function openBackdrop( id )  { NayiveUI.open( id ); }     // impl in shared/ui.js
         function closeBackdrop( id ) { NayiveUI.close( id ); }
 
-        // Both toasts are the shared ones (shared/ui.js + the .toast rules in
-        // shared/theme.css); these two names are kept only because the app calls them a lot.
-        // Plain functions, not `const x = NayiveUI.y`: shared/ui.js is deferred, so NayiveUI
-        // does not exist yet while this script is parsed.
-        function flashToast( msg )      { NayiveUI.toast( msg ); }
-        function flashUndo( msg, undo ) { NayiveUI.undoToast( msg, undo || undoMerge ); }   // no `undo`: the merge's
+        // An Undo for a change to the contacts; with no `undo`, the merge's.
+        function flashUndo( msg, undo ) { Ayni.toast( 'ok', msg, { undo: undo || undoMerge } ); }
 
     </script>
 </body>

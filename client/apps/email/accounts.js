@@ -65,7 +65,7 @@
         showPass( false );
         picked = false;
         try { await loadProviders(); }
-        catch( err ) { NayiveUI.toast( E.errText( err ) ); }
+        catch( err ) { Ayni.toast( "err", E.errText( err ) ); }
         E.$( "addProv" ).value = providers.length ? providers[ 0 ].id : "other";
         renderProvider();
         NayiveUI.open( "setSheet" );
@@ -96,7 +96,7 @@
                 S.settings = Object.assign( S.settings, await E.api( "PUT", "settings", { trashDays: n } ) );
                 if( ! S.label && S.tray === "trash" ) E.$( "trashBarText" ).textContent = E.TF( "mail.trashBar", { n: S.settings.trashDays } );
             }
-            catch( err ) { NayiveUI.toast( E.errText( err ) ); }
+            catch( err ) { Ayni.toast( "err", E.errText( err ) ); }
         }, 500 );
     }
 
@@ -115,7 +115,7 @@
         {
             sigTimer = 0;
             try { S.settings = Object.assign( S.settings, await E.api( "PUT", "settings", { signature: text } ) ); sigFailed = false; }
-            catch( err ) { sigFailed = true; NayiveUI.toast( E.errText( err ) ); }
+            catch( err ) { sigFailed = true; Ayni.toast( "err", E.errText( err ) ); }
         }, now === true ? 0 : 800 );
     }
     function retrySignature() { if( sigTimer || sigFailed ) saveSignature( true ); }
@@ -232,7 +232,7 @@
             try
             {
                 await E.api( "PATCH", "accounts/" + encodeURIComponent( a.id ), { pass: pass } );
-                NayiveUI.toast( E.T( "mail.passSaved" ) );
+                Ayni.toast( "ok", E.T( "mail.passSaved" ) );
                 await E.loadAccounts();
                 renderList();
                 if( a.id === S.acct ) { E.showProblem( null ); E.refresh( true ); }
@@ -275,13 +275,13 @@
             if( ! E.account( a.id ) ) S.accounts.splice( at < 0 ? S.accounts.length : Math.min( at, S.accounts.length ), 0, a );
             renderList();
         }
-        NayiveUI.undoToast( E.T( "mail.removed" ), function ()
+        Ayni.toast( "ok", E.T( "mail.removed" ), { undo: function ()
         {
             var here = S.acct === landed;
             back();
             if( wasOn && here ) { S.acct = a.id; E.showAccounts(); }      // still where it sent us: back to it
             else E.renderSide();
-        }, { onExpire: function ()
+        }, final: function ()
         {
             E.api( "DELETE", "accounts/" + encodeURIComponent( a.id ) ).catch( function ( err )
             {
@@ -289,7 +289,7 @@
                 back();
                 if( ! S.acct ) { S.acct = a.id; E.showAccounts(); }          // it was the only one
                 else E.renderSide();
-                NayiveUI.toast( E.errText( err ) );
+                Ayni.toast( "err", E.errText( err ) );
             } );
         } } );
     }
@@ -327,7 +327,7 @@
         try
         {
             var a = await E.api( "POST", "accounts", body );
-            NayiveUI.toast( E.T( "mail.added" ) );
+            Ayni.toast( "ok", E.T( "mail.added" ) );
             NayiveUI.close( "setSheet" );
             await E.loadAccounts();
             S.acct = a.id;

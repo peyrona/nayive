@@ -53,7 +53,7 @@
             E.renderSide();
             return l;
         }
-        catch( err ) { NayiveUI.toast( labelError( err ), { ms: 3000 } ); return null; }
+        catch( err ) { Ayni.toast( "err", labelError( err ) ); return null; }
     }
 
     // ---------------------------------------------------------------------
@@ -120,7 +120,7 @@
                 }
             E.plug( "synced" );
         }
-        catch( err ) { E.plug( "offline" ); NayiveUI.toast( E.errText( err ) ); }
+        catch( err ) { E.plug( "offline" ); Ayni.toast( "err", E.errText( err ) ); }
         job.end();
         if( changed.length ) { renderPicker(); E.labelsChanged( changed ); }
     }
@@ -244,18 +244,18 @@
             S.items.forEach( off );
             off( S.open );
         }
-        NayiveUI.undoToast( E.T( "ui.toast.deleted" ), function ()
+        Ayni.toast( "ok", E.T( "ui.toast.deleted" ), { undo: function ()
         {
             var here = ! S.label && S.tray === "inbox" && E.listShown() && ! E.picking() && ! E.isComposing();
             back();
             if( wasOn && here ) E.openLabel( l.id );      // still where it sent us: back to its list
-        }, { onExpire: function ()
+        }, final: function ()
         {
             E.api( "DELETE", "labels/" + encodeURIComponent( l.id ) ).then( done, function ( err )
             {
                 if( err.status === 404 ) { done(); return; }      // gone already (another device)
                 back();
-                NayiveUI.toast( E.errText( err ) );
+                Ayni.toast( "err", E.errText( err ) );
             } );
         } } );
     }

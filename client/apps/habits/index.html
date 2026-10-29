@@ -19,12 +19,14 @@
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
+    <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS (and localhost). -->
@@ -330,8 +332,6 @@
         </div>
     </div>
 
-    <div id="toast" class="toast" role="status"></div>
-
     <!-- File-API client (access probe, retrying fetch, file ops). -->
     <script src="../shared/gum-api.js" defer></script>
     <!-- Shared UI helpers: sheets, toast, dialogs, i18n. -->
@@ -528,7 +528,7 @@
         function canEdit()
         {
             if( loaded ) return true;
-            toast( T( corrupt ? 'habits.corrupt' : 'habits.noData' ) );
+            Ayni.toast( ( corrupt ? 'err' : 'warn' ), T( corrupt ? 'habits.corrupt' : 'habits.noData' ) );
             return false;
         }
 
@@ -655,7 +655,7 @@
                     habits = [];
                     loaded = false;
                     corrupt = true;
-                    toast( T( 'habits.corrupt' ) );
+                    Ayni.toast( 'err', T( 'habits.corrupt' ) );
                 }
             }
             // else: the server was unreachable AND nothing is cached (res.source
@@ -806,7 +806,7 @@
 
             // A counted habit only climbs, so a mis-tap (1/8) is taken back here.
             if( ! h.target ) return;
-            showUndo( h.name + ': ' + H.count( h, day ) + '/' + h.target, function()
+            Ayni.toast( 'ok', h.name + ': ' + H.count( h, day ) + '/' + h.target, { undo: function()
             {
                 const cur = habits.find( x => x.id === h.id );   // by id: a re-read may have replaced it
                 if( ! cur || ! canEdit() ) return;
@@ -814,7 +814,7 @@
                 if( had ) ( cur.counts = cur.counts || {} )[ day ] = had;   // ...which was this
                 save();
                 render();
-            } );
+            } } );
         }
 
         function fixYesterday( h )
@@ -825,7 +825,7 @@
             H.setDone( h, y, true );
             save();
             render();
-            showUndo( T( 'habits.yesterdayFixed' ), function()
+            Ayni.toast( 'ok', T( 'habits.yesterdayFixed' ), { undo: function()
             {
                 const cur = habits.find( x => x.id === h.id );   // by id: a re-read may have replaced it
                 if( ! cur || ! canEdit() ) return;
@@ -833,7 +833,7 @@
                 if( had ) ( cur.counts = cur.counts || {} )[ y ] = had;   // ...which was this
                 save();
                 render();
-            } );
+            } } );
         }
 
         //------------------------------------------------------------------------//
@@ -1036,9 +1036,9 @@
             const lost = editing && old.target && ( target
                        ? target < old.target && oldCounts.some( d => old.counts[ d ] >= target )
                        : oldCounts.length > 0 );
-            if( ! lost ) { toast( editing ? T( 'habits.saved' ) : T( 'habits.created' ) ); return; }
+            if( ! lost ) { Ayni.toast( 'ok', editing ? T( 'habits.saved' ) : T( 'habits.created' ) ); return; }
 
-            showUndo( T( 'habits.targetChanged' ), function()
+            Ayni.toast( 'ok', T( 'habits.targetChanged' ), { undo: function()
             {
                 // In place, never a new object: an open sheet holds this one (hs.h),
                 // and saveHabit finds it by identity.
@@ -1049,7 +1049,7 @@
                     { target: old.target, done, counts: Object.assign( {}, cur.counts, old.counts ) } ) ) );
                 save();
                 render();
-            } );
+            } } );
         }
 
         // Archive keeps the history; restoring keeps it too: the start date
@@ -1073,7 +1073,7 @@
 
             // Undo flips it back, the paused spells included. By id: a reload
             // in between swaps every habit for a fresh copy.
-            showUndo( h.archived ? T( 'habits.archived' ) : T( 'habits.restored' ), function()
+            Ayni.toast( 'ok', h.archived ? T( 'habits.archived' ) : T( 'habits.restored' ), { undo: function()
             {
                 const cur = habits.find( x => x.id === h.id );
                 if( ! cur ) return;
@@ -1081,7 +1081,7 @@
                 cur.paused   = was.paused;
                 save();
                 render();
-            } );
+            } } );
         }
 
         // The bin sits inside the sheet (a dialog already), and only on an archived
@@ -1098,24 +1098,15 @@
             closeSheet( 'habitSheetBackdrop' );
             render();
 
-            showUndo( T( 'habits.deleted' ), function()
+            Ayni.toast( 'ok', T( 'habits.deleted' ), { undo: function()
             {
                 if( habits.some( x => x.id === h.id ) ) return;
                 habits.splice( Math.min( at, habits.length ), 0, h );
                 save();
                 render();
-            } );
+            } } );
         }
 
-        //------------------------------------------------------------------------//
-        // TOASTS
-
-        // Both toasts are the shared ones (shared/ui.js + the .toast rules in
-        // shared/theme.css); these two names are kept only because the app calls them a lot.
-        // Plain functions, not `const x = NayiveUI.y`: shared/ui.js is deferred, so NayiveUI
-        // does not exist yet while this script is parsed.
-        function toast( msg )         { NayiveUI.toast( msg ); }
-        function showUndo( msg, fn )  { NayiveUI.undoToast( msg, fn ); }
     </script>
 </body>
 </html>

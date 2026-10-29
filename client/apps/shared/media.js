@@ -562,7 +562,7 @@
         var waiting = waitingMoves();
         waiting.push( { pairs: pairs, keep: !! keep } );
         storeMoves( waiting );
-        if( ! await settleNoteMoves() && window.NayiveUI ) NayiveUI.toast( Ayni.t( 'media.notesMoveFailed' ), { ms: 8000 } );
+        if( ! await settleNoteMoves() && window.NayiveUI ) Ayni.toast( 'warn', Ayni.t( 'media.notesMoveFailed' ) );
     }
 
     // The note moves still to be made on this device, oldest first.

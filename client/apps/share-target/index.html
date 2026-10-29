@@ -28,12 +28,14 @@
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
+    <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
@@ -324,7 +326,7 @@ async function upload()
     // again (or Cancel): never cleared as if it had been uploaded.
     if( failed.length )
     {
-        if( done ) NayiveUI.toast( Ayni.tf( done === 1 ? "st.oneUploaded" : "st.nUploaded", { n: done } ) );
+        if( done ) Ayni.toast( "ok", Ayni.tf( done === 1 ? "st.oneUploaded" : "st.nUploaded", { n: done } ) );
 
         ITEMS = failed.map( f => f.it );
         await markKept();
@@ -347,7 +349,7 @@ async function upload()
     }
 
     await clearInbox();
-    NayiveUI.toast( Ayni.tf( done === 1 ? "st.oneUploaded" : "st.nUploaded", { n: done } ) );
+    Ayni.toast( "ok", Ayni.tf( done === 1 ? "st.oneUploaded" : "st.nUploaded", { n: done } ) );
 
     // Remember this album as the Photos folder, then open it there. Only
     // `folder` changes: the file's other keys are kept, and an unreadable one
@@ -414,7 +416,7 @@ async function boot()
     setDest( folder );
 
     if( ! folder )
-        NayiveUI.toast( Ayni.t( 'st.pickAlbumToast' ) );
+        Ayni.toast( 'info', Ayni.t( 'st.pickAlbumToast' ) );
 }
 
 // shared/gum-api.js + shared/ui.js load deferred; they run before

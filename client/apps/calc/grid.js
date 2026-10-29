@@ -461,14 +461,14 @@ function renameSheet( i, name, quiet )
     const taken = doc.sheets.some( function( o, k ) { return k !== i && o.name.toLowerCase() === name.toLowerCase(); } );
     if( ! name || name.length > 31 || /[\\\/?*\[\]:]/.test( name ) || /^'|'$/.test( name ) || taken )
     {
-        if( ! quiet ) NayiveUI.toast( T( taken ? 'calc.sheetNameTaken' : 'calc.sheetNameBad' ) );
+        if( ! quiet ) Ayni.toast( 'warn', T( taken ? 'calc.sheetNameTaken' : 'calc.sheetNameBad' ) );
         return false;
     }
 
     const kept = doc.sheets.some( function( o ) { return o.raw && ( o.raw.refs.length || o.raw.cf || o.raw.dv ); } );
     if( kept )
     {
-        if( ! quiet ) NayiveUI.toast( T( 'calc.sheetNameKept' ) );
+        if( ! quiet ) Ayni.toast( 'warn', T( 'calc.sheetNameKept' ) );
         return true;                                 // nothing to fix in the field: closed, name unchanged
     }
 
@@ -668,14 +668,14 @@ function sortByColumn( descending )
     {
         return m.row <= last && ( m.row + m.rowspan - 1 ) >= first;
     });
-    if( touchesMerge ) { NayiveUI.toast( T( 'calc.sortMerged' ) ); return; }
+    if( touchesMerge ) { Ayni.toast( 'warn', T( 'calc.sortMerged' ) ); return; }
 
     for( let r = first; r <= last; r++ )
     {
         const row = data[ r ] || [];
         for( let c = 0; c < row.length; c++ )
             if( typeof row[ c ] === 'string' && row[ c ].charAt( 0 ) === '=' )
-            { NayiveUI.toast( T( 'calc.sortFormulas' ) ); return; }
+            { Ayni.toast( 'warn', T( 'calc.sortFormulas' ) ); return; }
     }
 
     const order = [];
@@ -2116,7 +2116,7 @@ function followLinkAt( row, col, event )
     // Anything that is not plainly http(s) or mailto is not opened: a
     // file:// or javascript: target in someone else's spreadsheet is not
     // something to hand the browser on a click.
-    if( ! /^(https?:|mailto:)/i.test( link.target ) ) { NayiveUI.toast( T( 'calc.linkBlocked' ) ); return; }
+    if( ! /^(https?:|mailto:)/i.test( link.target ) ) { Ayni.toast( 'warn', T( 'calc.linkBlocked' ) ); return; }
 
     window.open( link.target, '_blank', 'noopener,noreferrer' );
 }
@@ -2828,7 +2828,7 @@ function printSheet( pdfHint )
     document.body.appendChild( box );
     window.addEventListener( 'afterprint', function() { box.remove(); }, { once: true } );
 
-    if( pdfHint ) NayiveUI.toast( T( 'write.pdfHint' ), { ms: 5000 } );
+    if( pdfHint ) Ayni.toast( 'info', T( 'write.pdfHint' ) );
 
     // A tick, so the toast paints before the modal print dialog freezes the page.
     setTimeout( function() { window.print(); }, pdfHint ? 350 : 0 );

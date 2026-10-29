@@ -144,7 +144,7 @@
             if( gone( mine ) ) return;
             if( e.status === 409 && e.body && e.body.busy ) { finish( "busy" ); return; }   // chat_call.go: {"busy": true}
             drop();
-            if( e.status === 409 ) C.toast( "chat.inCall", 2600 );
+            if( e.status === 409 ) C.toast( "warn", "chat.inCall" );
             else C.fail( e );
         }
     };
@@ -239,7 +239,7 @@
             }
             if( ! local && ! gone( mine ) )
             {
-                C.toast( mine.video ? "chat.camBlocked" : "chat.micBlocked", 3600 );
+                C.toast( "warn", mine.video ? "chat.camBlocked" : "chat.micBlocked" );
                 return false;
             }
         }
@@ -489,7 +489,7 @@
             call.el.querySelector( ".call-self" ).srcObject = null;   // render() hangs the new one
             render();
         }
-        catch( e ) { C.toast( "chat.camBlocked", 2600 ); }
+        catch( e ) { C.toast( "warn", "chat.camBlocked" ); }
     }
 
     // Hang up, cancel, decline - the server tells which from the state.

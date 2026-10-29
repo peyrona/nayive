@@ -53,7 +53,7 @@ anaSeed( "files/Album/s2.png", PNG );
 
 const c = await browser( s );
 const phone = await s.client();
-const undo = p => p.evaluate( "( () => { const b = document.querySelector( '#toast .toast-undo' ); if( b ) b.click(); return !! b; } )()" );
+const undo = p => p.evaluate( "( () => { const b = document.querySelector( '#ayni-toasts .toast.undo .act' ); if( b ) b.click(); return !! b; } )()" );
 
 //----------------------------------------------------------------------------
 section( "G1 - Photos keeps the note of a binned photo" );
@@ -74,7 +74,7 @@ ok( await D.until( "typeof FS_ROOT !== 'undefined' && FS_ROOT === 'files' && typ
 // Drive's own delete: to the bin, the scan entries purged, an Undo toast.
 await D.evaluate( "deleteTargets = [ 'files/F/a.png' ]; confirmDelete(); true" );
 ok( await disk( () => ! exists( "files/F/a.png" ) ), "Drive binned a.png" );
-ok( await D.until( "!! document.querySelector( '#toast .toast-undo' )" ), "Drive shows its Undo" );
+ok( await D.until( "!! document.querySelector( '#ayni-toasts .toast.undo .act' )" ), "Drive shows its Undo" );
 
 await P.front();                                  // the user looks at Photos again: its news reload runs
 ok( await P.until( "PHOTOS.length === 1 && document.querySelectorAll( '#grid .tile' ).length === 1" ), "Photos reloaded on Drive's news" );
@@ -204,7 +204,7 @@ await I.evaluate( "window.__pressConfirm()" );
 ok( await disk( () => { const b = bytesOnDisk( s, "files/H/dst.png" ); return b && ! b.equals( BLUE ) && notes()[ "files/H/dst.png" ] === "note src"; } ),
     "the copy is written over dst.png, with the copy's note" );
 ok( JSON.stringify( notes() ).includes( "note dst" ), "the replaced dst.png's note is kept (parked)", notes() );
-ok( await I.until( "!! document.querySelector( '#toast .toast-undo' )" ), "its toast offers an Undo" );
+ok( await I.until( "!! document.querySelector( '#ayni-toasts .toast.undo .act' )" ), "its toast offers an Undo" );
 ok( await undo( I ), "Undo pressed" );
 ok( await disk( () => { const b = bytesOnDisk( s, "files/H/dst.png" ); return b && b.equals( BLUE ) && notes()[ "files/H/dst.png" ] === "note dst"; } ),
     "Undo: dst.png is back, with its own note", notes() );

@@ -112,11 +112,11 @@
         catch ( _ ) { res = { body: null, source: "unknown" }; }
 
         if( res.source === "cache" )
-            NayiveUI.toast( t( navigator.onLine ? "ui.recovered" : "ui.localCopy" ) );
+            Ayni.toast( ( navigator.onLine ? "info" : "warn" ), t( navigator.onLine ? "ui.recovered" : "ui.localCopy" ) );
         else if( res.source === "empty" )
-            NayiveUI.toast( t( opts.emptyKey || "ui.fileGone" ) );
+            Ayni.toast( "err", t( opts.emptyKey || "ui.fileGone" ) );
         else if( res.source === "unauth" || res.source === "unknown" )
-            NayiveUI.toast( t( opts.failKey || "ui.openFailed" ) );
+            Ayni.toast( "err", t( opts.failKey || "ui.openFailed" ) );
 
         return { body: res.body != null ? res.body : null, source: res.source };
     }
@@ -1167,7 +1167,7 @@
                         failed = true;
                         sync( "error" );
                         disk( "unsaved" );
-                        NayiveUI.toast( t( lock ? "lock.failed" : ( o.failKey || "ui.saveFailed" ) ) );
+                        Ayni.toast( "err", t( lock ? "lock.failed" : ( o.failKey || "ui.saveFailed" ) ) );
                     }
                     return null;
                 }
@@ -1208,7 +1208,7 @@
                 // vanished before it was sent: neither is "Saved" (K2, K5).
                 failed = res.ok === false && ! res.offline && ! res.needsAuth && ! res.otherAccount;
                 if( failed ) disk( "unsaved" );
-                if( res.forbidden ) NayiveUI.toast( t( "ui.saveFailed" ) );
+                if( res.forbidden ) Ayni.toast( "err", t( "ui.saveFailed" ) );
                 if( res.pageOnly )
                 {
                     // The store goes on trying (and says so in a toast): the
@@ -1219,7 +1219,7 @@
                 else if( res.unknown )
                 {
                     stamp( null );
-                    NayiveUI.toast( t( "write.notSaved" ), { ms: 6000 } );
+                    Ayni.toast( "err", t( "write.notSaved" ) );
                 }
                 if( ! failed )
                 {
@@ -1352,7 +1352,7 @@
 
         function saveNow()
         {
-            if( o.readOnly() ) { NayiveUI.toast( t( "text.notYours" ) ); o.saveAs(); return; }
+            if( o.readOnly() ) { Ayni.toast( "warn", t( "text.notYours" ) ); o.saveAs(); return; }
             if( ! path() )     { o.saveAs(); return; }
 
             askedFor = null;                  // a deliberate save may ask about a conflict again
@@ -1827,7 +1827,7 @@
         {
             if( ! canOpen || canOpen( p ) ) { await open( p ); return; }
 
-            NayiveUI.toast( t( "write.formatUnsupported" ) + ( o.turnAwayEnd || "" ) );
+            Ayni.toast( "warn", t( "write.formatUnsupported" ) + ( o.turnAwayEnd || "" ) );
         }
 
         // "Recientes" in the pull-down menus: the same ten paths the Open dialog
@@ -1846,14 +1846,14 @@
             } );
         }
 
-        function toast( k ) { NayiveUI.toast( t( k ) ); }
+        function toast( kind, k ) { Ayni.toast( kind, t( k ) ); }
 
         // Another account is signed in on this browser now (ownerHere, L5):
         // a side action on the server is refused, and says so.
         function notOwner()
         {
             if( ownerHere() ) return false;
-            NayiveUI.toast( t( "ui.otherAccountHere" ), { ms: 7000 } );
+            Ayni.toast( "warn", t( "ui.otherAccountHere" ) );
             return true;
         }
 
@@ -1918,7 +1918,7 @@
         function notReady()
         {
             if( ! o.ready || o.ready() ) return false;
-            toast( "write.waitForDoc" );
+            toast( "warn", "write.waitForDoc" );
             return true;
         }
 
@@ -1930,7 +1930,7 @@
 
         async function unsealAsk( body, name )
         {
-            if( ! NayiveCrypt.available() ) { toast( "lock.noCrypto" ); return null; }
+            if( ! NayiveCrypt.available() ) { toast( "warn", "lock.noCrypto" ); return null; }
 
             for( ;; )
             {
@@ -1948,7 +1948,7 @@
                 {
                     // A wrong password and a damaged file look exactly the same
                     // from here - that is what the tag is for.
-                    toast( "lock.wrong" );
+                    toast( "warn", "lock.wrong" );
                 }
             }
         }
@@ -2017,7 +2017,7 @@
             catch ( e )
             {
                 sync( "error" );
-                if( ! ( e && e.said ) ) toast( "ui.openFailed" );   // said: the app told why already (Text: not text)
+                if( ! ( e && e.said ) ) toast( "err", "ui.openFailed" );   // said: the app told why already (Text: not text)
                 return false;
             }
 
@@ -2043,7 +2043,7 @@
             }
 
             try { await o.load( bytes, name, "import" ); }
-            catch ( e ) { if( ! ( e && e.said ) ) toast( "text.importFailed" ); return false; }
+            catch ( e ) { if( ! ( e && e.said ) ) toast( "err", "text.importFailed" ); return false; }
 
             // `pristine` is the plain original on purpose: autosave seals
             // whatever goes to .bak/ while a password is on.
@@ -2059,7 +2059,7 @@
 
             var bytes;
             try { bytes = new Uint8Array( await file.arrayBuffer() ); }
-            catch ( e ) { toast( "text.importFailed" ); return; }
+            catch ( e ) { toast( "err", "text.importFailed" ); return; }
 
             // As Open does (see open): the document it replaces keeps its draft and gets an Undo.
             await saver.catchUp();
@@ -2072,7 +2072,7 @@
         {
             var bytes;
             try { bytes = await GumApi.readFileBytes( p ); }
-            catch ( e ) { toast( "text.importFailed" ); return false; }
+            catch ( e ) { toast( "err", "text.importFailed" ); return false; }
 
             return importBytes( bytes, baseName( p ) );
         }
@@ -2116,7 +2116,7 @@
                         askSoon();                     // still nowhere to save it: ask for a name
                         return;
                     }
-                    catch ( e ) { toast( "ui.openFailed" ); }
+                    catch ( e ) { toast( "err", "ui.openFailed" ); }
                 }
             }
 
@@ -2180,7 +2180,7 @@
 
             if( ! await startBlank( dropping ) ) return;
             if( kept )       offerBack( kept, aside );
-            else if( aside ) toast( "write.draftSetAside" );      // a password on it: no copy in memory, so no Undo
+            else if( aside ) toast( "info", "write.draftSetAside" );      // a password on it: no copy in memory, so no Undo
         }
 
         // "Guardar como"'s bin, shown only for a document that is nowhere but
@@ -2202,7 +2202,7 @@
             if( dropping ) await saver.dropDraft();
 
             try { await o.blank(); }
-            catch ( e ) { toast( "ui.openFailed" ); return false; }
+            catch ( e ) { toast( "err", "ui.openFailed" ); return false; }
 
             untitled( null );
             o.store.resting();                 // nothing was read or written: settle the plug by hand
@@ -2212,19 +2212,18 @@
 
         // ---- Undo: the document that New, the red bin or Restore swapped away --
         //
-        // Kept in memory only, while its toast is on show (NayiveUI.undoToast).
+        // Kept in memory only, while its toast is on show (Ayni.toast's undo).
         // The first key or edit in what replaced it makes the Undo final - it
         // would throw that new work away - and so does another document on
         // screen (opened / untitled). The Undo button's own Enter is not "a key".
 
         var undoOn = false;      // one of ours is on show
 
-        // Set AFTER undoToast: it settles the Undo it replaces first, and when
-        // that one is ours too, its onExpire clears the flag.
+        // Set AFTER Ayni.toast: it settles the Undo it replaces first, and when
+        // that one is ours too, its `final` clears the flag.
         function offerUndo( msg, back )
         {
-            NayiveUI.undoToast( msg, function () { undoOn = false; back(); },
-                                { onExpire: function () { undoOn = false; } } );
+            Ayni.toast( "ok", msg, { undo: function () { undoOn = false; back(); }, final: function () { undoOn = false; } } );
             undoOn = true;
         }
 
@@ -2232,13 +2231,13 @@
         {
             if( ! undoOn ) return;
             undoOn = false;
-            NayiveUI.undoSettle();
+            Ayni.settleUndo();
         }
 
         document.addEventListener( "keydown", function ( e )
         {
             if( ! undoOn || /^(Shift|Control|Alt|AltGraph|Meta|CapsLock|Tab)$/.test( e.key ) ) return;
-            if( e.target && e.target.closest && e.target.closest( "#toast" ) ) return;
+            if( e.target && e.target.closest && e.target.closest( "#ayni-toasts" ) ) return;
             settleUndo();
         }, true );
 
@@ -2273,7 +2272,7 @@
                 if( path !== on ) return;              // another document now: leave it be
 
                 try { await o.load( kept.body, kept.name, "draft" ); }
-                catch ( e ) { toast( "ui.openFailed" ); return; }
+                catch ( e ) { toast( "err", "ui.openFailed" ); return; }
 
                 untitled( kept.name, { dirty: true, pristine: kept.pristine } );
                 // Open / Import left its draft in this tab's slot: that one is
@@ -2420,7 +2419,7 @@
             // needs ANOTHER name: say so, keep the sheet open, write nothing.
             if( p === path && o.store.isBlocked && o.store.isBlocked( p ) === "bad" )
             {
-                NayiveUI.toast( o.sameNameRefused ? o.sameNameRefused( name ) : t( "ui.store.badFile" ), { ms: 6000 } );
+                Ayni.toast( "warn", o.sameNameRefused ? o.sameNameRefused( name ) : t( "ui.store.badFile" ) );
                 return;
             }
 
@@ -2593,7 +2592,7 @@
                 {
                     sync( wait.conflict ? "conflict" : "error" );
                     showLabel();
-                    NayiveUI.toast( t( wait.conflict ? "text.renameHeld" : "text.renameUnsent" ), { ms: 7000 } );
+                    Ayni.toast( "warn", t( wait.conflict ? "text.renameHeld" : "text.renameUnsent" ) );
                     if( wait.conflict && wait.mine ) saver.offerCopy( path );
                     return;
                 }
@@ -2618,7 +2617,7 @@
             catch ( e )
             {
                 sync( "error" );
-                toast( "text.renameFailed" );
+                toast( "err", "text.renameFailed" );
             }
             finally
             {
@@ -2647,21 +2646,21 @@
         async function restorePrevious()
         {
             if( notReady() ) return;
-            if( ! path )   { toast( "write.noBackupYet" ); return; }
-            if( readOnly ) { toast( "text.notYours" );     return; }
+            if( ! path )   { toast( "warn", "write.noBackupYet" ); return; }
+            if( readOnly ) { toast( "warn", "text.notYours" );     return; }
             if( notOwner() ) return;                   // that account's .bak, read and written (L5)
 
             // A parked save goes up first: its .bak is made as it goes (the
             // copy from before this session's first save), never later over
             // the one this restore writes. Not sent: no restore now.
             var up = await saver.upload( path );
-            if( up && ! up.ok ) { toast( "write.actionFailed" ); return; }
+            if( up && ! up.ok ) { toast( "err", "write.actionFailed" ); return; }
 
             var p    = path;
             var bak  = bakPath( path );
             var prev = null;
             try { prev = await GumApi.readFileBytes( bak ); } catch ( e ) { prev = null; }
-            if( ! prev || ! prev.length ) { toast( "write.noBackupYet" ); return; }
+            if( ! prev || ! prev.length ) { toast( "warn", "write.noBackupYet" ); return; }
             var raw = prev;                    // the .bak's bytes as they are on the server
 
             // An app that may restore by swapping the files (Calc): edits its
@@ -2671,7 +2670,7 @@
             if( o.restoreBytes )
             {
                 await saver.settle( CLOSE_WAIT_MS );
-                if( saver.dirty() ) { toast( "write.restoreSaveFirst" ); return; }
+                if( saver.dirty() ) { toast( "warn", "write.restoreSaveFirst" ); return; }
             }
 
             // A copy sealed with a password, back into a document that has none
@@ -2715,7 +2714,7 @@
             var swap = false;
             if( o.restoreBytes )
                 try { swap = await o.restoreBytes( prev, p ); }
-                catch ( e ) { toast( "write.actionFailed" ); return; }
+                catch ( e ) { toast( "err", "write.actionFailed" ); return; }
             if( swap ) { await swapFiles( p, bak, raw, prev, undoable, doneKey ); return; }
 
             var bakWas = undoable ? prev.slice() : null;     // the .bak's own bytes, whatever load() does with prev
@@ -2733,9 +2732,9 @@
                 await o.load( prev, path, "restore" );
                 saver.edited();                // the restored copy still has to be saved over the document
             }
-            catch ( e ) { toast( "write.actionFailed" ); return; }
+            catch ( e ) { toast( "err", "write.actionFailed" ); return; }
 
-            if( ! undoable ) { toast( doneKey ); return; }
+            if( ! undoable ) { toast( "ok", doneKey ); return; }
 
             // Undo: the .bak as it was, and what was on screen back on screen -
             // to be saved over the document again.
@@ -2749,7 +2748,7 @@
                     await o.load( now, p, "restore" );
                     saver.edited();
                 }
-                catch ( e ) { toast( "write.actionFailed" ); }
+                catch ( e ) { toast( "err", "write.actionFailed" ); }
             } );
         }
 
@@ -2774,23 +2773,23 @@
             // any save anywhere refused the restore).
             var wait = null;
             try { wait = await o.store.pending( p ); } catch ( e ) { wait = { unknown: true }; }
-            if( ! saver.kept() || wait || path !== p ) { toast( "write.actionFailed" ); return; }
+            if( ! saver.kept() || wait || path !== p ) { toast( "err", "write.actionFailed" ); return; }
 
             // Edits the file never got (Calc's gate held them back): neither
             // copy has them, and a swap would take them off the screen with
             // no way back but an orphan draft. restorePrevious already says
             // so before asking; this is in case one was made since.
-            if( saver.dirty() ) { toast( "write.restoreSaveFirst" ); return; }
+            if( saver.dirty() ) { toast( "warn", "write.restoreSaveFirst" ); return; }
 
             var cur;
             try { cur = await GumApi.readFileBytes( p ); }
-            catch ( e ) { toast( "write.actionFailed" ); return; }
+            catch ( e ) { toast( "err", "write.actionFailed" ); return; }
 
             // Sealed with the document's own password, or none (see restorePrevious).
             var back = saver.lock() ? await NayiveCrypt.seal( saver.lock(), plain ) : plain;
 
             try { await GumApi.writeFileBytes( bak, cur ); }
-            catch ( e ) { toast( "write.actionFailed" ); return; }
+            catch ( e ) { toast( "err", "write.actionFailed" ); return; }
             saver.bakTaken( p );               // never a first-save copy over it: it is the way back
 
             var put = await putFile( p, back );
@@ -2800,7 +2799,7 @@
                 // bytes back. Only in this page ("later"): the file may still
                 // become the copy, so the .bak keeps `cur`, the way back.
                 if( ! put ) try { await GumApi.writeFileBytes( bak, raw ); } catch ( e ) {}
-                toast( "write.actionFailed" );
+                toast( "err", "write.actionFailed" );
                 return;
             }
 
@@ -2812,12 +2811,12 @@
                 // would be nowhere.
                 if( await putFile( p, cur ) === "kept" )
                     try { await GumApi.writeFileBytes( bak, raw ); } catch ( e2 ) {}
-                toast( "write.actionFailed" );
+                toast( "err", "write.actionFailed" );
                 return;
             }
             saver.opened();                    // the screen IS the file now: nothing waits to be saved
 
-            if( ! undoable ) { toast( doneKey ); return; }
+            if( ! undoable ) { toast( "ok", doneKey ); return; }
 
             offerUndo( t( doneKey ), async function ()
             {
@@ -2836,7 +2835,7 @@
                     await o.load( cur, p, "restore" );
                     saver.opened();
                 }
-                catch ( e ) { toast( "write.actionFailed" ); }
+                catch ( e ) { toast( "err", "write.actionFailed" ); }
             } );
         }
 
@@ -2871,8 +2870,8 @@
         async function toggleLock()
         {
             if( notReady() ) return;
-            if( readOnly )                   { toast( "text.notYours" ); return; }
-            if( ! NayiveCrypt.available() )  { toast( "lock.noCrypto" ); return; }
+            if( readOnly )                   { toast( "warn", "text.notYours" ); return; }
+            if( ! NayiveCrypt.available() )  { toast( "warn", "lock.noCrypto" ); return; }
 
             if( saver.lock() ) await removeLock();
             else               await addLock();
@@ -2915,7 +2914,7 @@
             if( pw === null ) return;
 
             try { saver.lockDoc( await NayiveCrypt.newLock( pw ) ); }
-            catch ( e ) { toast( "lock.failed" ); return; }
+            catch ( e ) { toast( "err", "lock.failed" ); return; }
 
             showLock();
 
@@ -2924,7 +2923,7 @@
             if( how === "clean" ) { wipeAfter = path; openSaveAs(); return; }
 
             await writeLockState();
-            toast( "lock.on" );
+            toast( "ok", "lock.on" );
         }
 
         // The copy from before the password, once the protected one is safe:
@@ -2959,9 +2958,9 @@
                 }
 
                 if( ids.length ) await GumApi.trashDelete( ids );
-                toast( gone ? "lock.wiped" : "lock.wipeFailed" );
+                toast( ( gone ? "ok" : "err" ), gone ? "lock.wiped" : "lock.wipeFailed" );
             }
-            catch ( e ) { toast( "lock.wipeFailed" ); }
+            catch ( e ) { toast( "err", "lock.wipeFailed" ); }
         }
 
         async function removeLock()
@@ -2975,7 +2974,7 @@
             if( ! await saver.unlockDoc() ) { notOwner(); return; }   // another account now (L5): nothing changed
             showLock();
             await writeLockState();
-            toast( "lock.off" );
+            toast( "ok", "lock.off" );
         }
 
         // Right now, not in seven seconds: while the old state is still up
@@ -3085,7 +3084,7 @@
             try { cfg = await read(); }
             catch ( e )
             {
-                if( ! warned ) { warned = true; NayiveUI.toast( t( warnKey ) ); }
+                if( ! warned ) { warned = true; Ayni.toast( "warn", t( warnKey ) ); }
                 return null;
             }
             Object.assign( cfg, patch );

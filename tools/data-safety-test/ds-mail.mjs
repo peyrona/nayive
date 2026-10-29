@@ -130,7 +130,7 @@ const ASKED = "document.querySelector( '.sheet-backdrop.open h2' )?.textContent 
 // its buttons, in shared/ui.js confirmDialog's order: Más tarde, Descartar, Recuperar como borrador
 const answer = which => c.evaluate( `( () => { const b = [ ...document.querySelectorAll( '.sheet-backdrop.open .sheet-actions button' ) ];
     b[ ${ JSON.stringify( { later: 0, drop: 1, keep: 2 } ) }[ ${ JSON.stringify( which ) } ] ]?.click(); return b.length; } )()` );
-const toastNow = () => c.evaluate( "( window.__toasts || [] ).join( ' | ' ) + ' | ' + document.getElementById( 'toast' ).textContent" );
+const toastNow = () => c.evaluate( "( window.__toasts || [] ).join( ' | ' ) + ' | ' + ( ( document.getElementById( 'ayni-toasts' ) || {} ).textContent || '' )" );
 const closeWriter = async () => { if( await writing() ) { await c.evaluate( "document.getElementById( 'backBtn' ).click(); true" ); await c.until( "document.getElementById( 'composeView' ).hidden" ); } };
 // What sign-out counts of eMail (shared/store.js localCount: every record of "nayive-drafts")
 const RECORDS = `new Promise( r => { const q = indexedDB.open( 'nayive-drafts', 1 );
@@ -209,7 +209,7 @@ ok( await c.until( "! document.getElementById( 'composeView' ).hidden && NayiveM
 ok( await c.evaluate( "document.getElementById( 'cSubject' ).value" ) === "Larga" && await c.evaluate( "document.getElementById( 'cTo' ).value" ) === "bob@example.com",
     "…and its fields" );
 // (the toast may come before lib's recorder is on: what shows now counts too)
-ok( /Recuperado/.test( await toasts() + ( await c.evaluate( "document.getElementById( 'toast' ).textContent" ) ) ), "…saying so", await toasts() );
+ok( /Recuperado/.test( await toasts() + ( await c.evaluate( "( ( document.getElementById( 'ayni-toasts' ) || {} ).textContent || '' )" ) ) ), "…saying so", await toasts() );
 await knob( "fail=0" );
 ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 30000 ), "saves working again: it goes to Drafts", await status() );
 ok( ( await drafts() ).some( d => d.subject === "Larga" && d.text.includes( "Veinte minutos de texto" ) ), "the server has it", await drafts() );
@@ -279,13 +279,13 @@ ok( await c.until( "[ ...document.querySelectorAll( '#list .mail-row' ) ].some( 
 await c.evaluate( "[ ...document.querySelectorAll( '#list .mail-row' ) ].find( r => r.textContent.includes( 'Hello 3' ) ).dispatchEvent( new MouseEvent( 'dblclick', { bubbles: true } ) ); true" );
 ok( await c.until( "!! NayiveMail.S.open" ), "it opens" );
 await c.evaluate( "window.__toasts = []; document.getElementById( 'actDelete' ).click(); true" );
-ok( await c.until( "!! document.querySelector( '#toast .toast-undo' )" ), "Delete: to the Trash, with Undo" );
+ok( await c.until( "!! document.querySelector( '#ayni-toasts .toast.undo .act' )" ), "Delete: to the Trash, with Undo" );
 // meanwhile another device deletes it from the Trash for good
 const trash = JSON.parse( ( await phone.call( "GET", `/api/mail/${encodeURIComponent( acct )}/list?tray=trash` ) ).text );
 const gone = ( trash.items || trash.msgs || [] ).find( m => m.subject === "Hello 3" );
 const f = gone && await phone.call( "POST", `/api/mail/${encodeURIComponent( acct )}/forget`, JSON.stringify( { refs: [ gone.ref ] } ), { "Content-Type": "application/json" } );
 ok( f && f.status === 200, "(another device empties it from the Trash)", f && f.status );
-await c.evaluate( "document.querySelector( '#toast .toast-undo' ).click(); true" );
+await c.evaluate( "document.querySelector( '#ayni-toasts .toast.undo .act' ).click(); true" );
 ok( await c.until( "( window.__toasts || [] ).some( t => /no se pudieron devolver/.test( t ) )", 30000 ), "the Undo says one did not come back", await toasts() );
 
 section( "I1 - THE DRAFT CHANGED ON THE PHONE: BOTH STAY (review RV-A)" );
@@ -522,8 +522,8 @@ await fetch( s.base + "/e2e/send?nocopy=1" );
 await c.evaluate( "NayiveMail.openTray( 'inbox' ); true" );
 await compose( "bob@example.com", "Sin copia", "<div>el texto sin copia</div>" );
 await c.evaluate( "window.__toasts = []; document.getElementById( 'cSend' ).click(); true" );
-ok( await c.until( "document.getElementById( 'composeView' ).hidden && !! document.querySelector( '#toast .toast-undo' )", 30000 ), "Send: saved, then its Undo" );
-await c.evaluate( "NayiveUI.undoSettle(); true" );         // the Undo's 6 s, now
+ok( await c.until( "document.getElementById( 'composeView' ).hidden && !! document.querySelector( '#ayni-toasts .toast.undo .act' )", 30000 ), "Send: saved, then its Undo" );
+await c.evaluate( "Ayni.settleUndo(); true" );         // the Undo's 6 s, now
 ok( await c.until( "( window.__toasts || [] ).some( t => /no se pudo guardar una copia en Enviados/.test( t ) )", 30000 ),
     "it went, and the toast says no copy was kept in Sent", await toasts() );
 ok( await until( async () => ( await rows( "drafts" ) ).some( m => m.subject === "Sin copia" ) ), "its draft stays in Drafts (the only copy of the words)" );
@@ -588,10 +588,10 @@ section( "OL3 (bugs-2) - THE UNDO OF A DELETE RESTORES IN THE ACCOUNT IT CAME FR
 // by then, and another account's restore found nothing.
 ok( await openMail() && await c.until( "NayiveMail.S.items.some( m => m.subject === 'Hello 4' )" ), "the Inbox shows 'Hello 4'" );
 await c.evaluate( "window.__toasts = []; NayiveMail.act.del( NayiveMail.S.items.filter( m => m.subject === 'Hello 4' ) ); true" );
-ok( await c.until( "!! document.querySelector( '#toast .toast-undo' )" ), "Delete: to the Trash, with Undo" );
+ok( await c.until( "!! document.querySelector( '#ayni-toasts .toast.undo .act' )" ), "Delete: to the Trash, with Undo" );
 ok( await until( async () => ( await subjects( "trash" ) ).includes( "Hello 4" ) ), "(it is in the Trash)" );
 await c.evaluate( "NayiveMail.S.acct = 'otra-cuenta'; true" );        // another account on screen now
-await c.evaluate( "document.querySelector( '#toast .toast-undo' ).click(); true" );
+await c.evaluate( "document.querySelector( '#ayni-toasts .toast.undo .act' ).click(); true" );
 ok( await until( async () => ( await subjects( "inbox" ) ).includes( "Hello 4" ) ), "the Undo brings it back to its own account's Inbox",
     await subjects( "trash" ) );
 

@@ -264,12 +264,12 @@
             var bytes = new Uint8Array( await res.arrayBuffer() );
             await saveNew( dir, fileName( p.name ), bytes );
             E.plug( "synced" );
-            NayiveUI.toast( E.TF( "mail.savedToDrive", { folder: dir.replace( /^files\/?/, "" ) || E.T( "ui.filesRoot" ) } ), { ms: 3500 } );
+            Ayni.toast( "ok", E.TF( "mail.savedToDrive", { folder: dir.replace( /^files\/?/, "" ) || E.T( "ui.filesRoot" ) } ) );
         }
         catch( err )
         {
             E.plug( "offline" );
-            NayiveUI.toast( E.T( "ui.saveFailed" ), { ms: 3500 } );
+            Ayni.toast( "err", E.T( "ui.saveFailed" ) );
         }
         finally { Ayni.setBusy( btn, false ); E.busy( false ); }
     }

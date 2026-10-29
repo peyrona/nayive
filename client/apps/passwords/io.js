@@ -142,7 +142,7 @@ function importCsv( text )
 {
     const rows = parseCsv( text );
     const map  = rows.length ? mapColumns( rows[ 0 ] ) : null;
-    if( ! map ) { NayiveUI.toast( T( 'passwords.importUnknown' ) ); return; }
+    if( ! map ) { Ayni.toast( 'err', T( 'passwords.importUnknown' ) ); return; }
     const now  = nowIso();
     const have = new Set( allEntries().map( dupKey ) );
     const folders = [], list = [];
@@ -171,7 +171,7 @@ async function importBackup( f )
     if( pw === null || ! isOpen() ) return;
     let k;
     try { k = await PwVault.unlock( f, { password: pw } ); }
-    catch( e ) { NayiveUI.toast( T( e && e.message === 'wrong' ? 'passwords.wrongPw' : 'passwords.kdfFailed' ) ); return; }
+    catch( e ) { Ayni.toast( ( e && e.message === 'wrong' ? 'warn' : 'err' ), T( e && e.message === 'wrong' ? 'passwords.wrongPw' : 'passwords.kdfFailed' ) ); return; }
     const list = [];
     let skipped = 0, bad = 0;
     for( const id of Object.keys( f.items ) )
@@ -187,7 +187,7 @@ async function importBackup( f )
         }
         catch( err ) { bad++; }
     }
-    if( bad ) NayiveUI.toast( TF( 'passwords.damagedN', { n: bad } ) );
+    if( bad ) Ayni.toast( 'warn', TF( 'passwords.damagedN', { n: bad } ) );
     finishImport( list, list.filter( function( n ) { return ! isFolder( n ); } ).length, skipped, false );
 }
 
@@ -196,7 +196,7 @@ function finishImport( list, added, skipped, wasCsv )
     NayiveUI.close( 'importBackdrop' );
     if( ! list.length )
     {
-        NayiveUI.toast( skipped ? TF( 'passwords.importNone', { n: skipped } ) : T( 'passwords.importEmpty' ) );
+        Ayni.toast( ( skipped ? 'info' : 'warn' ), skipped ? TF( 'passwords.importNone', { n: skipped } ) : T( 'passwords.importEmpty' ) );
         return;
     }
     putItems( list ).then( function()
@@ -204,7 +204,7 @@ function finishImport( list, added, skipped, wasCsv )
         render();
         const msg = TF( 'passwords.imported', { n: added } ) + ( skipped ? ' ' + TF( 'passwords.importSkipped', { n: skipped } ) : '' );
         if( wasCsv ) NayiveUI.alert( { title: msg, body: T( 'passwords.deleteCsv' ) } );
-        else NayiveUI.toast( msg );
+        else Ayni.toast( "ok", msg );
     }, function() {} );
 }
 
@@ -221,11 +221,11 @@ function importFile( file )
         {
             const st = PwVault.check( json );
             if( st === 'ok' ) importBackup( json );
-            else NayiveUI.toast( T( st === 'newer' ? 'passwords.newerTitle' : 'passwords.importUnknown' ) );
+            else Ayni.toast( ( st === 'newer' ? 'warn' : 'err' ), T( st === 'newer' ? 'passwords.newerTitle' : 'passwords.importUnknown' ) );
         }
         else importCsv( text );
     };
-    reader.onerror = function() { NayiveUI.toast( T( 'passwords.importUnknown' ) ); };
+    reader.onerror = function() { Ayni.toast( 'err', T( 'passwords.importUnknown' ) ); };
     reader.readAsText( file );
 }
 
@@ -246,7 +246,7 @@ function exportEncrypted()
     if( ! isOpen() ) return;
     NayiveUI.saveFile( serialize(), 'passwords-' + stamp() + '.json', 'application/json' );
     NayiveUI.close( 'exportBackdrop' );
-    NayiveUI.toast( T( 'passwords.exportedEnc' ), { ms: 6000 } );
+    Ayni.toast( 'ok', T( 'passwords.exportedEnc' ) );
 }
 
 async function exportCsv()

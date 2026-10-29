@@ -115,9 +115,9 @@ await c.until( "/3 mensajes/.test( document.querySelector( '.days-count' )?.text
 const CLOSE = "document.getElementById( 'autoDelDays' )?.closest( '.sheet' )?.querySelector( '.sheet-close' )";
 ok( await c.until( CLOSE ), "its × (close keeps)" );
 await c.evaluate( CLOSE + ".click(), true" );
-ok( await c.until( "/3 ahora/.test( document.getElementById( 'toast' ).textContent )" ),
-    "×: the toast says it too", await c.evaluate( "document.getElementById( 'toast' ).textContent" ) );
-await c.evaluate( "document.querySelector( '#toast .toast-undo' ).click(), true" );
+ok( await c.until( "/3 ahora/.test( ( ( document.getElementById( 'ayni-toasts' ) || {} ).textContent || '' ) )" ),
+    "×: the toast says it too", await c.evaluate( "( ( document.getElementById( 'ayni-toasts' ) || {} ).textContent || '' )" ) );
+await c.evaluate( "document.querySelector( '#ayni-toasts .toast.undo .act' ).click(), true" );
 const after = await json( phone.call( "GET", "/api/chat/autodelete?days=1" ) );
 const sum = await json( phone.call( "GET", "/api/chat" ) );
 ok( after.n === 3 && ! sum.deleteAfter, "Undo: nothing was set, the 3 messages are there", { after, deleteAfter: sum.deleteAfter } );

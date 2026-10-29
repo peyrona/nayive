@@ -80,7 +80,7 @@ function offerEmptyTrash( on, held )
         // the question counts them - not the gauge's older figure.
         let items;
         try { items = await withBusy( GumApi.trashList() ); }
-        catch( _ ) { NayiveUI.toast( T( 'drive.emptyTrashFailed' ) ); return; }
+        catch( _ ) { Ayni.toast( 'err', T( 'drive.emptyTrashFailed' ) ); return; }
         if( ! items.length ) { reload(); return; }
         const ids  = items.map( function( it ) { return it.id; } );
         const size = binHeld( items );
@@ -89,8 +89,8 @@ function offerEmptyTrash( on, held )
                 body:    TF( 'drive.diskFullBody', { held: fmtSize( size ) } ) + '\n\n' + TF( 'drive.emptyTrashBody', { n: ids.length } ),
                 confirm: T( 'drive.emptyTrash' ), danger: true } ) ) return;
         try { await purgeBinIds( ids ); }
-        catch( _ ) { NayiveUI.toast( T( 'drive.emptyTrashFailed' ) ); return; }
-        NayiveUI.toast( T( 'drive.trashEmptied' ) );
+        catch( _ ) { Ayni.toast( 'err', T( 'drive.emptyTrashFailed' ) ); return; }
+        Ayni.toast( 'ok', T( 'drive.trashEmptied' ) );
         reload();
     };
 }

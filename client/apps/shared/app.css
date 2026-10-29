@@ -20,14 +20,18 @@
  *                                                           <!-- Ayni's texts: hides the page until they are in -->
  *     <meta name="theme-color" content="#1E1F23">           <!-- Ayni rewrites it to the live --bg -->
  *     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">   <!-- Ayni's colours and scales first -->
+ *     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
+ *     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">  <!-- notifications: Ayni.toast, Ayni.progress -->
  *     <link rel="stylesheet" href="../shared/theme.css">
  *     <link rel="stylesheet" href="../shared/app.css">
  *     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) ||
  *         ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
  *     <script src="../shared/ayni/ayni-icons.js" defer></script>
  *     <script src="../shared/ayni/ayni-base.js" defer></script>     <!-- light / dark, icons: before ui.js -->
+ *     <script src="../shared/ayni/ayni-buttons.js" defer></script>
+ *     <script src="../shared/ayni/ayni-toasts.js" defer></script>
  *     <script src="../shared/gum-api.js" defer></script>    <!-- GumApi: the file API -->
- *     <script src="../shared/ui.js" defer></script>         <!-- NayiveUI: sheets, toast, buttons -->
+ *     <script src="../shared/ui.js" defer></script>         <!-- NayiveUI: sheets, buttons, menus -->
  *     ... then the app's own <style> ...
  *   Light and dark follow the system until the user picks one (Ayni); the
  *   inline script applies it before first paint (no flash), and from then on
@@ -1242,7 +1246,7 @@ input[type="range"]
 
 
 /* -----------------------------------------------------------------------------
- * SYNC INDICATOR + TOAST  - defined in theme.css
+ * SYNC INDICATOR  - defined in theme.css
  *
  * .sync-indicator  the plug glyph in the header (shared/ui.js draws it). It is
  *                  hidden while all is well and floats as a chip just off the
@@ -1253,9 +1257,9 @@ input[type="range"]
  *     .busy      --busy blue    a GET / PUT is in flight
  *     .offline   --warn gold    working offline, changes queued
  *
- * .toast  a bottom-centre transient message. Put <div id="toast" class="toast">
- * in the page and call NayiveUI.toast("Guardado"). For confirmations only, not
- * for errors that need the user to act.
+ * Notifications are Ayni's: Ayni.toast( "ok", "Saved" ) (kinds ok, info, warn,
+ * err; an err stays until closed), with { undo, final } for an Undo, and
+ * Ayni.progress() for a long job. The page needs no element for them.
  * ---------------------------------------------------------------------------*/
 
 
@@ -2965,7 +2969,7 @@ html.nv-locked body { visibility: hidden; }
     /* An app that locks the page (html, body { height: 100%; overflow: hidden })
        would clip the printed sheet to a single page. */
     .printing, .printing body { height: auto !important; overflow: visible !important; background: #fff !important; }
-    .printing #app, .printing .sheet-backdrop, .printing #toast { display: none !important; }
+    .printing #app, .printing .sheet-backdrop, .printing #ayni-toasts { display: none !important; }
     .printing #printRoot { display: block !important; }
 }
 

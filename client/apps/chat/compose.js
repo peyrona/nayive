@@ -52,7 +52,7 @@
         // (a phone's or a tablet's keyboard has its own).
         var emojiBtn = NayiveUI.windowed ? C.btn( "smile", "chat.emoji", function () { togglePanel( "emoji" ); }, "fmt-open emoji-open" ) : null;
         if( emojiBtn ) emojiBtn.id = "emojiBtn";
-        composer = h( "div", { class: "composer", attrs: { id: "composer" } }, fmtBtn, emojiBtn, fmtBar, attachBtn, cbox, sendBtn );
+        composer = h( "div", { class: "composer", attrs: { id: "composer", "data-toasts-above": "" } }, fmtBtn, emojiBtn, fmtBar, attachBtn, cbox, sendBtn );
         wireSendHold();
 
         ta.addEventListener( "input", function ( e ) { if( ! marking ) smiley( e ); grow(); typing(); C.keepDraft(); } );
@@ -385,7 +385,7 @@
         if( ! S.open ) return;
         // The server's limit (chat.go chatMaxText, in runes): over it, a send
         // is refused and its retry fails for ever. The text stays in the box.
-        if( Array.from( text ).length > 4000 ) { C.toast( "chat.tooLong", 4000 ); return; }
+        if( Array.from( text ).length > 4000 ) { C.toast( "warn", "chat.tooLong" ); return; }
         if( S.editing )
         {
             var m = S.editing, conv = S.open;
@@ -581,7 +581,7 @@
         ok.addEventListener( "click", async function ()
         {
             var at = input.value ? new Date( input.value ).getTime() : NaN;   // no zone: local time
-            if( ! ( at > Date.now() ) ) { C.toast( "chat.whenPast", 3000 ); input.focus(); return; }
+            if( ! ( at > Date.now() ) ) { C.toast( "warn", "chat.whenPast" ); input.focus(); return; }
             Ayni.setBusy( ok, T( "ui.wait" ) );
             try
             {
@@ -589,7 +589,7 @@
                 sh.close();
                 if( S.open === conv && ta.value.trim() === text ) { C.resetComposer(); fmtBar.classList.remove( "on" ); }
                 else dropDraftIf( conv, text );
-                NayiveUI.toast( C.TF( "chat.scheduledFor", { when: whenLabel( l.at ) } ), { ms: 3000 } );
+                Ayni.toast( "ok", C.TF( "chat.scheduledFor", { when: whenLabel( l.at ) } ) );
                 var c = C.convOf( conv );
                 if( c && ! ( c.later || [] ).some( function ( x ) { return x.id === l.id; } ) )
                 {
@@ -650,7 +650,7 @@
             if( c && c.later ) c.later = c.later.filter( function ( x ) { return x.id !== l.id; } );
             C.renderLater();
             if( now && S.open === conv ) C.loadSince();
-            if( ! now && ! went ) NayiveUI.undoToast( T( "ui.toast.deleted" ), function () { reschedule( conv, l ); } );
+            if( ! now && ! went ) Ayni.toast( "ok", T( "ui.toast.deleted" ), { undo: function () { reschedule( conv, l ); } } );
         }
         render();
         sh = C.sheet( T( "chat.scheduledList" ), body, null, function () { laterSheet = null; } );
@@ -845,7 +845,7 @@
         } );
         if( ! n ) return;
         toldGone = true;
-        NayiveUI.toast( C.TF( "chat.waitingGone", { n: n } ), { ms: 6000 } );
+        Ayni.toast( "warn", C.TF( "chat.waitingGone", { n: n } ) );
     };
 
     // Every chat's waiting messages on their way again (conv: that chat's only).
@@ -1005,12 +1005,12 @@
         if( ! r ) return;               // a failed upload's bubble (media.js): just that
         outbox.delete( r.cid );
         C.renderList();
-        NayiveUI.undoToast( T( "chat.deletedToast" ), function ()
+        Ayni.toast( "ok", T( "chat.deletedToast" ), { undo: function ()
         {
             outbox.set( r.cid, r );
             if( S.open === r.conv ) C.showUnsent( r.conv );
             C.renderList();
-        }, { onExpire: function () { outDel( r.cid ); } } );
+        }, final: function () { outDel( r.cid ); } } );
     };
 
     window.addEventListener( "online", function () { C.flushOutbox(); } );
@@ -1267,8 +1267,8 @@
 
     // Delete for everyone - with "Undo", never a second question. The bubble
     // hides now (by state: a redraw keeps it hidden, conv.js bubble) and the
-    // server is told when the Undo is gone (the shared undoToast: 6 s, the
-    // next toast, leaving the chat, the page closing).
+    // server is told when the Undo is gone (Ayni.toast's `final`: 6 s, a
+    // newer Undo, leaving the chat, the page closing).
     var hiding  = new Set();      // "conv:id" of the messages on their way out
     var msgUndo = null;           // the delete whose Undo is on show
 
@@ -1288,11 +1288,11 @@
         hiding.add( conv + ":" + m.id );
         var el = S.els.get( m.id );
         if( el ) el.hidden = true;
-        NayiveUI.undoToast( T( "chat.deletedToast" ), function ()
+        Ayni.toast( "ok", T( "chat.deletedToast" ), { undo: function ()
         {
             if( msgUndo === mine ) msgUndo = null;
             unhideMsg( conv, m.id );
-        }, { onExpire: function ()
+        }, final: function ()
         {
             if( msgUndo === mine ) msgUndo = null;
             C.api( "DELETE", "conv/" + conv + "/messages/" + m.id ).then( function ( out )
@@ -1307,7 +1307,7 @@
     // another one on show - a chat's, the auto-delete - keeps its time).
     C.flushDeletes = function ()
     {
-        if( msgUndo ) NayiveUI.undoSettle();
+        if( msgUndo ) Ayni.settleUndo();
     };
 
     // ---------------------------------------------------------------------
@@ -1384,7 +1384,7 @@
                 {
                     sh.close();
                     var out = await C.sendMsg( { fwdConv: S.open, fwdId: m.id }, c.id );
-                    if( out ) NayiveUI.toast( C.TF( "chat.forwardedTo", { name: c.name } ), { ms: 2200 } );
+                    if( out ) Ayni.toast( "ok", C.TF( "chat.forwardedTo", { name: c.name } ) );
                 } } },
                 C.avatar( c.id, c.name ), h( "div", { class: "body" }, h( "span", { class: "name", text: c.name } ) ) ) );
         } );

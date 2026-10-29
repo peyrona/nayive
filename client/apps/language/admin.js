@@ -55,7 +55,7 @@ function serverStorage( shared )
             const r = await fetch( URL_CFG, { method: 'PUT', credentials: 'same-origin',
                                               headers: { 'Content-Type': 'application/json' }, body } ).catch( () => null );
             if( r && r.status === 401 && NayiveUI.sessionExpired ) NayiveUI.sessionExpired();
-            else if( ! r || ! r.ok ) NayiveUI.toast( T( 'ui.saveFailed' ), { ms: 4000 } );
+            else if( ! r || ! r.ok ) Ayni.toast( 'err', T( 'ui.saveFailed' ) );
         } );
     };
     return {
@@ -102,7 +102,7 @@ async function renderEngines()
         input.addEventListener( 'change', () =>
         {
             try { tr.setEngineEnabled( e.id, input.checked ); }
-            catch( err ) { input.checked = ! input.checked; NayiveUI.toast( T( 'language.needUrl' ) ); }
+            catch( err ) { input.checked = ! input.checked; Ayni.toast( 'warn', T( 'language.needUrl' ) ); }
         } );
         sw.append( input );
         row.append( name, sw );
@@ -255,7 +255,7 @@ async function resetConfig()
 {
     if( ! await NayiveUI.confirm( { title: T( 'language.reset' ), body: T( 'language.resetAsk' ), confirm: T( 'language.reset' ), danger: true } ) ) return;
     tr.resetConfig();
-    NayiveUI.toast( T( 'language.resetDone' ) );
+    Ayni.toast( 'ok', T( 'language.resetDone' ) );
 }
 
 //------------------------------------------------------------------------//

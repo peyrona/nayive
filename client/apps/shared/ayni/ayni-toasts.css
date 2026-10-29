@@ -1,0 +1,38 @@
+/* Ayni library 0.1.0, notifications family: notifications (toasts) and progress notifications. Load it after
+   ayni-base.css and ayni-buttons.css (its buttons are .btn). Behaviour: ayni-toasts.js. Rules: guidelines 11.2, 11.3. */
+
+/* ---------- The stack ---------- */
+.toasts { position: fixed; inset: auto max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) auto;
+  margin: 0; border: 0; padding: 0; background: none; overflow: visible; display: flex; flex-direction: column; gap: 8px; width: min(360px, calc(100vw - 32px)); }
+.toasts:not(:popover-open) { display: none; }
+/* Phones: bottom centre, full width less the gutters, lifted above a bar along the bottom (the page sets --toasts-lift) */
+@media (max-width: 599.98px) {
+  .toasts { inset: auto 16px calc(16px + env(safe-area-inset-bottom, 0px) + var(--toasts-lift, 0px)) 16px; width: auto; }
+}
+
+/* ---------- A notification ---------- */
+.toast { display: flex; align-items: center; gap: 10px; padding: 8px 6px 8px 12px; background: var(--panel-bg); color: var(--text);
+  border: var(--panel-border); border-radius: var(--panel-radius); box-shadow: var(--panel-shadow); }
+.toast p { margin: 0; flex: 1; min-width: 0; }
+.toast p small { display: block; font-size: .8rem; color: var(--text-dim); }
+.toast > .icon:first-child { color: var(--accent); }
+.toast.ok > .icon:first-child { color: var(--ok); } .toast.warn > .icon:first-child { color: var(--warn); } .toast.err > .icon:first-child { color: var(--danger); }
+.toast .btn { --btn: 30px; }
+.toast .btn.act { color: var(--accent); }
+/* "Ctrl+Z also undoes" only with a keyboard */
+html.touch .toast .undo-key { display: none; }
+@media (prefers-reduced-motion: no-preference) { .toast { animation: toast-rise .18s ease-out; } @keyframes toast-rise { from { opacity: 0; transform: translateY(6px); } } }
+
+/* ---------- Progress notification: text, then the bar; a Stop button at the right when the job can stop ---------- */
+.toast.progress { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; row-gap: 6px; padding: 10px 6px 10px 12px; }
+.toast.progress p { grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast-track { grid-column: 1; display: block; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
+.toast-fill { display: block; height: 100%; width: 0; background: var(--accent); transition: width var(--tr-move); }
+.toast.progress .stop { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+/* No end known: a short fill runs along the bar; with less motion asked, a still striped fill says the same */
+.toast.sliding .toast-fill { width: 30%; transition: none; animation: toast-slide 1.2s ease-in-out infinite; }
+@keyframes toast-slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce) {
+  .toast.sliding .toast-fill { width: 100%; animation: none;
+    background: repeating-linear-gradient(-45deg, var(--accent) 0 6px, color-mix(in srgb, var(--accent) 35%, transparent) 6px 12px); }
+}

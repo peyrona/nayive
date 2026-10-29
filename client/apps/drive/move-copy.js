@@ -90,8 +90,8 @@ async function doShortcuts( paths, dest )
     }
     catch( err )
     {
-        if( err && err.status === 507 ) NayiveUI.toast( T( 'ui.room.none' ) );
-        else                            NayiveUI.toast( TF( 'drive.shortcutFailed', { err: err && err.message || err } ) );
+        if( err && err.status === 507 ) Ayni.toast( 'err', T( 'ui.room.none' ) );
+        else                            Ayni.toast( 'err', TF( 'drive.shortcutFailed', { err: err && err.message || err } ) );
         await reload();
     }
 }
@@ -174,7 +174,7 @@ async function doMove( paths, dest )
 
         const msg = TF( 'drive.nMoved', { n: moved } )
                   + (skipped ? ' · ' + TF( 'drive.nSkipped', { n: skipped } ) : '');
-        if( moved && canUndo ) NayiveUI.undoToast( msg, function() { undoMoves( steps ); } );
+        if( moved && canUndo ) Ayni.toast( "ok", msg, { undo: function() { undoMoves( steps ); } } );
         else                   flashStatus( msg );
     }
     catch( err )
@@ -188,8 +188,8 @@ async function doMove( paths, dest )
         // and a "Replace" whose item went to the bin.
         const msg  = TF( 'drive.moveFailed', { err: err && err.message || err } );
         const done = steps.filter( function( s ) { return s.moved || s.bin; } );
-        if( done.length && canUndo ) NayiveUI.undoToast( msg, function() { undoMoves( done ); } );
-        else                         NayiveUI.toast( msg );
+        if( done.length && canUndo ) Ayni.toast( "err", msg, { undo: function() { undoMoves( done ); } } );
+        else                         Ayni.toast( "err", msg );
         await reload();
     }
 }
@@ -237,7 +237,7 @@ async function undoMoves( steps, failKey )
     await refreshView();
     if( trashMode ) setStatus( '' );      // the bin's refresh does not clear "Moving…" (reload does)
 
-    if( err )      NayiveUI.toast( TF( failKey || 'drive.moveFailed', { err: err && err.message || err } ) );
+    if( err )      Ayni.toast( 'err', TF( failKey || 'drive.moveFailed', { err: err && err.message || err } ) );
     else if( res ) restoredStatus( res );
 }
 
@@ -282,8 +282,8 @@ async function doCopy( paths, dest )
     catch( err )
     {
         await NayiveMedia.copyPaths( copied );      // same as doMove: keep what did copy
-        if( err && err.status === 507 ) NayiveUI.toast( T( 'ui.room.none' ) );
-        else                            NayiveUI.toast( TF( 'drive.copyFailed', { err: err && err.message || err } ) );
+        if( err && err.status === 507 ) Ayni.toast( 'err', T( 'ui.room.none' ) );
+        else                            Ayni.toast( 'err', TF( 'drive.copyFailed', { err: err && err.message || err } ) );
         await reload();
     }
     finally

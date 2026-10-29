@@ -54,12 +54,14 @@
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="shared/ayni/ayni-buttons.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="shared/theme.css">
     <link rel="stylesheet" href="shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="shared/ayni/ayni-icons.js" defer></script>
     <script src="shared/ayni/ayni-base.js" defer></script>
     <script src="shared/ayni/ayni-buttons.js" defer></script>
+    <script src="shared/ayni/ayni-toasts.js" defer></script>
     <script src="shared/ui.js" defer></script>
     <script src="shared/store.js" defer></script>
     <script>
@@ -847,8 +849,6 @@
         </div>
     </div>
 
-    <div id="toast" class="toast"></div>
-
     <script>
         // MOUSE CHIP - "Open the desktop" on Auto (see the <head>): a mouse or
         // touchpad plugged into a big screen offers the desktop, in the shared
@@ -864,8 +864,8 @@
                 try { if( sessionStorage.getItem( 'nayive-must-set' ) === '1' ) return; } catch( e ) {}
                 if( ! fine.matches || ! window.NayiveUI || location.search || location.hash ||
                     nayiveDeskMode() !== 'auto' || ! nayiveWantDesk( 'auto' ) ) return;
-                NayiveUI.undoToast( Ayni.t( 'desktop.toDeskAsk' ), function () { location.replace( 'desktop/' ); },
-                                    { label: Ayni.t( 'desktop.toDeskGo' ), ms: 10000 } );
+                Ayni.toast( 'info', Ayni.t( 'desktop.toDeskAsk' ),
+                            { action: { label: Ayni.t( 'desktop.toDeskGo' ), icon: 'apps', run: function () { location.replace( 'desktop/' ); } } } );
             }
             if( fine.addEventListener ) fine.addEventListener( 'change', onChange );
         } )();
@@ -1172,7 +1172,6 @@
                 if( h.length === 4 ) h = '#' + h[ 1 ] + h[ 1 ] + h[ 2 ] + h[ 2 ] + h[ 3 ] + h[ 3 ];
                 return h;
             }
-            function flash( t ){ if( window.NayiveUI ) NayiveUI.toast( t ); }
             function showMsg( t ){ msgEl.textContent = t; msgEl.hidden = false; }
             function clearMsg(){ msgEl.hidden = true; }
 
@@ -1324,7 +1323,7 @@
                 s.tokens = toStore( draft.tokens );
                 reconcile();
                 loadDraft();
-                persist(); clearMsg(); flash( Ayni.t( 'ui.saved' ) ); render();
+                persist(); clearMsg(); Ayni.toast( 'ok', Ayni.t( 'ui.saved' ) ); render();
             } );
 
             newBtn.addEventListener( 'click', function ()
@@ -1338,7 +1337,7 @@
                 } );
                 editingId = id;
                 loadDraft();
-                persist(); clearMsg(); flash( Ayni.t( 'scm.created' ) ); render();
+                persist(); clearMsg(); Ayni.toast( 'ok', Ayni.t( 'scm.created' ) ); render();
             } );
 
             delBtn.addEventListener( 'click', function ()
@@ -1352,7 +1351,7 @@
                 loadDraft();
                 persist(); clearMsg(); render();
                 // Undo: the scheme back in its place, and in use again if it was.
-                NayiveUI.undoToast( Ayni.t( 'ui.toast.deleted' ), function ()
+                Ayni.toast( 'ok', Ayni.t( 'ui.toast.deleted' ), { undo: function ()
                 {
                     if( find( s.id ) ) return;
                     data.schemes.splice( Math.min( at, data.schemes.length ), 0, s );
@@ -1362,7 +1361,7 @@
                     if( ! scmBack.classList.contains( 'open' ) ) { if( window.Ayni ) Ayni.setTheme( Ayni.theme.mode() ); return; }   // re-applies the stored schemes
                     editingId = s.id;
                     loadDraft(); clearMsg(); render();
-                } );
+                } } );
             } );
 
             selDark.addEventListener( 'change', function (){ data.activeDark  = this.value; persist(); render(); } );
@@ -2143,7 +2142,7 @@
                         Ayni.setBusy( saveBtn, false );
                         return;
                     }
-                    if( window.NayiveUI ) NayiveUI.toast( mandatory ? Ayni.t( 'acct.created' ) : Ayni.t( 'acct.updated' ) );
+                    if( window.NayiveUI ) Ayni.toast( 'ok', mandatory ? Ayni.t( 'acct.created' ) : Ayni.t( 'acct.updated' ) );
                     // The server dropped every push device of the account (a
                     // possible intruder's too): register this one again now.
                     pushNote( null );
@@ -2287,7 +2286,6 @@
             function T( k )     { return window.NayiveUI ? Ayni.t( k ) : k; }
             function TF( k, o ) { return window.NayiveUI ? Ayni.tf( k, o ) : k; }
             function esc( v )   { return window.NayiveUI ? NayiveUI.escapeHtml( String( v ) ) : String( v ); }
-            function toast( m, ms ) { if( window.NayiveUI ) NayiveUI.toast( m, { ms: ms || 2500 } ); }
             function get( k )    { try { return localStorage.getItem( k ); } catch ( e ) { return null; } }
             function put( k, v ) { try { if( v == null ) localStorage.removeItem( k ); else localStorage.setItem( k, v ); } catch ( e ) {} }
             function parse( k )  { try { return JSON.parse( get( k ) || 'null' ); } catch ( e ) { return null; } }
@@ -2368,7 +2366,7 @@
                         {
                             put( 'nayive-enrol', null );
                             put( 'nayive-device', JSON.stringify( { n: pending.n || '', ep: ep, id: j.id } ) );
-                            toast( T( 'dev.enrolled' ), 3500 );
+                            Ayni.toast( 'ok', T( 'dev.enrolled' ) );
                             refreshButton();
                         }
                         // Refused for good - not a token at all (400), no phones for
@@ -2379,7 +2377,7 @@
                         else if( j._status === 400 || j._status === 403 || j._status === 409 )
                         {
                             put( 'nayive-enrol', null );
-                            if( j._status !== 400 ) toast( T( j._status === 409 ? 'dev.tooMany' : 'ui.saveFailed' ), 6000 );
+                            if( j._status !== 400 ) Ayni.toast( ( j._status === 409 ? 'warn' : 'err' ), T( j._status === 409 ? 'dev.tooMany' : 'ui.saveFailed' ) );
                         }
                     } );
                 } ).catch( function () {} );
@@ -2416,13 +2414,13 @@
                 q.delete( 'here' );
                 var rest = q.toString();
                 history.replaceState( null, '', location.pathname + ( rest ? '?' + rest : '' ) + location.hash );
-                if( ! navigator.geolocation ) { toast( T( 'find.noGeo' ) ); return; }
+                if( ! navigator.geolocation ) { Ayni.toast( 'warn', T( 'find.noGeo' ) ); return; }
                 navigator.geolocation.getCurrentPosition( function ( p )
                 {
                     api( 'POST', '/here', { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, find: fid } )
-                        .then( function ( j ) { toast( j._status === 200 ? T( 'find.sent' ) : T( 'find.noGeo' ) ); } )
-                        .catch( function () { toast( T( 'find.noGeo' ) ); } );
-                }, function () { toast( T( 'find.noGeo' ), 3500 ); },
+                        .then( function ( j ) { Ayni.toast( ( j._status === 200 ? 'ok' : 'warn' ), j._status === 200 ? T( 'find.sent' ) : T( 'find.noGeo' ) ); } )
+                        .catch( function () { Ayni.toast( 'warn', T( 'find.noGeo' ) ); } );
+                }, function () { Ayni.toast( 'warn', T( 'find.noGeo' ) ); },
                    { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 } );
             }
 
@@ -2581,10 +2579,10 @@
                         : myEndpoint().then( function ( ep ) { return api( 'POST', '/find', { ask: true, endpoint: ep } ); } );
                 req.then( function ( j )
                 {
-                    if( act === 'ask' && j._status === 200 && ! j.asked ) toast( T( 'find.askedNone' ), 3500 );
-                    else if( j._status !== 200 ) toast( T( 'ui.saveFailed' ) );
+                    if( act === 'ask' && j._status === 200 && ! j.asked ) Ayni.toast( 'warn', T( 'find.askedNone' ) );
+                    else if( j._status !== 200 ) Ayni.toast( 'err', T( 'ui.saveFailed' ) );
                     poll();
-                } ).catch( function () { toast( T( 'login.noServer' ) ); Ayni.setBusy( b, false ); } );
+                } ).catch( function () { Ayni.toast( 'err', T( 'login.noServer' ) ); Ayni.setBusy( b, false ); } );
             } );
 
             // ---- 4. Mi cuenta ----------------------------------------------
@@ -2639,8 +2637,8 @@
             {
                 api( 'PUT', '/' + encodeURIComponent( id ), body ).then( function ( j )
                 {
-                    if( j._status !== 200 ) { undo(); toast( T( 'ui.saveFailed' ) ); }
-                } ).catch( function () { undo(); toast( T( 'login.noServer' ) ); } );
+                    if( j._status !== 200 ) { undo(); Ayni.toast( 'err', T( 'ui.saveFailed' ) ); }
+                } ).catch( function () { undo(); Ayni.toast( 'err', T( 'login.noServer' ) ); } );
             }
             devList.addEventListener( 'change', function ( e )
             {
@@ -2683,7 +2681,7 @@
                     d.mediaDir = picked;
                     drawAccount();
                     saveMedia( d.id, { mediaDir: picked }, function () { d.mediaDir = had; drawAccount(); } );
-                } ).catch( function () { toast( T( 'login.noServer' ) ); } );
+                } ).catch( function () { Ayni.toast( 'err', T( 'login.noServer' ) ); } );
             } );
             function redraw() { drawAccount(); if( isOpen() ) render(); }
             // A delete inside a dialog acts at once: no second question. Its token
@@ -2696,8 +2694,7 @@
                 var id = b.getAttribute( 'data-id' );
                 gone[ id ] = true;
                 redraw();
-                NayiveUI.undoToast( T( 'dev.removed' ), function () { delete gone[ id ]; redraw(); },
-                                    { onExpire: function () { removeNow( id ); } } );
+                Ayni.toast( 'ok', T( 'dev.removed' ), { undo: function () { delete gone[ id ]; redraw(); }, final: function () { removeNow( id ); } } );
             } );
             // The DELETE first: a closing page sends only a fetch started at once.
             // This browser's own record goes too, before the answer (a closing
@@ -2712,7 +2709,7 @@
                     if( had && ! get( 'nayive-device' ) ) put( 'nayive-device', had );
                     delete gone[ id ];
                     redraw();
-                    toast( m );
+                    Ayni.toast( 'err', m );
                 }
                 req.then( function ( j )
                 {

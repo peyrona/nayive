@@ -22,6 +22,7 @@
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
+    <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
     <script src="../shared/gum-api.js" defer></script>
     <!-- Small shared UI helpers: backdrop open/close, toast. -->
@@ -83,6 +84,7 @@
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -403,7 +405,7 @@
         @media print
         {
             /* app chrome — none of it belongs on paper */
-            .topbar, #toolbarRow, #menuBar, .menu-panel, .top-menu, .popup, #tbPopup, #symPopup, .toast,
+            .topbar, #toolbarRow, #menuBar, .menu-panel, .top-menu, .popup, #tbPopup, #symPopup, #ayni-toasts,
             .sheet-backdrop, .editor-loading, .session-bar, .nayive-home-link, #spellLayer,
             #findBar, #findLayer { display: none !important; }
 
@@ -973,8 +975,6 @@
         </div>
         <input type="color" id="tbColorInput" value="#000000" tabindex="-1" aria-hidden="true">
     </div>
-
-    <div id="toast" class="toast"></div>
 
     <script type="module" src="write.js"></script>
 </body>

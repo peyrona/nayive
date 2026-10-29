@@ -167,9 +167,8 @@ const MOUSE = [ "--blink-settings=primaryHoverType=2,availableHoverTypes=2,prima
 const QUIET = ( lang ) => `localStorage.setItem('balata-coach-seen','1'); localStorage.setItem('nayive-install-snooze','never');
     localStorage.setItem('balata-intro-dismiss:launcher','1'); localStorage.setItem('ayni-lang', ${JSON.stringify( lang )}); true`;
 const TOASTS = `( () => { if( window.__toastsOn ) return true; window.__toastsOn = true; window.__toasts = [];
-    const t = document.getElementById('toast'); if( ! t ) return true;
-    new MutationObserver( () => { if( t.classList.contains('show') ) window.__toasts.push( t.textContent ); } )
-        .observe( t, { attributes: true, childList: true, characterData: true, subtree: true } ); return true; } )()`;
+    if( ! document.body ) return true;
+    new MutationObserver( ms => ms.forEach( m => m.addedNodes.forEach( n => { if( n.nodeType === 1 && n.matches( '#ayni-toasts > .toast:not(.progress)' ) ) window.__toasts.push( n.querySelector( 'p' ).firstChild.textContent ); } ) ) ).observe( document.body, { childList: true, subtree: true } ); return true; } )()`;
 
 export async function browser( s, { user, password, mouse = false, lang = "en", width = 1280, height = 800 } = {} )
 {

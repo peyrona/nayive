@@ -195,7 +195,7 @@ async function regenerate()
     const seq = ++genSeq;
     let r;
     try { r = o.mode === 'words' ? await genWords( o ) : genChars( o ); }
-    catch( e ) { NayiveUI.toast( T( 'passwords.wordsFailed' ) ); return; }
+    catch( e ) { Ayni.toast( 'err', T( 'passwords.wordsFailed' ) ); return; }
     if( seq !== genSeq ) return;
     $( 'genOut' ).value = r.text;
     $( 'genBits' ).textContent = TF( 'passwords.genBits', { n: r.bits } );

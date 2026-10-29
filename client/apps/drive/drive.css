@@ -21,7 +21,7 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
 /* Nearly full with something in the papelera: the bar becomes a button
    that empties it (see offerEmptyTrash). */
 .disk-bar--offer { cursor: pointer; box-shadow: 0 0 0 2px color-mix( in srgb, var(--danger) 35%, transparent ); }
-.status-label { flex: 0 1 auto; min-width: 0; font-size: 0.85rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; text-align: right; }
+.status-label { flex: 1 1 0; min-width: 0; font-size: 0.85rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; text-align: right; }
 .status-label:empty { padding: 0; }   /* no text, no width: a 320px phone keeps the bar on one row */
 
 /* "Moved to the bin" used to be words in the status slot. Now the papelera

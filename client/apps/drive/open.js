@@ -138,9 +138,9 @@ function officeFailText( err, name )
 async function openOffice( node, kind )
 {
     const name = displayName( node );
-    if( kind === 'refuse' ) { NayiveUI.toast( TF( 'drive.officeRefusedOpen', { name: name } ), { ms: 6000 } ); return; }
+    if( kind === 'refuse' ) { Ayni.toast( 'warn', TF( 'drive.officeRefusedOpen', { name: name } ) ); return; }
     // A file shared on its own has no folder of ours to put a twin in.
-    if( node.shared )       { NayiveUI.toast( TF( 'drive.officeReadOnly',    { name: name } ), { ms: 6000 } ); return; }
+    if( node.shared )       { Ayni.toast( 'warn', TF( 'drive.officeReadOnly',    { name: name } ) ); return; }
 
     // The tab opens NOW, while the double-click still counts: opened
     // after the wait, the browser would block it as a pop-up. Not in a
@@ -166,7 +166,7 @@ async function openOffice( node, kind )
             r = await officeTwin( node.path, false );
             if( ! r.converted )
             {
-                NayiveUI.toast( TF( 'drive.officeTwinExists', { name: r.path.split( '/' ).pop() } ), { ms: 5000 } );
+                Ayni.toast( 'info', TF( 'drive.officeTwinExists', { name: r.path.split( '/' ).pop() } ) );
                 reload();
             }
         }
@@ -174,7 +174,7 @@ async function openOffice( node, kind )
         setStatus( '' );
         if( r.converted )
         {
-            NayiveUI.toast( TF( 'drive.officeConverted', { name: r.path.split( '/' ).pop() } ), { ms: 5000 } );
+            Ayni.toast( 'ok', TF( 'drive.officeConverted', { name: r.path.split( '/' ).pop() } ) );
             reload();     // the twin shows up beside the original
         }
         if( win )        win.location.href = url;
@@ -185,7 +185,7 @@ async function openOffice( node, kind )
     {
         setStatus( '' );
         if( win ) win.close();
-        NayiveUI.toast( officeFailText( err, name ), { ms: 6000 } );
+        Ayni.toast( "err", officeFailText( err, name ) );
     }
 }
 

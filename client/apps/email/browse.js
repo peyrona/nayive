@@ -107,7 +107,7 @@
             E.markRowSeen( m );
             E.compose( { mode: mode, msg: msg } );
         }
-        catch( err ) { E.plug( err.code === "gone" ? "synced" : "offline" ); NayiveUI.toast( E.errText( err ), { ms: 3500 } ); }
+        catch( err ) { E.plug( err.code === "gone" ? "synced" : "offline" ); Ayni.toast( "err", E.errText( err ) ); }
     }
 
     // ---------------------------------------------------------------------
@@ -401,7 +401,7 @@
         {
             var l = labelOfNode( id );
             var n = await E.labelAdd( ms, l );
-            if( n ) NayiveUI.toast( E.TF( "mail.labelAddedN", { name: l.name, n: n } ) );
+            if( n ) Ayni.toast( "ok", E.TF( "mail.labelAddedN", { name: l.name, n: n } ) );
         }
     }
 

@@ -481,7 +481,7 @@ function whenOpen()
 
             if( Date.now() - t0 > OPEN_SLOW_MS )
             {
-                NayiveUI.toast( Ayni.t( 'write.editorSlow' ) );
+                Ayni.toast( 'warn', Ayni.t( 'write.editorSlow' ) );
                 resolve();
                 return;
             }
@@ -595,7 +595,7 @@ function setDocMode( mode )
 // the same list; on a phone, under the File button whose menu holds the gear.
 function openSettings()
 {
-    if( ! ready ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready ) { Ayni.toast( 'warn', Ayni.t( 'write.waitForDoc' ) ); return; }
 
     if( menusOn() )
     {
@@ -666,7 +666,7 @@ function toggleProofLang( code )
 
 function toggleHeaderFooter( kind )
 {
-    if( ! ready || ! editor ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready || ! editor ) { Ayni.toast( 'warn', Ayni.t( 'write.waitForDoc' ) ); return; }
 
     const cmd = hfEditing() === kind ? { type: 'exitHeaderFooter' }
                                      : { type: 'editHeaderFooter', position: kind };
@@ -747,7 +747,7 @@ async function addPersonalWord( word )
     if( ! word ) return;
 
     if( ! dictRead ) await loadPersonalWords();       // it failed at start-up: once more
-    if( ! dictRead ) { NayiveUI.toast( Ayni.tf( 'write.dictUnread', { word: word } ) ); return; }
+    if( ! dictRead ) { Ayni.toast( 'err', Ayni.tf( 'write.dictUnread', { word: word } ) ); return; }
 
     if( isPersonalWord( word ) ) return;
 
@@ -758,7 +758,7 @@ async function addPersonalWord( word )
 
     if( spell ) spell.forget( word );        // its red lines go at once
 
-    if( ! saved ) { NayiveUI.toast( Ayni.t( 'write.dictSaveFailed' ) ); return; }
+    if( ! saved ) { Ayni.toast( 'err', Ayni.t( 'write.dictSaveFailed' ) ); return; }
     session.offerUndo( Ayni.tf( 'write.wordAdded', { word: word } ), function() { removePersonalWord( word ); } );
 }
 
@@ -775,7 +775,7 @@ async function removePersonalWord( word )
     if( spell ) spell.reset();
 
     if( ! await changeDict( function( words ) { const j = words.indexOf( word ); if( j !== -1 ) words.splice( j, 1 ); } ) )
-        NayiveUI.toast( Ayni.t( 'write.dictSaveFailed' ) );
+        Ayni.toast( 'err', Ayni.t( 'write.dictSaveFailed' ) );
 }
 
 // One word in or out of the list ON THE SERVER, read again right before: two
@@ -947,11 +947,11 @@ const writeCfg = NayiveOffice.appConfig( 'data/write/config.json', 'ui.prefsUnre
 
 async function openTemplates()
 {
-    if( ! ready ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready ) { Ayni.toast( 'warn', Ayni.t( 'write.waitForDoc' ) ); return; }
 
     let cfg;
     try { cfg = await writeCfg.read(); }
-    catch( _ ) { NayiveUI.toast( Ayni.t( 'ui.prefsUnread' ) ); return; }   // where the templates are is not known
+    catch( _ ) { Ayni.toast( 'warn', Ayni.t( 'ui.prefsUnread' ) ); return; }   // where the templates are is not known
 
     let dir = cfg.templatesDir;
 
@@ -978,7 +978,7 @@ async function renderTemplates( dir )
 
     let nodes = [];
     try { nodes = ( ( await GumApi.listDir( dir ) ) || {} ).nodes || []; }
-    catch( _ ) { list.innerHTML = ''; NayiveUI.toast( Ayni.t( 'ui.openFailed' ) ); return; }
+    catch( _ ) { list.innerHTML = ''; Ayni.toast( 'err', Ayni.t( 'ui.openFailed' ) ); return; }
 
     const docs = nodes.filter( function( n ) { return n.nodes === null && /\.docx$/i.test( n.path || '' ); } )
                       .sort( NayiveOffice.byBaseName );
@@ -1036,9 +1036,9 @@ async function useTemplate( path )
         session.untitled( docxName( Ayni.tf( 'write.templateCopy', { name: NayiveOffice.baseName( path ).replace( /\.docx$/i, '' ) } ) ),
                           { dirty: true } );
         if( kept )       session.offerBack( kept, aside );
-        else if( aside ) NayiveUI.toast( Ayni.t( 'write.draftSetAside' ) );
+        else if( aside ) Ayni.toast( 'info', Ayni.t( 'write.draftSetAside' ) );
     }
-    catch( _ ) { NayiveUI.toast( Ayni.t( 'write.openDocFailed' ) ); }
+    catch( _ ) { Ayni.toast( 'err', Ayni.t( 'write.openDocFailed' ) ); }
 }
 
 async function changeTemplatesDir()
@@ -1072,7 +1072,7 @@ let symTab = 0;
 
 function openSymbols()
 {
-    if( ! ready ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready ) { Ayni.toast( 'warn', Ayni.t( 'write.waitForDoc' ) ); return; }
 
     if( document.getElementById( 'symPopup' ).classList.contains( 'open' ) ) { symPopup.close(); return; }
 
@@ -1148,7 +1148,7 @@ function parseNum( raw ) { const n = parseFloat( String( raw ).replace( ',', '.'
 
 function openParagraph()
 {
-    if( ! ready || ! editor ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready || ! editor ) { Ayni.toast( 'warn', Ayni.t( 'write.waitForDoc' ) ); return; }
 
     let f = null;
     try { f = editor.snapshot().formatting; } catch( _ ) {}
@@ -1358,7 +1358,7 @@ async function confirmParagraph()
 // Level n of the caret's list numbered the chosen way (docx-patch.js).
 async function applyListFormat()
 {
-    if( ! paraList ) { NayiveUI.toast( Ayni.t( 'write.notInList' ) ); return; }
+    if( ! paraList ) { Ayni.toast( 'warn', Ayni.t( 'write.notInList' ) ); return; }
 
     const ilvl = parseInt( document.getElementById( 'paListLevel' ).value, 10 ) - 1;
     const fmt  = document.getElementById( 'paListFormat' ).value;
@@ -1385,7 +1385,7 @@ async function reloadPatched( patch, paraId, what )
         await session.flush();
 
         const bytes = patch( new Uint8Array( await editor.save() ) );
-        if( ! bytes ) { NayiveUI.toast( Ayni.t( 'write.actionFailed' ) ); return; }
+        if( ! bytes ) { Ayni.toast( 'err', Ayni.t( 'write.actionFailed' ) ); return; }
 
         await loadIntoEditor( bytes );
 
@@ -1397,7 +1397,7 @@ async function reloadPatched( patch, paraId, what )
     catch( e )
     {
         console.error( 'Write: ' + what + ' -', e );
-        NayiveUI.toast( Ayni.t( 'write.actionFailed' ) );
+        Ayni.toast( 'err', Ayni.t( 'write.actionFailed' ) );
     }
 }
 
@@ -1463,7 +1463,7 @@ function readStyleField( id )
 
 async function openStyles()
 {
-    if( ! ready || ! editor ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready || ! editor ) { Ayni.toast( 'warn', Ayni.t( 'write.waitForDoc' ) ); return; }
 
     let list = [], bytes = null;
     try
@@ -1471,7 +1471,7 @@ async function openStyles()
         list  = editor.getDocumentStyles();
         bytes = lastGood || new Uint8Array( await editor.save() );   // the styles never change without a load
     }
-    catch( _ ) { NayiveUI.toast( Ayni.t( 'write.actionFailed' ) ); return; }
+    catch( _ ) { Ayni.toast( 'err', Ayni.t( 'write.actionFailed' ) ); return; }
 
     // The colour list: Automatic, then the menu's own colours (labelled now,
     // so they follow the language).
@@ -1583,11 +1583,11 @@ async function confirmStyles()
 
 async function openStats()
 {
-    if( ! ready || ! editor ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready || ! editor ) { Ayni.toast( 'warn', Ayni.t( 'write.waitForDoc' ) ); return; }
 
     let paras;
     try { paras = editor.query( { type: 'paragraphs' } ) || []; }
-    catch( _ ) { NayiveUI.toast( Ayni.t( 'write.actionFailed' ) ); return; }
+    catch( _ ) { Ayni.toast( 'err', Ayni.t( 'write.actionFailed' ) ); return; }
 
     let words = 0, chars = 0, noSpaces = 0, count = 0;
 
@@ -1782,7 +1782,7 @@ function replaceMatch( match, text )
     if( ! ready || ! editor ) return;
 
     const sel = match ? editor.selectMatch( match ) : null;
-    if( ! sel || sel.ok === false ) { NayiveUI.toast( Ayni.t( 'write.actionFailed' ) ); return; }
+    if( ! sel || sel.ok === false ) { Ayni.toast( 'err', Ayni.t( 'write.actionFailed' ) ); return; }
 
     runExec( { type: 'insertText', text: text } );
 }
@@ -1805,7 +1805,7 @@ function engineRun( label, fn, failKey )
     if( r && r.ok === false )
     {
         console.error( 'Write: ' + label + ' -', r.reason );
-        NayiveUI.toast( Ayni.t( failKey || 'write.actionFailed' ) );
+        Ayni.toast( 'err', Ayni.t( failKey || 'write.actionFailed' ) );
         return false;
     }
     return true;
@@ -1968,11 +1968,11 @@ function applyPrintPageSize()
 
 function printDocument( pdfHint )
 {
-    if( ! ready || ! editor ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready || ! editor ) { Ayni.toast( 'warn', Ayni.t( 'write.waitForDoc' ) ); return; }
 
     applyPrintPageSize();
 
-    if( pdfHint ) NayiveUI.toast( Ayni.t( 'write.pdfHint' ), { ms: 5000 } );
+    if( pdfHint ) Ayni.toast( 'info', Ayni.t( 'write.pdfHint' ) );
 
     // A tick, so the toast paints before the modal print dialog freezes the page.
     setTimeout( function() { window.print(); }, pdfHint ? 350 : 0 );
@@ -2147,7 +2147,7 @@ function styleItems()
 function setStyle( want )
 {
     const id = styleIdFor( want );
-    if( ! id ) { NayiveUI.toast( Ayni.t( 'write.actionFailed' ) ); return; }
+    if( ! id ) { Ayni.toast( 'err', Ayni.t( 'write.actionFailed' ) ); return; }
     runSlot( 'styles.style', id );
 }
 
@@ -2539,7 +2539,7 @@ async function clipPaste( plain )
     if( ! ready || ! editor ) return;
 
     const dt = await NayiveOffice.clip.read();
-    if( ! dt ) { NayiveUI.toast( Ayni.t( 'ui.clipboardBlocked' ) ); return; }
+    if( ! dt ) { Ayni.toast( 'warn', Ayni.t( 'ui.clipboardBlocked' ) ); return; }
 
     const text = dt.getData( 'text/plain' ) || '';
     const html = plain ? '' : dt.getData( 'text/html' ) || '';
@@ -2626,7 +2626,7 @@ let find = null;     // made in wireStaticUI
 
 function openFind( replace )
 {
-    if( ! ready || ! editor ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready || ! editor ) { Ayni.toast( 'warn', Ayni.t( 'write.waitForDoc' ) ); return; }
     if( find ) find.open( replace );
 }
 
@@ -2650,7 +2650,7 @@ let linkEditing = null;     // the link the sheet was opened on, or null for a n
 
 function openLinkDialog()
 {
-    if( ! ready || ! editor ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready || ! editor ) { Ayni.toast( 'warn', Ayni.t( 'write.waitForDoc' ) ); return; }
     if( document.getElementById( 'linkBackdrop' ).classList.contains( 'open' ) ) return;   // Ctrl+K: engine and table both ask
 
     const L = links();
@@ -2660,7 +2660,7 @@ function openLinkDialog()
     let collapsed = true;
     try { collapsed = editor.snapshot().selectionCollapsed; } catch( _ ) {}
 
-    if( ! at && collapsed ) { NayiveUI.toast( Ayni.t( 'write.selectTextFirst' ) ); return; }
+    if( ! at && collapsed ) { Ayni.toast( 'warn', Ayni.t( 'write.selectTextFirst' ) ); return; }
 
     linkEditing = at;
     document.getElementById( 'linkHref' ).value = at ? at.authored || at.href || '' : '';
@@ -2684,7 +2684,7 @@ function confirmLink()
     }
     catch( e ) { console.error( 'Write: link -', e ); ok = false; }
 
-    if( ! ok ) NayiveUI.toast( Ayni.t( 'write.actionFailed' ) );
+    if( ! ok ) Ayni.toast( 'err', Ayni.t( 'write.actionFailed' ) );
     focusEditor();
 }
 
@@ -2713,7 +2713,7 @@ function showLinkMenu( act )
                       const L = links();
                       let ok = false;
                       try { ok = !! L && L.removeHyperlink( link.id ); } catch( _ ) {}
-                      if( ! ok ) NayiveUI.toast( Ayni.t( 'write.actionFailed' ) );
+                      if( ! ok ) Ayni.toast( 'err', Ayni.t( 'write.actionFailed' ) );
                       focusEditor();
                   } } );
 
@@ -2737,7 +2737,7 @@ const IMAGE_MIMES = [ 'image/png', 'image/jpeg', 'image/gif', 'image/bmp', 'imag
 
 function pickImage()
 {
-    if( ! ready || ! editor ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready || ! editor ) { Ayni.toast( 'warn', Ayni.t( 'write.waitForDoc' ) ); return; }
     document.getElementById( 'imgInput' ).click();
 }
 
@@ -2752,7 +2752,7 @@ async function insertPickedImage( file )
         if( IMAGE_MIMES.indexOf( mime ) < 0 )
         {
             try { blob = await NayivePhoto.shrinkToJpeg( blob, { maxW: IMAGE_MAX_EDGE, maxH: IMAGE_MAX_EDGE } ); mime = 'image/jpeg'; }
-            catch( _ ) { NayiveUI.toast( Ayni.t( 'write.formatUnsupported' ) ); return; }
+            catch( _ ) { Ayni.toast( 'warn', Ayni.t( 'write.formatUnsupported' ) ); return; }
         }
 
         const size = await imagePoints( blob );
@@ -2764,7 +2764,7 @@ async function insertPickedImage( file )
     catch( e )
     {
         console.error( 'Write: image -', e );
-        NayiveUI.toast( Ayni.t( 'write.actionFailed' ) );
+        Ayni.toast( 'err', Ayni.t( 'write.actionFailed' ) );
     }
 }
 
@@ -2843,10 +2843,10 @@ function applyTableBorderPreset( which )
 
     let snap = null;
     try { snap = editor.snapshot(); } catch( _ ) {}
-    if( ! snap || ! snap.table ) { NayiveUI.toast( Ayni.t( 'write.cursorInTable' ) ); return; }
+    if( ! snap || ! snap.table ) { Ayni.toast( 'warn', Ayni.t( 'write.cursorInTable' ) ); return; }
 
     const one = ! snap.selection || snap.selection.from.paraId === snap.selection.to.paraId;
-    if( which === 'inside' && one ) { NayiveUI.toast( Ayni.t( 'write.selectCells' ) ); return; }
+    if( which === 'inside' && one ) { Ayni.toast( 'warn', Ayni.t( 'write.selectCells' ) ); return; }
 
     const b   = tbSpec();
     const cmd = which === 'none'
@@ -2959,7 +2959,7 @@ function wireTableBorders()
     document.getElementById( 'tbApplyBtn' ).addEventListener( 'click', function()
     {
         const which = tbDraft.preset;
-        if( ! which ) { NayiveUI.toast( Ayni.t( 'write.pickBorder' ) ); return; }
+        if( ! which ) { Ayni.toast( 'warn', Ayni.t( 'write.pickBorder' ) ); return; }
 
         tbState.lineStyle    = tbDraft.lineStyle;
         tbState.lineWeightPt = tbDraft.lineWeightPt;
@@ -3012,7 +3012,7 @@ function inToTw( i )    { return Math.round( ( i || 0 ) * TWIPS_PER_IN ); }
 
 function openPageSetup()
 {
-    if( ! ready ) { NayiveUI.toast( Ayni.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready ) { Ayni.toast( 'warn', Ayni.t( 'write.waitForDoc' ) ); return; }
 
     // Fill from the DOCUMENT, not from Nayive's defaults. If the read fails,
     // fall back to the defaults rather than showing nothing.
@@ -3109,7 +3109,7 @@ function confirmPageSetup()
     if( r && r.ok === false )
     {
         console.error( 'Write: page setup -', r.reason );
-        NayiveUI.toast( Ayni.t( 'write.pageSetupFailed' ) );
+        Ayni.toast( 'err', Ayni.t( 'write.pageSetupFailed' ) );
         return;
     }
     focusEditor();          // the change event marks it dirty

@@ -276,16 +276,16 @@ async function deleteTrip()
     // server and point at the folder, so they work again once it is back.
     if( ! ids || ! ids.length )
     {
-        NayiveUI.toast( T( 'ui.toast.binned' ) );
+        Ayni.toast( 'ok', T( 'ui.toast.binned' ) );
         return;
     }
 
-    NayiveUI.undoToast( T( 'ui.toast.binned' ), function()
+    Ayni.toast( 'ok', T( 'ui.toast.binned' ), { undo: function()
     {
         GumApi.trashRestore( ids )
             .then( loadTrips )
-            .catch( function() { setSyncStatus( 'error' ); NayiveUI.toast( T( 'trips.restoreFailed' ) ); } );
-    });
+            .catch( function() { setSyncStatus( 'error' ); Ayni.toast( 'err', T( 'trips.restoreFailed' ) ); } );
+    } } );
 }
 
 //------------------------------------------------------------------------//
@@ -449,7 +449,7 @@ function deleteStage( stageId )
 
     if( ! removed ) return;
 
-    NayiveUI.undoToast( T( 'ui.toast.deleted' ), function()
+    Ayni.toast( 'ok', T( 'ui.toast.deleted' ), { undo: function()
     {
         mutateTrip( tripId, function( t )
         {
@@ -458,7 +458,7 @@ function deleteStage( stageId )
             stages.splice( Math.min( at, stages.length ), 0, removed );
             return { ...t, stages };
         });
-    });
+    } } );
 }
 
 // The trash button on a stage card's document row.
@@ -494,7 +494,7 @@ async function deleteDocWithUndo( stageId, doc )
     {
         if( ! navigator.onLine )
         {
-            NayiveUI.toast( T( 'trips.filesNeedNet' ) );
+            Ayni.toast( 'warn', T( 'trips.filesNeedNet' ) );
             return;
         }
 
@@ -506,7 +506,7 @@ async function deleteDocWithUndo( stageId, doc )
 
     editDocs( tripId, stageId, function( list ) { return list.filter( function( x ) { return x !== doc; } ); } );
 
-    NayiveUI.undoToast( T( 'ui.toast.deleted' ), function()
+    Ayni.toast( 'ok', T( 'ui.toast.deleted' ), { undo: function()
     {
         editDocs( tripId, stageId, function( list )
         {
@@ -517,8 +517,8 @@ async function deleteDocWithUndo( stageId, doc )
         });
 
         if( ids && ids.length )
-            GumApi.trashRestore( ids ).catch( function() { setSyncStatus( 'error' ); NayiveUI.toast( T( 'trips.restoreFailed' ) ); } );
-    });
+            GumApi.trashRestore( ids ).catch( function() { setSyncStatus( 'error' ); Ayni.toast( 'err', T( 'trips.restoreFailed' ) ); } );
+    } } );
 }
 
 // fn( documents ) -> the new document list of the trip (stageId null) or of that stage.
@@ -596,7 +596,7 @@ function reorderStage( stageId, targetStageId, bBefore )
         return;
 
     // Undo moves this one stage back to where it was.
-    NayiveUI.undoToast( T( 'ui.toast.moved' ), function()
+    Ayni.toast( 'ok', T( 'ui.toast.moved' ), { undo: function()
     {
         mutateTrip( tripId, function( t )
         {
@@ -611,5 +611,5 @@ function reorderStage( stageId, targetStageId, bBefore )
 
             return { ...t, stages };
         });
-    });
+    } } );
 }

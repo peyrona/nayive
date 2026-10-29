@@ -62,10 +62,10 @@ ok( await c.until( "document.querySelector('.CodeMirror') && document.getElement
 ok( await note( "nota tres\n" ), "a third note, in its device draft" );
 ok( await openFile( "a.txt" ), "Open a.txt over it" );
 ok( await c.until( `${CM}.getValue() === 'base\\n'` ), "a.txt is on screen" );
-ok( await c.until( "document.querySelector('#toast .toast-undo')", 3000 ), "an Undo is offered for the note it replaced" );
-ok( await c.evaluate( "document.getElementById('toast').textContent.indexOf( Ayni.t('write.draftSetAside') ) !== -1" ),
-    "and the toast says it is set aside (kept), not discarded", await c.evaluate( "document.getElementById('toast').textContent" ) );
-await c.evaluate( "( document.querySelector('#toast .toast-undo') || { click: function () {} } ).click(), true" );
+ok( await c.until( "document.querySelector('#ayni-toasts .toast.undo .act')", 3000 ), "an Undo is offered for the note it replaced" );
+ok( await c.evaluate( "( ( document.getElementById( 'ayni-toasts' ) || {} ).textContent || '' ).indexOf( Ayni.t('write.draftSetAside') ) !== -1" ),
+    "and the toast says it is set aside (kept), not discarded", await c.evaluate( "( ( document.getElementById( 'ayni-toasts' ) || {} ).textContent || '' )" ) );
+await c.evaluate( "( document.querySelector('#ayni-toasts .toast.undo .act') || { click: function () {} } ).click(), true" );
 ok( await c.until( `${CM}.getValue() === 'nota tres\\n'` ), "Undo brings the note back over the opened file" );
 // Its draft is written again at once (a flush, no timer). A second copy
 // would be there within this moment; an absence can only be checked so.

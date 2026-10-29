@@ -82,8 +82,8 @@ ok( await c.until( "st.queue[ st.playingIndex ] && st.queue[ st.playingIndex ].s
 await c.evaluate( "browse.set( [ " + JSON.stringify( ONE ) + ", " + JSON.stringify( FOUR ) + " ] ); document.activeElement.blur(); true" );
 await key( c, "Enter" );
 ok( await c.until( "st.queue.length === 2 && st.playingIndex === 0 && st.queue.map( e => e.song.path ).join() === " + JSON.stringify( FOUR + "," + ONE ) ), "Enter on two picked songs: they become the queue, in the list's order" );
-ok( await c.until( "!! document.querySelector('#toast .toast-undo')" ), "…with an Undo" );
-await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
+ok( await c.until( "!! document.querySelector('#ayni-toasts .toast.undo .act')" ), "…with an Undo" );
+await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
 ok( await c.until( "st.queue.length === 3" ), "Undo brings the old queue back" );
 
 section( "MUSIC · TREE AND PLAYLISTS" );
@@ -102,9 +102,9 @@ await key( c, "Escape" );
 await mouse( c, ROW( ONE ), { dx: 120 } );
 await key( c, "Delete" );
 ok( await disk( () => ! road().paths.includes( ONE ) ) && await c.until( "! document.querySelector('" + ROW( ONE ).replace( /"/g, '\\"' ) + "')" ), "Del takes it out of the list at once (on disk)" );
-ok( await c.evaluate( "! document.querySelector('.sheet-backdrop.open')" ) && await c.until( "!! document.querySelector('#toast .toast-undo')" ), "…no question, an Undo" );
+ok( await c.evaluate( "! document.querySelector('.sheet-backdrop.open')" ) && await c.until( "!! document.querySelector('#ayni-toasts .toast.undo .act')" ), "…no question, an Undo" );
 ok( onDisk( s, ONE ).length > 0, "…and the song's file is still there" );
-await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
+await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
 ok( await disk( () => road().paths[ 0 ] === ONE ), "Undo puts it back at its place", road() );
 await mouse( c, NODE( "pl:plA" ), { dx: 60, button: "right" } );
 rows = await menuRows( c );
@@ -119,8 +119,8 @@ ok( await c.until( "st.queue.length === 3 && st.queue[ st.playingIndex ].song.pa
 await mouse( c, NODE( "pl:plA" ), { dx: 60, button: "right" } );
 await c.evaluate( "document.querySelector('.item-menu [data-act=delete]').click(); true" );
 ok( await disk( () => ! road() ) && await c.until( "st.filter === 'songs' && ! document.querySelector('" + NODE( "pl:plA" ).replace( /"/g, '\\"' ) + "')" ), "Delete playlist: gone at once (on disk), the songs show" );
-ok( await c.evaluate( "! document.querySelector('.sheet-backdrop.open')" ) && await c.until( "!! document.querySelector('#toast .toast-undo')" ), "…no question, an Undo" );
-await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
+ok( await c.evaluate( "! document.querySelector('.sheet-backdrop.open')" ) && await c.until( "!! document.querySelector('#ayni-toasts .toast.undo .act')" ), "…no question, an Undo" );
+await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
 ok( await disk( () => road() && road().paths.length === 4 ) && await c.until( "!! document.querySelector('" + NODE( "pl:plA" ).replace( /"/g, '\\"' ) + "')" ), "Undo brings the playlist back, songs and all" );
 await mouse( c, ROW( FOUR ), { dx: 120 } );
 await c.evaluate( "browse.run('playlist'); true" );

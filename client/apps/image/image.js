@@ -220,8 +220,8 @@ async function saveTo( dest, replaced )
     if( ! editorDirty && dest === editorPath )
     {
         // The note IS the save here: one that failed must not say "Saved".
-        if( await saveNote( dest ) === null ) { NayiveUI.toast( T( 'photos.commentSaveFailed' ) ); return false; }
-        NayiveUI.toast( T( 'drive.imageSaved' ) );
+        if( await saveNote( dest ) === null ) { Ayni.toast( 'err', T( 'photos.commentSaveFailed' ) ); return false; }
+        Ayni.toast( 'ok', T( 'drive.imageSaved' ) );
         return true;
     }
 
@@ -229,7 +229,7 @@ async function saveTo( dest, replaced )
 
     // An old copy of the picture: what is on the server may be newer. Only a
     // copy beside it can be saved.
-    if( fromCopy && ! copy ) { NayiveUI.toast( T( 'image.offlineCopy' ), { ms: 8000 } ); return false; }
+    if( fromCopy && ! copy ) { Ayni.toast( 'warn', T( 'image.offlineCopy' ) ); return false; }
 
     const fmt  = formatFor( dest );
     const opts = { format: fmt };
@@ -237,7 +237,7 @@ async function saveTo( dest, replaced )
 
     let bytes;
     try { bytes = NayivePhoto.dataUrlBytes( imageEditor.toDataURL( opts ) ); }
-    catch( _ ) { NayiveUI.toast( T( 'drive.renderFailed' ) ); return false; }
+    catch( _ ) { Ayni.toast( 'err', T( 'drive.renderFailed' ) ); return false; }
     const size = imageEditor.getCanvasSize();
 
     saving = true;
@@ -258,13 +258,13 @@ async function saveTo( dest, replaced )
             // the bin unseen, and this edit take its place.
             let now = null;
             try { now = await GumApi.versionOf( dest ); }
-            catch( _ ) { NayiveUI.toast( T( 'drive.imageSaveFailed' ) ); return false; }
+            catch( _ ) { Ayni.toast( 'err', T( 'drive.imageSaveFailed' ) ); return false; }
             if( ! now.tag || now.tag !== heldTag ) throw { status: 412 };   // as the server would answer
 
             const note = await noteOf( dest );
             let ids = null;
             try { ids = await GumApi.binPaths( [ dest ] ); }
-            catch( _ ) { NayiveUI.toast( T( 'drive.imageSaveFailed' ) ); return false; }   // the original stays as it is
+            catch( _ ) { Ayni.toast( 'err', T( 'drive.imageSaveFailed' ) ); return false; }   // the original stays as it is
             if( ids ) kept = { ids: ids, note: note, from: dest, tag: heldTag };
             keptOnce.add( dest );
             cleared = true;
@@ -288,8 +288,8 @@ async function saveTo( dest, replaced )
         if( await saveNote( dest, copy ) && replaced ) replaced.parked = true;   // its Undo takes it back
 
         const back = replaced || kept;
-        if( back ) NayiveUI.undoToast( T( 'drive.imageSaved' ), function() { undoSaveCopy( dest, back ); } );
-        else       NayiveUI.toast( T( 'drive.imageSaved' ) );
+        if( back ) Ayni.toast( 'ok', T( 'drive.imageSaved' ), { undo: function() { undoSaveCopy( dest, back ); } } );
+        else       Ayni.toast( 'ok', T( 'drive.imageSaved' ) );
         saved = true;
     }
     catch( err )
@@ -299,9 +299,9 @@ async function saveTo( dest, replaced )
         // the name is put back (putBack says what happened).
         const changed = !! err && err.status === 412;
         if( kept )                       { keptOnce.delete( dest ); await putBack( dest, kept ); }
-        else if( changed && copy )       NayiveUI.toast( T( 'drive.nameExistsTitle' ) );
+        else if( changed && copy )       Ayni.toast( 'warn', T( 'drive.nameExistsTitle' ) );
         else if( changed && ! cleared )  conflict = true;
-        else                             NayiveUI.toast( T( 'drive.imageSaveFailed' ) );
+        else                             Ayni.toast( 'err', T( 'drive.imageSaveFailed' ) );
     }
     finally { saving = false; setBusy( false ); }
 
@@ -316,11 +316,11 @@ async function putBack( dest, r )
 {
     let res = null;
     try { res = await GumApi.trashRestore( r.ids ); }
-    catch( _ ) { NayiveUI.toast( TF( 'drive.imageNotSavedBin', { name: nameOf( dest ) } ), { ms: 8000 } ); return; }
+    catch( _ ) { Ayni.toast( 'err', TF( 'drive.imageNotSavedBin', { name: nameOf( dest ) } ) ); return; }
     GumApi.announce( [ dest ], false );             // a restore says nothing by itself
 
     const renamed = res && res.renamed && res.renamed.length ? res.renamed[ 0 ] : '';
-    NayiveUI.toast( TF( 'drive.imageNotSavedBack', { name: nameOf( renamed || dest ) } ), { ms: 8000 } );
+    Ayni.toast( 'err', TF( 'drive.imageNotSavedBack', { name: nameOf( renamed || dest ) } ) );
 }
 
 function save() { if( editorPath ) saveTo( editorPath ); }
@@ -379,7 +379,7 @@ async function confirmSaveCopy()
         const note = await noteOf( dest );          // the copy's note will take its place
         let ids;
         try { ids = await GumApi.binPaths( [ dest ] ); }
-        catch( _ ) { NayiveUI.toast( T( 'drive.moveExistingFailed' ) ); return; }
+        catch( _ ) { Ayni.toast( 'err', T( 'drive.moveExistingFailed' ) ); return; }
         await NayiveMedia.purgePaths( [ dest ] );   // its thumbnail + scan entry, as Drive's own delete does
 
         // An old server does not say the bin ids: no Undo then.
@@ -400,7 +400,7 @@ async function confirmSaveCopy()
 async function undoSaveCopy( dest, r )
 {
     try { await GumApi.deletePaths( [ dest ] ); }
-    catch( _ ) { NayiveUI.toast( T( 'drive.restoreFailed' ) ); return; }
+    catch( _ ) { Ayni.toast( 'err', T( 'drive.restoreFailed' ) ); return; }
     await NayiveMedia.purgePaths( [ dest ] );
 
     if( editorPath === dest )
@@ -414,7 +414,7 @@ async function undoSaveCopy( dest, r )
 
     let res = null;
     try { res = await GumApi.trashRestore( r.ids ); }
-    catch( _ ) { NayiveUI.toast( T( 'drive.restoreFailed' ) ); return; }
+    catch( _ ) { Ayni.toast( 'err', T( 'drive.restoreFailed' ) ); return; }
     GumApi.announce( [ dest ], false );             // a restore says nothing by itself
     if( r.from === dest ) keptOnce.delete( dest );  // the original is back: the next ✓ keeps it again
 
@@ -435,7 +435,7 @@ async function undoSaveCopy( dest, r )
         catch( _ ) { /* non-fatal: the file itself is back */ }
     }
 
-    NayiveUI.toast( renamed ? TF( 'drive.restoredAs', { name: renamed } ) : T( 'drive.restored' ) );
+    Ayni.toast( 'ok', renamed ? TF( 'drive.restoredAs', { name: renamed } ) : T( 'drive.restored' ) );
 }
 
 //------------------------------------------------------------------------//

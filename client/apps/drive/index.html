@@ -24,12 +24,14 @@
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
+    <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
@@ -118,9 +120,6 @@
                 </button>
             </div>
 
-            <!-- Upload / download progress sits here when there is room
-                 (NayiveUI.transfer in shared/ui.js); else at the bottom. -->
-            <div class="transfer-slot" data-transfer-slot></div>
             <span id="statusLabel" class="status-label"></span>
 
             <input type="file" id="uploadInput" multiple style="display:none">
@@ -430,9 +429,6 @@
             </div>
         </div>
     </div>
-
-    <!-- Bottom-centre transient toast (shared .toast styling from theme.css) -->
-    <div id="toast" class="toast"></div>
 
     <!-- Drive's code, one file per feature. Classic scripts sharing one global
          scope, so keep this order. init.js is a module for its top-level

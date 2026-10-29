@@ -87,7 +87,7 @@
         delete S.vias[ home ];
         w.running = false;
         if( w.ctl ) w.ctl.abort();
-        if( w.owner && w.list.length ) NayiveUI.toast( C.TF( "chat.viaGone", { name: w.owner } ), { ms: 3500 } );
+        if( w.owner && w.list.length ) Ayni.toast( "info", C.TF( "chat.viaGone", { name: w.owner } ) );
         afterLoad();
     }
 
@@ -523,8 +523,8 @@
     // Deleting a chat, a group or a person, with "Undo" (the chat's ⋮ ->
     // Delete, info.js - its dialog was the question: no second one). The chat
     // leaves the list now - by state, so a live redraw keeps it away - and
-    // the server is told when the Undo is gone (the shared undoToast: 6 s,
-    // the next toast, the page closing).
+    // the server is told when the Undo is gone (Ayni.toast's `final`: 6 s,
+    // a newer Undo, the page closing).
     var going    = new Set();   // ids of the chats on their way out
     var convUndo = null;        // the delete whose Undo is on show
 
@@ -539,12 +539,12 @@
         going.add( id );
         C.renderList();
         var mine = convUndo = { id: id };
-        NayiveUI.undoToast( msg, function ()
+        Ayni.toast( "ok", msg, { undo: function ()
         {
             if( convUndo === mine ) convUndo = null;
             going.delete( id );
             C.renderList();
-        }, { onExpire: function ()
+        }, final: function ()
         {
             if( convUndo === mine ) convUndo = null;
             call().then( function ()
@@ -565,7 +565,7 @@
     // Opening a chat whose delete still has its Undo on show: the delete is final first.
     C.settleConv = function ( id )
     {
-        if( convUndo && convUndo.id === id ) NayiveUI.undoSettle();
+        if( convUndo && convUndo.id === id ) Ayni.settleUndo();
     };
 
     // Delete a chat - for me only, as in WhatsApp: its messages go from my
@@ -915,7 +915,7 @@
     // The toast shows either way, as it always has.
     C.copyText = function ( text )
     {
-        var done = function () { C.toast( "chat.copied" ); };
+        var done = function () { C.toast( "ok", "chat.copied" ); };
         NayiveUI.copyText( text ).then( done, done );
     };
 
@@ -1026,7 +1026,7 @@
                 catch( e ) { C.fail( e ); }
                 return;
             }
-            if( ! picked.length ) { C.toast( "chat.pickSomeone" ); return; }
+            if( ! picked.length ) { C.toast( "warn", "chat.pickSomeone" ); return; }
             var name = await C.askText( { title: T( "chat.groupName" ), label: T( "chat.name" ), hint: T( "chat.groupNameHint" ) } );
             if( ! name ) return;
             try

@@ -342,8 +342,8 @@
             focus: function () { input.focus(); input.select(); },
             changed: function () { return value() !== ( S.deleteAfter || 0 ); },
             // The server deletes the old messages (for everyone) the moment
-            // it hears: so it hears when the "Undo" is gone (the shared
-            // undoToast: 6 s, the next toast, the page closing). Until then
+            // it hears: so it hears when the "Undo" is gone (Ayni.toast's
+            // `final`: 6 s, a newer Undo, the page closing). Until then
             // the new number shows here only (C.pendingTtl: a summary read
             // meanwhile keeps it). The dialog is closed by now.
             save: async function ()
@@ -356,12 +356,12 @@
                 // The toast with the Undo says it too (the count, when known).
                 var k = n ? await countOf( n ) : null;
                 if( C.pendingTtl !== mine ) return;
-                NayiveUI.undoToast( ! n ? T( "chat.autoDeleteOff" ) :
-                                    k ? C.TF( "chat.autoDeleteOnCount", { n: n, count: fmtCount( k ) } ) : C.TF( "chat.autoDeleteOn", { n: n } ), function ()
+                Ayni.toast( "ok", ! n ? T( "chat.autoDeleteOff" ) :
+                                    k ? C.TF( "chat.autoDeleteOnCount", { n: n, count: fmtCount( k ) } ) : C.TF( "chat.autoDeleteOn", { n: n } ), { undo: function ()
                 {
                     if( C.pendingTtl === mine ) C.pendingTtl = null;
                     showTtl( old );
-                }, { onExpire: function ()
+                }, final: function ()
                 {
                     C.api( "PUT", "autodelete", { days: n } ).then( function ()
                     {
@@ -415,7 +415,7 @@
         var members = before.filter( function ( x ) { return x !== p; } );
         try { await C.api( "PATCH", "groups/" + gid, { members: members } ); }
         catch( e ) { C.fail( e ); return; }
-        NayiveUI.undoToast( T( "ui.toast.removed" ), async function ()
+        Ayni.toast( "ok", T( "ui.toast.removed" ), { undo: async function ()
         {
             // Whoever is in the group by now, with them back where they were.
             var now = C.convOf( c.id );
@@ -424,7 +424,7 @@
             list.splice( at < 0 ? list.length : Math.min( at, list.length ), 0, p );
             try { await C.api( "PATCH", "groups/" + gid, { members: list } ); await C.loadSummary(); }
             catch( e ) { C.fail( e ); }
-        } );
+        } } );
         C.loadSummary().catch( function () {} );
     }
 

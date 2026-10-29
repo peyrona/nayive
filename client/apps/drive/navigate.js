@@ -119,7 +119,7 @@ async function loadListing( path )
         curListing = { path: path, nodes: [] };
         render();
         if( err && err.status === 401 ) { GumApi.loginRedirect(); return; }
-        NayiveUI.toast( T( 'drive.openFolderFailed' ) );
+        Ayni.toast( 'err', T( 'drive.openFolderFailed' ) );
     }
 }
 

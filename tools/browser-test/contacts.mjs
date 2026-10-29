@@ -31,8 +31,8 @@ async function disk( fn, ms = 10000 )
 }
 async function undo()
 {
-    if( ! await c.until( "!! document.querySelector('#toast .toast-undo')" ) ) return false;
-    await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
+    if( ! await c.until( "!! document.querySelector('#ayni-toasts .toast.undo .act')" ) ) return false;
+    await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
     return true;
 }
 

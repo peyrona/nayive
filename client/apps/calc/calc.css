@@ -381,7 +381,7 @@ body.calc-painting #gridHost .htCore td { cursor: copy; }
 .top-menu              { z-index: 400; }
 .popup                 { z-index: 400; }
 .sheet-backdrop        { z-index: 500; }
-.info-popup, .toast    { z-index: 600; }
+.info-popup            { z-index: 600; }
 .coach-overlay         { z-index: 700; }
 
 .fx-list { max-height: 320px; overflow-y: auto; margin-bottom: 14px; }

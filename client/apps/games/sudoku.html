@@ -678,7 +678,7 @@
                 if( record ) { times[ level ] = secs; saveTime( KEY[ level ], secs ); }
                 bestEl.textContent = clock( times[ level ] );
 
-                NayiveUI.toast( TF( record ? 'games.sudokuRecord' : 'games.sudokuWon', { time: clock( secs ) } ) );
+                Ayni.toast( 'info', TF( record ? 'games.sudokuRecord' : 'games.sudokuWon', { time: clock( secs ) } ) );
                 sfx.play( record ? 'record' : 'win', null, 0.2 );   // after the last digit's own note
                 return true;
             }

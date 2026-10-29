@@ -101,8 +101,8 @@ function locationSection()
         row.appendChild( text );
         row.appendChild( NayiveUI.rowButton( 'copy', t( 'trips.loc.copy' ), function()
         {
-            return NayiveUI.copyText( url ).then( function() { NayiveUI.toast( t( 'share.link.copied' ) ); },
-                                                  function() { NayiveUI.toast( url ); } );
+            return NayiveUI.copyText( url ).then( function() { Ayni.toast( 'ok', t( 'share.link.copied' ) ); },
+                                                  function() { Ayni.toast( "info", url ); } );
         } ) );
         card.appendChild( row );
 
@@ -175,7 +175,7 @@ function locationSection()
                 : NayiveUI.confirm( { title: t( 'trips.loc.stopTitle' ), body: t( 'trips.loc.stopBody' ),
                                       confirm: t( 'trips.loc.stopOk' ) } )
                       .then( function( yes ) { if( yes ) return NayiveUI.jsonApi( '/api/location', 'DELETE' ); } );
-            done.then( load, function( e ) { NayiveUI.toast( e.message || t( 'ui.loadFailed' ) ); load(); } );
+            done.then( load, function( e ) { Ayni.toast( 'err', e.message || t( 'ui.loadFailed' ) ); load(); } );
         } );
 
         return sw.row;
@@ -212,7 +212,7 @@ function locationSection()
     {
         return NayiveUI.jsonApi( '/api/location', 'GET' )
             .then( function( j ) { tracker = j && j.url ? j : null; },
-                   function( e ) { NayiveUI.toast( e.message || t( 'ui.loadFailed' ) ); } )
+                   function( e ) { Ayni.toast( 'err', e.message || t( 'ui.loadFailed' ) ); } )
             .then( function() { loaded = true; render(); } );
     }
 

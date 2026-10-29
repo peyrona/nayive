@@ -361,7 +361,7 @@
         try { var cfg = await GumApi.readJson( "data/photos/config.json" ); if( cfg && cfg.folder ) dir = cfg.folder; } catch( _ ) {}
         var f = await NayiveUI.pickFile( { title: title, dir: dir, only: function ( name ) { return IMAGE_EXT.test( name ); } } );
         if( ! f ) return null;
-        if( ! IMAGE_EXT.test( f.name ) ) { C.toast( "chat.notImage", 3000 ); return null; }
+        if( ! IMAGE_EXT.test( f.name ) ) { C.toast( "warn", "chat.notImage" ); return null; }
         var bytes = await GumApi.readFileBytes( f.path );
         return new Blob( [ bytes ] );
     }
@@ -378,8 +378,8 @@
         var f = await NayiveUI.pickFile( { title: T( "chat.nayiveDoc" ), confirm: T( "chat.sendMsg" ) } );
         if( ! f || S.open !== conv ) return;
         var photo = IMAGE_EXT.test( f.name );
-        if( ! photo && f.size > MAX_FILE ) { C.toast( "chat.tooBig", 3000 ); return; }
-        if( f.size > 2 * 1024 * 1024 ) C.toast( "chat.fetchingFile" );
+        if( ! photo && f.size > MAX_FILE ) { C.toast( "warn", "chat.tooBig" ); return; }
+        if( f.size > 2 * 1024 * 1024 ) C.toast( "info", "chat.fetchingFile" );
         try
         {
             var bytes = await GumApi.readFileBytes( f.path );
@@ -423,7 +423,7 @@
                 urls[ 0 ] = URL.createObjectURL( f );
                 one.src = urls[ 0 ];
             };
-            var failed = function () { busy = false; C.toast( "chat.failed", 3000 ); };
+            var failed = function () { busy = false; C.toast( "err", "chat.failed" ); };
             body.appendChild( one );
             body.appendChild( h( "div", { class: "prev-tools" },
                 C.btn( "crop", "imgEd.crop", function () { if( ! busy ) cropPhoto( files[ 0 ], take ); } ),
@@ -448,7 +448,7 @@
         {
             // The message box's limit (compose.js send): over it the server refuses
             // the photo's caption. The sheet stays open, the caption in its box.
-            if( Array.from( cap.value.trim() ).length > 4000 ) { C.toast( "chat.tooLong", 4000 ); return; }
+            if( Array.from( cap.value.trim() ).length > 4000 ) { C.toast( "warn", "chat.tooLong" ); return; }
             if( busy ) return;                                  // a turn still being drawn
             sh.close();
             var reply = S.replyTo ? S.replyTo.id : 0, caption = cap.value.trim();
@@ -484,7 +484,7 @@
         // its position (his call: the photo keeps its GPS; Photos maps it).
         if( kind === "photo" && dims && NayivePhoto.copyExif && NayivePhoto.isJpeg( file ) )
             blob = await NayivePhoto.copyExif( file, blob, dims[ 0 ], dims[ 1 ] );
-        if( blob.size > MAX_FILE ) { C.toast( "chat.tooBig", 3000 ); return; }
+        if( blob.size > MAX_FILE ) { C.toast( "warn", "chat.tooBig" ); return; }
 
         var cid = C.rid();
         var temp = null;
@@ -605,7 +605,7 @@
             box.hidden = false;
         }
         img.onload  = place;
-        img.onerror = function () { f.close(); C.toast( "chat.failed", 3000 ); };
+        img.onerror = function () { f.close(); C.toast( "err", "chat.failed" ); };
         window.addEventListener( "resize", place );
         f.layer._onClose = function () { window.removeEventListener( "resize", place ); URL.revokeObjectURL( url ); };
 
@@ -650,7 +650,7 @@
             cut.w = Math.max( 1, Math.min( W - cut.x, Math.round( r.w * W ) ) );
             cut.h = Math.max( 1, Math.min( H - cut.y, Math.round( r.h * H ) ) );
             redrawPhoto( file, img, cut, false ).then( function ( out ) { f.close(); done( out ); },
-                                                       function () { busy = false; C.toast( "chat.failed", 3000 ); } );
+                                                       function () { busy = false; C.toast( "err", "chat.failed" ); } );
         } );
     }
 
@@ -743,7 +743,7 @@
                 stream = await navigator.mediaDevices.getUserMedia( { audio: false,
                     video: deviceId ? { deviceId: { exact: deviceId } } : { width: { ideal: 1920 }, height: { ideal: 1080 } } } );
             }
-            catch( _ ) { if( f.layer.isConnected ) f.close(); C.toast( "chat.noCamera", 3500 ); return; }
+            catch( _ ) { if( f.layer.isConnected ) f.close(); C.toast( "err", "chat.noCamera" ); return; }
             if( ! f.layer.isConnected ) { stop(); return; }                 // closed while it asked
             video.srcObject = stream;
             shutter.ariaDisabled = false;
@@ -871,7 +871,7 @@
         {
             var out = await C.api( "POST", "conv/" + conv + "/messages/" + m.id + "/keep", { dir: dir } );
             take( out.msg );
-            if( ! quiet ) NayiveUI.toast( C.TF( "chat.kept", { path: shortPath( out.path ) } ), { ms: 3500 } );
+            if( ! quiet ) Ayni.toast( "ok", C.TF( "chat.kept", { path: shortPath( out.path ) } ) );
             return out.path;
         }
         catch( e )
@@ -997,7 +997,7 @@
         closeB.addEventListener( "click", leave );
 
         try { await NayivePhoto.loadEditor(); }
-        catch( _ ) { C.popNav( "photo-editor" ); shut(); C.toast( "chat.editorFailed", 3500 ); return; }
+        catch( _ ) { C.popNav( "photo-editor" ); shut(); C.toast( "err", "chat.editorFailed" ); return; }
         if( ! layer.isConnected ) return;          // closed while the library loaded
 
         editor = NayivePhoto.newEditor( host, GumApi.fileUrl( path ) + "&v=" + Date.now(), path.split( "/" ).pop(),
@@ -1007,7 +1007,7 @@
         function pixels()
         {
             try { return NayivePhoto.dataUrlBytes( editor.toDataURL( { format: "jpeg", quality: 0.92 } ) ); }
-            catch( _ ) { C.toast( "chat.failed", 3000 ); return null; }
+            catch( _ ) { C.toast( "err", "chat.failed" ); return null; }
         }
         // The photo's own Exif (its date) put back into the export.
         function withExif( bytes )
@@ -1038,14 +1038,14 @@
                 if( out && out.msg && S.open === conv ) { out.msg._v = Date.now(); S.msgs.set( out.msg.id, out.msg ); C.redraw( out.msg.id ); }
                 leave();
                 if( onSaved ) onSaved();
-                NayiveUI.toast( C.TF( "chat.photoSaved", { path: shortPath( made ) } ), { ms: 3500 } );
+                Ayni.toast( "ok", C.TF( "chat.photoSaved", { path: shortPath( made ) } ) );
             }
             catch( e )
             {
                 busy = false;
                 // Saved, but the message could not be changed: the edit is a
                 // file beside the photo (not lost), and is said so.
-                if( made ) { dirty = false; leave(); NayiveUI.toast( C.TF( "chat.editedNotShown", { path: shortPath( made ) } ), { ms: 8000 } ); }
+                if( made ) { dirty = false; leave(); Ayni.toast( "warn", C.TF( "chat.editedNotShown", { path: shortPath( made ) } ) ); }
                 else C.fail( e );
             }
         } );
@@ -1064,7 +1064,7 @@
                 dirty = false;
                 busy = false;
                 leave();
-                NayiveUI.toast( C.TF( "chat.copySaved", { path: shortPath( copy ) } ), { ms: 3500 } );
+                Ayni.toast( "ok", C.TF( "chat.copySaved", { path: shortPath( copy ) } ) );
             }
             catch( e ) { busy = false; C.fail( e ); }
         } );
@@ -1118,7 +1118,7 @@
 
     C.openLocationPicker = function ()
     {
-        if( ! navigator.geolocation ) { C.toast( "chat.noGeo", 3000 ); return; }
+        if( ! navigator.geolocation ) { C.toast( "warn", "chat.noGeo" ); return; }
         var conv = S.open;
         var sendRow = h( "button", { class: "row", attrs: { type: "button", disabled: true } },
             h( "span", { class: "ring" }, C.ic( "pin-map" ) ),
@@ -1268,7 +1268,7 @@
         function send( card )
         {
             card = cardFit( card );
-            if( ! card.name || ! ( card.tels.length || card.emails.length ) ) { C.toast( "chat.cardNeeds", 2600 ); return; }
+            if( ! card.name || ! ( card.tels.length || card.emails.length ) ) { C.toast( "warn", "chat.cardNeeds" ); return; }
             if( sh ) sh.close();
             C.nightGate( conv, function ( silent ) { C.sendMsg( { kind: "card", card: card, silent: silent || undefined }, conv ); } );
         }
@@ -1365,7 +1365,7 @@
                                           seen.push( k );
                                           return true;
                                       } );
-            if( ! q.value.trim() || list.length < 2 ) { C.toast( "chat.pollNeeds", 2600 ); return; }
+            if( ! q.value.trim() || list.length < 2 ) { C.toast( "warn", "chat.pollNeeds" ); return; }
             sh.close();
             var poll = { q: q.value.trim(), opts: list, multi: multi.checked };
             C.nightGate( conv, function ( silent ) { C.sendMsg( { kind: "poll", poll: poll, silent: silent || undefined }, conv ); } );

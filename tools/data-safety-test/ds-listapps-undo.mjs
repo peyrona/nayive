@@ -48,13 +48,13 @@ async function setFile( selector, file )
     const q   = await c.send( "DOM.querySelector", { nodeId: doc.result.root.nodeId, selector } );
     await c.send( "DOM.setFileInputFiles", { nodeId: q.result.nodeId, files: [ file ] } );
 }
-// An Undo toast lasts 6 s (shared/ui.js undoToast): on a loaded machine the
+// An Undo toast lasts 6 s (Ayni.toast's undo): on a loaded machine the
 // steps between an action and its Undo can take longer, and the Undo is gone
-// before the test presses it. The app's own timer, so it is made long here
-// (the test is about what the Undo does, not how long it waits).
-const LONG_UNDO = `( () => { if( ! window.NayiveUI || NayiveUI.__longUndo ) return true; const u = NayiveUI.undoToast;
-    NayiveUI.undoToast = function ( m, f, o ) { return u.call( this, m, f, Object.assign( {}, o, { ms: 120000 } ) ); };
-    NayiveUI.__longUndo = true; return true; } )()`;
+// before the test presses it. The page's own timer, so here an Undo stays until
+// it is pressed or made final (the test is about what the Undo does, not how long it waits).
+const LONG_UNDO = `( () => { if( ! window.Ayni || ! Ayni.toast || Ayni.__longUndo ) return true; const u = Ayni.toast;
+    Ayni.toast = function ( k, m, o ) { return u.call( this, k, m, o && o.undo ? Object.assign( {}, o, { persist: true } ) : o ); };
+    Ayni.__longUndo = true; return true; } )()`;
 // A fresh page of the app: by way of a blank page, as the same address would
 // answer "loaded" from the old document before the new one starts.
 async function reopen( p, want )
@@ -62,16 +62,15 @@ async function reopen( p, want )
     await c.send( "Page.navigate", { url: "about:blank" } );
     await c.until( "location.href === 'about:blank'" );
     const opened = await c.open( p, want );
-    await c.until( "window.NayiveUI && typeof NayiveUI.undoToast === 'function'" );
+    await c.until( "window.NayiveUI && window.Ayni && typeof Ayni.toast === 'function'" );
     await c.evaluate( LONG_UNDO );
     return opened;
 }
 const TMP = fs.mkdtempSync( path.join( os.tmpdir(), "ds-undo-" ) );
 // The Undo of the toast ON SHOW, clicked once it is there: an app shows it
 // after its save answered (Contacts' import: after `await saveContacts()`),
-// which a loaded machine makes take seconds. (A hidden toast keeps its old
-// button in the DOM - only `.show` is the current one.)
-const UNDO = "document.querySelector( '#toast.show .toast-undo' )";
+// which a loaded machine makes take seconds.
+const UNDO = "document.querySelector( '#ayni-toasts .toast.undo .act' )";
 const undo = async () => await c.until( UNDO, 30000 ) && c.evaluate( `( () => { const b = ${UNDO}; if( b ) b.click(); return !! b; } )()` );
 // The page's PUT answers from now on (window.__puts): proof that a save really
 // met another device's (412) - a re-read in between would make it a plain 200.
@@ -255,7 +254,7 @@ section( "H4 · CALENDAR: delete on a stale copy (412 -> merge), the Undo stays 
     ok( await disk( () => sums() === "Alpha,Charlie" ), "deleted; the save met the phone's and kept Charlie", sums() );
     ok( await c.evaluate( "window.__puts.includes( 412 )" ), "...through a 412 and a merge", await c.evaluate( "window.__puts" ) );
     // (waited for: the page hears its save's answer after the disk has it)
-    ok( await c.until( "document.getElementById('toast').classList.contains('actionable') && document.getElementById('toast').classList.contains('show')" ),
+    ok( await c.until( "!! document.querySelector( '#ayni-toasts .toast.undo' )" ),
         "the Undo is still on show after the merge" );
     await undo();
     ok( await disk( () => sums() === "Alpha,Bravo,Charlie" ), "Undo: Bravo back, Charlie kept", sums() );

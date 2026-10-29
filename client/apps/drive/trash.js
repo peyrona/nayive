@@ -189,7 +189,7 @@ async function restoreTrash( ids )
         await refreshTrash();
         restoredStatus( res );                          // actions.js
     }
-    catch( _ ) { setStatus( '' ); NayiveUI.toast( T( 'drive.restoreFailed' ) ); }
+    catch( _ ) { setStatus( '' ); Ayni.toast( 'err', T( 'drive.restoreFailed' ) ); }
 }
 
 async function purgeTrash( ids, name )
@@ -208,12 +208,12 @@ async function purgeTrash( ids, name )
         await refreshTrash();
         flashStatus( T( 'drive.deletedForever' ) );
     }
-    catch( _ ) { setStatus( '' ); NayiveUI.toast( T( 'drive.deleteFailedMsg' ) ); }
+    catch( _ ) { setStatus( '' ); Ayni.toast( 'err', T( 'drive.deleteFailedMsg' ) ); }
 }
 
 // One item: no question. Its row goes now and it is deleted for good when
 // the Undo is gone (a real delete has no way back, so it waits). A closing
-// page still sends it: the fetch is the first thing onExpire does.
+// page still sends it: the fetch is the first thing its `final` does.
 function purgeOneLater( ids )
 {
     ids.forEach( function( id ) { trashPurging.add( id ); } );
@@ -222,19 +222,18 @@ function purgeOneLater( ids )
 
     function forget() { ids.forEach( function( id ) { trashPurging.delete( id ); } ); }
 
-    NayiveUI.undoToast( T( 'ui.toast.deleted' ), function()
+    Ayni.toast( 'ok', T( 'ui.toast.deleted' ), { undo: function()
     {
         forget();
         if( trashMode ) refreshTrash();
-    },
-    { onExpire: function()
+    }, final: function()
     {
         // Gone: the ids stay in the set, so a bin read that was already on
         // its way cannot draw the row again.
         withBusy( GumApi.trashDelete( ids ) ).catch( function()
         {
             forget();
-            NayiveUI.toast( T( 'drive.deleteFailedMsg' ) );
+            Ayni.toast( 'err', T( 'drive.deleteFailedMsg' ) );
             if( trashMode ) refreshTrash();      // it is still in the bin: show it again
         } );
     } } );
@@ -262,7 +261,7 @@ async function emptyTrash()
         title: T( 'drive.emptyTrashTitle' ),
         body: TF( 'drive.emptyTrashBody', { n: ids.length } ),
         confirm: T( 'drive.emptyTrash' ), danger: true } ) ) return;
-    NayiveUI.undoSettle();            // a one-item delete waiting on its Undo goes now: all of it is going
+    Ayni.settleUndo();            // a one-item delete waiting on its Undo goes now: all of it is going
     setStatus( T( 'drive.emptyingTrash' ) );
     try
     {
@@ -270,5 +269,5 @@ async function emptyTrash()
         await refreshTrash();
         flashStatus( T( 'drive.trashEmptied' ) );
     }
-    catch( _ ) { setStatus( '' ); NayiveUI.toast( T( 'drive.emptyTrashFailed' ) ); }
+    catch( _ ) { setStatus( '' ); Ayni.toast( 'err', T( 'drive.emptyTrashFailed' ) ); }
 }

@@ -153,7 +153,7 @@
             S.bootFailed = true;
             S.last = last;
             E.plug( "offline" );
-            NayiveUI.toast( E.errText( err ), { ms: 4000 } );
+            Ayni.toast( "err", E.errText( err ) );
             return;
         }
         applyLast( last );

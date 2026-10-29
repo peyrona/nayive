@@ -235,7 +235,7 @@
                         timer = setInterval( function () { if( cur === me && ! me.driving ) follow(); else if( cur === me ) driveCheck(); }, TICK );
                     },
                     onStateChange: function ( e ) { if( cur === me ) stateChanged( e.data ); },
-                    onError: function () { if( cur === me ) C.toast( "chat.watchCannot", 4000 ); }
+                    onError: function () { if( cur === me ) C.toast( "warn", "chat.watchCannot" ); }
                 }
             } );
             if( driving )
@@ -243,7 +243,7 @@
                 clearInterval( timer );
                 timer = setInterval( function () { if( cur === me && me.driving ) driveCheck(); else if( cur === me ) follow(); }, TICK );
             }
-        } ).catch( function () { if( cur === me ) { C.toast( "chat.watchCannot", 4000 ); close(); } } );
+        } ).catch( function () { if( cur === me ) { C.toast( "warn", "chat.watchCannot" ); close(); } } );
     }
 
     // ---------------------------------------------------------------------
@@ -328,7 +328,7 @@
 
     function failed( e )
     {
-        if( e && e.status === 409 ) C.toast( "chat.watchBusy", 3000 );
+        if( e && e.status === 409 ) C.toast( "warn", "chat.watchBusy" );
         else C.fail( e );
     }
 

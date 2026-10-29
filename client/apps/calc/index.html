@@ -16,12 +16,14 @@
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
+    <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Vendored libs (all pinned, no build step). Order matters: classic scripts run before the deferred module script below. -->
@@ -335,7 +337,7 @@
 
         <!-- Bottom bar. The tab strip appears only for a workbook with more than
              one sheet; the totals for whatever is selected are always there. -->
-        <div id="statusBar">
+        <div id="statusBar" data-toasts-above>
             <div id="sheetTabs" role="tablist" hidden></div>
             <div id="selStats" aria-live="polite"></div>
         </div>
@@ -635,13 +637,10 @@
         </div>
     </div>
 
-    <!-- Bottom-centre transient toast (shared .toast styling from theme.css) -->
     <!-- The pull-down panels: one for an open menu, one for its submenu.
          .top-menu gives them the card and shadow (shared/app.css). -->
     <div id="menuPanel" class="top-menu menu-panel" role="menu" hidden></div>
     <div id="menuSub"   class="top-menu menu-panel" role="menu" hidden></div>
-
-    <div id="toast" class="toast"></div>
 
     <script type="module" src="calc.js"></script>
 </body>

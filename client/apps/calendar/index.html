@@ -17,12 +17,14 @@
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
+    <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
@@ -663,8 +665,6 @@
          display:none on screen; the @media print block shows it and hides the app. -->
     <div id="printRoot"></div>
 
-    <div id="toast" class="toast"></div>
-
     <script type="module">
         // Nothing is drawn from JS before the dictionary is in: without an
         // in-source fallback, an early render would paint the bare keys.
@@ -769,7 +769,7 @@
             store.onMerged( function( path, body )
             {
                 if( path !== CAL_FILE ) return;
-                if( undoHold && ! undoKeep ) NayiveUI.undoSettle();
+                if( undoHold && ! undoKeep ) Ayni.settleUndo();
                 if( ! applyCalendar( { body: body, source: 'cache' } ) ) return;
                 if( dragBusy ) refetchHeld = true;
                 else if( calendar ) refetchAll();
@@ -851,7 +851,7 @@
                 if( cal.bad )
                 {
                     store.block( CAL_FILE );
-                    if( ! calBadSaid ) NayiveUI.toast( T( 'ui.store.badFile' ), { ms: 6000 } );
+                    if( ! calBadSaid ) Ayni.toast( 'warn', T( 'ui.store.badFile' ) );
                 }
                 calBadSaid = cal.bad;
             }
@@ -871,7 +871,7 @@
             const why = store.isBlocked( CAL_FILE );
             if( ! why ) return false;
 
-            NayiveUI.toast( T( why === 'bad' ? 'ui.store.badFile' : why === 'loading' ? 'ui.store.loading' : 'ui.store.notRead' ), { ms: 6000 } );
+            Ayni.toast( ( why === 'bad' || why === 'loading' ? 'warn' : 'err' ), T( why === 'bad' ? 'ui.store.badFile' : why === 'loading' ? 'ui.store.loading' : 'ui.store.notRead' ) );
             return true;
         }
 
@@ -1214,7 +1214,7 @@
                 if( ! d ) return false;
                 if( JSON.stringify( { start: d.start, end: d.end, allDay: d.allDay } ) !== moved )
                 {
-                    flashToast( T( 'ui.conflictTitle' ) );   // "Changed on another device"
+                    Ayni.toast( 'warn', T( 'ui.conflictTitle' ) );   // "Changed on another device"
                     return false;
                 }
 
@@ -1927,9 +1927,9 @@
                 } );
                 const d = await r.json().catch( () => ( {} ) );
                 if( r.ok ) { remindSaved = d.window_minutes; inp.value = remindSaved; }
-                else       { inp.value = remindSaved; NayiveUI.toast( d.error || T( 'ui.saveFailed' ) ); }
+                else       { inp.value = remindSaved; Ayni.toast( 'err', d.error || T( 'ui.saveFailed' ) ); }
             }
-            catch( e ) { inp.value = remindSaved; NayiveUI.toast( T( 'login.noServer' ) ); }
+            catch( e ) { inp.value = remindSaved; Ayni.toast( 'err', T( 'login.noServer' ) ); }
             inp.disabled = false;
         }
 
@@ -1939,12 +1939,12 @@
             const to     = document.getElementById( 'xTo'   ).value;
             const format = document.getElementById( 'xFormat' ).value;
 
-            if( ! from || ! to )        { NayiveUI.toast( T( 'calendar.exportNeedDates' ) ); return; }
-            if( from > to )             { NayiveUI.toast( T( 'calendar.exportBadRange' ) );  return; }
+            if( ! from || ! to )        { Ayni.toast( 'warn', T( 'calendar.exportNeedDates' ) ); return; }
+            if( from > to )             { Ayni.toast( 'warn', T( 'calendar.exportBadRange' ) );  return; }
 
             const rows = collectOccurrences( from, to );
 
-            if( ! rows.length )         { NayiveUI.toast( T( 'calendar.nothingToExport' ) ); return; }
+            if( ! rows.length )         { Ayni.toast( 'warn', T( 'calendar.nothingToExport' ) ); return; }
 
             closeSettings();
 
@@ -2384,7 +2384,7 @@
             if( refuseEdit() ) return;
 
             const title = document.getElementById( 'fTitle' ).value.trim();
-            if( ! title ) { flashToast( T( 'calendar.needTitle' ) ); return; }
+            if( ! title ) { Ayni.toast( 'warn', T( 'calendar.needTitle' ) ); return; }
 
             const allDay   = document.getElementById( 'fAllDay' ).checked;
             const floating = document.getElementById( 'fFloating' ).value === '1';
@@ -2392,7 +2392,7 @@
 
             if( ! floating && ! allDay && typedTzid && ! isValidTimezone( typedTzid ) )
             {
-                flashToast( TF( 'calendar.badTz', { tz: typedTzid } ) );
+                Ayni.toast( 'warn', TF( 'calendar.badTz', { tz: typedTzid } ) );
                 return;
             }
 
@@ -2405,8 +2405,8 @@
 
             const datesTouched = ! editingKey || datesSignature() !== sheetDates;
 
-            if( datesTouched && ( ! sDate || ! eDate ) ) { setMoreOpen( true ); flashToast( T( 'calendar.needDates' ) );      return; }
-            if( datesTouched && eAt < sAt )              { setMoreOpen( true ); flashToast( T( 'calendar.endBeforeStart' ) ); return; }
+            if( datesTouched && ( ! sDate || ! eDate ) ) { setMoreOpen( true ); Ayni.toast( 'warn', T( 'calendar.needDates' ) );      return; }
+            if( datesTouched && eAt < sAt )              { setMoreOpen( true ); Ayni.toast( 'warn', T( 'calendar.endBeforeStart' ) ); return; }
 
             const def = editingKey ? findDef( editingKey ) : makeEventDef();
             if( ! editingKey ) eventDefs.push( def );
@@ -2558,26 +2558,24 @@
         // No re-read while the Undo is up (undoHold, the wireRefresh guard): it puts
         // back def objects of THIS read, and a series' new EXDATE lives only on its
         // def - a re-read would swap them for fresh ones. The flag is set AFTER
-        // undoToast(): that call settles the Undo before this one, whose onExpire
+        // Ayni.toast(): that call settles the Undo before this one, whose `final`
         // clears it.
         // `byKey`: the Undo finds what it puts back by key on the list as it is
         // then, so a merge does not make it final (see onMerged).
         function undoable( msg, undo, byKey )
         {
-            NayiveUI.undoToast( msg, function()
+            Ayni.toast( 'ok', msg, { undo: function()
             {
                 undoHold = undoKeep = false;
                 if( refuseEdit() )     return;
                 if( undo() === false ) return;
                 refetchAll();
                 saveCalendar();
-            }, { onExpire: function() { undoHold = undoKeep = false; } } );
+            }, final: function() { undoHold = undoKeep = false; } } );
 
             undoHold = true;
             undoKeep = !! byKey;
         }
-
-        function flashToast( msg ) { NayiveUI.toast( msg ); }   // <div id="toast"> below; styling in shared/theme.css
 
         //------------------------------------------------------------------------//
         // TIMEZONE LIST

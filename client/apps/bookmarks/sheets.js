@@ -212,7 +212,7 @@ function saveFolderSheet()
     if( folderEdit && node( folderEdit ) )
     {
         const f = node( folderEdit );
-        if( f.parentId !== dest && ! canMove( [ f.id ], dest ) ) { NayiveUI.toast( T( 'bookmarks.cycle' ) ); return; }
+        if( f.parentId !== dest && ! canMove( [ f.id ], dest ) ) { Ayni.toast( 'warn', T( 'bookmarks.cycle' ) ); return; }
         f.title = name;
         if( f.parentId !== dest ) moveNodes( [ f.id ], dest );
     }
@@ -254,10 +254,10 @@ function doMove( ids, dest )
 {
     if( ids.every( function( id ) { return node( id ) && node( id ).parentId === dest; } ) ) return true;
     if( ! canEdit() ) return false;
-    if( ! canMove( ids, dest ) ) { NayiveUI.toast( T( 'bookmarks.cycle' ) ); return false; }
+    if( ! canMove( ids, dest ) ) { Ayni.toast( 'warn', T( 'bookmarks.cycle' ) ); return false; }
     moveNodes( ids, dest );
     if( ! save() ) return false;
-    NayiveUI.toast( TF( 'bookmarks.movedTo', { name: folderName( node( dest ) ) } ) );
+    Ayni.toast( 'ok', TF( 'bookmarks.movedTo', { name: folderName( node( dest ) ) } ) );
     render();
     return true;
 }
@@ -270,9 +270,9 @@ function doPlace( ids, anchorId, where )
     const n = node( ids[ 0 ] );
     const from = n ? n.parentId : null;
     const dest = placeNodes( ids, anchorId, where );
-    if( ! dest ) { NayiveUI.toast( T( 'bookmarks.cycle' ) ); return false; }
+    if( ! dest ) { Ayni.toast( 'warn', T( 'bookmarks.cycle' ) ); return false; }
     if( ! save() ) return false;
-    if( dest !== from ) NayiveUI.toast( TF( 'bookmarks.movedTo', { name: folderName( node( dest ) ) } ) );
+    if( dest !== from ) Ayni.toast( 'ok', TF( 'bookmarks.movedTo', { name: folderName( node( dest ) ) } ) );
     if( dest !== ROOT ) toggleOpen( dest, true );          // the tree shows where they went
     render();
     return true;
@@ -291,13 +291,13 @@ function deleteNodes( ids )
     save();
     pruneState();
     render();
-    NayiveUI.undoToast( ids.length === 1 ? T( 'bookmarks.deleted' ) : TF( 'bookmarks.deletedN', { n: ids.length } ), function()
+    Ayni.toast( 'ok', ids.length === 1 ? T( 'bookmarks.deleted' ) : TF( 'bookmarks.deletedN', { n: ids.length } ), { undo: function()
     {
         putBack( rec );
         save();
         pruneState();
         render();
-    } );
+    } } );
 }
 
 //------------------------------------------------------------------------//
@@ -319,18 +319,18 @@ function copyLink( id )
 {
     const b = node( id );
     if( ! b ) return;
-    const done = function() { NayiveUI.toast( T( 'bookmarks.linkCopied' ) ); };
+    const done = function() { Ayni.toast( 'ok', T( 'bookmarks.linkCopied' ) ); };
     if( navigator.clipboard && navigator.clipboard.writeText )
-        navigator.clipboard.writeText( b.url ).then( done, function() { NayiveUI.toast( b.url ); } );
+        navigator.clipboard.writeText( b.url ).then( done, function() { Ayni.toast( "info", b.url ); } );
     else
-        NayiveUI.toast( b.url );
+        Ayni.toast( "info", b.url );
 }
 
 function openLink( id )
 {
     const b = node( id );
     if( ! b || ! b.url ) return;
-    if( ! isOpenable( b.url ) ) { NayiveUI.toast( T( 'bookmarks.cannotOpen' ) ); return; }
+    if( ! isOpenable( b.url ) ) { Ayni.toast( 'warn', T( 'bookmarks.cannotOpen' ) ); return; }
     const w = window.open( b.url, '_blank', 'noopener' );
     if( w ) try { w.opener = null; } catch( e ) {}
 }

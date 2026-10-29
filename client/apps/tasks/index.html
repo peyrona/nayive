@@ -17,12 +17,14 @@
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
+    <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
@@ -425,9 +427,6 @@
          what that row borrows its glyph from. -->
     <span id="planGlyph" hidden><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg></span>
 
-    <!-- NayiveUI.toast() writes here (styling in shared/theme.css): "this file opens read-only" and the like. -->
-    <div id="toast" class="toast"></div>
-
     <!-- Vendored date lib, for the once-a-day birthday and trip syncs. Shared with calendar (shared/lib/): one download, one cache entry. -->
     <script src="../shared/lib/luxon_v3.7.2.min.js"></script>
 
@@ -711,7 +710,7 @@
                 if( ! Array.isArray( parsed ) || good.length !== list.length )
                 {
                     store.block( TASKS_FILE );
-                    if( ! badSaid ) NayiveUI.toast( T( 'ui.store.badFile' ), { ms: 6000 } );
+                    if( ! badSaid ) Ayni.toast( 'warn', T( 'ui.store.badFile' ) );
                     badSaid = true;
                 }
                 else
@@ -816,7 +815,7 @@
             const why = store.isBlocked( TASKS_FILE ) || ( readOnce ? '' : 'loading' );
             if( ! why ) return false;
 
-            NayiveUI.toast( T( why === 'bad' ? 'ui.store.badFile' : why === 'loading' ? 'ui.store.loading' : 'ui.store.notRead' ), { ms: 6000 } );
+            Ayni.toast( ( why === 'bad' || why === 'loading' ? 'warn' : 'err' ), T( why === 'bad' ? 'ui.store.badFile' : why === 'loading' ? 'ui.store.loading' : 'ui.store.notRead' ) );
             return true;
         }
 
@@ -1280,7 +1279,7 @@
         // is not doubled.
         function undoDelete( gone )
         {
-            NayiveUI.undoToast( T( 'ui.toast.deleted' ), function()
+            Ayni.toast( 'ok', T( 'ui.toast.deleted' ), { undo: function()
             {
                 if( refuseEdit() ) return;
 
@@ -1292,7 +1291,7 @@
 
                 render();
                 saveTasks();
-            } );
+            } } );
         }
 
         // The bin on a done sub-task, the same as the bin on a done task. Whatever
@@ -1332,7 +1331,7 @@
             saveTasks();
 
             // Looked up again at Undo time, by id: a re-read may have replaced the task.
-            NayiveUI.undoToast( T( 'ui.toast.deleted' ), function()
+            Ayni.toast( 'ok', T( 'ui.toast.deleted' ), { undo: function()
             {
                 if( refuseEdit() ) return;
 
@@ -1362,7 +1361,7 @@
 
                 render();
                 saveTasks();
-            } );
+            } } );
         }
 
         function startEdit( id )

@@ -36,7 +36,6 @@
         var host = document.getElementById( "app" );
         host.textContent = "";
         host.appendChild( root );
-        host.appendChild( h( "div", { class: "toast", attrs: { id: "toast", role: "status" } } ) );
 
         initResizer( rz, side );
         C.buildList( side );
@@ -73,7 +72,7 @@
         {
             S.shared = shared;
             try { history.replaceState( history.state, "", location.pathname ); } catch( _ ) {}
-            C.toast( "chat.pickToShare", 4000 );
+            C.toast( "warn", "chat.pickToShare" );
         }
 
         if( want && C.convOf( want ) ) C.openConv( want );

@@ -85,8 +85,8 @@ await mouse( c, ROW( "b_c" ), { dx: 120 } );
 await key( c, "Delete" );
 ok( await disk( () => ! onFile().b_c && onFile().b_a && ! onFile().root.children.includes( "b_c" ) ), "Del: Gamma leaves the file" );
 ok( await c.evaluate( "! document.querySelector('.sheet-backdrop.open') && ! document.querySelector('" + ROW( "b_c" ) + "')" ), "…at once, no question" );
-ok( await c.until( "!! document.querySelector('#toast .toast-undo')" ), "…with an Undo" );
-await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
+ok( await c.until( "!! document.querySelector('#ayni-toasts .toast.undo .act')" ), "…with an Undo" );
+await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
 ok( await disk( () => onFile().b_c && onFile().b_c.url === "https://gamma.invalid/" && onFile().root.children.join() === "f_work,b_a,b_b,b_c" ) && await c.until( "!! document.querySelector('" + ROW( "b_c" ) + "')" ),
     "Undo puts it back, in its place", onFile().root );
 

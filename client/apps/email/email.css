@@ -361,5 +361,3 @@ button.mail-part:disabled { opacity: 0.6; cursor: progress; }
 .mail-newpass .field-error { flex: 1 1 100%; margin: 0; }
 .mail-signature { min-height: 90px; resize: vertical; }
 
-/* the long jobs' bar (core.js E.bar): the transfer bar, centred */
-.transfer-bar.mail-busy-bar { top: 50%; bottom: auto; transform: translate(-50%, -50%); }

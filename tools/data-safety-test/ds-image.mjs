@@ -48,8 +48,8 @@ const q = await untilBytes( "files/q.png", b => ! b.equals( RED ) );
 ok( q && ! q.equals( RED ), "✓ wrote the edited picture" );
 let bin = await binList();
 ok( bin.some( it => it.orig === "files/q.png" ), "the original went to the bin first", bin );
-ok( await c.until( "document.querySelector('#toast .toast-undo')", 3000 ), "and the toast offers an Undo" );
-await c.evaluate( "( document.querySelector('#toast .toast-undo') || { click: function () {} } ).click(), true" );
+ok( await c.until( "document.querySelector('#ayni-toasts .toast.undo .act')", 3000 ), "and the toast offers an Undo" );
+await c.evaluate( "( document.querySelector('#ayni-toasts .toast.undo .act') || { click: function () {} } ).click(), true" );
 const back = await untilBytes( "files/q.png", b => b.equals( RED ) );
 ok( back && back.equals( RED ), "Undo: the original is back, byte for byte" );
 

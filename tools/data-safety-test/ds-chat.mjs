@@ -108,7 +108,7 @@ const items = await c.evaluate( "[ ...document.querySelectorAll( '.ctx .menu-ite
 ok( items.join( "|" ) === "Reintentar|Copiar|Eliminar", "its menu: try again, copy, delete", items );
 await c.evaluate( "[ ...document.querySelectorAll( '.ctx .menu-item' ) ].pop().click(); true" );
 ok( await c.until( `! ${bubble( "para borrar" )}` ), "Delete takes its bubble away" );
-await c.evaluate( "NayiveUI.undoSettle(); true" );
+await c.evaluate( "Ayni.settleUndo(); true" );
 ok( await settles( OUTBOX + ".then( l => ! l.includes( 'para borrar' ) )" ), "…and, the Undo gone, it leaves the outbox" );
 await c.evaluate( "localStorage.removeItem( 'ds-fail-send' ); true" );
 
@@ -159,8 +159,8 @@ const gone = await phone.del( "/api/chat/contacts/" + javi.id );
 ok( gone.status < 300, "Javi is deleted on another device", gone.status );
 await c.evaluate( "localStorage.removeItem( 'ds-fail-send' ); true" );
 ok( await load(), "the page loads again" );
-ok( await c.until( "( window.__toasts || [] ).concat( document.getElementById( 'toast' ).textContent ).some( t => /chat que ya no está: 1/.test( t ) )", 10000 ),
-    "a toast says one waits for a chat that is gone", await c.evaluate( "document.getElementById( 'toast' ).textContent" ) );
+ok( await c.until( "( window.__toasts || [] ).concat( ( ( document.getElementById( 'ayni-toasts' ) || {} ).textContent || '' ) ).some( t => /chat que ya no está: 1/.test( t ) )", 10000 ),
+    "a toast says one waits for a chat that is gone", await c.evaluate( "( ( document.getElementById( 'ayni-toasts' ) || {} ).textContent || '' )" ) );
 await new Promise( r => setTimeout( r, 1500 ) );    // the opening's own work (flush, list) has had its time
 ok( ( await c.evaluate( OUTBOX ) ).includes( "para nadie" ), "the message is still kept (never thrown away)", await c.evaluate( OUTBOX ) );
 

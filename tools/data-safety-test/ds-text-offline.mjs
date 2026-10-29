@@ -32,7 +32,7 @@ section( "A NOT-UTF-8 FILE WHOSE BYTES COME BACK FROM THE OFFLINE COPY" );
 await c.open( "/nayive/text/?file=files/viejo.txt", "/nayive/text/" );
 const CM = "document.querySelector('.CodeMirror') && document.querySelector('.CodeMirror').CodeMirror";
 ok( await c.until( CM + " && " + CM + ".getValue().indexOf( 'caf' ) === 0" ), "Text shows the file" );
-ok( await c.until( "( window.__toasts || [] ).length || document.getElementById('toast').classList.contains('show')", 10000 ), "it says something about it" );
+ok( await c.until( "( window.__toasts || [] ).length || !! document.querySelector('#ayni-toasts > .toast')", 10000 ), "it says something about it" );
 const value = await c.evaluate( CM + ".getValue()" );
 ok( value.indexOf( "viejo" ) === -1, "the old copy's text is not what it shows", value );
 ok( await c.evaluate( CM + ".getOption( 'readOnly' )" ) === true, "it opens read-only (no way to tell what the bytes are)" );

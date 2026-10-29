@@ -30,7 +30,7 @@ async function confirmNewFolder()
     }
     catch( _ )
     {
-        NayiveUI.toast( T( 'drive.createFolderFailed' ) );
+        Ayni.toast( 'err', T( 'drive.createFolderFailed' ) );
         setStatus( '' );
     }
 }
@@ -76,7 +76,7 @@ function onDrop( e )
         setStatus( T( 'drive.readingFolder' ) );
         Promise.all( entries.map( function( en ) { return walkEntry( en, '' ); } ) )
                .then( function( lists ) { uploadItems( [].concat.apply( [], lists ) ); } )
-               .catch( function() { setStatus( '' ); NayiveUI.toast( T( 'drive.readFolderFailed' ) ); } );
+               .catch( function() { setStatus( '' ); Ayni.toast( 'err', T( 'drive.readFolderFailed' ) ); } );
         return;
     }
 
@@ -766,8 +766,8 @@ async function runAppImports( imports )
     if( conFiles && conCards )  done.push( TF( conCards  === 1 ? 'drive.oneContactTo' : 'drive.nContactsTo', { n: conCards } ) );
     const msg = ( done.length ? TF( 'drive.imported', { what: done.join( T( 'drive.and' ) ) } ) : '' ) +
                 ( kept ? ( done.length ? ' · ' : '' ) + TF( 'drive.importKept', { n: kept } ) : '' );
-    if( msg && undos.length ) NayiveUI.undoToast( msg, function() { undoAppImports( undos ); }, { ms: 8000 } );
-    else if( msg )            NayiveUI.toast( msg, { ms: 5000 } );
+    if( msg && undos.length ) Ayni.toast( "ok", msg, { undo: function() { undoAppImports( undos ); } } );
+    else if( msg )            Ayni.toast( "ok", msg );
     if( failed.length ) NayiveUI.alert( { title: T( 'drive.importFailedTitle' ), body: failed.join( '\n' ) } );
 }
 
@@ -783,7 +783,7 @@ async function undoAppImports( undos )
         catch( err ) { failed.push( u.app + ( err && err.message ? ' (' + err.message + ')' : '' ) ); }
     }
     if( failed.length ) NayiveUI.alert( { title: T( 'drive.importUndoFailed' ), body: failed.join( '\n' ) } );
-    else NayiveUI.toast( T( 'drive.importUndone' ) );
+    else Ayni.toast( 'ok', T( 'drive.importUndone' ) );
 }
 
 // "album/foto.HEIC" + "foto.jpg" -> "album/foto.jpg", and never onto a
@@ -953,7 +953,7 @@ async function uploadItems( items )
     // A LibreOffice document also lands its twin ("x.odt" -> "x.docx"), so
     // a twin already here is a clash too, listed on its own - see markClash.
     const there = await filesThere( items, dest );
-    if( ! there ) { setStatus( '' ); NayiveUI.toast( T( 'drive.checkDestFailed' ), { ms: 6000 } ); return; }
+    if( ! there ) { setStatus( '' ); Ayni.toast( 'err', T( 'drive.checkDestFailed' ) ); return; }
     const clashNames = [];
     const collisions = items.filter( function( it )
     {
@@ -1084,10 +1084,10 @@ async function uploadItems( items )
         {
             if( err && err.status === 507 )
             {
-                NayiveUI.toast( TF( 'drive.uploadQuota', { name: it.relPath } ) );
+                Ayni.toast( 'err', TF( 'drive.uploadQuota', { name: it.relPath } ) );
                 break;
             }
-            NayiveUI.toast( TF( 'drive.uploadFailed', { name: it.relPath } ) );
+            Ayni.toast( 'err', TF( 'drive.uploadFailed', { name: it.relPath } ) );
         }
     }
 
@@ -1095,7 +1095,7 @@ async function uploadItems( items )
     // them - one at a time, as the server does them anyway.
     if( toOffice.length )
     {
-        NayiveUI.toast( T( 'drive.officeStart' ), { ms: 4000 } );
+        Ayni.toast( 'info', T( 'drive.officeStart' ) );
         const done = [], failed = [], kept = [];
         let   off  = false;
         for( let i = 0; i < toOffice.length && ! off; i++ )
@@ -1135,10 +1135,10 @@ async function uploadItems( items )
         if( st && st.jobs && st.jobs.length )
         {
             if( notes.length ) notes.push( T( 'drive.convertStarted' ) );
-            else               NayiveUI.toast( T( 'drive.convertStarted' ) );
+            else               Ayni.toast( 'info', T( 'drive.convertStarted' ) );
             startConvertPoll();
         }
     }
     // One message with all of it: a toast replaces the one before.
-    if( notes.length ) NayiveUI.toast( notes.join( ' ' ), { ms: 4000 + 2000 * notes.length } );
+    if( notes.length ) Ayni.toast( 'info', notes.join( ' ' ) );
 }

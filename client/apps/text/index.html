@@ -17,12 +17,14 @@
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
+    <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Vendored libs (all pinned, no build step). Order matters: CodeMirror core first,
@@ -436,9 +438,6 @@
          editors share, built here by shared/office.js (session, THE SHEETS);
          the Save-as format list is the extensions Text can reopen. -->
 
-    <!-- Bottom-centre transient toast (shared .toast styling from theme.css) -->
-    <div id="toast" class="toast"></div>
-
     <script type="module">
         // Nothing is drawn from JS before the dictionary is in: without an
         // in-source fallback, an early render would paint the bare keys.
@@ -813,9 +812,9 @@
         {
             const sel = editor ? editor.getSelection() : '';
 
-            if( ! sel ) { NayiveUI.toast( T( 'write.selectTextFirst' ) ); return; }
+            if( ! sel ) { Ayni.toast( 'warn', T( 'write.selectTextFirst' ) ); return; }
 
-            if( ! await O.clip.write( sel ) ) { NayiveUI.toast( T( 'ui.clipboardBlocked' ) ); return; }
+            if( ! await O.clip.write( sel ) ) { Ayni.toast( 'warn', T( 'ui.clipboardBlocked' ) ); return; }
 
             if( andCut && ! editor.getOption( 'readOnly' ) ) editor.replaceSelection( '' );   // the API edits even a read-only file
 
@@ -828,7 +827,7 @@
 
             const text = await O.clip.text();
 
-            if( text === null ) { NayiveUI.toast( T( 'ui.clipboardBlocked' ) ); return; }
+            if( text === null ) { Ayni.toast( 'warn', T( 'ui.clipboardBlocked' ) ); return; }
             if( ! text ) return;
 
             // 'end' leaves the caret after what was pasted, where the next
@@ -1434,7 +1433,7 @@
             document.body.appendChild( box );
             window.addEventListener( 'afterprint', function() { box.remove(); }, { once: true } );
 
-            if( pdfHint ) NayiveUI.toast( T( 'write.pdfHint' ), { ms: 5000 } );
+            if( pdfHint ) Ayni.toast( 'info', T( 'write.pdfHint' ) );
 
             // The pictures beside the .md load first (3 s at most), or paper gets
             // empty boxes; and a tick, so the toast paints before the modal
@@ -1465,7 +1464,7 @@
         {
             const why = store.isBlocked( session.path() );
             if( why === 'loading' ) return;   // still being read: nothing to save yet
-            if( why && tooBig ) { NayiveUI.toast( tooBigText( O.baseName( session.path() ) ), { ms: 5000 } ); return; }   // a copy would be just as big
+            if( why && tooBig ) { Ayni.toast( 'warn', tooBigText( O.baseName( session.path() ) ) ); return; }   // a copy would be just as big
             if( why ) { session.openSaveAs(); return; }
             session.saveNow();
         }
@@ -1528,7 +1527,7 @@
                 store.block( name );
                 tooBig = true;
                 editor.setOption( 'readOnly', true );
-                NayiveUI.toast( tooBigText( O.baseName( name ) ), { ms: 5000 } );
+                Ayni.toast( 'warn', tooBigText( O.baseName( name ) ) );
             }
             // Not UTF-8, or no way to tell: on screen as it really reads, but a
             // save would write it back as UTF-8 - so it is not written at all.
@@ -1536,7 +1535,7 @@
             {
                 store.block( name );
                 editor.setOption( 'readOnly', true );
-                NayiveUI.toast( TF( 'text.notUtf8', { name: O.baseName( name ) } ), { ms: 5000 } );
+                Ayni.toast( 'warn', TF( 'text.notUtf8', { name: O.baseName( name ) } ) );
             }
 
             // "Restaurar" has already put what was on screen into the .bak: the
@@ -1580,7 +1579,7 @@
         // "could not be opened" of its own on top (shared/office.js).
         function notText( name )
         {
-            NayiveUI.toast( TF( 'text.notText', { name: O.baseName( name ) } ), { ms: 5000 } );
+            Ayni.toast( 'warn', TF( 'text.notText', { name: O.baseName( name ) } ) );
 
             const e = new Error( 'not a text file: ' + name );
             e.said = true;
@@ -1602,7 +1601,7 @@
             name = O.withExt( name, fmt );
             if( textCanOpen( name ) ) return name;
 
-            NayiveUI.toast( TF( 'text.badExt', { ext: O.extOf( name ) } ) );
+            Ayni.toast( 'warn', TF( 'text.badExt', { ext: O.extOf( name ) } ) );
             return null;
         }
 

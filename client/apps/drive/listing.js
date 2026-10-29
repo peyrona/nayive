@@ -53,7 +53,7 @@ async function runSearch()
         searchHits = [];
         searchTruncated = false;
         render();
-        NayiveUI.toast( T( 'drive.searchFailed' ) );
+        Ayni.toast( 'err', T( 'drive.searchFailed' ) );
     }
 }
 

@@ -238,7 +238,7 @@ function saveFolderSheet()
     if( ! name ) { $( 'folderName' ).focus(); return; }
     const dest = $( 'folderParent' ).value || ROOT;
     const old  = folderEdit ? item( folderEdit ) : null;
-    if( old && dest !== ROOT && isInside( dest, old.id ) ) { NayiveUI.toast( T( 'passwords.cycle' ) ); return; }
+    if( old && dest !== ROOT && isInside( dest, old.id ) ) { Ayni.toast( 'warn', T( 'passwords.cycle' ) ); return; }
     const now = nowIso();
     const f = Object.assign( {}, old || {}, { id: old ? old.id : PwVault.newId(), type: 'folder', title: name, folder: dest,
                                               created: old && old.created ? old.created : now, updated: now } );
@@ -282,13 +282,13 @@ function doMove( ids, dest )
     ids = ids.filter( function( id ) { return !! item( id ); } );
     if( ids.every( function( id ) { return parentOf[ id ] === dest; } ) ) return true;
     if( ! canEdit() ) return false;
-    if( ! canMove( ids, dest ) ) { NayiveUI.toast( T( 'passwords.cycle' ) ); return false; }
+    if( ! canMove( ids, dest ) ) { Ayni.toast( 'warn', T( 'passwords.cycle' ) ); return false; }
     const now = nowIso();
     const list = ids.filter( function( id ) { return parentOf[ id ] !== dest; } )
                     .map( function( id ) { return Object.assign( {}, item( id ), { folder: dest, updated: now } ); } );
     putItems( list ).then( function()
     {
-        NayiveUI.toast( TF( 'passwords.movedTo', { name: folderName( item( dest ) ) } ) );
+        Ayni.toast( 'ok', TF( 'passwords.movedTo', { name: folderName( item( dest ) ) } ) );
         render();
     }, function() {} );
     return true;
@@ -313,10 +313,10 @@ function deleteNodes( ids )
         pruneState();
         render();
         if( ! gone.length ) return;
-        NayiveUI.undoToast( ids.length === 1 ? T( 'passwords.deleted' ) : TF( 'passwords.deletedN', { n: ids.length } ), function()
+        Ayni.toast( 'ok', ids.length === 1 ? T( 'passwords.deleted' ) : TF( 'passwords.deletedN', { n: ids.length } ), { undo: function()
         {
             putItems( gone ).then( function() { render(); }, function() {} );
-        } );
+        } } );
     }, function() {} );
 }
 
@@ -351,7 +351,7 @@ function siteUrl( raw )
 function openSite( raw )
 {
     const url = siteUrl( raw );
-    if( ! url ) { NayiveUI.toast( T( 'passwords.cannotOpen' ) ); return; }
+    if( ! url ) { Ayni.toast( 'warn', T( 'passwords.cannotOpen' ) ); return; }
     const w = window.open( url, '_blank', 'noopener,noreferrer' );
     if( w ) try { w.opener = null; } catch( e ) {}
 }
@@ -371,11 +371,11 @@ function copySecret( text, doneKey )
     if( ! text ) return;
     NayiveUI.copyText( text ).then( function()
     {
-        NayiveUI.toast( TF( 'passwords.copiedFor', { what: T( doneKey ), n: ui.clipSec } ) );
+        Ayni.toast( 'ok', TF( 'passwords.copiedFor', { what: T( doneKey ), n: ui.clipSec } ) );
         clearTimeout( clipTimer );
         clipOwed  = 0;
         clipTimer = setTimeout( wipeClipboard, ui.clipSec * 1000 );
-    }, function() { NayiveUI.toast( T( 'passwords.copyFailed' ) ); } );
+    }, function() { Ayni.toast( 'err', T( 'passwords.copyFailed' ) ); } );
 }
 
 function wipeClipboard()
@@ -393,7 +393,7 @@ function copyFromItem( id, what )
 {
     const n = item( id );
     if( ! n ) return;
-    if( what === 'user' ) NayiveUI.copyText( n.user ).then( function() { NayiveUI.toast( T( 'passwords.userCopied' ) ); }, function() {} );
+    if( what === 'user' ) NayiveUI.copyText( n.user ).then( function() { Ayni.toast( 'ok', T( 'passwords.userCopied' ) ); }, function() {} );
     else copySecret( n.pass, 'passwords.passCopied' );
 }
 

@@ -701,7 +701,7 @@
                 overSubEl.textContent   = TF( 'games.solitaireWon', { time: clock( secs ), n: moves } );
                 overEl.hidden = false;
 
-                NayiveUI.toast( TF( record ? 'games.solitaireRecord' : 'games.solitaireWon',
+                Ayni.toast( 'info', TF( record ? 'games.solitaireRecord' : 'games.solitaireWon',
                                     { time: clock( secs ), n: moves } ) );
                 sfx.play( record ? 'record' : 'win', null, 0.2 );
 

@@ -49,12 +49,14 @@
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
+    <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
@@ -335,7 +337,7 @@
         <a class="btn text primary" href="../drive/index.html" data-i18n="ui.openDrive"></a>
     </div>
 
-    <div class="player-bar" id="playerBar" hidden>
+    <div class="player-bar" id="playerBar" data-toasts-above hidden>
         <div class="player-now">
             <span class="player-art" id="playerArt">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
@@ -404,9 +406,6 @@
             </div>
         </div>
     </div>
-
-    <!-- NayiveUI.toast() writes here: without it every Music toast was silent. -->
-    <div id="toast" class="toast"></div>
 
 </div>
 
@@ -1237,7 +1236,7 @@ function playSongs( songs )
     stopPlayback();
     playIndex( 0 );
     if( snap.queue.length )
-        NayiveUI.undoToast( Ayni.tf( 'music.playingN', { n: songs.length } ), function () { restoreQueue( snap, entries ); } );
+        Ayni.toast( 'ok', Ayni.tf( 'music.playingN', { n: songs.length } ), { undo: function () { restoreQueue( snap, entries ); } } );
 }
 
 function handleQueueDrop( targetIndex )
@@ -1281,14 +1280,14 @@ function removeFromQueue( index )
     renderLibrary();
 
     // Undo: the row goes back where it was; the song playing now keeps playing.
-    NayiveUI.undoToast( Ayni.t( 'ui.toast.removed' ), function ()
+    Ayni.toast( 'ok', Ayni.t( 'ui.toast.removed' ), { undo: function ()
     {
         var cur = st.queue[ st.playingIndex ];
         st.queue.splice( Math.min( index, st.queue.length ), 0, entry );
         st.playingIndex = cur ? st.queue.indexOf( cur ) : -1;
         renderQueueList();
         renderLibrary();
-    } );
+    } } );
 }
 
 function clearQueue()
@@ -1486,7 +1485,7 @@ async function readPlaylists()
     if( ! why && list !== null && ! Array.isArray( list ) ) why = "bad";
     if( why )
     {
-        NayiveUI.toast( Ayni.t( why === "bad" ? 'ui.store.badFile' : 'ui.store.notRead' ) );
+        Ayni.toast( ( why === "bad" ? "warn" : "err" ), Ayni.t( why === "bad" ? 'ui.store.badFile' : 'ui.store.notRead' ) );
         var err = new Error( "playlists not read" );
         err.read = why;
         throw err;
@@ -1532,7 +1531,7 @@ function changePlaylists( apply )
             var why = e && e.read ? e.read : e && e.notRead ? ( e instanceof SyntaxError ? "bad" : "unread" ) : "";
             if( why )
             {
-                NayiveUI.toast( Ayni.t( why === "bad" ? 'ui.store.badFile' : 'ui.store.notRead' ) );
+                Ayni.toast( ( why === "bad" ? "warn" : "err" ), Ayni.t( why === "bad" ? 'ui.store.badFile' : 'ui.store.notRead' ) );
                 e.read = why;
             }
             throw e;
@@ -1582,9 +1581,8 @@ function loadPlaylist( id, shuffled )
 
     // Undo puts the old queue back - only when there was one to lose.
     if( snap.queue.length )
-        NayiveUI.undoToast( Ayni.t( 'music.listLoaded' ) + ( missingMsg ? " " + missingMsg : "" ),
-                            function () { restoreQueue( snap, found ); } );
-    else if( missingMsg ) NayiveUI.toast( missingMsg );
+        Ayni.toast( 'ok', Ayni.t( 'music.listLoaded' ) + ( missingMsg ? " " + missingMsg : "" ), { undo: function () { restoreQueue( snap, found ); } } );
+    else if( missingMsg ) Ayni.toast( 'warn', missingMsg );
 }
 
 // At once, no question: the Undo puts the list back where it was.
@@ -1604,7 +1602,7 @@ async function deletePlaylist( id )
         for( var i = list.length - 1; i >= 0; i-- ) if( list[ i ] && list[ i ].id === id ) list.splice( i, 1 );
         return list.length !== n;               // gone there already: nothing to write
     } );
-    NayiveUI.undoToast( Ayni.t( 'ui.toast.deleted' ), async function ()
+    Ayni.toast( 'ok', Ayni.t( 'ui.toast.deleted' ), { undo: async function ()
     {
         try { await saving; } catch( e ) {}     // the delete's write lands first, or it could land last
         try
@@ -1615,11 +1613,11 @@ async function deletePlaylist( id )
                 list.splice( Math.min( at, list.length ), 0, pl );
             } );
         }
-        catch( e ) { if( ! e || ! e.read ) NayiveUI.toast( Ayni.t( 'music.listUpdateFailed' ) ); }
+        catch( e ) { if( ! e || ! e.read ) Ayni.toast( 'err', Ayni.t( 'music.listUpdateFailed' ) ); }
         refreshPlaylists();
-    } );
+    } } );
     try { await saving; }
-    catch( e ) { if( ! e || ! e.read ) NayiveUI.toast( Ayni.t( 'music.listUpdateFailed' ) ); return; }
+    catch( e ) { if( ! e || ! e.read ) Ayni.toast( 'err', Ayni.t( 'music.listUpdateFailed' ) ); return; }
     refreshPlaylists();                         // with the lists saved elsewhere
 }
 
@@ -1764,7 +1762,7 @@ function setShuffle( on )
  * again, changes only that list, by id, version-checked). Taking a song out
  * of a list never touches the song's file.
  * -------------------------------------------------------------------------*/
-function listToast( e ) { if( ! e || ! e.read ) NayiveUI.toast( Ayni.t( 'music.listUpdateFailed' ) ); }
+function listToast( e ) { if( ! e || ! e.read ) Ayni.toast( 'err', Ayni.t( 'music.listUpdateFailed' ) ); }
 
 function findList( list, id ) { return list.filter( function ( p ) { return p && p.id === id; } )[ 0 ] || null; }
 
@@ -1789,7 +1787,7 @@ async function addToPlaylist( id, paths )
     }
     catch( e ) { listToast( e ); return; }
     if( gone ) { listToast( null ); return; }
-    NayiveUI.toast( added ? Ayni.tf( 'music.addedTo', { n: added, name: name } ) : Ayni.tf( 'music.alreadyIn', { name: name } ) );
+    Ayni.toast( ( added ? "ok" : "info" ), added ? Ayni.tf( 'music.addedTo', { n: added, name: name } ) : Ayni.tf( 'music.alreadyIn', { name: name } ) );
 }
 
 // Out of the playlist on screen, at once; the Undo puts each song back at
@@ -1813,7 +1811,7 @@ async function removeFromPlaylist( ids )
     catch( e ) { listToast( e ); return; }
     if( ! removed.length ) return;
     var back = removed;
-    NayiveUI.undoToast( Ayni.t( 'ui.toast.removed' ), async function ()
+    Ayni.toast( 'ok', Ayni.t( 'ui.toast.removed' ), { undo: async function ()
     {
         try
         {
@@ -1827,7 +1825,7 @@ async function removeFromPlaylist( ids )
             } );
         }
         catch( e ) { listToast( e ); }
-    } );
+    } } );
 }
 
 // The name sheet (#saveBackdrop): saves the queue as a new list, names a
@@ -1858,7 +1856,7 @@ async function confirmName()
 {
     if( ! nameSheet ) return;
     var o = nameSheet, name = $( "#playlistName" ).value.trim();
-    if( ! name ) { NayiveUI.toast( Ayni.t( 'music.needListName' ) ); return; }
+    if( ! name ) { Ayni.toast( 'warn', Ayni.t( 'music.needListName' ) ); return; }
     if( savingList ) return;
     var old = null;
     savingList = true;
@@ -1888,20 +1886,20 @@ async function confirmName()
     {
         // Not saved: the sheet stays open with the name typed, ✓ tries
         // again. A read that failed has said why already.
-        if( ! e || ! e.read ) NayiveUI.toast( Ayni.t( 'music.listSaveFailed' ) );
+        if( ! e || ! e.read ) Ayni.toast( 'err', Ayni.t( 'music.listSaveFailed' ) );
         return;
     }
     finally { savingList = false; }
     NayiveUI.setOpen( "saveBackdrop", false );
     nameSheet = null;
-    if( o.kind === "queue" ) NayiveUI.toast( Ayni.t( 'music.listSaved' ) );
+    if( o.kind === "queue" ) Ayni.toast( 'ok', Ayni.t( 'music.listSaved' ) );
     else if( o.kind === "new" )
     {
-        if( o.paths.length ) NayiveUI.toast( Ayni.tf( 'music.addedTo', { n: o.paths.length, name: name } ) );
-        else { NayiveUI.toast( Ayni.t( 'music.listSaved' ) ); goNode( "pl:" + o.newId ); }
+        if( o.paths.length ) Ayni.toast( 'ok', Ayni.tf( 'music.addedTo', { n: o.paths.length, name: name } ) );
+        else { Ayni.toast( 'ok', Ayni.t( 'music.listSaved' ) ); goNode( "pl:" + o.newId ); }
     }
     else if( old !== null && old !== name )
-        NayiveUI.undoToast( Ayni.t( 'ui.toast.renamed' ), async function ()
+        Ayni.toast( 'ok', Ayni.t( 'ui.toast.renamed' ), { undo: async function ()
         {
             try
             {
@@ -1913,7 +1911,7 @@ async function confirmName()
                 } );
             }
             catch( e ) { listToast( e ); }
-        } );
+        } } );
 }
 
 /* ---------------------------------------------------------------------------
@@ -1947,7 +1945,7 @@ function openSong( id )
 {
     var ids = browse.has( id ) && browse.ids().length > 1 ? browse.ids() : [ id ];
     var songs = songsOf( ids );
-    if( ! songs.length ) { NayiveUI.toast( Ayni.tf( 'music.oneMissing', { n: 1 } ) ); return; }
+    if( ! songs.length ) { Ayni.toast( 'warn', Ayni.tf( 'music.oneMissing', { n: 1 } ) ); return; }
     playSongs( songs );
 }
 
@@ -1992,9 +1990,9 @@ function musicActions()
         { id: "play", label: T( "media.play" ), icon: "play", key: "Enter", rank: 1, group: 0, when: some,
           run: function ( ids ) { playSongs( songsOf( ids ) ); } },
         { id: "next", label: T( "music.playNext" ), icon: ICON.next, rank: 6, group: 0, when: some,
-          run: function ( ids ) { var s = songsOf( ids ); playNext( s ); NayiveUI.toast( tf( "music.nextN", { n: s.length } ) ); } },
+          run: function ( ids ) { var s = songsOf( ids ); playNext( s ); Ayni.toast( "ok", tf( "music.nextN", { n: s.length } ) ); } },
         { id: "queue", label: T( "music.addToQueue" ), icon: "queue", key: "Q", rank: 2, group: 0, when: some,
-          run: function ( ids ) { var s = songsOf( ids ); addToQueue( s ); NayiveUI.toast( tf( "music.queuedN", { n: s.length } ) ); } },
+          run: function ( ids ) { var s = songsOf( ids ); addToQueue( s ); Ayni.toast( "ok", tf( "music.queuedN", { n: s.length } ) ); } },
         { id: "playlist", label: T( "music.addToPlaylist" ), icon: "plus", rank: 3, group: 1, when: some, run: pickPlaylist },
         { id: "album", label: T( "music.goToAlbum" ), icon: ICON.albums, rank: 7, group: 1, when: one,
           run: function ( ids ) { goToAlbum( findSong( ids[ 0 ] ) ); } },
@@ -2093,7 +2091,7 @@ function wireStaticUI()
         if( ! st.queue.length ) return;
         var snap = queueSnapshot();
         clearQueue();
-        NayiveUI.undoToast( Ayni.t( 'music.queueEmptied' ), function () { restoreQueue( snap, [] ); } );
+        Ayni.toast( 'ok', Ayni.t( 'music.queueEmptied' ), { undo: function () { restoreQueue( snap, [] ); } } );
     } );
 
     $( "#saveListBtn" ).addEventListener( "click", openSaveSheet );
@@ -2133,7 +2131,7 @@ function wireStaticUI()
     {
         var entry = st.queue[ st.playingIndex ];
         if( ! entry || ! audio.getAttribute( "src" ) ) return;
-        NayiveUI.toast( Ayni.tf( 'music.cantPlay', { name: entry.song.title } ) );
+        Ayni.toast( 'warn', Ayni.tf( 'music.cantPlay', { name: entry.song.title } ) );
         if( ++failedInRow >= st.queue.length ) { failedInRow = 0; return; }
         if( ! autoNext() ) failedInRow = 0;
     } );

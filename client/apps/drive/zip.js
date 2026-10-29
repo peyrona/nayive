@@ -141,14 +141,14 @@ async function extractZip( path )
     catch( err )
     {
         hideProgress();
-        NayiveUI.toast( zipFailText( err, name ), { ms: 6000 } );
+        Ayni.toast( "err", zipFailText( err, name ) );
         return;
     }
     hideProgress();
 
     const folder = r.path.split( '/' ).pop();
-    NayiveUI.toast( r.skipped ? TF( 'drive.zipDoneSkipped', { folder: folder, n: r.skipped } )
-                              : TF( 'drive.zipDone',        { folder: folder } ), { ms: 5000 } );
+    Ayni.toast( ( r.skipped ? 'warn' : 'ok' ), r.skipped ? TF( 'drive.zipDoneSkipped', { folder: folder, n: r.skipped } )
+                              : TF( 'drive.zipDone',        { folder: folder } ) );
 
     await reload();
     selectIfListed( r.path );
@@ -192,12 +192,12 @@ async function compressSelection()
     catch( err )
     {
         hideProgress();
-        NayiveUI.toast( compressFailText( err ), { ms: 6000 } );
+        Ayni.toast( "err", compressFailText( err ) );
         return;
     }
     hideProgress();
 
-    NayiveUI.toast( TF( 'drive.compressDone', { name: r.path.split( '/' ).pop() } ), { ms: 5000 } );
+    Ayni.toast( 'ok', TF( 'drive.compressDone', { name: r.path.split( '/' ).pop() } ) );
     await reload();
     selectIfListed( r.path );
 }

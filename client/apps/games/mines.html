@@ -509,7 +509,7 @@
 
                 paint();
 
-                if( ! won ) { NayiveUI.toast( T( 'games.minesLost' ) ); sfx.play( 'mine' ); return; }
+                if( ! won ) { Ayni.toast( 'info', T( 'games.minesLost' ) ); sfx.play( 'mine' ); return; }
 
                 secs = seconds();
                 var record = ! has( level ) || secs < times[ level ];
@@ -517,7 +517,7 @@
 
                 sfx.play( record ? 'record' : 'win', null, 0.15 );   // after the last square's own click
 
-                NayiveUI.toast( TF( record ? 'games.minesRecord' : 'games.minesWon', { time: clock( secs ) } ) );
+                Ayni.toast( 'info', TF( record ? 'games.minesRecord' : 'games.minesWon', { time: clock( secs ) } ) );
             }
 
             //---- input -------------------------------------------------------

@@ -95,11 +95,11 @@ ok( bak && bak.equals( LAND ), "the .bak is the file as it was, byte for byte (i
 ok( await openSheet( "files/s2.xlsx", "NOW2" ), "s2.xlsx (plain) is open; its .bak is protected" );
 await c.evaluate( "document.getElementById('restoreBtn').click(), true" );
 ok( await c.until( `${A1} === 'OLD2'` ), "Restore at once (undoable)" );
-ok( await c.until( "document.querySelector('#toast .toast-undo')", 3000 ), "with an Undo" );
+ok( await c.until( "document.querySelector('#ayni-toasts .toast.undo .act')", 3000 ), "with an Undo" );
 let f2 = null;
 for( let i = 0; i < 50 && ! ( f2 && f2.equals( OLD2 ) ); i++ ) { await new Promise( r => setTimeout( r, 200 ) ); f2 = bytesOnDisk( s, "files/s2.xlsx" ); }
 ok( f2 && f2.equals( OLD2 ), "the file is the old copy, byte for byte" );
-await c.evaluate( "( document.querySelector('#toast .toast-undo') || { click: function () {} } ).click(), true" );
+await c.evaluate( "( document.querySelector('#ayni-toasts .toast.undo .act') || { click: function () {} } ).click(), true" );
 ok( await c.until( `${A1} === 'NOW2'` ), "Undo: the sheet as it was is back on screen" );
 for( let i = 0; i < 50 && ! ( f2 && f2.equals( NOW2 ) ); i++ ) { await new Promise( r => setTimeout( r, 200 ) ); f2 = bytesOnDisk( s, "files/s2.xlsx" ); }
 ok( f2 && f2.equals( NOW2 ), "and in the file, byte for byte" );
@@ -130,7 +130,7 @@ c = await first.tab();
 ok( await openSheet( "files/s4.xlsx", "NOW4" ), "s4.xlsx (plain) is open; its .bak is protected" );
 await c.evaluate( "document.getElementById('restoreBtn').click(), true" );
 ok( await c.until( `${A1} === 'OLD4'` ), "Restore at once (undoable)" );
-ok( await c.until( "document.querySelector('#toast .toast-undo')", 3000 ), "with an Undo" );
+ok( await c.until( "document.querySelector('#ayni-toasts .toast.undo .act')", 3000 ), "with an Undo" );
 let f4 = null;
 for( let i = 0; i < 50 && ! ( f4 && f4.equals( OLD4 ) ); i++ ) { await new Promise( r => setTimeout( r, 200 ) ); f4 = bytesOnDisk( s, "files/s4.xlsx" ); }
 ok( f4 && f4.equals( OLD4 ) && bytesOnDisk( s, "files/.bak/s4.xlsx" ).equals( NOW4 ), "swapped: the file is the old copy, the .bak the sheet as it was" );
@@ -143,7 +143,7 @@ await c.evaluate( `( function () {
         return f( u, o );
     };
     return true; } )()` );
-await c.evaluate( "( document.querySelector('#toast .toast-undo') || { click: function () {} } ).click(), true" );
+await c.evaluate( "( document.querySelector('#ayni-toasts .toast.undo .act') || { click: function () {} } ).click(), true" );
 ok( await c.until( TOLD( "write.actionFailed" ) ), "the Undo says it did not work" );
 ok( bytesOnDisk( s, "files/.bak/s4.xlsx" ).equals( NOW4 ), "and the sheet as it was is still in the .bak (not nowhere)" );
 

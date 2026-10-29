@@ -62,8 +62,8 @@ section( "BIN 1,300 PICKED FILES, THEN ONE UNDO" );
     ok( await pickAll() === N, "all 1,300 picked" );
     await c.evaluate( "openDeleteConfirm(); true" );
     ok( await until( () => jpgsOnDisk() === 0, 60000 ), "all 1,300 go to the bin", jpgsOnDisk() );
-    ok( await c.until( "document.querySelector( '.toast-undo' ) && ! deleteBusy", 30000 ), "...with one Undo" );
-    await c.evaluate( "document.querySelector( '.toast-undo' ).click(); true" );
+    ok( await c.until( "document.querySelector( '#ayni-toasts .toast.undo .act' ) && ! deleteBusy", 30000 ), "...with one Undo" );
+    await c.evaluate( "document.querySelector( '#ayni-toasts .toast.undo .act' ).click(); true" );
     ok( await until( () => jpgsOnDisk() === N, 60000 ), "the Undo brings all 1,300 back", jpgsOnDisk() );
 }
 
@@ -88,8 +88,8 @@ section( "A BATCH THAT HALF WENT: WHAT WENT STILL HAS ITS UNDO (review)" );
     await c.evaluate( "deleteTargets = [ 'files/Half/a.txt', 'files/Half/ro/b.txt' ]; confirmDelete(); true" );
     ok( await until( () => ! fs.existsSync( half + "/a.txt" ) ), "a.txt goes to the bin" );
     ok( fs.existsSync( half + "/ro/b.txt" ), "(b.txt cannot, and stays)" );
-    ok( await c.until( "document.querySelector( '.actionable .toast-undo' ) && ! deleteBusy", 30000 ), "the failure toast still has an Undo" );
-    await c.evaluate( "document.querySelector( '.actionable .toast-undo' ).click(); true" );
+    ok( await c.until( "document.querySelector( '#ayni-toasts .toast.undo .act' ) && ! deleteBusy", 30000 ), "the failure toast still has an Undo" );
+    await c.evaluate( "document.querySelector( '#ayni-toasts .toast.undo .act' ).click(); true" );
     ok( await until( () => fs.existsSync( half + "/a.txt" ) ), "the Undo brings a.txt back" );
     fs.chmodSync( half + "/ro", 0o755 );
 }

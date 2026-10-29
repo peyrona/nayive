@@ -15,7 +15,6 @@
  *
  * Deliberately small - just the bits that were byte-identical across apps:
  *   - backdrop / sheet / popup open-close (the `.open` class dance)
- *   - the bottom-centre transient toast (paired CSS is in shared/theme.css)
  *   - the viewer's IANA time zone
  *   - (the texts are Ayni's: Ayni.t / Ayni.tf / Ayni.i18n, shared/ayni/)
  *   - dialog action buttons: the one Nayive style (see Calendar -> "Ir a mes").
@@ -407,37 +406,6 @@
         window.addEventListener( "resize", reclampSheets );
     }
 
-    // Bottom-centre transient toast. Needs a <div id="toast" class="toast"> in
-    // the page (styled by shared/theme.css). opts: { id, ms, keepUndo }.
-    //
-    // keepUndo: news the user did not ask for (a background merge, a sync):
-    // with an Undo on show it waits until that one is gone - shown over it,
-    // it made the Undo final and the user lost the way back (Bookmarks'
-    // "Merged" over Replace all's Undo).
-    function toast( msg, opts )
-    {
-        opts = opts || {};
-        var t = byId( opts.id || "toast" );
-        if( ! t ) return;
-
-        if( opts.keepUndo && undoPending && undoPending.tt === t )
-        {
-            undoPending.after = [ msg, opts ];
-            return;
-        }
-
-        settleUndo();                           // it takes an Undo's place: that one is final now
-        clearTimeout( t._nayiveToastTimer );
-        t.classList.remove( "actionable" );     // clear a prior actionable toast (contact)
-        t.textContent = msg;
-        t.classList.add( "show" );
-
-        t._nayiveToastTimer = setTimeout( function ()
-        {
-            t.classList.remove( "show" );
-        }, opts.ms || 1800 );
-    }
-
     // The viewer's IANA zone, or "UTC" if the browser won't say.
     function viewerTz()
     {
@@ -502,6 +470,7 @@
                     applyInfoDots( n );
                     applyHomeLinks( n );
                     applySyncDots( n );
+                    watchToastLifts( n );
                 }
             }
         } );
@@ -1830,10 +1799,10 @@
                 for ( var i = 0; i < ids.length; i += 2000 ) await GumApi.trashDelete( ids.slice( i, i + 2000 ) );
                 return true;
             }
-            catch ( e ) { toast( t( "ui.room.emptyFail" ) ); return false; }
+            catch ( e ) { Ayni.toast( "err", t( "ui.room.emptyFail" ) ); return false; }
         }
 
-        toast( t( "ui.room.none" ) + " " + short +
+        Ayni.toast( "err", t( "ui.room.none" ) + " " + short +
                ( held > 0 ? " " + tf( "ui.room.trashHolds", { held: fmtBytes( held ) } ) : "" ) );
         return false;
     }
@@ -3304,10 +3273,10 @@
 
                 runTask( renameFolder( target, to ).then( function ()
                 {
-                    undoToast( t( "ui.toast.renamed" ), function ()
+                    Ayni.toast( "ok", t( "ui.toast.renamed" ), { undo: function ()
                     {
                         afterUndo( renameFolder( to, target ).then( function () { return target; } ) );
-                    } );
+                    } } );
                     return to;
                 } ) );
             }
@@ -3346,7 +3315,7 @@
             // "HTTP 409: Conflict".
             function taskFailed( err )
             {
-                toast( err && err.status === 409 ? t( "drive.nameExistsTitle" )
+                Ayni.toast( "warn", err && err.status === 409 ? t( "drive.nameExistsTitle" )
                                                  : String( ( err && err.message ) || err ) );
             }
 
@@ -3360,10 +3329,10 @@
                 runTask( GumApi.binPaths( [ gone ] ).then( function ( ids )
                 {
                     if( ids && ids.length )
-                        undoToast( t( "ui.toast.binned" ), function ()
+                        Ayni.toast( "ok", t( "ui.toast.binned" ), { undo: function ()
                         {
                             afterUndo( GumApi.trashRestore( ids ).then( function () { return gone; } ) );
-                        } );
+                        } } );
                     return sidecarUpkeep( "purgePaths", [ gone ] ).then( function () { return null; } );
                 } ) );
             }
@@ -3809,7 +3778,7 @@
         var back = document.getElementById( "nayive-install-bar" );
         // _finish also drops the dialog's Escape listener - remove() alone leaks it
         if( back ) { if( back._finish ) back._finish(); else back.remove(); }
-        toast( t( "ui.install.done" ), { ms: 3200 } );
+        Ayni.toast( "ok", t( "ui.install.done" ) );
     } );
 
     function isStandalone()
@@ -4475,7 +4444,7 @@
         {
             Ayni.setBusy( b, t( "ui.wait" ) );
             Promise.resolve().then( action )
-                .catch( function ( e ) { toast( e.message ); } )
+                .catch( function ( e ) { Ayni.toast( "err", e.message ); } )
                 .then( function () { Ayni.setBusy( b, false ); } );
         } );
         return b;
@@ -4540,7 +4509,7 @@
             root.innerHTML = "";
         } );
 
-        toast( t( hintKey ), { ms: 5000 } );
+        Ayni.toast( "info", t( hintKey ) );
         setTimeout( function () { window.print(); }, 350 );
     }
 
@@ -4646,16 +4615,16 @@
                                 .then( function ()
                                 {
                                     // Undo shares it again, the same way (a new grant, same person and rights).
-                                    undoToast( tf( "share.stopped", { who: name } ), function ()
+                                    Ayni.toast( "ok", tf( "share.stopped", { who: name } ), { undo: function ()
                                     {
                                         shareApi( "POST", { to: g.to, root: path, app: g.app || opts.app || "folder",
                                                             title: g.title || opts.title || "", mode: g.mode || "ro" } )
-                                            .catch( function ( e ) { toast( e.message ); } )
+                                            .catch( function ( e ) { Ayni.toast( "err", e.message ); } )
                                             .then( function () { if( back.parentNode ) return load(); } );
-                                    } );
+                                    } } );
                                     return load();
                                 } )
-                                .catch( function ( e ) { toast( e.message ); Ayni.setBusy( del, false ); } );
+                                .catch( function ( e ) { Ayni.toast( "err", e.message ); Ayni.setBusy( del, false ); } );
                         } );
                         row.appendChild( del );
                         have.appendChild( row );
@@ -4808,10 +4777,10 @@
                                 .then( function ()
                                 {
                                     toAll = false;
-                                    toast( t( "share.allDone" ) );
+                                    Ayni.toast( "ok", t( "share.allDone" ) );
                                     return load();
                                 } )
-                                .catch( function ( e ) { toast( e.message ); return load(); } );
+                                .catch( function ( e ) { Ayni.toast( "err", e.message ); return load(); } );
                             return;
                         }
 
@@ -4836,10 +4805,10 @@
                         }, Promise.resolve() )
                         .then( function ()
                         {
-                            toast( tf( "share.done", { who: done.join( ", " ) } ) );
+                            Ayni.toast( "ok", tf( "share.done", { who: done.join( ", " ) } ) );
                             return load();
                         } )
-                        .catch( function ( e ) { toast( e.message ); return load(); } );
+                        .catch( function ( e ) { Ayni.toast( "err", e.message ); return load(); } );
                     } );
                     row2.appendChild( ok );
                 }
@@ -4886,8 +4855,8 @@
                         } ) );
                     row.appendChild( rowButton( "copy", t( "share.link.copy" ), function ()
                     {
-                        return copyText( url ).then( function () { toast( t( "share.link.copied" ) ); },
-                                                     function () { toast( url ); } );
+                        return copyText( url ).then( function () { Ayni.toast( "ok", t( "share.link.copied" ) ); },
+                                                     function () { Ayni.toast( "info", url ); } );
                     } ) );
                     // Gone from the sheet at once; the link itself dies when the
                     // Undo does (a new link would be a new address).
@@ -4898,15 +4867,15 @@
                         link    = null;
                         dropped = true;
                         render();
-                        undoToast( t( "share.link.stopped" ), function ()
+                        Ayni.toast( "ok", t( "share.link.stopped" ), { undo: function ()
                         {
                             delete linksGoing[ id ];
                             dropped = false;
                             if( back.parentNode ) load();
-                        }, { onExpire: function ()
+                        }, final: function ()
                         {
                             shareApi( "DELETE", null, id )
-                                .catch( function ( e ) { toast( e.message ); } )
+                                .catch( function ( e ) { Ayni.toast( "err", e.message ); } )
                                 .then( function () { delete linksGoing[ id ]; } );
                         } } );
                     } ) );
@@ -4938,7 +4907,7 @@
                                    .then( function ( g ) { link = g; } );
                 } ).catch( function ( e )
                 {
-                    toast( e.message || t( "ui.loadFailed" ) );
+                    Ayni.toast( "err", e.message || t( "ui.loadFailed" ) );
                 } ).then( render );
             }
 
@@ -5156,120 +5125,57 @@
     }
 
     //------------------------------------------------------------------------//
-    // TRANSFER BAR - uploads and downloads, one look
+    // TOASTS ABOVE A BOTTOM BAR
     //
-    // One box, a row per transfer under way: the uploads (drawn from GumApi's
-    // "nayive:upload" events, below) and whatever an app hands to transfer() -
-    // Drive's downloads. A row is its text with the percent, the bar, and a ✕
-    // when the transfer can be stopped. Never modal: the app stays usable.
-    //
-    // WHERE. An app may offer room in its toolbar: an element with
-    // data-transfer-slot (class .transfer-slot takes the toolbar's free width).
-    // When that room is at least TRANSFER_SLOT_MIN px the box sits there, flat;
-    // otherwise - a phone, a narrow window, an app with no slot - it floats
-    // above the toast at the bottom, the way the upload bar always did. Asked
-    // again on every update and on resize. Styled in theme.css.
+    // On a phone Ayni's notifications sit at the bottom of the screen. A bar
+    // along the bottom (a player, Chat's message box, Calc's sheet tabs) marks
+    // itself data-toasts-above, and its height lifts them over it
+    // (--toasts-lift, shared/ayni/ayni-toasts.css). Asked again whenever such
+    // a bar changes size, shows or hides, and on resize.
 
-    var TRANSFER_SLOT_MIN = 220;
-    var transferBox = null;
+    var liftObserver = window.ResizeObserver ? new ResizeObserver( liftToasts ) : null;
 
-    function placeTransferBox()
+    function liftToasts()
     {
-        if( ! transferBox || ! document.body ) return;
-        var slot = document.querySelector( "[data-transfer-slot]" );
-        var fits = !! ( slot && slot.getClientRects().length && slot.clientWidth >= TRANSFER_SLOT_MIN );
-        var host = fits ? slot : document.body;
-        if( transferBox.parentNode !== host ) host.appendChild( transferBox );
-        transferBox.classList.toggle( "in-slot", fits );
+        var h = 0, H = window.innerHeight;
+        document.querySelectorAll( "[data-toasts-above]" ).forEach( function ( el )
+        {
+            var r = el.getBoundingClientRect();
+            if( r.height && r.bottom >= H - 2 ) h = Math.max( h, H - r.top );
+        } );
+        document.documentElement.style.setProperty( "--toasts-lift", Math.round( h ) + "px" );
     }
 
-    window.addEventListener( "resize", placeTransferBox );
-
-    // A new row on the transfer bar; opts.onStop adds a ✕ that calls it.
-    // Answers { set( text, pct ), end() }: set draws the row (it shows on the
-    // first call), end takes it away - the box fades out with its last row.
-    function transfer( opts )
+    function watchToastLifts( root )
     {
-        opts = opts || {};
-        if( ! transferBox )
-        {
-            transferBox = document.createElement( "div" );
-            transferBox.className = "transfer-bar";
-        }
-
-        var row = document.createElement( "div" );
-        row.className = "transfer-row";
-        row.setAttribute( "role", "progressbar" );
-        row.setAttribute( "aria-valuemin", "0" );
-        row.setAttribute( "aria-valuemax", "100" );
-        row.innerHTML = '<span class="transfer-text"></span>' +
-                        '<span class="transfer-track"><span class="transfer-fill"></span></span>';
-        if( opts.onStop )
-        {
-            var stop = document.createElement( "button" );
-            stop.type      = "button";
-            stop.className = "btn sm transfer-stop";
-            Ayni.setTip( stop, t( "ui.cancel" ) );
-            stop.setAttribute( "aria-label", t( "ui.cancel" ) );
-            stop.innerHTML = Ayni.icon( "close" );
-            stop.addEventListener( "click", function () { stop.ariaDisabled = true; opts.onStop(); } );
-            row.appendChild( stop );
-            row.classList.add( "can-stop" );
-        }
-
-        var ended = false;
-        return {
-            set: function ( text, pct )
-            {
-                if( ended ) return;
-                pct = Math.max( 0, Math.min( 100, Math.floor( pct || 0 ) ) );
-                row.setAttribute( "aria-valuenow", String( pct ) );
-                row.querySelector( ".transfer-text" ).textContent = text;
-                row.querySelector( ".transfer-fill" ).style.width = pct + "%";
-                if( row.parentNode !== transferBox ) transferBox.appendChild( row );
-                placeTransferBox();
-                transferBox.classList.add( "show" );
-            },
-            end: function ()
-            {
-                if( ended ) return;
-                ended = true;
-                if( row.parentNode !== transferBox ) return;
-                // The last row stays while the box fades, so it does not
-                // shrink to an empty frame first.
-                var last = true;
-                for( var r = transferBox.firstChild; r; r = r.nextSibling )
-                    if( r !== row && ! r.classList.contains( "ended" ) ) last = false;
-                row.classList.add( "ended" );
-                if( last ) transferBox.classList.remove( "show" );
-                setTimeout( function () { if( row.parentNode ) row.parentNode.removeChild( row ); },
-                            last ? 250 : 0 );
-            }
-        };
+        if( ! liftObserver || ! root.querySelectorAll ) return;
+        if( root.matches && root.matches( "[data-toasts-above]" ) ) liftObserver.observe( root );
+        root.querySelectorAll( "[data-toasts-above]" ).forEach( function ( el ) { liftObserver.observe( el ); } );
     }
+
+    if( document.body ) watchToastLifts( document.body );
+    else document.addEventListener( "DOMContentLoaded", function () { watchToastLifts( document.body ); } );
+    window.addEventListener( "resize", liftToasts );
 
     //------------------------------------------------------------------------//
     // UPLOAD PROGRESS
     //
     // GumApi.putBinary announces every upload as "nayive:upload" events on the
-    // document ({ id, loaded, total }, then { id, done: true }). Most uploads -
-    // a settings file, a thumbnail - finish at once and must show nothing, so
-    // the row appears only once a BURST of uploads has run for UPLOAD_SHOW_MS.
-    // A burst, not one request: Photos and Drive send many files one after
-    // another, and each alone may be quick. It goes UPLOAD_HIDE_MS after the
-    // last one ends, so it does not flicker in the gap between two files.
+    // document ({ id, loaded, total }, then { id, done: true }). The uploads of
+    // one BURST share one progress notification (Ayni.progress, in the toast
+    // stack): Photos and Drive send many files one after another, and each
+    // alone may be quick. Ayni shows it only once the burst has run 600 ms, so
+    // a settings file or a thumbnail shows nothing. It goes UPLOAD_HIDE_MS
+    // after the last one ends, so it does not flicker in the gap between two files.
     //
     // The percent is of what is in flight NOW; the apps already say "3 de 12"
     // in their own status line when they send several.
 
-    var UPLOAD_SHOW_MS = 600;
     var UPLOAD_HIDE_MS = 400;
 
     var uploads     = {};     // id -> { loaded, total }, the requests in flight
     var burstBytes  = 0;      // bytes the finished uploads of this burst sent
-    var uploadRow   = null;   // the uploads' row on the transfer bar, while shown
-    var burstStart  = 0;      // when the current burst began; 0 = none
-    var uploadShowT = null;
+    var uploadRow   = null;   // the burst's progress notification
     var uploadHideT = null;
 
     function uploadsBusy() { return Object.keys( uploads ).length > 0; }
@@ -5283,19 +5189,14 @@
 
     function drawUploadBar( pct )
     {
-        if( ! document.body ) return;
-        if( ! uploadRow ) uploadRow = transfer();
-        uploadRow.set( tf( "ui.uploading", { pct: pct } ), pct );
+        var text = tf( "ui.uploading", { pct: pct } );
+        if( uploadRow ) uploadRow.set( text, pct );
+        else if( document.body && window.Ayni && Ayni.progress ) uploadRow = Ayni.progress( text, { pct: pct } );
     }
-
-    function uploadBarShown() { return !! uploadRow; }
 
     function endUploadBurst()
     {
         uploadHideT = null;
-        clearTimeout( uploadShowT );      // a burst that ended before the bar was due
-        uploadShowT = null;
-        burstStart  = 0;
         if( uploadRow ) { uploadRow.end(); uploadRow = null; }
         // A real upload (not an autosave or a thumbnail) may just have pushed
         // the space past 90%: look now rather than at the next page.
@@ -5314,22 +5215,11 @@
         {
             clearTimeout( uploadHideT );
             uploadHideT = null;
-            if( ! burstStart ) burstStart = Date.now();
-
-            var waited = Date.now() - burstStart;
-            if( waited >= UPLOAD_SHOW_MS )
-                drawUploadBar( uploadPercent() );
-            else if( ! uploadShowT )
-                uploadShowT = setTimeout( function ()
-                {
-                    uploadShowT = null;
-                    // In a gap between two files: the next one draws it at once.
-                    if( uploadsBusy() ) drawUploadBar( uploadPercent() );
-                }, UPLOAD_SHOW_MS - waited );
+            drawUploadBar( uploadPercent() );
         }
         else
         {
-            if( uploadBarShown() ) drawUploadBar( 100 );   // it did finish
+            if( uploadRow ) drawUploadBar( 100 );           // it did finish
             if( ! uploadHideT ) uploadHideT = setTimeout( endUploadBurst, UPLOAD_HIDE_MS );
         }
     }
@@ -5865,119 +5755,6 @@
     }
 
     //------------------------------------------------------------------------//
-    // UNDO TOAST  -  "Eliminado  [Deshacer]" for a few seconds. Paired CSS
-    // (.toast.actionable / .toast-undo) lives in shared/theme.css.
-    //
-    //   NayiveUI.undoToast( msg, undo, opts )     opts: { id, ms, label,
-    //                                                     onExpire, keepOnLeave }
-    //
-    // Two ways to use it:
-    //   - do it now, `undo` puts it back (a move, a rename, a delete to the bin);
-    //   - hide it now and do the real thing in `onExpire` (a delete with no way
-    //     back): `undo` then only shows it again.
-    // onExpire runs once, when the Undo is gone for good: the time is up, another
-    // toast takes this one's place, undoSettle() is called (an editor or a game
-    // on its next key), or the page is closed. keepOnLeave: a closed page does
-    // NOT run it (a send: the draft keeps the mail).
-    var undoPending = null;             // { tt, onExpire, keepOnLeave } of the Undo on show
-
-    function undoToast( msg, fn, opts )
-    {
-        opts = opts || {};
-        var tt = byId( opts.id || "toast" );
-        if( ! tt ) return;
-
-        settleUndo();                   // one Undo at a time: the older one is final now
-        clearTimeout( tt._nayiveToastTimer );
-        tt.textContent = msg;
-
-        var mine = { tt: tt, onExpire: opts.onExpire || null, keepOnLeave: !! opts.keepOnLeave };
-        undoPending = mine;
-
-        var b = document.createElement( "button" );
-        b.type        = "button";
-        b.className   = "toast-undo";
-        b.textContent = opts.label || t( "ui.undo" );
-        b.addEventListener( "click", function ()
-        {
-            if( undoPending !== mine ) return;
-            undoPending = null;
-            clearTimeout( tt._nayiveToastTimer );
-            tt.classList.remove( "show", "actionable" );
-            showAfter( mine );          // before the undo: a toast of its own goes over it
-            fn();
-        } );
-        tt.appendChild( b );
-
-        tt.classList.add( "actionable", "show" );
-        tt._nayiveToastTimer = setTimeout( function ()
-        {
-            tt.classList.remove( "show" );
-            setTimeout( function () { tt.classList.remove( "actionable" ); }, 250 );
-            if( undoPending === mine ) settleUndo();
-        }, opts.ms || 6000 );
-    }
-
-    // The Undo on show (if any) is final: its onExpire runs now. Cleared BEFORE
-    // the call - an onExpire that shows a toast must not settle itself again.
-    function settleUndo( leaving )
-    {
-        var p = undoPending;
-        if( ! p ) return;
-        undoPending = null;
-        if( p.onExpire && ! ( leaving && p.keepOnLeave ) )
-        {
-            try
-            {
-                if( leaving ) withKeepalive( p.onExpire );
-                else          p.onExpire();
-            }
-            catch ( e ) { console.error( e ); }
-        }
-        if( ! leaving ) showAfter( p );
-    }
-
-    // The keepUndo toast that waited for this Undo (see toast), now.
-    function showAfter( p )
-    {
-        var a = p && p.after;
-        if( ! a ) return;
-        p.after = null;
-        toast( a[ 0 ], Object.assign( {}, a[ 1 ], { keepUndo: false } ) );
-    }
-
-    // B5: an editor or a game closes the Undo on the next key or move, or the
-    // Undo would throw the new work away.
-    function undoSettle()
-    {
-        var p = undoPending;
-        if( ! p ) return;
-        clearTimeout( p.tt._nayiveToastTimer );
-        p.tt.classList.remove( "show", "actionable" );
-        settleUndo();
-    }
-
-    // A fetch started while the page is going away is cancelled with it unless
-    // it carries keepalive (small bodies only: the browser caps them at 64 KB).
-    // So while a closing page runs its last onExpire, every fetch gets the flag.
-    // Only the fetches started in that same tick: one after an await is lost.
-    function withKeepalive( fn )
-    {
-        var real = window.fetch;
-        if( ! real ) { fn(); return; }
-        window.fetch = function ( url, init )
-        {
-            var o = Object.assign( {}, init || {} ), body = o.body;
-            if( body == null || ( typeof body === "string" && body.length < 60000 ) ) o.keepalive = true;
-            return real.call( window, url, o );
-        };
-        try { fn(); }
-        finally { window.fetch = real; }
-    }
-
-    window.addEventListener( "pagehide", function () { settleUndo( true ); } );
-
-    //------------------------------------------------------------------------//
     // "MORE" MENU  -  the small popup a header "..." button opens (view switch
     // in Calendar, the phone-only import / export in Contacts, the file buttons
     // in Calc / Write). The menu is a `.top-menu` (shared/app.css: position
@@ -6500,7 +6277,6 @@
         onSheetClose: onSheetClose, // close-only dialogs: run something when a sheet closes
         open:     open,
         close:    close,
-        toast:    toast,
         sessionExpired: sessionExpired,   // the shared "your session expired" bar (gum-api / store call it)
         loginRedirect:  loginRedirect,    // to the sign-in page and back here (GumApi.loginRedirect too)
         signOut:        signOut,          // the launcher's and admin's sign-out ({ unlinkPhone, swScope })
@@ -6522,9 +6298,6 @@
         syncIndicator:  syncIndicator,    // a ready store.onState listener for #syncIndicator
         bootWithStore:  bootWithStore,    // the access probe + "open from cache" fallback
         wireRefresh:    wireRefresh,      // visibilitychange / focus / plug-click re-read
-        undoToast:      undoToast,        // "Eliminado [Deshacer]"
-        undoSettle:     undoSettle,       // the Undo on show is final now (editor / game: next key)
-        transfer:       transfer,         // a row on the shared upload/download bar
         wireMenu:       wireMenu,         // the header "..." popup menu
         h:                 h,             // build DOM: h( "div", { class, text, on, attrs, data }, kids… )
         attachPanel:       attachPanel,   // the clip's round-button panel (Chat, eMail)

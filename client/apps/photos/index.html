@@ -54,12 +54,14 @@
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
+    <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
@@ -645,8 +647,6 @@
         </div>
     </div>
 
-    <div class="toast" id="toast"></div>
-
 <script src="../shared/media.js"></script>
 <script>
 "use strict";
@@ -1138,7 +1138,7 @@ async function handleAddPhotos( fileList )
     const files = Array.from( fileList || [] ).filter( f => f && ( f.type.indexOf( "image/" ) === 0 || f.type.indexOf( "video/" ) === 0 || isVideo( f.name ) ) );
     $( "#addInput" ).value = "";
     if( ! files.length ) return;
-    if( DEMO ) { NayiveUI.toast( Ayni.t( 'photos.demoNoUpload' ) ); return; }
+    if( DEMO ) { Ayni.toast( 'warn', Ayni.t( 'photos.demoNoUpload' ) ); return; }
 
     // Friendly up-front space check, with the offer to empty the papelera when
     // that alone would make room (the server enforces the quota too).
@@ -1175,7 +1175,7 @@ async function handleAddPhotos( fileList )
         // passes): an SVG, a TIFF, a HEIC would sit in the album unseen.
         if( SHOW_EXT.indexOf( extOf( ready.name || f.name ) ) === -1 )
         {
-            NayiveUI.toast( Ayni.tf( "photos.notAPhoto", { name: f.name } ) );
+            Ayni.toast( "warn", Ayni.tf( "photos.notAPhoto", { name: f.name } ) );
             continue;
         }
         let name = NayiveUI.uniqueName( ready.name || ( "foto-" + Date.now() + "-" + i + ".jpg" ), taken );
@@ -1199,7 +1199,7 @@ async function handleAddPhotos( fileList )
             // ours, and there is nothing we can empty to fix it - say whose it is.
             if( status === 507 )
             {
-                NayiveUI.toast( RO ? Ayni.t( 'photos.ownerNoSpace' )
+                Ayni.toast( 'err', RO ? Ayni.t( 'photos.ownerNoSpace' )
                                    : Ayni.t( "ui.quotaExceeded" ) );
                 break;
             }
@@ -1208,17 +1208,17 @@ async function handleAddPhotos( fileList )
             // (you may add, never replace) - keep going, the rest may be fine.
             if( status === 409 )
             {
-                NayiveUI.toast( Ayni.tf( "photos.alreadyThere", { name: name } ) );
+                Ayni.toast( "warn", Ayni.tf( "photos.alreadyThere", { name: name } ) );
                 continue;
             }
 
-            NayiveUI.toast( Ayni.tf( "photos.uploadFailed", { name: name } ) );
+            Ayni.toast( "err", Ayni.tf( "photos.uploadFailed", { name: name } ) );
         }
     }
 
     Ayni.setBusy( $( "#addBtn" ), false );
     setSync( "synced" );
-    NayiveUI.toast( Ayni.tf( done === 1 ? "st.oneUploaded" : "st.nUploaded", { n: done } ) );
+    Ayni.toast( "ok", Ayni.tf( done === 1 ? "st.oneUploaded" : "st.nUploaded", { n: done } ) );
 
     if( done ) await loadFolder();
     else if( emptied ) await loadFolder();     // restore the "no images" hint
@@ -1716,7 +1716,7 @@ async function loadComments()
     {
         COMMENTS = {};
         if( ! err || err.status !== 403 )
-            NayiveUI.toast( Ayni.t( 'photos.commentsFailed' ) );
+            Ayni.toast( 'err', Ayni.t( 'photos.commentsFailed' ) );
     }
 }
 // A shared album: what its owner wrote about the photos, lent by the server
@@ -2253,10 +2253,10 @@ function editPhoto( id )
 {
     const p = photos().find( x => x.id === id );
     if( ! p ) return;
-    if( DEMO ) { NayiveUI.toast( Ayni.t( 'photos.demoNoEdit' ) ); return; }
+    if( DEMO ) { Ayni.toast( 'warn', Ayni.t( 'photos.demoNoEdit' ) ); return; }
     if( EDIT_EXT.indexOf( extOf( p.name ) ) === -1 )
     {
-        NayiveUI.toast( Ayni.t( 'photos.cantEdit' ) );
+        Ayni.toast( 'warn', Ayni.t( 'photos.cantEdit' ) );
         openLb( id, photos() );
         return;
     }
@@ -2318,7 +2318,7 @@ function setMode( m )
     // is not started: it stayed blank until a reload.
     if( m === "pase" && ! pasePhotos().length )
     {
-        NayiveUI.toast( PHOTOS.length ? Ayni.tf( "photos.noMatch", { q: st.q.trim() } ) : Ayni.t( 'photos.noPhotos' ) );
+        Ayni.toast( "info", PHOTOS.length ? Ayni.tf( "photos.noMatch", { q: st.q.trim() } ) : Ayni.t( 'photos.noPhotos' ) );
         return;
     }
     st.mode = m;
@@ -2370,7 +2370,7 @@ NayiveMedia.wireFolderInfo();                          // folder-? -> path + cou
 // Reload: re-list the folder from the server (picks up added / removed files).
 $( "#reloadBtn" ).addEventListener( "click", () =>
 {
-    if( DEMO ) { NayiveUI.toast( Ayni.t( 'photos.demoNoReload' ) ); return; }
+    if( DEMO ) { Ayni.toast( 'warn', Ayni.t( 'photos.demoNoReload' ) ); return; }
     loadFolder();
 } );
 
@@ -2716,7 +2716,7 @@ async function downloadPaths( paths )
     }
     catch( err )
     {
-        NayiveUI.toast( Ayni.t( err && err.tooMany ? "drive.pickTooMany" :
+        Ayni.toast( ( err && err.status !== 413 && ! err.tooMany ? "err" : "warn" ), Ayni.t( err && err.tooMany ? "drive.pickTooMany" :
                                     err && err.status === 413 ? "drive.compressTooMany" : "drive.downloadFailed" ) );
     }
     finally { dlBusy = false; }
@@ -2856,10 +2856,10 @@ async function newAlbum( parent )
     if( RO || DEMO ) return;
     const name = await askName( Ayni.t( "photos.newAlbum" ), "", Ayni.t( "photos.newAlbum" ) );
     if( name == null ) return;
-    if( ! okName( name ) ) { NayiveUI.toast( Ayni.t( "drive.createFolderFailed" ) ); return; }
+    if( ! okName( name ) ) { Ayni.toast( "err", Ayni.t( "drive.createFolderFailed" ) ); return; }
     setSync( "saving" );
     try { await GumApi.makeDir( parent, name ); }
-    catch( _ ) { setSync( "synced" ); NayiveUI.toast( Ayni.t( "drive.createFolderFailed" ) ); return; }
+    catch( _ ) { setSync( "synced" ); Ayni.toast( "err", Ayni.t( "drive.createFolderFailed" ) ); return; }
     setSync( "synced" );
     treeOpen.add( parent );
     saveTreeOpen();
@@ -2935,9 +2935,9 @@ async function renameAlbum( path )
     const old  = baseName( path );
     const name = await askName( Ayni.t( "ui.rename" ), old, Ayni.t( "ui.rename" ) );
     if( name == null || name === old ) return;
-    if( ! okName( name ) ) { NayiveUI.toast( Ayni.tf( "drive.renameFailed", { err: name } ) ); return; }
+    if( ! okName( name ) ) { Ayni.toast( "err", Ayni.tf( "drive.renameFailed", { err: name } ) ); return; }
     const parent = NayiveMedia.dirOf( path );
-    if( ( await destNameSet( parent ) ).has( name ) ) { NayiveUI.toast( Ayni.t( "drive.nameExistsTitle" ) ); return; }
+    if( ( await destNameSet( parent ) ).has( name ) ) { Ayni.toast( "warn", Ayni.t( "drive.nameExistsTitle" ) ); return; }
     if( moveBusy ) return;
     moveBusy = true;
     try { await runMoves( [ { from: path, to: parent + "/" + name, clash: false } ], false, 0, Ayni.t( "ui.toast.renamed" ), "drive.renameFailed" ); }
@@ -2979,7 +2979,7 @@ async function runMoves( items, replace, skipped, okMsg, failKey )
     const undo = done.length && canUndo ? { kind: "moves", steps: done } : null;
     const msg  = failed ? Ayni.tf( failKey, { err: failed && failed.message || failed } )
                : okMsg || ( Ayni.tf( "drive.nMoved", { n: moved } ) + ( skipped ? " · " + Ayni.tf( "drive.nSkipped", { n: skipped } ) : "" ) );
-    settle( remapped.map( r => r[ 0 ] ), NayiveUI.followPath( DIR, remapped ), msg, undo );
+    settle( remapped.map( r => r[ 0 ] ), NayiveUI.followPath( DIR, remapped ), msg, undo, failed ? "err" : "ok" );
 }
 
 // Copy photos (or an album) into `dest` - Drive's doCopy: one server copy per
@@ -3006,9 +3006,9 @@ async function copyPaths( paths, dest )
     catch( err ) { failed = err; }
     await NayiveMedia.copyPaths( copied );
     setSync( "synced" );
-    if( failed ) NayiveUI.toast( failed.status === 507 ? Ayni.t( "ui.room.none" )
+    if( failed ) Ayni.toast( "err", failed.status === 507 ? Ayni.t( "ui.room.none" )
                                                        : Ayni.tf( "drive.copyFailed", { err: failed && failed.message || failed } ) );
-    else NayiveUI.toast( Ayni.tf( "drive.nCopied", { n: files } ) );
+    else Ayni.toast( "ok", Ayni.tf( "drive.nCopied", { n: files } ) );
     if( copied.length && dest === DIR ) reloadView();
     else if( copied.length ) loadAlbums();
 }
@@ -3027,22 +3027,22 @@ async function binPaths( paths )
     const { ids, went, failed } = await NayiveMedia.binInBatches( paths );
     binBusy = false;
     setSync( "synced" );
-    if( ! went.length ) { NayiveUI.toast( Ayni.t( "drive.trashFailed" ) ); return; }
+    if( ! went.length ) { Ayni.toast( "err", Ayni.t( "drive.trashFailed" ) ); return; }
     // The open album (or one it is in) went: the album above it opens.
     const gone = went.find( p => under( DIR, p ) );
     settle( went, gone ? NayiveMedia.dirOf( gone ) : DIR, Ayni.t( failed ? "drive.trashFailed" : "ui.toast.binned" ),
-            ids && ids.length ? { kind: "bin", ids: ids } : null );
+            ids && ids.length ? { kind: "bin", ids: ids } : null, failed ? "err" : "ok" );
 }
 
 // After a move or the bin: show the truth. `next` is where the open album is
 // now - another place re-opens the page there, the Undo carried along.
-function settle( gone, next, msg, undo )
+function settle( gone, next, msg, undo, kind )
 {
-    if( next !== DIR ) { carryUndo( msg, undo ); location.href = albumUrl( next ); return; }
+    if( next !== DIR ) { carryUndo( msg, undo, kind ); location.href = albumUrl( next ); return; }
     if( albumIndexShown ) reloadView();
     else { dropPhotos( gone ); loadAlbums(); }
-    if( undo ) NayiveUI.undoToast( msg, () => { runUndo( undo ).then( () => reloadView() ); } );
-    else       NayiveUI.toast( msg );
+    if( undo ) Ayni.toast( kind, msg, { undo: () => { runUndo( undo ).then( () => reloadView() ); } } );
+    else       Ayni.toast( kind, msg );
 }
 
 // Photos that left this album: off the screen, without a reload (the scroll
@@ -3110,30 +3110,31 @@ async function runUndo( undo )
         }
     }
     setSync( "synced" );
-    if( err ) NayiveUI.toast( undo.kind === "bin" ? Ayni.t( "drive.restoreFailed" )
+    if( err ) Ayni.toast( "err", undo.kind === "bin" ? Ayni.t( "drive.restoreFailed" )
                                                   : Ayni.tf( "drive.moveFailed", { err: err && err.message || err } ) );
-    else if( res && res.renamed && res.renamed.length ) NayiveUI.toast( Ayni.tf( "drive.restoredAs", { name: res.renamed[ 0 ] } ) );
-    else if( res ) NayiveUI.toast( Ayni.t( "drive.restored" ) );
+    else if( res && res.renamed && res.renamed.length ) Ayni.toast( "ok", Ayni.tf( "drive.restoredAs", { name: res.renamed[ 0 ] } ) );
+    else if( res ) Ayni.toast( "ok", Ayni.t( "drive.restored" ) );
     return ! err;
 }
 
 // The open album moved or went: its Undo rides along to the page opened next
 // (sessionStorage: this tab only), shown there for a short while.
-function carryUndo( msg, undo )
+function carryUndo( msg, undo, kind )
 {
-    try { sessionStorage.setItem( CARRY_KEY, JSON.stringify( { msg: msg, undo: undo, back: DIR, ts: Date.now() } ) ); } catch( _ ) {}
+    try { sessionStorage.setItem( CARRY_KEY, JSON.stringify( { msg: msg, undo: undo, kind: kind, back: DIR, ts: Date.now() } ) ); } catch( _ ) {}
 }
 function offerCarriedUndo()
 {
     let c = null;
     try { c = JSON.parse( sessionStorage.getItem( CARRY_KEY ) || "null" ); sessionStorage.removeItem( CARRY_KEY ); } catch( _ ) {}
     if( ! c || typeof c.msg !== "string" || ! ( Date.now() - c.ts < 30000 ) ) return;
-    if( ! c.undo ) { NayiveUI.toast( c.msg ); return; }
-    NayiveUI.undoToast( c.msg, async () =>
+    const kind = [ "ok", "err" ].includes( c.kind ) ? c.kind : "ok";
+    if( ! c.undo ) { Ayni.toast( kind, c.msg ); return; }
+    Ayni.toast( kind, c.msg, { undo: async () =>
     {
         if( await runUndo( c.undo ) && typeof c.back === "string" ) location.href = albumUrl( c.back );
         else reloadView();
-    } );
+    } } );
 }
 
 /* ---------------------------------------------------------------------------

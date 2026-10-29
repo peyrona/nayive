@@ -55,12 +55,14 @@
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="../shared/ayni/ayni-base.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
+    <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
@@ -90,7 +92,7 @@
     <style>
     /* ===================================================================
      * MOVIES - per-app layout only. The chrome (header, .btn, .field,
-     * .sheet, .btn, .toast) comes from shared/theme.css + app.css; this
+     * .sheet, .btn) comes from shared/theme.css + app.css; this
      * block holds the poster library, the movie detail, the video stage and
      * the player bar - none of which exists anywhere else except, in spirit,
      * in Music's own <style>.
@@ -347,7 +349,7 @@
         <a class="btn text primary" href="../drive/index.html" data-i18n="ui.openDrive"></a>
     </div>
 
-    <div class="player-bar" id="playerBar" hidden>
+    <div class="player-bar" id="playerBar" data-toasts-above hidden>
         <div class="player-now">
             <span class="player-art" id="playerArt">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="19" height="19" rx="2.5"/><line x1="7.5" y1="2.5" x2="7.5" y2="21.5"/><line x1="16.5" y1="2.5" x2="16.5" y2="21.5"/><line x1="2.5" y1="12" x2="21.5" y2="12"/></svg>
@@ -395,8 +397,6 @@
             </button>
         </div>
     </div>
-
-    <div id="toast" class="toast"></div>
 </div>
 
 <!-- TMDB API key. Closes on its buttons / Escape only (dialog-close rule). -->
@@ -758,7 +758,7 @@ async function loadPosters()
 async function postersReady()
 {
     if( st.postersBlocked ) await loadPosters();
-    if( st.postersBlocked ) NayiveUI.toast( Ayni.t( st.postersBlocked === "bad" ? 'ui.store.badFile' : 'ui.store.notRead' ) );
+    if( st.postersBlocked ) Ayni.toast( ( st.postersBlocked === "bad" ? "warn" : "err" ), Ayni.t( st.postersBlocked === "bad" ? 'ui.store.badFile' : 'ui.store.notRead' ) );
     return ! st.postersBlocked;
 }
 
@@ -813,14 +813,17 @@ async function fetchPosters( only )
     var todo = st.movies.filter( function ( mv )
     { return ( ! only || only.indexOf( mv.path ) !== -1 ) && ! mv.poster && ! posterEntry( mv ); } );
 
-    if( ! todo.length ) { NayiveUI.toast( Ayni.t( 'movies.allHavePosters' ) ); return; }
+    if( ! todo.length ) { Ayni.toast( 'info', Ayni.t( 'movies.allHavePosters' ) ); return; }
 
     var ok = 0, miss = 0;
+    var job = Ayni.progress( Ayni.tf( 'movies.searchingPosters', { i: 1, n: todo.length } ), { pct: 0 } );
+    try
+    {
     for( var i = 0; i < todo.length; i++ )
     {
         var mv  = todo[ i ];
         var key = posterKey( mv );
-        NayiveUI.toast( Ayni.tf( 'movies.searchingPosters', { i: i + 1, n: todo.length } ), { ms: 4000 } );
+        job.set( Ayni.tf( 'movies.searchingPosters', { i: i + 1, n: todo.length } ), i * 100 / todo.length );
         try
         {
             var url = "https://api.themoviedb.org/3/search/movie?api_key=" + encodeURIComponent( st.posters.key )
@@ -830,7 +833,7 @@ async function fetchPosters( only )
             if( res.status === 401 )
             {
                 await savePosters();
-                NayiveUI.toast( Ayni.t( 'movies.badKey' ) );
+                Ayni.toast( 'err', Ayni.t( 'movies.badKey' ) );
                 openTmdbKeySheet();
                 return;
             }
@@ -854,9 +857,11 @@ async function fetchPosters( only )
         renderLibrary();
         await sleep( 250 );                 // stay well under TMDB's rate limit
     }
+    }
+    finally { job.end(); }
     await savePosters();
-    NayiveUI.toast( Ayni.tf( ok === 1 ? "movies.onePoster" : "movies.nPosters", { n: ok } )
-                + ( miss ? "  ·  " + Ayni.tf( "movies.nNoResult", { n: miss } ) : "" ), { ms: 3500 } );
+    Ayni.toast( "ok", Ayni.tf( ok === 1 ? "movies.onePoster" : "movies.nPosters", { n: ok } )
+                + ( miss ? "  ·  " + Ayni.tf( "movies.nNoResult", { n: miss } ) : "" ) );
 }
 
 async function downloadPoster( mv, remoteUrl )
@@ -900,7 +905,7 @@ async function loadProgress()
     {
         st.prog = { version: 1, watched: {}, resume: {} };
         st.progBlocked = true;
-        NayiveUI.toast( Ayni.t( e instanceof SyntaxError ? 'ui.store.badFile' : 'ui.store.notRead' ) );
+        Ayni.toast( ( e instanceof SyntaxError ? "warn" : "err" ), Ayni.t( e instanceof SyntaxError ? 'ui.store.badFile' : 'ui.store.notRead' ) );
     }
 }
 
@@ -1024,14 +1029,14 @@ function toggleWatched( mv )
 
     // Only that loss gets an Undo (a second tap un-marks it): not watched
     // again, and back in "Keep watching" at the same point.
-    if( resume ) NayiveUI.undoToast( Ayni.t( 'movies.markedWatched' ), function ()
+    if( resume ) Ayni.toast( 'ok', Ayni.t( 'movies.markedWatched' ), { undo: function ()
     {
         delete st.prog.watched[ mv.path ];
         if( ! st.prog.resume[ mv.path ] ) st.prog.resume[ mv.path ] = resume;   // a newer point wins
         st.progDirty[ mv.path ] = progNow();
         saveProgressNow();
         renderLibrary();
-    } );
+    } } );
 }
 
 /* ---------------------------------------------------------------------------
@@ -1540,21 +1545,21 @@ function setWatched( films )
     if( change.length === 1 ) { toggleWatched( change[ 0 ] ); return; }
     var undos = quietly( function () { change.forEach( toggleWatched ); } );
     if( undos.length )
-        NayiveUI.undoToast( Ayni.t( 'movies.markedWatched' ), function ()
+        Ayni.toast( 'ok', Ayni.t( 'movies.markedWatched' ), { undo: function ()
         {
             quietly( function () { undos.forEach( function ( u ) { u(); } ); } );
-        } );
+        } } );
 }
 
 // Runs fn with the library's repaint and the Undo toast held back; repaints
 // once after, and hands back the Undos asked for.
 function quietly( fn )
 {
-    var undos = [], toast = NayiveUI.undoToast, paint = renderLibrary;
-    NayiveUI.undoToast = function ( msg, u ) { undos.push( u ); };
+    var undos = [], toast = Ayni.toast, paint = renderLibrary;
+    Ayni.toast = function ( kind, msg, o ) { if( o && o.undo ) undos.push( o.undo ); else return toast( kind, msg, o ); };
     renderLibrary = function () {};
     try { fn(); }
-    finally { NayiveUI.undoToast = toast; renderLibrary = paint; }
+    finally { Ayni.toast = toast; renderLibrary = paint; }
     renderLibrary();
     return undos;
 }
@@ -1705,7 +1710,7 @@ function wireStaticUI()
         }
         saveProgressNow();
         renderLibrary();
-        NayiveUI.toast( Ayni.t( 'movies.theEnd' ) );
+        Ayni.toast( 'info', Ayni.t( 'movies.theEnd' ) );
     } );
     video.addEventListener( "error", function ()
     {
@@ -1716,7 +1721,7 @@ function wireStaticUI()
         GumApi.fetchText( "/api/convert" )
             .then( function ( txt ) { return ( ( JSON.parse( txt ) || {} ).jobs || [] ).some( function ( j ) { return j.path === mv.path; } ); } )
             .catch( function () { return false; } )
-            .then( function ( converting ) { NayiveUI.toast( Ayni.t( converting ? 'movies.converting' : 'movies.cantPlay' ) ); } );
+            .then( function ( converting ) { Ayni.toast( ( converting ? "warn" : "err" ), Ayni.t( converting ? 'movies.converting' : 'movies.cantPlay' ) ); } );
     } );
 
     document.addEventListener( "fullscreenchange", function ()

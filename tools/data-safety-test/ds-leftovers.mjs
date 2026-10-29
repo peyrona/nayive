@@ -18,7 +18,7 @@ const s = await server( { test: "test", beto: "bbb" } );
 fs.writeFileSync( `${s.run}/apps/outer.html`, `<!doctype html><meta charset=utf-8><title>outer</title>
 <iframe id="f" src="/nayive/inner.html"></iframe>` );
 fs.writeFileSync( `${s.run}/apps/inner.html`, `<!doctype html><meta charset=utf-8><title>inner</title>
-<div id="toast" class="toast"></div><script src="shared/i18n.js"></script><script src="shared/ayni/ayni-i18n.js" data-dict="shared/i18n/" data-langs="es en pt fr de"></script><script src="shared/ayni/ayni-icons.js"></script><script src="shared/ayni/ayni-base.js"></script><script src="shared/ayni/ayni-buttons.js"></script><script src="shared/ui.js"></script>` );
+<body><script src="shared/i18n.js"></script><script src="shared/ayni/ayni-i18n.js" data-dict="shared/i18n/" data-langs="es en pt fr de"></script><script src="shared/ayni/ayni-icons.js"></script><script src="shared/ayni/ayni-base.js"></script><script src="shared/ayni/ayni-buttons.js"></script><script src="shared/ayni/ayni-toasts.js"></script><script src="shared/ui.js"></script>` );
 const c = await browser( s );
 const phone = await s.client();
 
@@ -100,19 +100,17 @@ section( "LOCKER SETTINGS · NEVER INTO ANOTHER ACCOUNT'S HOME" );
 }
 
 //----------------------------------------------------------------------------//
-section( "UI · AN INFORMATIONAL TOAST WAITS FOR A PENDING UNDO" );
+section( "UI · NEWS NEVER ENDS A PENDING UNDO" );
 {
     await c.open( "/nayive/inner.html" );
-    ok( await c.until( "window.NayiveUI && NayiveUI.undoToast" ), "a page with the shared UI" );
-    await c.evaluate( `window.__undone = false; window.__final = false; window.__seen = [];
-        new MutationObserver( () => { const t = document.getElementById( 'toast' ); if( t.classList.contains( 'show' ) ) window.__seen.push( t.textContent ); } )
-            .observe( document.getElementById( 'toast' ), { attributes: true, childList: true, subtree: true, characterData: true } );
-        NayiveUI.undoToast( 'Deleted', function () { window.__undone = true; }, { ms: 20000, onExpire: function () { window.__final = true; } } );
-        NayiveUI.toast( 'Merged', { keepUndo: true } ); true` );
-    ok( await c.evaluate( "!! document.querySelector( '#toast .toast-undo' ) && ! window.__final" ), "the Undo is still on show, not final" );
-    await c.evaluate( "( document.querySelector( '#toast .toast-undo' ) || { click: function () {} } ).click(), true" );
-    ok( await c.evaluate( "window.__undone" ), "and it still undoes" );
-    ok( await c.until( "window.__seen.some( t => t === 'Merged' )" ), "the news is shown once the Undo is gone" );
+    ok( await c.until( "window.NayiveUI && window.Ayni && Ayni.toast" ), "a page with the shared UI" );
+    await c.evaluate( `window.__undone = false; window.__final = false;
+        Ayni.toast( 'ok', 'Deleted', { undo: function () { window.__undone = true; }, persist: true, final: function () { window.__final = true; } } );
+        Ayni.toast( 'info', 'Merged' ); true` );
+    ok( await c.evaluate( "!! document.querySelector( '#ayni-toasts .toast.undo .act' ) && ! window.__final" ), "the Undo is still on show, not final" );
+    ok( await c.evaluate( "[ ...document.querySelectorAll( '#ayni-toasts .toast p' ) ].some( p => p.firstChild.textContent === 'Merged' )" ), "the news shows beside it" );
+    await c.evaluate( "( document.querySelector( '#ayni-toasts .toast.undo .act' ) || { click: function () {} } ).click(), true" );
+    ok( await c.evaluate( "window.__undone && ! window.__final" ), "and it still undoes" );
 }
 
 //----------------------------------------------------------------------------//

@@ -75,8 +75,8 @@ section( "ITEM 8 · \"MERGED\" WAITS FOR A PENDING UNDO" );
     await c.evaluate( "window.__toasts = []; deleteNodes( [ 'y' ] ); true" );
     ok( await disk( () => titles() === "Phone again,X" ), "the delete went up, merged with the phone's", titles() );
     ok( await c.until( "!! node( 'q' )" ), "the merge is on screen" );
-    ok( await c.evaluate( "!! document.querySelector( '#toast .toast-undo' )" ), "the delete's Undo is still there" );
-    await c.evaluate( "( document.querySelector( '#toast .toast-undo' ) || { click: function () {} } ).click(), true" );
+    ok( await c.evaluate( "!! document.querySelector( '#ayni-toasts .toast.undo .act' )" ), "the delete's Undo is still there" );
+    await c.evaluate( "( document.querySelector( '#ayni-toasts .toast.undo .act' ) || { click: function () {} } ).click(), true" );
     ok( await disk( () => titles() === "Phone again,X,Y" ), "Undo: Y is back (and the phone's stays)", titles() );
     ok( await c.until( "window.__toasts.some( function ( t ) { return t.indexOf( Ayni.t( 'bookmarks.merged' ) ) !== -1; } )" ),
         "\"Merged\" is said once the Undo is gone", await c.toasts() );

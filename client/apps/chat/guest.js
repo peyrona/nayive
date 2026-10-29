@@ -89,10 +89,10 @@
     // From a tap: ask, then subscribe.
     async function enable()
     {
-        if( ! pushable() ) { C.toast( isIOS() ? "chat.iosTooOld" : "chat.noPushHere", 4000 ); return false; }
+        if( ! pushable() ) { C.toast( "warn", isIOS() ? "chat.iosTooOld" : "chat.noPushHere" ); return false; }
         var perm = await Notification.requestPermission();
-        if( perm !== "granted" ) { C.toast( "chat.pushDenied", 4500 ); return false; }
-        try { await subscribe(); C.toast( "chat.pushOn" ); return true; }
+        if( perm !== "granted" ) { C.toast( "warn", "chat.pushDenied" ); return false; }
+        try { await subscribe(); C.toast( "ok", "chat.pushOn" ); return true; }
         catch( e ) { failPush( e ); return false; }
     }
 
@@ -179,16 +179,16 @@
     C.guestNotifications = async function ()
     {
         var perm = ( "Notification" in window ) ? Notification.permission : "denied";
-        if( perm === "granted" ) { if( await C.guestEnsurePush( true ) ) C.toast( "chat.pushOn" ); return; }
+        if( perm === "granted" ) { if( await C.guestEnsurePush( true ) ) C.toast( "ok", "chat.pushOn" ); return; }
         if( isIOS() && ! standalone() ) { iosSteps( function () {} ); return; }
-        if( perm === "denied" ) { C.toast( "chat.pushDenied", 5000 ); return; }
+        if( perm === "denied" ) { C.toast( "warn", "chat.pushDenied" ); return; }
         enable();
     };
 
     // The ⋮ menu's "Put an icon on the home screen".
     C.guestHomeIcon = function ()
     {
-        if( standalone() ) { C.toast( "chat.alreadyHome" ); return; }
+        if( standalone() ) { C.toast( "info", "chat.alreadyHome" ); return; }
         if( installEvt ) { installEvt.prompt(); installEvt = null; return; }
         if( isIOS() ) { iosSteps( function () {} ); return; }
         NayiveUI.alert( { title: T( "chat.homeIcon" ), body: T( "chat.androidHomeSteps" ) } );

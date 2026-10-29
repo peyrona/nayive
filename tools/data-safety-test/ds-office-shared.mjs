@@ -29,12 +29,12 @@ ok( await untilDraft( c, "mis notas" ), "the edits are in a device draft (the 7 
 
 await c.evaluate( "document.getElementById('newBtn').click(), true" );
 ok( await c.until( `${CM}.getValue() === ''` ), "New: a blank document" );
-ok( await c.until( "document.getElementById('toast').classList.contains('show') && document.getElementById('toast').textContent.indexOf( Ayni.t('write.draftSetAside') ) !== -1", 3000 ),
-    "the toast says the edits are set aside", await c.evaluate( "document.getElementById('toast').textContent" ) );
-ok( await c.evaluate( "!! document.querySelector('#toast .toast-undo')" ), "with an Undo" );
+ok( await c.until( "( ( document.getElementById( 'ayni-toasts' ) || {} ).textContent || '' ).indexOf( Ayni.t('write.draftSetAside') ) !== -1", 3000 ),
+    "the toast says the edits are set aside", await c.evaluate( "( ( document.getElementById( 'ayni-toasts' ) || {} ).textContent || '' )" ) );
+ok( await c.evaluate( "!! document.querySelector('#ayni-toasts .toast.undo .act')" ), "with an Undo" );
 ok( await untilDraft( c, "mis notas", 1000 ), "and their draft is still there" );
 
-await c.evaluate( "( document.querySelector('#toast .toast-undo') || { click: function () {} } ).click(), true" );
+await c.evaluate( "( document.querySelector('#ayni-toasts .toast.undo .act') || { click: function () {} } ).click(), true" );
 ok( await c.until( `${CM}.getValue() === 'mis notas\\nde Ana\\n'` ), "Undo brings them back on screen" );
 
 await done( c, s );

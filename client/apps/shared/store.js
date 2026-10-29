@@ -2648,23 +2648,22 @@
         function refusedToast( reason )
         {
             var now = Date.now();
-            if( now - toastAt < 4000 || ! window.NayiveUI || ! NayiveUI.toast || ! Ayni.t ) return;
+            if( now - toastAt < 4000 || ! window.Ayni || ! Ayni.toast ) return;
             toastAt = now;
-            NayiveUI.toast( Ayni.t( reason === "bad"     ? "ui.store.badFile"
-                                      : reason === "loading" ? "ui.store.loading" : "ui.store.notRead" ), { ms: 6000 } );
+            Ayni.toast( ( reason === "bad" || reason === "loading" ? "warn" : "err" ), Ayni.t( reason === "bad"     ? "ui.store.badFile"
+                                      : reason === "loading" ? "ui.store.loading" : "ui.store.notRead" ) );
         }
 
         // The save could not be sent and is only in this page (the browser's
         // storage failed: K2, or another page's save holds the outbox and the
-        // server was not reached). Said once in a while, not per keystroke -
-        // and after an Undo on show, never over it (the save of a delete
-        // would make the delete's Undo final: keepUndo, shared/ui.js).
+        // server was not reached). Said once in a while, not per keystroke.
+        // It stacks beside an Undo on show and never makes it final (Ayni.toast).
         function pageOnlyToast()
         {
             var now = Date.now();
-            if( now - toastAt < 4000 || ! window.NayiveUI || ! NayiveUI.toast || ! Ayni.t ) return;
+            if( now - toastAt < 4000 || ! window.Ayni || ! Ayni.toast ) return;
             toastAt = now;
-            NayiveUI.toast( Ayni.t( "ui.store.pageOnly" ), { ms: 8000, keepUndo: true } );
+            Ayni.toast( "warn", Ayni.t( "ui.store.pageOnly" ) );
         }
 
         //--------------------------------------------------------------------//

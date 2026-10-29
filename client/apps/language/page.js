@@ -270,8 +270,8 @@ async function showError( err, allowRemote )
 async function copyResult()
 {
     if( ! lastResult ) return;
-    try { await NayiveUI.copyText( lastResult ); $( 'copy' ).classList.add( 'done' ); NayiveUI.toast( T( 'language.copied' ) ); }
-    catch( e ) { NayiveUI.toast( T( 'language.copyFailed' ) ); }
+    try { await NayiveUI.copyText( lastResult ); $( 'copy' ).classList.add( 'done' ); Ayni.toast( 'ok', T( 'language.copied' ) ); }
+    catch( e ) { Ayni.toast( 'err', T( 'language.copyFailed' ) ); }
 }
 
 // SPEECH: Play reads the translation; Play again stops it.
@@ -293,7 +293,7 @@ async function speak()
     const lang = $( 'out' ).lang ? $( 'out' ).lang.split( '-' )[ 0 ] : $( 'to' ).value;
     b.classList.add( 'busy' );
     try { await tr.speak( lastResult, lang ); }
-    catch( e ) { NayiveUI.toast( e.category === 'no-voice' ? TF( 'language.noVoice', { lang: langName( lang ) } ) : T( 'language.speakFailed' ) ); }
+    catch( e ) { Ayni.toast( ( e.category === 'no-voice' ? 'warn' : 'err' ), e.category === 'no-voice' ? TF( 'language.noVoice', { lang: langName( lang ) } ) : T( 'language.speakFailed' ) ); }
     finally { b.classList.remove( 'busy' ); }
 }
 
@@ -474,7 +474,7 @@ function openSettings()
 async function deleteModel( m )
 {
     const freed = await tr.deleteLocalModel( m.engineId, m.source, m.target );
-    NayiveUI.toast( TF( 'language.freed', { size: mb( freed ) } ) );
+    Ayni.toast( 'ok', TF( 'language.freed', { size: mb( freed ) } ) );
     renderModels();
 }
 
@@ -519,7 +519,7 @@ function wire()
         $( 'local' ).checked = tr.isLocalMode();
         markPairs();
     } );
-    tr.on( 'storage-error', ( e ) => { if( e.detail && e.detail.reason === 'corrupt' ) NayiveUI.toast( T( 'language.storageBad' ), { ms: 4000 } ); } );
+    tr.on( 'storage-error', ( e ) => { if( e.detail && e.detail.reason === 'corrupt' ) Ayni.toast( 'warn', T( 'language.storageBad' ) ); } );
 }
 
 async function start()

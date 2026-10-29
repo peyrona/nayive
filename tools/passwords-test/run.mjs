@@ -260,7 +260,7 @@ section( "EDIT · HISTORY, NO-OP SAVES, DELETE + UNDO, FAVOURITES, MOVE" );
     await c.evaluate( "deleteNodes( [ __ids.folder ] ); true" );
     ok( await disk( () => live().length === 3 && Object.values( json().items ).filter( e => e.x === 1 ).length === 2 ),
         "deleting a folder takes its entry too: both marked deleted (no content kept)" );
-    await c.evaluate( "( document.querySelector( '#toast .toast-undo' ) || { click: function () {} } ).click(); true" );
+    await c.evaluate( "( document.querySelector( '#ayni-toasts .toast.undo .act' ) || { click: function () {} } ).click(); true" );
     ok( await disk( () => live().length === 5 ), "Undo: both back" );
     ok( await c.until( "!! item( __ids[ 'Card PIN' ] ) && parentOf[ __ids[ 'Card PIN' ] ] === __ids.folder" ), "…the entry inside its folder again" );
 

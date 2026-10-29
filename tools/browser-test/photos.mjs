@@ -49,7 +49,7 @@ async function openAlbum( dir, n )
 const pickIn = async ( row ) => c.evaluate( `( () => { const P = '.sheet-backdrop.open .pick-tree ';
     const r = document.querySelector( P + '.tree-row[data-id="${row}"]' ); if( ! r ) return false;
     r.click(); document.querySelector( '.sheet-backdrop.open .pick-ok' ).click(); return true; } )()` );
-const undo = () => c.evaluate( "( () => { const b = document.querySelector( '#toast .toast-undo' ); if( b ) b.click(); return !! b; } )()" );
+const undo = () => c.evaluate( "( () => { const b = document.querySelector( '#ayni-toasts .toast.undo .act' ); if( b ) b.click(); return !! b; } )()" );
 
 section( "PHOTOS · MOUSE" );
 await openAlbum( "files/Pics/Lisbon", 3 );
@@ -111,7 +111,7 @@ section( "PHOTOS · BIN, NO QUESTION" );
 await mouse( c, TILE( "Lisbon/c.png" ) );
 await key( c, "Delete" );
 ok( await c.until( "! document.querySelector( '" + TILE( "Lisbon/c.png" ) + "' )" ) && ! exists( s, L( "c.png" ) ), "Del: to the bin at once" );
-ok( await c.evaluate( "! document.querySelector( '.sheet-backdrop.open' )" ) && await c.until( "!! document.querySelector( '#toast .toast-undo' )" ), "…no question, an Undo" );
+ok( await c.evaluate( "! document.querySelector( '.sheet-backdrop.open' )" ) && await c.until( "!! document.querySelector( '#ayni-toasts .toast.undo .act' )" ), "…no question, an Undo" );
 ok( notes()[ L( "c.png" ) ] === "note c", "…its note is kept for a restore", notes() );
 ok( await undo(), "Undo pressed" );
 ok( await c.until( "!! document.querySelector( '" + TILE( "Lisbon/c.png" ) + "' )" ) && exists( s, L( "c.png" ) ) && notes()[ L( "c.png" ) ] === "note c", "Undo brings it back, with its note" );
@@ -198,7 +198,7 @@ section( "PHOTOS · THE OPEN ALBUM GOES TO THE BIN" );
 await mouse( c, TREE( "Lisbon" ), { button: "right", dx: 40 } );
 await c.evaluate( "document.querySelector( '.item-menu [data-act=bin]' ).click(); true" );
 ok( await c.until( "new URLSearchParams( location.search ).get( 'dir' ) === 'files/Pics' && typeof albumIndexShown !== 'undefined' && albumIndexShown", 20000 ) && ! exists( s, "files/Pics/Lisbon" ), "binning the open album opens the one above it" );
-ok( await c.until( "!! document.querySelector( '#toast .toast-undo' )" ), "…its Undo came along" );
+ok( await c.until( "!! document.querySelector( '#ayni-toasts .toast.undo .act' )" ), "…its Undo came along" );
 ok( notes()[ L( "a.png" ) ] === "note a", "…the notes of its photos are kept", notes() );
 ok( await undo(), "Undo pressed" );
 ok( await c.until( "new URLSearchParams( location.search ).get( 'dir' ) === 'files/Pics/Lisbon' && typeof PHOTOS !== 'undefined' && PHOTOS.length === 2", 20000 ) && exists( s, L( "a.png" ) ) && exists( s, L( "c.png" ) ),
@@ -210,7 +210,7 @@ await c.evaluate( "document.querySelector( '.sheet-backdrop.open input' ).value 
 ok( await c.until( "new URLSearchParams( location.search ).get( 'dir' ) === 'files/Pics/Lisboa' && typeof PHOTOS !== 'undefined' && PHOTOS.length === 2", 20000 ) && exists( s, "files/Pics/Lisboa/a.png" ),
     "renaming the open album opens it under its new name" );
 ok( notes()[ "files/Pics/Lisboa/a.png" ] === "note a", "…its notes follow", notes() );
-ok( await c.until( "!! document.querySelector( '#toast .toast-undo' )" ) && await undo(), "…its Undo came along, pressed" );
+ok( await c.until( "!! document.querySelector( '#ayni-toasts .toast.undo .act' )" ) && await undo(), "…its Undo came along, pressed" );
 ok( await c.until( "new URLSearchParams( location.search ).get( 'dir' ) === 'files/Pics/Lisbon' && typeof PHOTOS !== 'undefined' && PHOTOS.length === 2", 20000 ) &&
     exists( s, L( "a.png" ) ) && ! exists( s, "files/Pics/Lisboa" ) && notes()[ L( "a.png" ) ] === "note a", "Undo puts the old name back and opens it" );
 await mouse( c, TREE( "Alhambra" ), { dx: 60 } );

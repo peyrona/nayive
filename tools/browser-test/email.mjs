@@ -151,9 +151,9 @@ await at( "Hello 4" );
 await c.evaluate( "window.__toasts = []; true" );
 await key( c, "Delete" );
 ok( await c.until( "! [ ...document.querySelectorAll('#list .mail-row') ].some( r => r.textContent.includes( 'Hello 4' ) )" ), "Del: the row goes at once" );
-ok( await c.evaluate( "! document.querySelector('.sheet-backdrop.open')" ) && await c.until( "!! document.querySelector('#toast .toast-undo')" ), "…no question, an Undo" );
+ok( await c.evaluate( "! document.querySelector('.sheet-backdrop.open')" ) && await c.until( "!! document.querySelector('#ayni-toasts .toast.undo .act')" ), "…no question, an Undo" );
 ok( ! await inTray( "inbox", "Hello 4" ) && !! await inTray( "trash", "Hello 4" ), "…on the server: in the Trash" );
-await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
+await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
 ok( await c.until( "[ ...document.querySelectorAll('#list .mail-row') ].some( r => r.textContent.includes( 'Hello 4' ) )", 10000 ) && !! await inTray( "inbox", "Hello 4" ) && ! await inTray( "trash", "Hello 4" ), "Undo: back in the Inbox (server too)" );
 
 section( "EMAIL · THE TREE" );
@@ -190,8 +190,8 @@ ok( await c.until( "( window.__toasts || [] ).some( t => /Work/.test( t ) )" ) &
 await at( "Hello 6" );
 lit = await drag( c, `${ROW}.is-selected`, TR( "trash" ) );
 ok( lit === true && await c.until( "! [ ...document.querySelectorAll('#list .mail-row') ].some( r => r.textContent.includes( 'Hello 6' ) )" ) && !! await inTray( "trash", "Hello 6" ), "a row dropped on Trash: deleted (server)", lit );
-ok( await c.until( "!! document.querySelector('#toast .toast-undo')" ), "…with an Undo" );
-await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
+ok( await c.until( "!! document.querySelector('#ayni-toasts .toast.undo .act')" ), "…with an Undo" );
+await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
 ok( await c.until( "[ ...document.querySelectorAll('#list .mail-row') ].some( r => r.textContent.includes( 'Hello 6' ) )", 10000 ) && !! await inTray( "inbox", "Hello 6" ), "…Undo brings it back" );
 ok( await drag( c, ROW, TR( "drafts" ) ) === false, "Drafts takes no drop" );
 // the eyes: a label's hides its mail from the tray, No label's the mail with none
@@ -216,7 +216,7 @@ await c.until( "NayiveMail.S.tray === 'inbox' && ! NayiveMail.S.label && documen
 await at( "Hello 7" );
 await key( c, "Delete" );
 await c.until( "! [ ...document.querySelectorAll('#list .mail-row') ].some( r => r.textContent.includes( 'Hello 7' ) )" );
-await c.evaluate( "NayiveUI.undoSettle(); true" );
+await c.evaluate( "Ayni.settleUndo(); true" );
 await mouse( c, TR( "trash" ), { dx: 40 } );
 ok( await c.until( "NayiveMail.S.tray === 'trash' && ! NayiveMail.S.loading" ) && await c.until( "[ ...document.querySelectorAll('#list .mail-row') ].some( r => r.textContent.includes( 'Hello 7' ) )" ), "a click on Trash opens it" );
 await at( "Hello 7", { button: "right" } );
@@ -224,8 +224,8 @@ rows = await menuRows( c );
 ok( act( "restore" ) && act( "forget" ) && ! rows.some( r => r.act === "del" || r.act === "spam" ), "in the Trash: Restore, Delete for good; no Delete, no Spam", rows );
 await key( c, "Escape" );
 await key( c, "Delete", 8 );
-ok( await c.until( "! [ ...document.querySelectorAll('#list .mail-row') ].some( r => r.textContent.includes( 'Hello 7' ) )" ) && await c.until( "!! document.querySelector('#toast .toast-undo')" ), "Shift+Del: out of sight at once, with Undo" );
-await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
+ok( await c.until( "! [ ...document.querySelectorAll('#list .mail-row') ].some( r => r.textContent.includes( 'Hello 7' ) )" ) && await c.until( "!! document.querySelector('#ayni-toasts .toast.undo .act')" ), "Shift+Del: out of sight at once, with Undo" );
+await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
 ok( await c.until( "[ ...document.querySelectorAll('#list .mail-row') ].some( r => r.textContent.includes( 'Hello 7' ) )", 8000 ) && !! await inTray( "trash", "Hello 7" ), "…Undo: still in the Trash (server)" );
 await at( "Hello 7" );
 await c.evaluate( "NayiveMail.browse.run( 'restore' ); true" );

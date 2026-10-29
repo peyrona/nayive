@@ -215,7 +215,7 @@ section( "P6 · DELETE + UNDO; NEW MASTER PASSWORD AND RECOVERY KEY KEEP EVERY E
     const n0 = live().length;
     await c.evaluate( "deleteNodes( [ Object.keys( items )[ 0 ] ] ); true" );
     ok( await disk( () => live().length === n0 - 1 ), "deleted" );
-    await c.evaluate( "( document.querySelector( '#toast .toast-undo' ) || { click: function () {} } ).click(); true" );
+    await c.evaluate( "( document.querySelector( '#ayni-toasts .toast.undo .act' ) || { click: function () {} } ).click(); true" );
     ok( await disk( () => live().length === n0 ), "Undo: back" );
     await sleep( 1000 );
 

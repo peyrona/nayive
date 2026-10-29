@@ -207,7 +207,7 @@ function open( kind )
             {
                 if( i.checked ) cfg.langs.push( l );
                 else if( cfg.langs.length > 1 ) cfg.langs.splice( cfg.langs.indexOf( l ), 1 );
-                else { i.checked = true; NayiveUI.toast( t( "salon.needLang" ) ); return; }
+                else { i.checked = true; Ayni.toast( "warn", t( "salon.needLang" ) ); return; }
                 drawLangs();
             } );
             var k = cfg.langs.indexOf( l );
@@ -239,7 +239,7 @@ function open( kind )
                     var now = ( cfg.cards[ c ].langs || cfg.langs ).slice();
                     if( i.checked ) now.push( l );
                     else now.splice( now.indexOf( l ), 1 );
-                    if( ! now.length ) { i.checked = true; NayiveUI.toast( t( "salon.needLang" ) ); return; }
+                    if( ! now.length ) { i.checked = true; Ayni.toast( "warn", t( "salon.needLang" ) ); return; }
                     now.sort( function ( a, b ) { return cfg.langs.indexOf( a ) - cfg.langs.indexOf( b ); } );
                     cfg.cards[ c ].langs = now.length === cfg.langs.length ? null : now;
                 } );
@@ -291,7 +291,7 @@ function open( kind )
                 {
                     if( on ) cfg.pics.push( k );
                     else if( cfg.pics.length > 1 ) cfg.pics.splice( cfg.pics.indexOf( k ), 1 );
-                    else { i.checked = true; NayiveUI.toast( t( "sci.needSource" ) ); }
+                    else { i.checked = true; Ayni.toast( "warn", t( "sci.needSource" ) ); }
                 } );
             } );
             return;
@@ -317,7 +317,7 @@ function open( kind )
             {
                 if( on ) cfg.museums.push( m );
                 else if( cfg.museums.length > 1 ) cfg.museums.splice( cfg.museums.indexOf( m ), 1 );
-                else { i.checked = true; NayiveUI.toast( t( "salon.needMuseum" ) ); }
+                else { i.checked = true; Ayni.toast( "warn", t( "salon.needMuseum" ) ); }
             } );
         } );
 
@@ -366,7 +366,7 @@ function open( kind )
                 {
                     if( on ) cfg.news.push( k );
                     else if( cfg.news.length > 1 ) cfg.news.splice( cfg.news.indexOf( k ), 1 );
-                    else { i.checked = true; NayiveUI.toast( t( "sci.needSource" ) ); }
+                    else { i.checked = true; Ayni.toast( "warn", t( "sci.needSource" ) ); }
                 } );
             } );
         } );
@@ -517,12 +517,12 @@ function open( kind )
             return out;
         } ).then( function ()
         {
-            NayiveUI.toast( t( "salon.saved" ) );
+            Ayni.toast( "ok", t( "salon.saved" ) );
         }, function ( e )
         {
             // Not read: nothing written. Otherwise kept on this device anyway
             // (update keeps the local copy first).
-            NayiveUI.toast( t( e && e.read ? "salon.notSaved" : "salon.saveFail" ) );
+            Ayni.toast( ( e && e.read ? "err" : "warn" ), t( e && e.read ? "salon.notSaved" : "salon.saveFail" ) );
         } );
     }
 }

@@ -206,7 +206,7 @@
             if( gen !== S.gen ) return;
             E.plug( "offline" );
             if( ! more ) E.showProblem( err );
-            else NayiveUI.toast( E.errText( err ) );
+            else Ayni.toast( "err", E.errText( err ) );
         }
         finally
         {

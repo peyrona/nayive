@@ -597,7 +597,7 @@ function gotoReference( raw )
         const wanted = text.slice( 0, bang ).replace( /^'|'$/g, '' );
         const i      = doc.sheets.findIndex( function( sh ) { return sh.name === wanted; } );
 
-        if( i === -1 ) { NayiveUI.toast( T( 'calc.gotoNoSheet' ) ); return; }
+        if( i === -1 ) { Ayni.toast( 'warn', T( 'calc.gotoNoSheet' ) ); return; }
 
         ref = text.slice( bang + 1 );
         if( i !== doc.active ) switchToSheet( i );
@@ -611,7 +611,7 @@ function gotoReference( raw )
 
     if( ! r || ! isFinite( r.s.r ) || ! isFinite( r.s.c ) || r.s.r < 0 || r.s.c < 0 )
     {
-        NayiveUI.toast( T( 'calc.gotoBadRef' ) );
+        Ayni.toast( 'warn', T( 'calc.gotoBadRef' ) );
         return;
     }
 
@@ -1051,7 +1051,7 @@ function openShortcuts()
 // as a formula, and a cell holding only a formula's result is not a filled one.
 function openStats()
 {
-    if( ! table ) { NayiveUI.toast( T( 'write.waitForDoc' ) ); return; }
+    if( ! table ) { Ayni.toast( 'warn', T( 'write.waitForDoc' ) ); return; }
 
     // ONE getSourceData() and then plain arrays, as codec.js does on save: a
     // getSourceDataAtCell() per cell runs Handsontable's hooks a million times
@@ -1201,7 +1201,7 @@ async function clipCopy( andCut )
     if( ! node ) return;
 
     if( await O.clip.out( node, andCut === true ? 'cut' : 'copy' ) === 'blocked' )
-        NayiveUI.toast( T( 'ui.clipboardBlocked' ) );
+        Ayni.toast( 'warn', T( 'ui.clipboardBlocked' ) );
 }
 
 function clipCut() { clipCopy( true ); }
@@ -1212,7 +1212,7 @@ async function clipPaste()
     if( ! node ) return;
 
     if( await O.clip.into( node ) === 'blocked' )
-        NayiveUI.toast( T( 'ui.clipboardBlocked' ) );
+        Ayni.toast( 'warn', T( 'ui.clipboardBlocked' ) );
 }
 
 // Ctrl+Shift+V: the values, naked. Only the plain text reaches Handsontable
@@ -1228,7 +1228,7 @@ async function clipPastePlain()
     try
     {
         if( await O.clip.into( node, true ) === 'blocked' )
-            NayiveUI.toast( T( 'ui.clipboardBlocked' ) );
+            Ayni.toast( 'warn', T( 'ui.clipboardBlocked' ) );
     }
     finally { pasteWithoutStyles( false ); }
 }

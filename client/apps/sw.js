@@ -194,6 +194,8 @@ var PRECACHE_SHELL = [
     "shared/ayni/ayni-base.js",
     "shared/ayni/ayni-buttons.css",
     "shared/ayni/ayni-buttons.js",
+    "shared/ayni/ayni-toasts.css",
+    "shared/ayni/ayni-toasts.js",
     "shared/ayni/ayni-i18n.js",
     "shared/ayni/ayni-icons.js",
     "shared/ayni/i18n/de.json",

@@ -788,7 +788,7 @@
                 // loadData() answered raises `best` off zero on the first alien,
                 // and the record adopted a moment later can be higher than this
                 // whole game - which is not a record to announce.
-                if( record && score === best ) NayiveUI.toast( TF( 'games.invadersRecord', { n: score } ) );
+                if( record && score === best ) Ayni.toast( 'info', TF( 'games.invadersRecord', { n: score } ) );
                 sfx.play( record && score === best ? 'record' : 'over' );
                 A.overlay();
             }

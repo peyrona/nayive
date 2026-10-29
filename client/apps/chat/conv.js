@@ -259,7 +259,7 @@
         try
         {
             await C.api( "POST", "conv/" + ( id || S.open ) + "/prefs", pref );
-            if( pref.mute !== undefined ) C.toast( pref.mute ? "chat.muted" : "chat.unmuted" );
+            if( pref.mute !== undefined ) C.toast( "ok", pref.mute ? "chat.muted" : "chat.unmuted" );
             await C.loadSummary();
         }
         catch( e ) { C.fail( e ); }

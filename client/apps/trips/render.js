@@ -536,10 +536,10 @@ function buildPhotosRow( trip )
             const tripId = selectedTripId;
             const old    = trip.photosDir;
             mutateTrip( tripId, function( t ) { const u = { ...t }; delete u.photosDir; return u; } );
-            NayiveUI.undoToast( T( 'ui.toast.removed' ), function()
+            Ayni.toast( 'ok', T( 'ui.toast.removed' ), { undo: function()
             {
                 mutateTrip( tripId, function( t ) { return { ...t, photosDir: old }; } );
-            });
+            } } );
         });
         row.appendChild( clearBtn );
     }
@@ -589,7 +589,7 @@ async function pickTripPhotoFolder( trip )
                 if( ! ( await GumApi.namesIn( lib ) ).has( sub ) ) await GumApi.makeDir( lib, sub );
                 if( ! ( await GumApi.namesIn( lib + '/' + sub ) ).has( name ) ) await GumApi.makeDir( lib + '/' + sub, name );
             }
-            catch( e ) { NayiveUI.toast( T( 'ui.saveFailed' ) ); return; }
+            catch( e ) { Ayni.toast( 'err', T( 'ui.saveFailed' ) ); return; }
             sPath = want;
         }
     }

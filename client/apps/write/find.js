@@ -177,7 +177,7 @@ export function createFindBar( o )
         if( ! matches.length ) { current = -1; paint(); return; }
 
         const i = Math.max( 0, Math.min( current, matches.length - 1 ) );
-        if( ! putOver( ed, matches[ i ], repl.value ) ) { NayiveUI.toast( Ayni.t( 'write.actionFailed' ) ); return; }
+        if( ! putOver( ed, matches[ i ], repl.value ) ) { Ayni.toast( 'err', Ayni.t( 'write.actionFailed' ) ); return; }
 
         // The next one is the match that now sits at the same index.
         matches = find();
@@ -196,8 +196,8 @@ export function createFindBar( o )
 
         // How many, and that Undo takes them back one at a time (quirks.js,
         // replaceAllOneStepPerMatch) - fifty Ctrl+Z are a surprise otherwise.
-        if( failed ) NayiveUI.toast( Ayni.t( 'write.actionFailed' ) );
-        else if( list.length ) NayiveUI.toast( Ayni.tf( 'write.find.replaced', { n: list.length } ) );
+        if( failed ) Ayni.toast( 'err', Ayni.t( 'write.actionFailed' ) );
+        else if( list.length ) Ayni.toast( 'ok', Ayni.tf( 'write.find.replaced', { n: list.length } ) );
         search( false );
     }
 

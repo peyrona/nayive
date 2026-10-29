@@ -189,7 +189,7 @@ async function loadData()
             // A damaged file is shown as nothing and never written over.
             data   = emptyData();
             loaded = false;
-            NayiveUI.toast( T( 'ui.store.badFile' ) );
+            Ayni.toast( 'warn', T( 'ui.store.badFile' ) );
         }
     }
     // else: unreachable and nothing cached - keep what is on screen, unloaded.
@@ -209,7 +209,7 @@ async function loadData()
 function canEdit()
 {
     if( loaded ) return true;
-    NayiveUI.toast( T( 'ui.store.notRead' ) );
+    Ayni.toast( 'err', T( 'ui.store.notRead' ) );
     return false;
 }
 
@@ -263,7 +263,7 @@ function onFileMerged( path, body )
     catch( e ) { return; }
     pruneState();
     render();
-    NayiveUI.toast( T( 'bookmarks.merged' ), { keepUndo: true } );
+    Ayni.toast( 'info', T( 'bookmarks.merged' ) );
 }
 
 function sameJson( a, b ) { return JSON.stringify( a ) === JSON.stringify( b ); }

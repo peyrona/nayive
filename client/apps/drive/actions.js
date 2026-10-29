@@ -113,7 +113,7 @@ async function confirmRename()
             return;
         }
         try { step.bin = await withBusy( GumApi.binPaths( [ newPath ] ) ); }
-        catch( _ ) { NayiveUI.toast( T( 'drive.moveExistingFailed' ) ); setStatus( '' ); return; }
+        catch( _ ) { Ayni.toast( 'err', T( 'drive.moveExistingFailed' ) ); setStatus( '' ); return; }
         if( ! step.bin ) canUndo = false;     // an old server: nothing to restore it by
     }
 
@@ -127,17 +127,16 @@ async function confirmRename()
         await reload();
 
         if( canUndo )
-            NayiveUI.undoToast( T( 'ui.toast.renamed' ),
-                                function() { undoMoves( [ step ], 'drive.renameFailed' ); } );
+            Ayni.toast( 'ok', T( 'ui.toast.renamed' ), { undo: function() { undoMoves( [ step ], 'drive.renameFailed' ); } } );
         else if( newPath !== oldPath )
-            NayiveUI.toast( T( 'ui.toast.renamed' ) );
+            Ayni.toast( 'ok', T( 'ui.toast.renamed' ) );
     }
     catch( err )
     {
         // The one in the way may be in the bin already: its Undo brings it back.
         const msg = TF( 'drive.renameFailed', { err: err.message } );
-        if( step.bin ) NayiveUI.undoToast( msg, function() { undoMoves( [ step ], 'drive.renameFailed' ); } );
-        else           NayiveUI.toast( msg );
+        if( step.bin ) Ayni.toast( "err", msg, { undo: function() { undoMoves( [ step ], 'drive.renameFailed' ); } } );
+        else           Ayni.toast( "err", msg );
         setStatus( '' );
     }
 }
@@ -497,7 +496,7 @@ async function confirmDelete()
     deleteBusy = false;
     if( ! sent )
     {
-        NayiveUI.toast( T( 'drive.trashFailed' ) );
+        Ayni.toast( 'err', T( 'drive.trashFailed' ) );
         setStatus( '' );
         return;
     }
@@ -515,8 +514,8 @@ async function confirmDelete()
 
     // An old server does not say the bin ids: no way back from here.
     const msg = T( failed ? 'drive.trashFailed' : 'ui.toast.binned' );
-    if( ids && ids.length ) NayiveUI.undoToast( msg, function() { undoBin( ids ); } );
-    else                    NayiveUI.toast( msg );
+    if( ids && ids.length ) Ayni.toast( ( failed ? 'err' : 'ok' ), msg, { undo: function() { undoBin( ids ); } } );
+    else                    Ayni.toast( ( failed ? 'err' : 'ok' ), msg );
 }
 
 // Shortcuts that lead into what goes to the bin, and are not going with it,
@@ -553,7 +552,7 @@ async function undoBin( ids )
     // In batches too: the ids ride in the address as well (AB1).
     let res;
     try { res = await NayiveMedia.restoreInBatches( ids, withBusy ); }
-    catch( _ ) { setStatus( '' ); NayiveUI.toast( T( 'drive.restoreFailed' ) ); await refreshView(); return; }
+    catch( _ ) { setStatus( '' ); Ayni.toast( 'err', T( 'drive.restoreFailed' ) ); await refreshView(); return; }
 
     await refreshView();
     restoredStatus( res );
@@ -590,9 +589,9 @@ function hideProgress() { setBackdrop( 'progressBackdrop', false ); }
 // is, anything else as ONE .zip it writes while it reads - and the browser
 // saves it with its own downloader. So no size is too big for a phone's
 // memory, and Drive stays usable meanwhile. Drive only watches: it asks the
-// server how far it got and draws that on the shared transfer bar
-// (NayiveUI.transfer: in the toolbar when there is room, else at the bottom),
-// whose ✕ stops it. One at a time: Download is off while one runs.
+// server how far it got and draws that as a progress notification
+// (Ayni.progress, in the toast stack), whose Stop button stops it. One at a
+// time: Download is off while one runs.
 
 const DL_POLL_MS   = 700;
 const DL_NET_TRIES = 20;     // polls in a row that may fail before Drive stops watching
@@ -616,14 +615,12 @@ async function downloadSelection()
     }
     catch( err )
     {
-        NayiveUI.toast( err && err.tooMany ? T( 'drive.pickTooMany' ) :
-                        err && err.status === 413 ? T( 'drive.compressTooMany' ) : T( 'drive.downloadFailed' ),
-                        { ms: 6000 } );
+        Ayni.toast( ( err && err.status !== 413 && ! err.tooMany ? 'err' : 'warn' ), err && err.tooMany ? T( 'drive.pickTooMany' ) :
+                        err && err.status === 413 ? T( 'drive.compressTooMany' ) : T( 'drive.downloadFailed' ) );
         return;
     }
 
-    const job = dlJob = { id: r.id, name: r.name, files: r.files, timer: 0, fails: 0, stopped: false,
-                          row: NayiveUI.transfer( { onStop: stopDownload } ) };
+    const job = dlJob = { id: r.id, name: r.name, files: r.files, timer: 0, fails: 0, stopped: false, row: null };
     drawDownload( job, 0, 0 );
     updateToolbarState();
 
@@ -643,7 +640,8 @@ function drawDownload( job, pct, done )
 {
     const text = job.files > 1 ? TF( 'drive.downloadPctFiles', { pct: pct, done: done, n: job.files } )
                                : TF( 'drive.downloadPct', { pct: pct } );
-    job.row.set( text, pct );
+    if( job.row ) job.row.set( text, pct );
+    else job.row = Ayni.progress( text, { pct: pct, onStop: stopDownload } );
 }
 
 async function pollDownload()
@@ -695,7 +693,7 @@ function endDownload( state )
     dlJob = null;
     // A finished one stays at 100 % a moment, so it reads as done.
     if( state === 'done' ) setTimeout( job.row.end, 800 ); else job.row.end();
-    if(      state === 'failed' )                 NayiveUI.toast( T( 'drive.downloadFailed' ), { ms: 6000 } );
-    else if( state === 'stopped' && job.stopped ) NayiveUI.toast( T( 'drive.downloadStopped' ) );
+    if(      state === 'failed' )                 Ayni.toast( 'err', T( 'drive.downloadFailed' ) );
+    else if( state === 'stopped' && job.stopped ) Ayni.toast( 'info', T( 'drive.downloadStopped' ) );
     updateToolbarState();
 }
