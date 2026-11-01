@@ -1,16 +1,16 @@
 /*
  * input.js - Passwords: every click, key and drag. The header and its "⋮"
- * (the shared NayiveUI.fitBar), the tree, the rows, search, the sheets'
+ * (the shared Ayni.fitBar), the tree, the rows, search, the sheets'
  * buttons, the gate's boxes, dropping onto folders and the pane resizer.
  * Picking, the item menu, the selection's header buttons and the list keys
- * are the shared item browser (shared/browser.js): this file only gives it
+ * are the shared item list (Ayni.list): this file only gives it
  * the action list.
  */
 "use strict";
 
-let browse      = null;   // the shared item browser on #items
+let browse      = null;   // the shared item list on #items
 let treeView    = null;   // the shared tree in #tree
-let searchFold  = null;   // the shared search fold
+let searchFold  = null;   // the header's search field (Ayni.searchField)
 let searchTimer = null;
 
 function wireAll()
@@ -25,7 +25,6 @@ function wireAll()
     wireGate();
     wireDragDrop();
     wireResizer();
-    wireKeys();
     wireAutoLock();
 
     window.addEventListener( 'resize', function() { if( isOpen() ) renderCrumbs(); } );
@@ -41,13 +40,6 @@ function wireHeader()
     $( 'lockBtn' ).addEventListener( 'click', lock );
     $( 'upBtn' ).innerHTML = Ayni.icon( 'back' );
     $( 'treeBtn' ).addEventListener( 'click', function() { treeView.openSheet(); } );
-}
-
-function focusSearch()
-{
-    $( 'listPane' ).scrollTop = 0;
-    searchFold.open();
-    $( 'searchInput' ).select();
 }
 
 const SORTS = [ [ 'name', 'passwords.sortName' ], [ 'changed', 'passwords.sortChanged' ] ];
@@ -77,15 +69,15 @@ function topMenuItems()
 
 function wireTree()
 {
-    treeView = NayiveUI.tree( {
-        host:    $( 'tree' ),
-        pane:    $( 'treePane' ),
-        roots:   treeRoots,
+    treeView = Ayni.tree( $( 'tree' ), {
+        nav:     true,
+        sheet:   $( 'treePane' ),
+        items:   treeRoots,
         isOpen:  function( id ) { return ui.open.indexOf( id ) >= 0; },
         setOpen: function( id, v ) { toggleOpen( id, v ); },
         current: function() { return filter === 'all' && ! query ? curFolder : null; },
         go:      function( id ) { goFolder( id ); },
-        menu:    function( id, x, y, anchor ) { NayiveUI.menuAt( x, y, browse.items( [ id ] ), { anchor: anchor } ); },
+        menu:    function( id, x, y, anchor ) { Ayni.menuAt( browse.items( [ id ] ), { x: x, y: y, anchor: anchor } ); },
         keys:    true,
         drag:    function( id ) { return [ id ]; },
         drop:    { can: treeCan, drop: dropInto }
@@ -140,10 +132,10 @@ function wireItems()
 {
     const list = $( 'items' );
 
-    NayiveUI.fitBar( document.querySelector( '.topbar' ), { btn: '#moreBtn', more: topMenuItems } );
+    Ayni.fitBar( document.querySelector( '.topbar' ), { btn: '#moreBtn', more: topMenuItems } );
 
-    browse = NayiveUI.browser( {
-        list:    list,
+    browse = Ayni.list( list, {
+        main:    true,
         row:     '.pw-item',
         bar:     $( 'selActions' ),
         actions: actionList(),
@@ -152,7 +144,6 @@ function wireItems()
         open:    openItem,
         grid:    function() { return true; },    // cards side by side: the arrows move in two directions
         active:  isOpen,
-        search:  focusSearch,
         drag:    { text: function( ids ) { const n = item( ids[ 0 ] ); return n ? n.title : ''; } }
     } );
 
@@ -206,24 +197,12 @@ function wireSearch()
         clearTimeout( searchTimer );
         searchTimer = setTimeout( function() { query = input.value.trim(); render(); }, 90 );
     } );
-    searchFold = NayiveUI.searchFold( { box: input.parentElement, input: input, toggle: $( 'searchBtn' ),
-                                        onClose: function() { clearTimeout( searchTimer ); if( isOpen() ) setQuery( '' ); } } );
+    searchFold = Ayni.searchField( input.parentElement, { onClose: function() { clearTimeout( searchTimer ); if( isOpen() ) setQuery( '' ); } } );
 }
 
 //------------------------------------------------------------------------//
-// KEYS  -  Ctrl+/ (Cmd+/) to the search box; Esc clears the search.
-// Enter in a sheet's one-line box = its ✓.
-
-function wireKeys()
-{
-    document.addEventListener( 'keydown', function( e )
-    {
-        if( ! isOpen() ) return;
-        if( ( e.ctrlKey || e.metaKey ) && e.key === '/' ) { e.preventDefault(); focusSearch(); return; }
-        if( e.key !== 'Escape' || e.defaultPrevented || document.querySelector( 'dialog.panel[open]' ) || NayiveUI.menuOpen() ) return;
-        if( query ) setQuery( '' );
-    } );
-}
+// KEYS  -  Ctrl+F (Ayni's) opens the search; Esc in it clears it, then folds
+// it. Enter in a sheet's one-line box = its ✓.
 
 function enterSubmits( backId, fn )
 {
@@ -456,7 +435,7 @@ function dropInto( ids, id )
 
 function wireDragDrop()
 {
-    NayiveUI.dropZone( $( 'listPane' ), {
+    Ayni.dropZone( $( 'listPane' ), {
         sel: '.pw-item.is-folder, .crumb-seg', target: function( el ) { return el.dataset.id; },
         can: treeCan, drop: dropInto
     } );

@@ -267,6 +267,21 @@
         pause: '<g stroke-width="2.2"><line x1="9" y1="5" x2="9" y2="19"/><line x1="15" y1="5" x2="15" y2="19"/></g>',
         play: '<g stroke-width="2.2"><polygon points="7 4 19 12 7 20 7 4"/></g>',
         stop: '<g stroke-width="2.2"><rect x="6" y="6" width="12" height="12" rx="1.5"/></g>',
+        // Item list and tree actions (were browser.js glyphs, 2026-11-01).
+        move: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><polyline points="12 10 15 13 12 16"/><line x1="8" y1="13" x2="15" y2="13"/>',
+        link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+        star: '<polygon points="12 2.8 14.9 8.7 21.4 9.6 16.7 14.2 17.8 20.6 12 17.6 6.2 20.6 7.3 14.2 2.6 9.6 9.1 8.7 12 2.8"/>',
+        external: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',
+        tag: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
+        "tag-plus": '<path d="M16 8l-6-6H2v8l6 6"/><line x1="6.5" y1="6.5" x2="6.51" y2="6.5"/><line x1="18" y1="13" x2="18" y2="21"/><line x1="14" y1="17" x2="22" y2="17"/>',
+        users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+        pin: '<line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/>',
+        "bell-off": '<path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.89 17.89 0 0 1 18 8"/><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><line x1="1" y1="1" x2="23" y2="23"/>',
+        "mail-open": '<path d="M21.2 8.4c.5.38.8.97.8 1.6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10a2 2 0 0 1 .8-1.6l8-6a2 2 0 0 1 2.4 0z"/><path d="M22 10l-9 5.7a2 2 0 0 1-2 0L2 10"/>',
+        queue: '<line x1="3" y1="6" x2="15" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="11" y2="18"/><polygon points="17 14 22 17 17 20 17 14"/>',
+        image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+        merge: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>',
+        upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
         // App logos that do not fit the 24 grid: their own viewBox. `write` =
         // fountain pen + inkwell, `calc` = the "f(x)" mark, `nayive` = the real
         // Nayive logo (the launcher's artwork, never redrawn): the icon of every
@@ -339,190 +354,6 @@
             btn.setAttribute( "aria-label", t( show ? "ui.hidePassword" : "ui.showPassword" ) );
             input.focus();
         } );
-    }
-
-    // SEARCH FOLD - every toolbar search field (app.css SEARCH FOLD). At rest
-    // only a magnifier shows; a click opens the field in its place. The field
-    // takes the room the bar has left; only when that is under `min` px do
-    // the bar's other icons step aside (.search-tight) so it takes the bar.
-    // Inside the field, on the right: when the field has a dialog of filters,
-    // a funnel button that opens it; then the ×, which (like Escape) clears
-    // the field and folds it away.
-    //   o.box       the wrapper around the input (the field's own box)
-    //   o.input     the text field
-    //   o.bar       the row whose icons step aside (default: the closest
-    //               .topbar / .view-bar)
-    //   o.toggle    the magnifier to open it (default: one is made, before box)
-    //   o.filter()  opens the filter dialog (the in-field button shows a funnel)
-    //   o.filterTitle  its tooltip (an i18n key)
-    //   o.filterBtn the app's own filter button instead (it wires the click)
-    //   o.onClose() the field has been emptied: drop the search (default:
-    //               an "input" event on it)
-    //   o.min       the narrowest the field may get beside the icons (180)
-    //   o.tip       false: the field's words go to a server with rules of its
-    //               own (eMail), so no "how to search" tooltip (ui.searchTip,
-    //               the matcher's rule); an app's own title on it is kept
-    //   o.step( d ) the field steps through its hits in place (Calendar): an
-    //               up / down pair before the ×, and Enter / Shift+Enter;
-    //               d is -1 or +1. canStep( false ) greys the pair.
-    // Returns { open, close, fit, isOpen, count, canStep }. count( "12 / 300" ) shows
-    // how many items match, dim, inside the field before its buttons ("" hides
-    // it). open( true ) unfolds it without
-    // the focus (a search the app set itself: no phone keyboard); close( true )
-    // folds it without onClose (the app is about to show something else).
-    function searchFold( o )
-    {
-        var box = o.box, input = o.input, min = o.min || 180;
-        var bar = o.bar || box.parentElement.closest( ".topbar, .view-bar" );
-        var toggle = o.toggle;
-        if( ! toggle )
-        {
-            toggle = document.createElement( "button" );
-            toggle.type = "button";
-            toggle.className = "btn";
-            toggle.innerHTML = Ayni.icon( "search" );
-            toggle.setAttribute( "data-i18n-attr", "data-tip:ui.search, aria-label:ui.search" );
-            Ayni.setTip( toggle, t( "ui.search" ) );
-            toggle.setAttribute( "aria-label", t( "ui.search" ) );
-            box.parentNode.insertBefore( toggle, box );
-        }
-        var said = input.getAttribute( "data-i18n-attr" ) || "";
-        if( o.tip !== false && ! /(^|,)\s*title:/.test( said ) && ! input.title )
-        {
-            input.setAttribute( "data-i18n-attr", ( said ? said + ", " : "" ) + "title:ui.searchTip" );
-            input.title = t( "ui.searchTip" );
-        }
-        toggle.classList.add( "search-fold-toggle" );
-        box.classList.add( "search-fold" );
-        bar.classList.add( "search-fold-bar" );
-
-        var ends = document.createElement( "span" );
-        ends.className = "search-ends";
-        // A filter dialog gets its funnel button; a plain field gets nothing
-        // there - a magnifier that cannot be pressed would only look like one.
-        var mark = o.filterBtn;
-        if( mark ) mark.classList.add( "btn", "sm" );
-        else if( o.filter )
-        {
-            mark = document.createElement( "button" );
-            mark.type = "button";
-            mark.className = "btn sm";
-            mark.addEventListener( "click", function () { o.filter(); } );
-            if( o.filterTitle )
-            {
-                mark.setAttribute( "data-i18n-attr", "data-tip:" + o.filterTitle + ", aria-label:" + o.filterTitle );
-                Ayni.setTip( mark, t( o.filterTitle ) );
-                mark.setAttribute( "aria-label", t( o.filterTitle ) );
-            }
-        }
-        if( mark )
-        {
-            mark.classList.add( "search-mark" );
-            mark.innerHTML = Ayni.icon( "filter" );
-            box.classList.add( "has-filter" );
-        }
-        var shut = document.createElement( "button" );
-        shut.type = "button";
-        shut.className = "btn sm search-shut";
-        shut.innerHTML = Ayni.icon( "close" );
-        shut.setAttribute( "data-i18n-attr", "data-tip:ui.close, aria-label:ui.close" );
-        Ayni.setTip( shut, t( "ui.close" ) );
-        shut.setAttribute( "aria-label", t( "ui.close" ) );
-        shut.addEventListener( "click", function () { close(); } );
-        var tally = document.createElement( "span" );
-        tally.className = "search-count";
-        tally.hidden = true;
-        ends.appendChild( tally );
-        if( mark ) ends.appendChild( mark );
-        var steps = [];
-        if( o.step )
-        {
-            [ [ -1, "chev-up", "ui.prev" ], [ 1, "chev-down", "ui.next" ] ].forEach( function ( d )
-            {
-                var b = document.createElement( "button" );
-                b.type = "button";
-                b.className = "btn sm search-step";
-                b.innerHTML = Ayni.icon( d[ 1 ] );
-                b.setAttribute( "data-i18n-attr", "data-tip:" + d[ 2 ] + ", aria-label:" + d[ 2 ] );
-                Ayni.setTip( b, t( d[ 2 ] ) );
-                b.setAttribute( "aria-label", t( d[ 2 ] ) );
-                b.ariaDisabled = true;
-                b.addEventListener( "click", function () { o.step( d[ 0 ] ); } );
-                steps.push( b );
-                ends.appendChild( b );
-            } );
-            box.classList.add( "has-steps" );
-        }
-        ends.appendChild( shut );
-        box.appendChild( ends );
-
-        // The field's text must stop before the count + buttons, whatever
-        // their width; with no count the CSS padding stands.
-        function count( text )
-        {
-            tally.textContent = text || "";
-            tally.hidden = ! text;
-            input.style.paddingRight = text ? ( ends.offsetWidth + 8 ) + "px" : "";
-        }
-        function canStep( on ) { steps.forEach( function ( b ) { b.ariaDisabled = ! on; } ); }
-
-        function isOpen() { return box.classList.contains( "is-open" ); }
-        function open( noFocus )
-        {
-            box.classList.add( "is-open" );
-            fit();
-            if( noFocus !== true && ! input.hidden ) input.focus();
-        }
-        function close( quiet )
-        {
-            box.classList.remove( "is-open" );
-            fit();
-            input.value = "";
-            count( "" );
-            if( quiet === true ) return;
-            // First: the item browser counts the rows now, then shows the
-            // first pick once the whole list is back.
-            document.dispatchEvent( new Event( "nayive:search-closed" ) );
-            if( o.onClose ) o.onClose();
-            else input.dispatchEvent( new Event( "input" ) );
-        }
-        // The bar's state follows the field as it is SHOWN: an app mode that
-        // hides the box (reading a message, the bin) gives the icons back.
-        // Tried with the icons shown, and tight only when the field gets too
-        // little - measured in one go, so nothing flickers.
-        function fit()
-        {
-            var shown = isOpen() && box.getClientRects().length > 0;
-            bar.classList.toggle( "searching", shown );
-            bar.classList.remove( "search-tight" );
-            if( shown && box.offsetWidth < min ) bar.classList.add( "search-tight" );
-        }
-
-        toggle.addEventListener( "click", function () { open(); } );
-        input.addEventListener( "keydown", function ( e )
-        {
-            if( e.key === "Enter" && o.step && ! e.isComposing )
-            {
-                e.preventDefault();
-                if( steps.length && steps[ 0 ].ariaDisabled !== "true" ) o.step( e.shiftKey ? -1 : 1 );
-                return;
-            }
-            if( e.key !== "Escape" || ! isOpen() ) return;
-            e.preventDefault();
-            e.stopPropagation();      // not the app's own Escape (a dialog, a viewer)
-            close();
-        } );
-        // The bar resizing, and the box itself coming and going (an app mode
-        // shows or hides it). fit() ends where it started for a given size,
-        // so its own changes settle at once.
-        if( window.ResizeObserver )
-        {
-            var ro = new ResizeObserver( fit );
-            ro.observe( bar );
-            ro.observe( box );
-        }
-
-        return { open: open, close: close, fit: fit, isOpen: isOpen, count: count, canStep: canStep };
     }
 
     // A Mac (or an iPhone / iPad with a keyboard): its shortcuts take ⌘, not
@@ -1961,10 +1792,12 @@
             document.addEventListener( "click", function ( e )
             {
                 var t = e.target;
-                if( t && t.closest && t.closest( "[data-intro-open]" ) )
+                // The app's own Ayuda menu (setHelpMenu): the "?" opens it by
+                // itself (popovertarget), so its click is left alone.
+                if( t && t.closest && t.closest( "[data-intro-open]" ) && ! helpIsMenu )
                 {
                     e.preventDefault();
-                    if( ! helpIsMenu ) doShowIntro( introOpts, false );
+                    doShowIntro( introOpts, false );
                 }
             }, true );
         }
@@ -2030,6 +1863,14 @@
 
     var tourOpen = false;
 
+    // An opener whose menu or popup is not showing (any more).
+    function shut( o )
+    {
+        var id = o.getAttribute( "popovertarget" ), p = id && document.getElementById( id );
+        if( p ) return ! p.matches( ":popover-open" );
+        return o.getAttribute( "aria-expanded" ) === "false";
+    }
+
     function firstShown( sel )
     {
         if( ! sel ) return null;
@@ -2039,14 +1880,14 @@
     }
 
     // The steps every app has, with one text for all of them. "pick" and
-    // "picked" are the item browser's (shared/browser.js): the round tick of a
+    // "picked" are the item list's (Ayni.list): the tick of a
     // row, then the selection group in the header with that row picked.
     var TOUR_SHARED = {
         home:   function () { return { sel: ".app-icon.nayive-home-link, h1.nayive-home-link", text: t( "ui.coach.home" ), optional: true }; },
-        search: function () { return { sel: ".search-fold-toggle", text: t( "ui.tour.search" ) }; },
+        search: function () { return { sel: "[data-search]", text: t( "ui.tour.search" ) }; },
         more:   function () { return { sel: ".fit-more", text: t( "ui.tour.more" ), optional: true }; },
         pick:   function () { return { sel: ".pick-tick", ghost: "[aria-selected]", tap: true, text: t( "ui.tour.pick" ) }; },
-        picked: function () { return { sel: ".sel-group:not([hidden])", text: t( "ui.tour.picked" ), picked: true }; },
+        picked: function () { return { sel: ".pick-group:not([hidden])", text: t( "ui.tour.picked" ), picked: true }; },
         help:   function () { return { sel: "[data-intro-open]", text: t( "ui.tour.helpAgain" ), optional: true }; }
     };
 
@@ -2054,13 +1895,13 @@
     // show while picking): pick the first row the way its tick would.
     function tourPickOne()
     {
-        if( firstShown( ".sel-group:not([hidden])" ) ) return;
+        if( firstShown( ".pick-group:not([hidden])" ) ) return;
         var tk = document.querySelector( "[aria-selected] .pick-tick" );
         if( tk ) tk.click();
     }
     function tourUnpick()
     {
-        var x = firstShown( '.sel-group [data-sel="clear"]' );
+        var x = firstShown( '.pick-group [data-pick="clear"]' );
         if( x ) x.click();
     }
 
@@ -2122,13 +1963,13 @@
         var all = sel ? document.querySelectorAll( sel ) : [];
         for( var i = 0; i < all.length; i++ )
         {
-            var r = all[ i ].id && firstShown( '.top-menu [data-menu="' + all[ i ].id + '"]' );
+            var r = all[ i ].id && firstShown( '.panel.menu [data-menu="' + all[ i ].id + '"]' );
             if( r ) return r;
         }
         return null;
     }
 
-    // A toolbar button that fitBar (shared/browser.js) moved into the ⋮ for
+    // A toolbar button that Ayni.fitBar moved into the ⋮ for
     // lack of room: { opener: the ⋮, row: () => its menu row once open }.
     function inFitMenu( sel )
     {
@@ -2138,23 +1979,23 @@
             var out = all[ i ].closest( ".fit-out" );
             if( ! out ) continue;
             var h = out;
-            while( h && ! h._fitBar ) h = h.parentElement;
-            var more = h && h._fitBar.button;
+            while( h && ! h.ayniFitBar ) h = h.parentElement;
+            var more = h && h.ayniFitBar.button;
             if( ! more || ! onScreen( more ) ) continue;
 
             var b  = all[ i ].matches( "button" ) ? all[ i ] : out.querySelector( "button:not([hidden])" ) || out;
-            var id = b.id || b.dataset.sel || b.dataset.selAct || "";
+            var id = b.id || b.dataset.selAct || b.dataset.act || "";
             var label = ( b.getAttribute( "aria-label" ) || b.title || "" ).trim();
             return {
                 opener: more,
                 row: function ()
                 {
-                    var rows = document.querySelectorAll( ".item-menu:not([hidden]) .menu-item" );
+                    var rows = document.querySelectorAll( "#ayni-menu:popover-open [role^='menuitem']" );
                     for( var j = 0; j < rows.length; j++ )
                     {
-                        var r = rows[ j ];
+                        var r = rows[ j ], txt = ( r.querySelector( ".label" ) || r ).textContent.trim();
                         if( id ? r.dataset.act === id
-                               : label && label.indexOf( r.textContent.trim() ) === 0 ) return onScreen( r ) ? r : null;
+                               : label && label.indexOf( txt ) === 0 ) return onScreen( r ) ? r : null;
                     }
                     return null;
                 }
@@ -2270,14 +2111,19 @@
                 if( my !== token ) return;
                 var e = cur.find();
                 if( e ) { show( e ); return; }
-                // The next opener in the chain that is out and not pressed yet.
+                // The next opener in the chain that is out and not pressed yet -
+                // or pressed, but its menu has closed since: a press on the
+                // tour (Siguiente) is a press outside the menu, and the browser
+                // closes it (Ayni's menus are popovers).
                 for( var k = 0; k < chain.length; k++ )
                 {
                     var o = typeof chain[ k ] === "string" ? firstShown( chain[ k ] ) : ( onScreen( chain[ k ] ) ? chain[ k ] : null );
-                    if( o && cur.opened.indexOf( o ) < 0 && k >= cur.opened.length && ! cur.find() )
+                    if( ! o || cur.find() ) continue;
+                    var was = cur.opened.indexOf( o ) >= 0;
+                    if( was ? shut( o ) : k >= cur.opened.length )
                     {
                         o.click();
-                        cur.opened.push( o );
+                        if( ! was ) cur.opened.push( o );
                         end = Date.now() + 1500;
                         break;
                     }
@@ -2326,22 +2172,39 @@
             n.style.height = Math.max( 0, h ) + "px";
         }
 
-        // Above an open dialog the tour lives in the innermost one, as a
-        // popover in the top layer: outside it, the modal dialog would cover
-        // it and keep its presses. Checked on every placing, and when a
-        // dialog closes.
-        function hostOver()
+        // The tour is a popover in the top layer, so it shows over the menus
+        // and popups it points into (Ayni's popovers, top layer too). Above an
+        // open dialog it lives in the innermost one: outside it, the modal
+        // dialog would cover it and keep its presses. A menu or popup opened
+        // after it would cover it, so it is shown again, on top (`lift`).
+        // Checked on every placing, when a dialog closes, and when a menu or
+        // popup opens.
+        function hostOver( lift )
         {
             if( ended ) return;
             var dl = [].filter.call( document.querySelectorAll( "dialog[open]" ), function ( d ) { return d.matches( ":modal" ); } ).pop();
             var host = dl || document.body;
-            if( over.parentNode === host ) return;
-            if( over.matches( ":popover-open" ) ) over.hidePopover();
-            host.appendChild( over );
-            if( dl ) { over.popover = "manual"; over.showPopover(); }
-            else over.removeAttribute( "popover" );
+            if( over.parentNode !== host )
+            {
+                if( over.matches( ":popover-open" ) ) over.hidePopover();
+                host.appendChild( over );
+            }
+            if( over.popover !== "manual" ) over.popover = "manual";
+            if( lift && over.matches( ":popover-open" ) )
+            {
+                var f = document.activeElement;
+                over.hidePopover();
+                over.showPopover();
+                if( f && over.contains( f ) ) try { f.focus( { preventScroll: true } ); } catch ( e ) {}
+            }
+            if( ! over.matches( ":popover-open" ) ) over.showPopover();
         }
         function onDialogClose() { setTimeout( function () { hostOver(); place(); } ); }
+        function onPopOpen( e )
+        {
+            if( e.newState !== "open" || e.target === over || ! e.target.matches || ! e.target.matches( ".panel.menu, .panel.popup" ) ) return;
+            setTimeout( function () { hostOver( true ); place(); } );
+        }
 
         function place()
         {
@@ -2436,6 +2299,7 @@
             leave();
             document.removeEventListener( "click", onTap, true );
             document.removeEventListener( "close", onDialogClose, true );
+            document.removeEventListener( "toggle", onPopOpen, true );
             follow( false, place, onKey );
             if( over.parentNode ) over.parentNode.removeChild( over );
             tourOpen = false;
@@ -2444,6 +2308,7 @@
         document.body.appendChild( over );
         document.addEventListener( "click", onTap, true );
         document.addEventListener( "close", onDialogClose, true );
+        document.addEventListener( "toggle", onPopOpen, true );
         follow( true, place, onKey );
         go( 0 );
         return true;
@@ -2520,27 +2385,7 @@
             .catch( function () {} );
     }
 
-    // The shared tree lives in browser.js, which only the list apps load: the
-    // picker fetches it on first use from beside this file, like media.js.
-    var BROWSER_JS = MEDIA_JS.replace( /media\.js$/, "browser.js" );
-    var browserLoad = null;
-
-    function loadBrowser()
-    {
-        if( window.NayiveUI && window.NayiveUI.tree ) return Promise.resolve();
-        if( ! browserLoad )
-            browserLoad = new Promise( function ( resolve )
-            {
-                var s = document.createElement( "script" );
-                s.src     = BROWSER_JS;
-                s.onload  = resolve;
-                s.onerror = function () { browserLoad = null; resolve(); };
-                document.head.appendChild( s );
-            } );
-        return browserLoad;
-    }
-
-    // Its look (.fp-*, and the shared tree's .ntree) is in shared/app.css.
+    // Its look: .fp-* in shared/app.css, the tree is Ayni's (Ayni.tree, pick mode).
     function pickFolder( opts )
     {
         opts = opts || {};
@@ -2552,7 +2397,6 @@
             var selected  = null;     // the folder path the user has highlighted
             var filesNode = null;     // { path:'files', nodes:[...] }, once loaded
             var treeErr   = false;
-            var jsErr     = false;   // browser.js failed to load: show it, never retry in a loop
 
             // The three folder verbs (delete / rename / new folder) live in the
             // bottom-left corner. While a name is being typed the same sheet
@@ -2592,7 +2436,7 @@
 
             // The tree from GumApi.dirTree() is folders-only, so every node here
             // is a folder; a folder with no sub-folders just has nodes:[]. It is
-            // drawn by the shared tree (shared/browser.js, NayiveUI.tree), the
+            // drawn by the shared tree (Ayni.tree), the
             // same one every "Move to…" and side pane uses: the arrow opens and
             // closes, a click lights a folder, a double-click / Enter chooses it.
             function treeNodes( nodes )
@@ -2600,7 +2444,7 @@
                 return sortNodes( nodes || [] ).filter( function ( n ) { return Array.isArray( n.nodes ); } )
                     .map( function ( n )
                     {
-                        return { id: n.path, name: String( n.path ).split( "/" ).pop(), kids: treeNodes( n.nodes ) };
+                        return { id: n.path, name: String( n.path ).split( "/" ).pop(), children: treeNodes( n.nodes ) };
                     } );
             }
 
@@ -2805,20 +2649,15 @@
                     return p;
                 };
 
-                if( treeErr || jsErr )
+                if( treeErr )
                     box.appendChild( fpMsg( t( "ui.fp.loadError" ) ) );
                 else if( filesNode === null )
                     box.appendChild( fpMsg( t( "ui.fp.loading" ) ) );
-                else if( ! window.NayiveUI.tree )
-                {
-                    box.appendChild( fpMsg( t( "ui.fp.loading" ) ) );
-                    loadBrowser().then( function () { if( ! window.NayiveUI.tree ) jsErr = true; if( ! done ) render(); } );
-                }
                 else
                 {
                     var kids  = treeNodes( filesNode.nodes );
                     var roots = opts.allowRoot
-                              ? [ { id: filesNode.path, name: opts.rootLabel || t( "ui.fp.allFiles" ), kids: kids } ]
+                              ? [ { id: filesNode.path, name: opts.rootLabel || t( "ui.fp.allFiles" ), children: kids } ]
                               : kids;
                     if( opts.allowRoot ) expanded[ filesNode.path ] = expanded[ filesNode.path ] !== false;
 
@@ -2826,12 +2665,12 @@
                         box.appendChild( fpMsg( t( "ui.fp.noFolders" ) ) );
                     else
                     {
-                        var host = document.createElement( "div" );
+                        var host = document.createElement( "ul" );
                         box.appendChild( host );
-                        var tr = window.NayiveUI.tree( {
-                            host:     host,
+                        var tr = Ayni.tree( host, {
+                            nav:      true,
                             pick:     true,
-                            roots:    function () { return roots; },
+                            items:    function () { return roots; },
                             isOpen:   function ( id ) { return !! expanded[ id ]; },
                             setOpen:  function ( id, v ) { expanded[ id ] = v; },
                             current:  function () { return selected; },
@@ -4067,72 +3906,59 @@
                 }
                 else
                 {
-                    var list = document.createElement( "div" );
-                    list.className = "share-pick";
-                    list.setAttribute( "role", "group" );
-                    list.setAttribute( "aria-label", t( "share.pick" ) );
-                    list.classList.toggle( "all", toAll );
-
-                    // "Todos" on top, the whole width: one grant that also reaches
-                    // whoever gets an account later. While it is ticked the names
-                    // below are greyed out - everybody is in already.
+                    // "Everybody" on top: one grant that also reaches whoever gets
+                    // an account later. While it is on the names below are greyed
+                    // out - everybody is in already.
                     var allLab = document.createElement( "label" );
-                    allLab.className = "share-user share-all" + ( toAll ? " on" : "" );
-
+                    allLab.className = "share-add share-all";
                     var allBox = document.createElement( "input" );
                     allBox.type    = "checkbox";
+                    allBox.setAttribute( "role", "switch" );
                     allBox.checked = toAll;
-                    allBox.addEventListener( "change", function ()
-                    {
-                        toAll = allBox.checked;
-                        allLab.classList.toggle( "on", toAll );
-                        list.classList.toggle( "all", toAll );
-                        list.querySelectorAll( "input" ).forEach( function ( b ) { if( b !== allBox ) b.disabled = toAll; } );
-                        if( ok ) ok.ariaDisabled = ! ( toAll || chosen.length );
-                    } );
+                    var allSw = document.createElement( "span" );
+                    allSw.className = "switch";
+                    allSw.appendChild( allBox );
+                    allLab.appendChild( document.createTextNode( t( "share.allPick" ) ) );
+                    allLab.appendChild( allSw );
+                    people.appendChild( allLab );
 
-                    var allName = document.createElement( "span" );
-                    allName.textContent = t( "share.allPick" );
-                    allLab.title = allName.textContent;
-
-                    allLab.appendChild( allBox );
-                    allLab.appendChild( allName );
-                    list.appendChild( allLab );
+                    // The names: an Ayni pick list (a click or Space ticks one,
+                    // Shift a range, Ctrl+A all), in three columns. A name too wide
+                    // for its column ends in "..." (the tooltip has it whole).
+                    var list = document.createElement( "ul" );
+                    list.className = "lb share-pick";
+                    list.id        = "sharePick";
+                    list.tabIndex  = 0;
+                    list.setAttribute( "role", "listbox" );
+                    list.setAttribute( "aria-multiselectable", "true" );
+                    list.setAttribute( "aria-label", t( "share.pick" ) );
+                    if( toAll ) list.setAttribute( "aria-disabled", "true" );
 
                     free.forEach( function ( name )
                     {
-                        var on  = chosen.indexOf( name ) !== -1;
-                        var lab = document.createElement( "label" );
-                        lab.className = "share-user" + ( on ? " on" : "" );
-
-                        // A plain <input type="checkbox"> inside a <label>: every browser
-                        // draws it, and clicking the name ticks it. No custom drawing.
-                        var box = document.createElement( "input" );
-                        box.type     = "checkbox";
-                        box.value    = name;
-                        box.checked  = on;
-                        box.disabled = toAll;
-                        box.addEventListener( "change", function ()
-                        {
-                            var at = chosen.indexOf( name );
-                            if( box.checked ) { if( at === -1 ) chosen.push( name ); }
-                            else if( at !== -1 ) chosen.splice( at, 1 );
-
-                            // No render() here: it would scroll the list back to the top.
-                            lab.classList.toggle( "on", box.checked );
-                            if( ok ) ok.ariaDisabled = ! ( toAll || chosen.length );
-                        } );
-
-                        // A <span>, not a bare text node: only an element can end in "..."
-                        // when the name is wider than its column. The tooltip has it whole.
+                        var li = document.createElement( "li" );
+                        li.setAttribute( "role", "option" );
+                        li.setAttribute( "aria-selected", chosen.indexOf( name ) !== -1 ? "true" : "false" );
+                        li.title = name;
                         var nm = document.createElement( "span" );
                         nm.textContent = name;
-                        lab.title = name;
-
-                        lab.appendChild( box );
-                        lab.appendChild( nm );
-                        list.appendChild( lab );
+                        li.appendChild( nm );
+                        list.appendChild( li );
                     } );
+
+                    // No render() on a change: it would scroll the list back to the top.
+                    list.addEventListener( "ayni:change", function ( e )
+                    {
+                        chosen.splice.apply( chosen, [ 0, chosen.length ].concat( e.detail.selected ) );
+                        if( ok ) ok.ariaDisabled = ! ( toAll || chosen.length );
+                    } );
+                    allBox.addEventListener( "change", function ()
+                    {
+                        toAll = allBox.checked;
+                        list.setAttribute( "aria-disabled", toAll ? "true" : "false" );
+                        if( ok ) ok.ariaDisabled = ! ( toAll || chosen.length );
+                    } );
+                    Ayni.init( list );
                     people.appendChild( list );
                 }
 
@@ -4868,76 +4694,12 @@
         return stem + " (" + i + ")" + ext;
     }
 
-    // Text for searching: accent- and case-blind, so "jose" finds "José" and
-    // "nino" finds "Niño" (the ñ folds too); "strasse" finds "Straße", "oeuvre"
-    // finds "œuvre", and a typed ' finds the typographic ’. Both sides of a
-    // comparison go through it. The server's Drive search folds the same way
-    // (search.go, fold).
-    var FOLD_MORE = { "ß": "ss", "œ": "oe", "æ": "ae", "\u2018": "'", "\u2019": "'" };
-    function fold( s )
-    {
-        return String( s == null ? "" : s ).normalize( "NFD" ).replace( /[\u0300-\u036f]/g, "" ).toLowerCase()
-               .replace( /[ßœæ\u2018\u2019]/g, function ( c ) { return FOLD_MORE[ c ]; } );
-    }
-
-    // A text with its umlauts spelt the German way, folded: "Müller" ->
-    // "mueller". The matcher tries it on both sides, so "Mueller" finds
-    // "Müller" and "Müller" finds "Mueller" ("Muller" finds both, by fold).
-    // Only umlauts are spelt out - folding every "ue" would make "fue" find
-    // "fumar". null when there is no umlaut (most texts).
-    function foldUmlauts( s )
-    {
-        var n = String( s == null ? "" : s ).normalize( "NFC" );
-        if( ! /[äöüÄÖÜ]/.test( n ) ) return null;
-        return fold( n.replace( /[äöüÄÖÜ]/g, function ( c ) { return c.normalize( "NFD" ).charAt( 0 ) + "e"; } ) );
-    }
-
-    // A search box's text as a test, the one rule of every box: words in any
-    // order (factura luz), "an exact phrase", -word to leave out; accent- and
-    // case-blind (fold, foldUmlauts). A "-" inside a word (e-mail) or alone is
-    // a letter. Returns null when nothing is asked, else m( text ) -> true /
-    // false, with m.terms (the words / phrases to find, as typed: Chat folds
-    // them for its hit marks) and m.not (those to leave out). Drive sends both
-    // to its server, which folds them the same way.
-    function matcher( raw )
-    {
-        var want = [], skip = [], wantF = [], skipF = [];
-        String( raw == null ? "" : raw ).replace( /(-?)"([^"]*)"?|(\S+)/g, function ( all, neg, phrase, word )
-        {
-            var not = word ? word.length > 1 && word.charAt( 0 ) === "-" : !! neg;
-            var w = ( word ? ( not ? word.slice( 1 ) : word ) : phrase ).replace( /\s+/g, " " ).trim();
-            var f = fold( w );
-            if( ! f ) return "";
-            ( not ? skip : want ).push( w );
-            ( not ? skipF : wantF ).push( [ f, foldUmlauts( w ) ] );
-            return "";
-        } );
-        if( ! want.length && ! skip.length ) return null;
-        var m = function ( text )
-        {
-            var t  = fold( text ).replace( /\s+/g, " " );    // a phrase spans any run of spaces
-            var de = foldUmlauts( text );
-            if( de ) de = de.replace( /\s+/g, " " );
-            var has = function ( w )
-            {
-                return t.indexOf( w[ 0 ] ) >= 0 || ( !! w[ 1 ] && t.indexOf( w[ 1 ] ) >= 0 ) ||
-                       ( !! de && ( de.indexOf( w[ 0 ] ) >= 0 || ( !! w[ 1 ] && de.indexOf( w[ 1 ] ) >= 0 ) ) );
-            };
-            for( var i = 0; i < wantF.length; i++ ) if( ! has( wantF[ i ] ) ) return false;
-            for( var j = 0; j < skipF.length; j++ ) if( has( skipF[ j ] ) ) return false;
-            return true;
-        };
-        m.terms = want;
-        m.not   = skip;
-        return m;
-    }
-
     // A name as a safe folder / file name: "Córdoba 2026" -> "cordoba-2026".
-    // Accents are dropped (fold), not the letters; anything else that is not a-z
+    // Accents are dropped (Ayni.fold), not the letters; anything else that is not a-z
     // or 0-9 becomes one "-". `max` cuts it; `fallback` stands in for "".
     function slugify( s, fallback, max )
     {
-        var out = fold( s || "" ).replace( /[^a-z0-9]+/g, "-" ).replace( /^-+|-+$/g, "" );
+        var out = Ayni.fold( s || "" ).replace( /[^a-z0-9]+/g, "-" ).replace( /^-+|-+$/g, "" );
         if( max ) out = out.slice( 0, max );
         return out || fallback || "item";
     }
@@ -5172,11 +4934,11 @@
     }
 
     //------------------------------------------------------------------------//
-    // "MORE" MENU  -  the small popup a header "..." button opens (view switch
-    // in Calendar, the phone-only import / export in Contacts, the file buttons
-    // in Calc / Write). The menu is a `.top-menu` (shared/app.css: position
-    // fixed) anchored under its button; a click on an item, outside, Escape,
-    // or a resize closes it.
+    // "MORE" MENU  -  the desktop's own bar popups only (its ⋮, the weather;
+    // desktop/index.html), until the desktop family moves to Ayni. Every other
+    // menu is an Ayni menu (shared/ayni/ayni-menus.js). The menu is a
+    // `.top-menu` (shared/app.css: position fixed) anchored under its button;
+    // a click on an item, outside, Escape, or a resize closes it.
     //
     //   var menu = NayiveUI.wireMenu( { btn: "moreBtn", menu: "topMenu",
     //                                   onPick: function ( item ) { ... } } );
@@ -5381,7 +5143,6 @@
         paneResizer: paneResizer,   // a .pane-resizer handle sizes the pane next to it
         isMac:    IS_MAC,           // shortcuts take ⌘ (Drive, Write, Calc, Text)
         pwEye:    pwEye,            // show / hide a password field's text
-        searchFold: searchFold,     // a toolbar search field folded behind a magnifier
         sessionExpired: sessionExpired,   // the shared "your session expired" bar (gum-api / store call it)
         loginRedirect:  loginRedirect,    // to the sign-in page and back here (GumApi.loginRedirect too)
         signOut:        signOut,          // the launcher's and admin's sign-out ({ unlinkPhone, swScope })
@@ -5395,8 +5156,6 @@
         followPath: followPath,
         keyHints:   keyHints,
         uniqueName: uniqueName,    // "foto.jpg" -> "foto (2).jpg" in a folder that has it
-        fold:       fold,          // "José" -> "jose": every search compares through it
-        matcher:    matcher,       // a search box's text -> test: words any order, "phrase", -word
         slugify:    slugify,       // "Córdoba" -> "cordoba" (Trips, Split)
         timeZones:  timeZones,     // every IANA zone (the launcher, Calendar)
         applySyncState: applySyncState,   // store state -> the header plug (classes + title)

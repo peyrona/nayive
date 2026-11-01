@@ -123,29 +123,20 @@ const session = O.session( {
 
 const PHONE = window.matchMedia( '(max-width: 640px)' );
 
-const fileMenu = O.fileMenu( { btn: 'moreBtn', menu: 'topMenu',
-                               ids: [ 'newBtn', 'openBtn', 'recentBtn', 'saveBtn', 'importBtn', 'saveAsBtn', 'restoreBtn', 'lockBtn', 'printBtn', 'pdfBtn', 'scBtn' ] } );
+O.fileMenu( { btn: 'moreBtn', menu: 'topMenu',
+              ids: [ 'newBtn', 'openBtn', 'recentBtn', 'saveBtn', 'importBtn', 'saveAsBtn', 'restoreBtn', 'lockBtn', 'printBtn', 'pdfBtn', 'scBtn' ] } );
 
 // Ayuda on the "?" - the three entries O.HELP_ITEMS names (the pull-down
 // Ayuda menu shows the same ones; the guide card is the third).
-const helpMenu = O.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
+O.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
 
-// ---- the toolbar's group cards (shared/office.js, groupPopup) ----
+// ---- the toolbar's group cards ----
 // Four runs of near-identical buttons that cost fifteen slots on the bar and
-// now cost four. The buttons are THE REAL ONES, sitting inside the cards in
-// index.html: their click handlers below are wired exactly as before and
-// format.js still lights them up. Only `align` and `freeze` hold toggles, so
-// only their triggers can light up - syncToolbar() calls sync() on both.
-const groups =
-[
-    O.groupPopup( { btn: 'fmtTableBtn',     popup: 'tablePopup'  } ),
-    O.groupPopup( { btn: 'fmtSortBtn',      popup: 'sortPopup'   } ),
-    O.groupPopup( { btn: 'fmtAlignBtn',     popup: 'alignPopup',  activeFrom: [ 'fmtWrapBtn' ] } ),
-    O.groupPopup( { btn: 'fmtFreezeGrpBtn', popup: 'freezePopup', activeFrom: [ 'fmtFreezeBtn', 'fmtFreezeRowBtn' ] } )
-];
-
-// Called by format.js after every toolbar refresh.
-function syncGroupTriggers() { groups.forEach( function( g ) { if( g ) g.sync(); } ); }
+// now cost four. Each card is an Ayni tool group (index.html: the trigger's
+// popovertarget): the buttons are THE REAL ONES, sitting inside the cards, so
+// their click handlers below are wired exactly as before and format.js still
+// lights them up. Only `align` and `freeze` hold toggles, so only their
+// triggers light up, by themselves (data-lit-by in index.html).
 
 // Folding sets height:0 rather than display:none - Handsontable sizes
 // itself to the space left over and re-renders on resize either way.
@@ -164,7 +155,6 @@ function applyPhoneChrome()
         tools     : 'fmtToolbar',
         helpBefore: 'moreToolsBtn',
         fileClass : function( btn, phone ) { btn.className = phone ? 'btn' : 'btn fmt-btn'; },
-        close     : function() { return [ fileMenu, helpMenu ].concat( groups ); },
         fold      : function() { return fold; }
     } );
 }
@@ -212,7 +202,7 @@ function wireStaticUI()
     document.addEventListener( 'click', function( e )
     {
         const pop = document.getElementById( 'borderPopup' );
-        if( pop.classList.contains( 'open' ) && ! pop.contains( e.target ) && ! e.target.closest( '#fmtBorderBtn' ) )
+        if( pop.matches( ':popover-open' ) && ! pop.contains( e.target ) && ! e.target.closest( '#fmtBorderBtn' ) )
             closeBorderPopup();
     });
 
@@ -233,7 +223,7 @@ function wireStaticUI()
             if( ed && ed.isOpened() ) return;
             const a = document.activeElement;
             if( a && a.matches( 'input, select, textarea, [contenteditable=""], [contenteditable="true"]' ) && ! a.closest( '#gridHost' ) ) return;
-            if( document.querySelector( '.popup.open, dialog.panel[open], .top-menu:not([hidden])' ) ) return;
+            if( document.querySelector( '.popup.open, .panel.menu:popover-open, .panel.popup:popover-open, dialog.panel[open]' ) ) return;
             table.listen();
             table.getFocusManager().focusOnHighlightedCell();
         }, 0 );
@@ -298,7 +288,7 @@ function wireStaticUI()
             return;
         }
         // Escape on the border popup; the "⋮" menu and every dialog are closed by shared/ui.js.
-        if( e.key === 'Escape' && document.getElementById( 'borderPopup' ).classList.contains( 'open' ) )
+        if( e.key === 'Escape' && document.getElementById( 'borderPopup' ).matches( ':popover-open' ) )
         {
             e.preventDefault();
             closeBorderPopup();
@@ -313,8 +303,7 @@ function wireStaticUI()
     document.getElementById( 'editBtn' ).addEventListener( 'click', function( e )
     {
         e.stopPropagation();
-        if( menus.isOpenFor( this ) ) menus.close();
-        else menus.openItems( CLIP_ITEMS.concat( [ { sep: true }, ADD_COMMENT ] ), this );
+        menus.openItems( CLIP_ITEMS.concat( [ { sep: true }, ADD_COMMENT ] ), this );   // a second press closes it
     } );
     document.getElementById( 'saveBtn'   ).addEventListener( 'click', function() { saveNow(); } );
     document.getElementById( 'printBtn'  ).addEventListener( 'click', function() { printSheet( false ); } );
@@ -373,8 +362,8 @@ function wireStaticUI()
     {
         e.stopPropagation();
         const pop = document.getElementById( 'borderPopup' );
-        if( pop.classList.contains( 'open' ) ) closeBorderPopup();
-        else                                   openBorderPopup();
+        if( pop.matches( ':popover-open' ) ) closeBorderPopup();
+        else                                 openBorderPopup();
     });
     document.getElementById( 'fmtAlignLeftBtn'   ).addEventListener( 'click', function() { setStyleField( 'align', 'left'   ); } );
     document.getElementById( 'fmtAlignCenterBtn' ).addEventListener( 'click', function() { setStyleField( 'align', 'center' ); } );
@@ -791,8 +780,8 @@ function openFxPicker()
 function renderFxList( filterText )
 {
     const list = document.getElementById( 'fxList' );
-    const q    = filterText.trim().toUpperCase();
-    const rows = FUNCTIONS.filter( function( f ) { return ! q || f.name.indexOf( q ) !== -1; } );
+    const q    = Ayni.matcher( filterText );       // the one search rule (Ayni)
+    const rows = FUNCTIONS.filter( function( f ) { return ! q || q( f.name ); } );
 
     list.innerHTML = rows.length
         ? fxRowsHtml( rows )
@@ -1474,5 +1463,5 @@ export
 {
     NF_SAMPLE_DATE, borderWeight, borderColorValue, T, PHONE, fold, HT_LOCALE,
     refreshNameBox, gotoReference, refreshFormulaBar, mirrorEditorToBar, refreshSelStats,
-    FUNCTIONS, fxRowsHtml, scheduleAutosave, menus, CHROME, syncGroupTriggers
+    FUNCTIONS, fxRowsHtml, scheduleAutosave, menus, CHROME
 };

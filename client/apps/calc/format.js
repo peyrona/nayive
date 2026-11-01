@@ -13,8 +13,7 @@ import
 from './lib/xlsx-format_v2.4.5.js';
 import
 {
-    NF_SAMPLE_DATE, borderWeight, borderColorValue, T, scheduleAutosave, menus, CHROME,
-    syncGroupTriggers
+    NF_SAMPLE_DATE, borderWeight, borderColorValue, T, scheduleAutosave, menus, CHROME
 }
 from './calc.js';
 import
@@ -462,8 +461,7 @@ function updateToolbarActiveState()
     // Alignment, wrap and freeze live inside group cards now, so the bar shows
     // none of the lights above until a card is opened. The two that answer a
     // yes/no question - "¿ajustar texto?", "¿algo inmovilizado?" - hand their
-    // light to the button that opens the card (calc.js, groups).
-    syncGroupTriggers();
+    // light to the button that opens the card by themselves (data-lit-by).
 }
 
 // What a cell with no colours of its own is drawn in - the theme's text on
@@ -596,21 +594,19 @@ function openBorderPopup()
     // sliver, so the menu row that ran the entry is the honest anchor.
     const rect = menus.anchorRect( '#fmtBorderBtn', CHROME.on(), 'menuBar' );
 
-    pop.style.top  = ( rect.bottom + 4 ) + 'px';
-    pop.style.left = rect.left + 'px';
-    pop.classList.add( 'open' );
-
-    // nudge back inside the viewport if the button sits near the right edge
-    const pr = pop.getBoundingClientRect();
-    if( pr.right > window.innerWidth - 8 )
-        pop.style.left = Math.max( 8, window.innerWidth - 8 - pr.width ) + 'px';
+    // A popover in the top layer (above the grid's own layers); placed and
+    // kept on screen by Ayni. Its own outside-press and Escape (calc.js)
+    // close it: popover="manual".
+    pop.showPopover();
+    Ayni.place( pop, rect );
 
     syncBorderPopupState();
 }
 
 function closeBorderPopup()
 {
-    document.getElementById( 'borderPopup' ).classList.remove( 'open' );
+    const pop = document.getElementById( 'borderPopup' );
+    if( pop.matches( ':popover-open' ) ) pop.hidePopover();
 }
 
 // Reflects the sticky weight choice and the colour swatch in the popup.

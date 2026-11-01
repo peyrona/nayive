@@ -160,7 +160,7 @@ function selectIfListed( path )
 {
     if( ! ( curListing.nodes || [] ).some( function( n ) { return n.path === path; } ) ) return;
     setSel( [ path ] );
-    const row = document.querySelector( '#listing .row.is-selected' );
+    const row = document.querySelector( '#listing .row[aria-selected="true"]' );
     if( row ) row.scrollIntoView( { block: 'nearest' } );
 }
 

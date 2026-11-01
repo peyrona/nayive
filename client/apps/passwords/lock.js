@@ -81,7 +81,7 @@ function renderGate()
     show( 'setupBox', box === 'setupBox' );
     show( 'recoveryBox', box === 'recoveryBox' );
     if( box === 'setupBox' ) drawChecks( 'setupChecks', $( 'setupPw' ).value, $( 'setupPw2' ).value );
-    if( box === 'unlockBox' && ! gateBusy && ! NayiveUI.menuOpen() && ! document.querySelector( 'dialog.panel[open]' ) )
+    if( box === 'unlockBox' && ! gateBusy && ! !! document.querySelector( '.panel.menu:popover-open' ) && ! document.querySelector( 'dialog.panel[open]' ) )
         setTimeout( function() { if( ! $( 'unlockBox' ).hidden ) $( 'unlockPw' ).focus(); }, 0 );
 }
 
@@ -141,7 +141,7 @@ function drawChecks( listId, pw, pw2 )
 //   words = runs of letters / digits (folded); signs = every other character
 //   but spaces, each found anywhere in the phrase.
 
-function words( s ) { return NayiveUI.fold( s ).split( /[^\p{L}\p{N}]+/u ).filter( Boolean ); }
+function words( s ) { return Ayni.fold( s ).split( /[^\p{L}\p{N}]+/u ).filter( Boolean ); }
 function signs( s ) { return String( s ).match( /[^\p{L}\p{N}\s]/gu ) || []; }
 
 function readPhrase( id ) { return $( id ).value.trim().slice( 0, MAX_HINT ); }

@@ -37,7 +37,7 @@ const LOCALE = window.Ayni?.i18n?.lang() || 'en';
        render: (name) => html }           instead of a sprite: any markup, e.g. an icon font's <i class="…">
    Ayni.icons.use(null) goes back to the built-in set. Ayni.icons.add(set) adds the app's own icons (below).
    No SVG is pasted into a page. */
-const ICONS = Object.freeze(['arrow-down', 'arrow-up', 'calendar', 'check', 'chev-down', 'chev-right', 'close', 'copy', 'cut',
+const ICONS = Object.freeze(['arrow-down', 'arrow-up', 'calendar', 'case', 'check', 'check-all', 'chev-down', 'chev-right', 'chev-up', 'close', 'copy', 'cut',
   'apps', 'edit', 'error', 'eye', 'eye-off', 'file', 'filter', 'folder', 'help', 'info', 'maximise', 'minimise', 'minus', 'more', 'ok',
   'moon', 'paste', 'plus', 'restore', 'search', 'sun', 'today', 'trash', 'undo', 'warn']);
 let iconSet = null;
@@ -301,6 +301,41 @@ const applyTouch = () => {
 /* Ayni.setTouchPreview(true) gives the touch layout with a mouse: a preview, or a tablet with a mouse plugged in */
 const setTouchPreview = (on) => { touchPreview = !!on; applyTouch(); };
 
+/* ---------- The search rule: one for every search field, list filter and type-ahead (guidelines 4.5) ---------- */
+/* Text for searching: accent- and case-blind ("jose" finds "José", "nino" finds "Niño"); "strasse" finds "Straße",
+   "oeuvre" finds "œuvre", and a typed ' finds the typographic ’. Both sides of a comparison go through it. A server
+   that searches for the page must fold the same way */
+const FOLD_MORE = { ß: 'ss', œ: 'oe', æ: 'ae', '\u2018': "'", '\u2019': "'" };
+const fold = (s) => String(s ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[ßœæ\u2018\u2019]/g, (c) => FOLD_MORE[c]);
+/* A text with its umlauts spelt the German way, folded: "Müller" -> "mueller". Tried on both sides, so "Mueller" finds
+   "Müller" and back ("Muller" finds both, by fold). Only umlauts are spelt out: folding every "ue" would make "fue" find
+   "fumar". null when there is no umlaut (most texts) */
+const foldUmlauts = (s) => {
+  const n = String(s ?? '').normalize('NFC');
+  return /[äöüÄÖÜ]/.test(n) ? fold(n.replace(/[äöüÄÖÜ]/g, (c) => c.normalize('NFD')[0] + 'e')) : null;
+};
+/* Ayni.matcher(text): a search field's text as a test. Words in any order (bill light), "an exact phrase", -word to
+   leave out; a "-" inside a word (e-mail) or alone is a letter. null when nothing is asked, else m(itemText) -> true or
+   false, with m.terms (the words and phrases to find, as typed: to mark the hits) and m.not (those left out) */
+const matcher = (raw) => {
+  const want = [], skip = [], wantF = [], skipF = [];
+  String(raw ?? '').replace(/(-?)"([^"]*)"?|(\S+)/g, (all, neg, phrase, word) => {
+    const not = word ? word.length > 1 && word[0] === '-' : !!neg;
+    const w = (word ? (not ? word.slice(1) : word) : phrase).replace(/\s+/g, ' ').trim(), f = fold(w);
+    if (!f) return '';
+    (not ? skip : want).push(w); (not ? skipF : wantF).push([f, foldUmlauts(w)]);
+    return '';
+  });
+  if (!want.length && !skip.length) return null;
+  const m = (text) => {
+    const t = fold(text).replace(/\s+/g, ' '), de = foldUmlauts(text)?.replace(/\s+/g, ' ');   // a phrase spans any run of spaces
+    const has = ([f, u]) => t.includes(f) || (!!u && t.includes(u)) || (!!de && (de.includes(f) || (!!u && de.includes(u))));
+    return wantF.every(has) && !skipF.some(has);
+  };
+  m.terms = want; m.not = skip;
+  return m;
+};
+
 /* ---------- Tooltips: data-tip on any element ---------- */
 let tip, tipTimer, tipEl = null;
 const showTip = (el) => {
@@ -329,13 +364,15 @@ const setupTips = () => {
     hideTip(); if (e.pointerType === 'touch' || document.documentElement.classList.contains('touch')) return; // touch: the Help dialog replaces tooltips
     if (el) { tipEl = el; tipTimer = setTimeout(() => showTip(el), 500); }
   });
-  /* Shown a moment later: the focus may come back while a popup is still closing, when no other popup can open */
+  /* Shown a moment later: the focus may come back while a popup is still closing, when no other popup can open.
+     A text field's tooltip (how to search) shows on hover only: on focus it would cover what the user is typing for */
   document.addEventListener('focusin', (e) => {
     const el = e.target.closest('[data-tip]'); hideTip();
-    if (el && el.matches(':focus-visible')) { tipEl = el; setTimeout(() => { if (tipEl === el && document.activeElement === el) showTip(el); }); }
+    if (el && el.matches(':focus-visible') && !el.matches('input, textarea')) { tipEl = el; setTimeout(() => { if (tipEl === el && document.activeElement === el) showTip(el); }); }
   });
   document.addEventListener('focusout', hideTip);
   document.addEventListener('pointerdown', hideTip);
+  document.addEventListener('input', hideTip);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideTip(); });
 };
 
@@ -353,10 +390,10 @@ const init = (root = document) => {
 const family = (f) => { families.push(f); if (started) { f.setup?.(); f.init?.(document); } };
 
 Object.assign(window.Ayni ??= {}, {
-  version: '0.1.0', init, $, $$, icon, setIcon, isDark, setTheme, theme, supported, isMac, isTouch, setTouchPreview, setTip,
+  version: '0.1.0', init, $, $$, icon, setIcon, isDark, setTheme, theme, supported, isMac, isTouch, setTouchPreview, setTip, fold, matcher,
   icons: { use: useIcons, add: addIcons, names: ICONS, get set() { return iconSet; } },
   /* For Ayni's own family files */
-  core: { fire, wired, once, each, tx, txf, LOCALE, iconName, drawIcons, family, isRO, layer, isTouch, HOLD_MS, DBL_MS, retip },
+  core: { fire, wired, once, each, tx, txf, LOCALE, iconName, drawIcons, family, isRO, layer, isTouch, HOLD_MS, DBL_MS, retip, fold },
 });
 window.Ayni.ready = new Promise((go) => {
   const start = async () => {

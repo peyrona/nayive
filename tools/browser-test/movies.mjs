@@ -16,7 +16,7 @@ seed( s, { [ UNO ]: "not really a film", [ DOS ]: "not really a film", [ TRES ]:
            [ POSTERS ]: JSON.stringify( { key: "K1", items: {} } ) } );
 const c = await browser( s, { mouse: true } );
 const CARD = p => `#libContent .poster-card[data-open="${p}"]`;
-const NODE = id => `#tree .tree-row[data-id="${id}"]`;
+const NODE = id => `#tree [role=treeitem][data-id="${id}"] > .ti`;   // the row (the item holds its children too)
 const sel = () => c.evaluate( "browse.ids().join()" );
 const json = rel => { try { return JSON.parse( onDisk( s, rel ) ); } catch { return null; } };
 async function disk( fn, ms = 8000 )
@@ -29,10 +29,10 @@ async function disk( fn, ms = 8000 )
 section( "MOVIES · MOUSE" );
 ok( await c.open( `/nayive/movies/index.html?dir=${D}` ) && await c.until( "typeof st !== 'undefined' && st.movies.length === 3 && document.querySelectorAll('#libContent .poster-grid .poster-card').length === 3" ), "Movies lists the 3 films" );
 await c.evaluate( "document.head.insertAdjacentHTML( 'beforeend', '<style>.quota-card{display:none!important}</style>' ); true" );   // the scratch disk's "space almost full" card
-ok( await c.evaluate( "!! document.querySelector('#tree .tree-row[data-id=\"v:folders\"]') && ! document.getElementById('filterMovies')" ), "the tree holds Films / Genres / Folders; the old view buttons are gone" );
+ok( await c.evaluate( "!! document.querySelector('#tree [role=treeitem][data-id=\"v:folders\"]') && ! document.getElementById('filterMovies')" ), "the tree holds Films / Genres / Folders; the old view buttons are gone" );
 await mouse( c, CARD( UNO ) + " .poster-title" );
 ok( await sel() === UNO && await c.evaluate( "! document.querySelector('.movie-detail')" ), "a click picks one film (it does not open)" );
-ok( await c.evaluate( "!document.getElementById('selActions').hidden && document.querySelector('#selActions .sel-count').textContent.trim() === '1'" ), "the header group shows, count 1" );
+ok( await c.evaluate( "!document.getElementById('selActions').hidden && document.querySelector('#selActions .pick-count').textContent.trim() === '1'" ), "the header group shows, count 1" );
 await mouse( c, CARD( TRES ) + " .poster-title", { mods: 2 } );
 ok( ( await sel() ).split( "," ).length === 2, "Ctrl+click adds one", await sel() );
 await key( c, "Escape" );
@@ -47,7 +47,7 @@ await mouse( c, CARD( DOS ) + " .poster-title", { button: "right" } );
 let rows = await menuRows( c );
 ok( await sel() === DOS && rows && [ "open", "play", "watched", "poster", "drive" ].every( a => rows.some( r => r.act === a && ! r.off ) ), "right-click: Open, Play, Mark watched, Find poster, Show in Drive", rows );
 await key( c, "Escape" );
-ok( await c.evaluate( "! document.querySelector('#libContent [data-more], #tree [data-more], #selActions [data-sel=menu]')" ), "no card ⋮, no tree ⋮, no ⋮ in the selection group" );
+ok( await c.evaluate( "! document.querySelector('#libContent [data-more], #tree [data-more], #selActions [data-pick=menu]')" ), "no card ⋮, no tree ⋮, no ⋮ in the selection group" );
 let fs = await fitState( c );
 ok( fs.acts.join() === "play,watched,poster,drive" && ! fs.out.length && ! fs.more && ! fs.crowded, "wide: every action is a button, in menu order; no ⋮", fs );
 
@@ -63,7 +63,7 @@ ok( json( PROG ).watched[ DOS ], "…Dos (no point lost) stays watched" );
 await c.evaluate( "browse.set( [ " + JSON.stringify( DOS ) + " ] ); true" );
 await mouse( c, CARD( DOS ) + " .poster-title", { button: "right" } );
 ok( ( await menuRows( c ) )?.some( r => r.act === "watched" && /not watched/.test( r.label ) ), "a watched film's menu says Mark as not watched" );
-await c.evaluate( "document.querySelector('.item-menu [data-act=watched]').click(); true" );
+await c.evaluate( "document.querySelector('#ayni-menu [data-act=watched]').click(); true" );
 ok( await disk( () => ! json( PROG ).watched[ DOS ] ), "…and un-marks it (on disk)" );
 
 section( "MOVIES · FIND POSTER ON A PICK" );
@@ -87,7 +87,7 @@ await mouse( c, CARD( TRES ) + " .poster-title" );
 await key( c, "Enter" );
 ok( await c.until( "st.selectedMovie === " + JSON.stringify( TRES ) ), "Enter opens the picked film" );
 await mouse( c, NODE( "v:folders" ), { dx: 60 } );
-ok( await c.until( "st.filter === 'folders' && !! document.querySelector('#tree .tree-row[data-id=\"f:" + D + "/Drama\"]')" ), "Folders opens and lists the real folders" );
+ok( await c.until( "st.filter === 'folders' && !! document.querySelector('#tree [role=treeitem][data-id=\"f:" + D + "/Drama\"]')" ), "Folders opens and lists the real folders" );
 await mouse( c, NODE( "f:" + D + "/Drama" ), { dx: 60 } );
 ok( await c.until( "document.querySelectorAll('#libContent .poster-card').length === 2" ), "a folder shows its films" );
 await mouse( c, NODE( "v:genres" ), { dx: 60 } );
@@ -101,7 +101,7 @@ await c.send( "Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoi
 await c.evaluate( "browse.clear(); setFilter( 'movies' ); true" );
 await c.until( "document.querySelectorAll('#libContent .poster-grid .poster-card').length === 3" );
 await finger( c, CARD( UNO ) + " .poster-title", 700 );
-ok( await c.until( "browse.ids().join() === " + JSON.stringify( UNO ) ) && await c.evaluate( "document.getElementById('libContent').classList.contains('is-picking') && ! document.querySelector('.movie-detail')" ), "a long-press picks (ticks on), it does not open" );
+ok( await c.until( "browse.ids().join() === " + JSON.stringify( UNO ) ) && await c.evaluate( "document.getElementById('libContent').classList.contains('picking') && ! document.querySelector('.movie-detail')" ), "a long-press picks (ticks on), it does not open" );
 fs = await fitState( c );
 ok( ! fs.crowded && fs.more && [ "play", "watched" ].every( a => fs.acts.includes( a ) ) && ! fs.tools.includes( "reloadBtn" ),
     "phone header: one row; the top ranks stay, the tools leave first, the ⋮ shows", fs );
@@ -111,8 +111,8 @@ await finger( c, ".topbar .fit-more" );
 const mrows = await menuRows( c );
 ok( mrows && mrows.some( r => r.act === "reloadBtn" ), "the ⋮ opens with them", mrows );
 await finger( c, ".topbar .fit-more" );
-ok( await c.until( "document.querySelector('.item-menu').hidden" ), "…and closes again" );
-await finger( c, "#selActions [data-sel=clear]" );
+ok( await c.until( "( ! document.querySelector('#ayni-menu')?.matches(':popover-open') )" ), "…and closes again" );
+await finger( c, "#selActions [data-pick=clear]" );
 ok( await c.until( "browse.ids().length === 0" ), "the × stops picking" );
 await c.evaluate( "document.querySelector('" + CARD( DOS ).replace( /"/g, '\\"' ) + "').scrollIntoView( { block: 'center' } ); document.querySelectorAll( '#ayni-toasts .dismiss' ).forEach( b => b.click() ); true" );   // "1 poster added" lies over it
 await finger( c, CARD( DOS ) + " .poster-title" );

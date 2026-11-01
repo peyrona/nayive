@@ -1,8 +1,8 @@
 /*
  * render.js - Bookmarks: what is on screen. The tree pane, the filter pills,
  * the crumbs, the cards / rows and the empty screens. Picking and the
- * selection's header buttons are the shared item browser (input.js wires
- * it, shared/browser.js does it).
+ * selection's header buttons are the shared item list (input.js wires
+ * it, Ayni.list does it).
  */
 "use strict";
 
@@ -50,15 +50,15 @@ function render()
 //------------------------------------------------------------------------//
 // TREE
 
-// The shared tree (input.js makes it: NayiveUI.tree). No row for the root:
+// The shared tree (input.js makes it: Ayni.tree, nav). No row for the root:
 // its folders start the tree. The "All" pill and the crumbs lead back to it.
 function treeRoots()
 {
-    function mk( f ) { return { id: f.id, name: folderName( f ), kids: childrenOf( f.id ).filter( isFolder ).map( mk ) }; }
+    function mk( f ) { return { id: f.id, name: folderName( f ), children: childrenOf( f.id ).filter( isFolder ).map( mk ) }; }
     return childrenOf( ROOT ).filter( isFolder ).map( mk );
 }
 
-function renderTree() { if( treeView ) treeView.render(); }
+function renderTree() { if( treeView ) treeView.build(); }
 
 function toggleOpen( id, force )
 {
@@ -133,8 +133,8 @@ function sortNodes( list )
     const by = ui.sort;
     if( by === 'saved' ) return list;
     const cmp = {
-        az:  function( a, b ) { return NayiveUI.fold( a.title ).localeCompare( NayiveUI.fold( b.title ) ); },
-        za:  function( a, b ) { return NayiveUI.fold( b.title ).localeCompare( NayiveUI.fold( a.title ) ); },
+        az:  function( a, b ) { return Ayni.fold( a.title ).localeCompare( Ayni.fold( b.title ) ); },
+        za:  function( a, b ) { return Ayni.fold( b.title ).localeCompare( Ayni.fold( a.title ) ); },
         new: byDate( true ),
         old: byDate( false )
     }[ by ];
@@ -176,9 +176,9 @@ function renderItems()
 
 function itemHtml( n, withPath )
 {
-    // The shared browser paints .is-selected; the tick is its own.
-    const cls = 'card-row bm-item' + ( isFolder( n ) ? ' is-folder' : '' ) + ( browse && browse.has( n.id ) ? ' is-selected' : '' );
-    const tick = NayiveUI.tickHtml();
+    // Ayni.list paints aria-selected; the tick goes in the card's top row.
+    const cls = 'card-row bm-item' + ( isFolder( n ) ? ' is-folder' : '' );
+    const tick = Ayni.pickTick();
     const where = withPath ? '<div class="bm-path">' + SVG.folder + '<span>' + esc( pathText( n.parentId ) || T( 'bookmarks.all' ) ) + '</span></div>' : '';
 
     if( isFolder( n ) )

@@ -588,19 +588,19 @@ function initialOf( n )
 }
 
 //------------------------------------------------------------------------//
-// SEARCH  -  the shared rule (NayiveUI.matcher: words in any order, "phrase",
+// SEARCH  -  the shared rule (Ayni.matcher: words in any order, "phrase",
 // -word, accent-insensitive). A "#tag" word matches tags only (from the start
 // of the tag).
 
 function makeMatcher( q )
 {
     const tagWords = [];
-    const rest = String( q || '' ).replace( /(^|\s)#(\S*)/g, function( all, sp, t ) { tagWords.push( NayiveUI.fold( t ) ); return sp; } );
-    const text = NayiveUI.matcher( rest );
+    const rest = String( q || '' ).replace( /(^|\s)#(\S*)/g, function( all, sp, t ) { tagWords.push( Ayni.fold( t ) ); return sp; } );
+    const text = Ayni.matcher( rest );
     if( ! text && ! tagWords.length ) return null;
     return function( n )
     {
-        const tags = isFolder( n ) ? [] : n.tags.map( NayiveUI.fold );
+        const tags = isFolder( n ) ? [] : n.tags.map( Ayni.fold );
         const ok   = tagWords.every( function( t ) { return !! t && tags.some( function( x ) { return x.indexOf( t ) === 0; } ); } );
         return ok && ( ! text || text( isFolder( n ) ? n.title
                                      : ( n.title || '' ) + '\n' + ( n.url || '' ) + '\n' + tags.join( '\n' ) + '\n' + ( n.notes || '' ) ) );
@@ -611,8 +611,8 @@ function makeMatcher( q )
 // "web dev" is one tag, not two words.
 function tagMatcher( tag )
 {
-    const t = NayiveUI.fold( tag );
-    return function( n ) { return ! isFolder( n ) && n.tags.some( function( x ) { return NayiveUI.fold( x ) === t; } ); };
+    const t = Ayni.fold( tag );
+    return function( n ) { return ! isFolder( n ) && n.tags.some( function( x ) { return Ayni.fold( x ) === t; } ); };
 }
 
 // Newest / oldest first; an unknown date ("") last either way.

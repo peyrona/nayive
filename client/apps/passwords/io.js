@@ -114,7 +114,7 @@ function rowToEntry( r, map, now )
     return n;
 }
 
-function dupKey( n ) { return [ NayiveUI.fold( n.title || '' ), n.user || '', n.pass || '', ( n.urls || [] )[ 0 ] || '' ].join( '\u0001' ); }
+function dupKey( n ) { return [ Ayni.fold( n.title || '' ), n.user || '', n.pass || '', ( n.urls || [] )[ 0 ] || '' ].join( '\u0001' ); }
 
 // A folder path under the top -> its id; the folders that are missing are
 // made (into `made`, to be saved with the entries).
@@ -123,10 +123,10 @@ function folderFor( path, made )
     let parent = ROOT;
     for( const name of path )
     {
-        const want = NayiveUI.fold( name );
+        const want = Ayni.fold( name );
         const pool = Object.keys( items ).map( item ).concat( made )
                            .filter( function( f ) { return isFolder( f ) && ( f.id in parentOf ? parentOf[ f.id ] : f.folder || ROOT ) === parent; } );
-        let f = pool.find( function( x ) { return NayiveUI.fold( x.title ) === want; } );
+        let f = pool.find( function( x ) { return Ayni.fold( x.title ) === want; } );
         if( ! f )
         {
             const now = nowIso();

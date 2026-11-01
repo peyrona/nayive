@@ -40,24 +40,8 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
 }
 .btn.bin-gulp { animation: bin-gulp 1.5s ease-in-out 2; }
 
-/* The search field is the shared SEARCH FOLD (app.css): the funnel and the ×
-   inside its right end are made there too (NayiveUI.searchFold). */
-
-/* While an advanced search is in force this button stands in for the box
-   (advsearch.js): the field's own look with an accent edge, so it reads as
-   "a search is on"; a click reopens the dialog. A one-app state, kept here. */
-.adv-chip
-{
-    display: flex; align-items: center; gap: 6px; width: 100%;
-    padding: 7px 60px 7px 10px;    /* clears the funnel and the × (SEARCH FOLD) */
-    font: inherit; font-size: var(--field-fs); text-align: left;
-    color: var(--accent); background: var(--card2);
-    border: 1px solid var(--accent); border-radius: var(--radius-s);
-    cursor: pointer;
-}
-.adv-chip svg  { flex: 0 0 auto; }
-.adv-chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.search-wrap.adv-on #searchBuilderBtn { color: var(--accent); }
+/* The search field is Ayni's (shared/ayni/ayni-search.css): its funnel turns
+   Accent while an advanced search is in force (advsearch.js). */
 
 /* Advanced search dialog. Layout only: every control in it is a shared one
    (.field, .pill, .btn.text, .btn, .dt-field). */
@@ -117,8 +101,8 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
     border-bottom: 1px solid color-mix(in srgb, var(--text) 6%, transparent); cursor: pointer;
 }
 .row:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
-.row.is-selected { background: color-mix(in srgb, var(--accent) 22%, transparent); }
-/* The tick is the item browser's (app.css .pick-tick). In the list it is
+.row[aria-selected="true"]:hover { background: var(--accent-soft); }
+/* Picked rows: Ayni's soft Accent tint. The tick is Ayni's (.pick-tick). In the list it is
    as big as the file icon beside it (18px); the icons view keeps its own. */
 .list-rows:not(.is-grid) .row > .pick-tick     { width: 18px; height: 18px; border-radius: 4px; }
 .list-rows:not(.is-grid) .row > .pick-tick svg { width: 11px; height: 11px; }
@@ -180,9 +164,9 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
     border: 1px solid transparent; border-radius: var(--radius-m);
 }
 .list-rows.is-grid .row:hover       { border-color: var(--line); }
-.list-rows.is-grid .row.is-selected { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.list-rows.is-grid .row[aria-selected="true"] { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
 .list-rows.is-grid .row > .pick-tick { position: absolute; top: 6px; left: 6px; z-index: 1; background: var(--bg); }
-.list-rows.is-grid .row.is-selected > .pick-tick { background: var(--accent); }
+.list-rows.is-grid .row[aria-selected="true"] > .pick-tick { background: var(--accent); }
 .list-rows.is-grid .row-ic svg { width: 46px; height: 46px; stroke-width: 1.5; }
 .list-rows.is-grid .row .row-name
 {
@@ -229,7 +213,7 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
 }
 .list-pane.drag-over .drop-cover { display: flex; }
 
-/* Internal drag-and-drop: the shared marks (app.css .dragging / .drop-target). */
+/* Internal drag-and-drop: Ayni's marks (.dragged / .drop-in, ayni-lists.css). */
 
 /* Dialogs: Ayni's dialog.panel; .field / inputs from app.css. */
 dialog.panel .body p { font-size: 0.9rem; color: var(--text-dim); margin: 0 0 14px; }
@@ -362,7 +346,7 @@ dialog.panel .body p { font-size: 0.9rem; color: var(--text-dim); margin: 0 0 14
 
 /* Trash view ("Papelera"). A flat listing of trashed items; the file-tree
    toolbar buttons are hidden while it is open. */
-body.trash-mode .search-wrap,
+body.trash-mode .search-field,
 body.trash-mode #searchToggleBtn,
 body.trash-mode #newFolderBtn, body.trash-mode #uploadBtn,
 body.trash-mode #renameBtn,  body.trash-mode #moveToBtn,
@@ -403,13 +387,7 @@ body.trash-mode .tb-modes { display: none; }
        sends the buttons to a second row on a 320px phone. */
     .topbar-actions > .tb-group::before { display: none; }
 
-    /* B2 — the search fold (app.css). Fingers: the funnel and the × inside
-       grow as far as the taller field allows. */
-    .search-wrap .topbar-search,
-    .adv-chip { padding-right: 70px; }
-    .adv-chip { font-size: 16px; }      /* the same height as the 16px phone field it stands in for */
     .sb-rule select { width: 128px; }
-    .search-wrap .search-ends .btn.sm { width: 32px; height: 32px; }
 
     /* B4 — the view switch leaves the header for its ⋮ (menus.js viewMenuItems). */
     .tb-modes { display: none; }

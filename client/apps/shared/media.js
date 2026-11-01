@@ -172,15 +172,9 @@
         if( el ) el.innerHTML = Ayni.icon( "folder" ) + "<span>" + esc( label ) + "</span>";
     }
 
-    // The folder-? button (#folderInfoBtn) opens its menu (#folderMenu): the
-    // crumb, then the counts line (#subStrip). See FOLDER-BACKED VIEWERS in
-    // shared/app.css. Photos calls this before the deferred ui.js has run.
-    function wireFolderInfo()
-    {
-        var wire = function () { NayiveUI.wireMenu( { btn: "folderInfoBtn", menu: "folderMenu" } ); };
-        if( window.NayiveUI ) wire();
-        else document.addEventListener( "DOMContentLoaded", wire );
-    }
+    // (The folder-? button, #folderInfoBtn, opens its popup, #folderMenu, by
+    // itself: an Ayni popup, popovertarget in the page. See FOLDER-BACKED
+    // VIEWERS in shared/app.css.)
 
     // The crumb re-opens the folder picker; a new choice reloads the app on
     // it. `opts` go to NayiveUI.changeLauncherFolder ({ app, allowRoot,
@@ -198,16 +192,16 @@
     }
 
     // The magnifier (#searchToggle) unfolds the search field (#searchInput,
-    // in its .search-wrap) - the shared fold (NayiveUI.searchFold); its × and
-    // Escape clear the search (an "input" event) and fold it away. Photos
-    // calls this before the deferred ui.js has run: it then waits for it.
+    // in its .search-field) - Ayni's folded search field; its × and Escape
+    // clear the search (an "input" event) and fold it away. Photos calls this
+    // early: it waits for Ayni.ready (its words loaded), as Ayni asks.
     var searchFold = null;
     function wireSearchToggle()
     {
-        var btn = document.getElementById( "searchToggle" ), box = document.getElementById( "searchInput" );
-        if( ! btn || ! box ) return;
-        var wire = function () { searchFold = NayiveUI.searchFold( { box: box.parentElement, input: box, toggle: btn } ); };
-        if( window.NayiveUI ) wire();
+        var box = document.getElementById( "searchInput" );
+        if( ! document.getElementById( "searchToggle" ) || ! box ) return;
+        var wire = function () { Ayni.ready.then( function () { searchFold = Ayni.searchField( box.parentElement ); } ); };
+        if( window.Ayni && Ayni.ready ) wire();
         else document.addEventListener( "DOMContentLoaded", wire );
     }
 
@@ -949,17 +943,17 @@
     {
         return ( node && node.nodes || [] )
             .filter( function ( n ) { return n.nodes !== null && n.nodes !== undefined; } )
-            .map( function ( n ) { return { id: "f:" + n.path, name: baseName( n.path ), icon: icon, noMenu: true, kids: folderNodes( n, icon ) }; } );
+            .map( function ( n ) { return { id: "f:" + n.path, name: baseName( n.path ), icon: icon, noMenu: true, children: folderNodes( n, icon ) }; } );
     }
 
-    // The library tree (NayiveUI.tree in #tree / #treePane; the header's
+    // The library tree (Ayni.tree, nav, in #tree / #treePane; the header's
     // #treeBtn slides it in on a phone). `open`: the app's map of open rows,
-    // this visit. cfg: roots, current, go - and Music's menu, drop.
+    // this visit. cfg: items, current, go - and Music's menu, drop.
     function libraryTree( open, cfg )
     {
-        var tree = NayiveUI.tree( Object.assign( {
-            host:    document.getElementById( "tree" ),
-            pane:    document.getElementById( "treePane" ),
+        var tree = Ayni.tree( document.getElementById( "tree" ), Object.assign( {
+            nav:     true,
+            sheet:   document.getElementById( "treePane" ),
             isOpen:  function ( id ) { return !! open[ id ]; },
             setOpen: function ( id, v ) { open[ id ] = v; }
         }, cfg ) );
@@ -981,7 +975,7 @@
         fmtClock: fmtClock, fmtRuntime: fmtRuntime, fmtSize: fmtSize,
         sleep: sleep, pool: pool,
         flattenFiles: flattenFiles, loadFolderTree: loadFolderTree,
-        dirLabel: dirLabel, setCrumb: setCrumb, wireFolderInfo: wireFolderInfo, wireCrumbPicker: wireCrumbPicker, wireSearchToggle: wireSearchToggle, searchCount: searchCount,
+        dirLabel: dirLabel, setCrumb: setCrumb, wireCrumbPicker: wireCrumbPicker, wireSearchToggle: wireSearchToggle, searchCount: searchCount,
         scanCache: scanCache, probeDuration: probeDuration,
         readComments: readComments, updateComments: updateComments, NOTES_ASIDE: ASIDE,
         parkNotes:   function ( map, path ) { return park( map, path, null ); },

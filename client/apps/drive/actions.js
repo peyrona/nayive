@@ -453,7 +453,7 @@ async function revealItem( sel )
 
     setSel( [ sel ] );
 
-    const row = document.querySelector( '#listing .row.is-selected' );
+    const row = document.querySelector( '#listing .row[aria-selected="true"]' );
     if( row ) row.scrollIntoView( { block: 'center' } );
 }
 

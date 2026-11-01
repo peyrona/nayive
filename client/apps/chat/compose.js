@@ -459,23 +459,16 @@
         }, true );
     }
 
-    // A small menu over the button; it lives in the composer like the clip's
-    // panel, so a click elsewhere (or a new chat) closes it the same way.
+    // A small menu over the button (an Ayni menu, Ayni.menuAt: it shows when
+    // the finger lifts, and a press elsewhere closes it).
     function openSendMenu()
     {
-        if( ( panel && panel.dataset.which === "send" ) || ! S.open || S.editing || ! ta.value.trim() ) return;
+        if( sendBtn.getAttribute( "aria-expanded" ) === "true" || ! S.open || S.editing || ! ta.value.trim() ) return;
         closePanel();
-        var menu = h( "div", { class: "top-menu send-menu", attrs: { role: "menu" } } );
-        function item( icon, key, fn )
-        {
-            menu.appendChild( h( "button", { class: "menu-item", attrs: { type: "button", role: "menuitem" },
-                                             on: { click: function () { closePanel(); fn(); } } }, C.ic( icon ), T( key ) ) );
-        }
-        item( "bell-off", "chat.sendSilent", function () { send( { silent: true } ); } );
-        item( "clock", "chat.schedule", schedule );
-        panel = menu;
-        panel.dataset.which = "send";
-        composer.appendChild( panel );
+        Ayni.menuAt( [
+            { id: "silent",   label: T( "chat.sendSilent" ), icon: C.icon( "bell-off" ), run: function () { send( { silent: true } ); } },
+            { id: "schedule", label: T( "chat.schedule" ),   icon: C.icon( "clock" ),    run: schedule }
+        ], { anchor: sendBtn } );
         if( navigator.vibrate ) try { navigator.vibrate( 15 ); } catch( _ ) {}
     }
 
@@ -530,27 +523,21 @@
         if( S.open !== conv ) return;
         closePanel();
         var names = who.slice( 0, 2 ).map( function ( x ) { return x.name; } ).join( ", " ) + ( who.length > 2 ? " +" + ( who.length - 2 ) : "" );
-        var menu = h( "div", { class: "top-menu send-menu", attrs: { role: "menu" } },
-            h( "div", { class: "menu-label", text: who.length === 1 ? C.TF( "chat.nightAt", { time: who[ 0 ].time, who: names } )
-                                                                   : C.TF( "chat.nightFor", { who: names } ) } ) );
         function item( icon, key, silent )
         {
-            menu.appendChild( h( "button", { class: "menu-item", attrs: { type: "button", role: "menuitem" },
-                                             on: { click: function ()
-                                             {
-                                                 closePanel();
-                                                 nightPick[ conv ] = { silent: silent, until: Date.now() + 60 * 60 * 1000 };
-                                                 go( silent );
-                                             } } }, C.ic( icon ), T( key ) ) );
+            return { id: silent ? "silent" : "loud", label: T( key ), icon: C.icon( icon ), run: function ()
+            {
+                nightPick[ conv ] = { silent: silent, until: Date.now() + 60 * 60 * 1000 };
+                go( silent );
+            } };
         }
-        item( "bell-off", "chat.sendSilent", true );
-        item( "bell", "chat.sendLoud", false );
-        // Say the answer holds, so a later quiet send is not taken for a loud one.
-        menu.appendChild( h( "div", { class: "menu-label note", text: C.TF( "chat.nightHold", { time: C.time( Date.now() + 60 * 60 * 1000 ) } ) } ) );
-        panel = menu;
-        panel.dataset.which = "night";
-        composer.appendChild( panel );
-        menu.querySelector( ".menu-item" ).focus();
+        Ayni.menuAt( [
+            { caption: who.length === 1 ? C.TF( "chat.nightAt", { time: who[ 0 ].time, who: names } ) : C.TF( "chat.nightFor", { who: names } ) },
+            item( "bell-off", "chat.sendSilent", true ),
+            item( "bell", "chat.sendLoud", false ),
+            // Say the answer holds, so a later quiet send is not taken for a loud one.
+            { caption: C.TF( "chat.nightHold", { time: C.time( Date.now() + 60 * 60 * 1000 ) } ) }
+        ], { anchor: sendBtn, keyboard: true } );
     }
 
     // A date input's value ("2026-09-19T21:30") for a moment, in local time.
@@ -1396,26 +1383,26 @@
     // searching inside the open conversation
     // ---------------------------------------------------------------------
 
-    // The shared fold (ui.js searchFold), as every app's search: the
-    // magnifier opens the field in the bar, the chat's buttons stay and
-    // leave only when the bar is too narrow; count · up · down · × inside
+    // Ayni's folded search field, as every app's search: the magnifier
+    // opens the field in the bar, the chat's buttons stay and go into the
+    // ⋮ only when the bar is too narrow (fitBar); count · up · down · × inside
     // the field. Built once: renderConvHead puts the same box back each time.
     var fold = null, box = null, toggle = null, input = null;
 
     C.convSearch = function ()
     {
         if( box ) return [ box, toggle ];
-        // type=text, not search: the browser's own clear cross would sit next to ours
-        input = h( "input", { attrs: { type: "text", enterkeyhint: "search", autocomplete: "off",
+        input = h( "input", { class: "input", attrs: { type: "search", enterkeyhint: "search", autocomplete: "off",
                               placeholder: T( "chat.searchIn" ), "aria-label": T( "chat.searchIn" ) } } );
-        box = h( "div", { class: "search-wrap" }, input );
+        box = h( "div", { class: "input-group search-field fold" }, input );
         toggle = C.btn( "search", "chat.searchIn", startSearch );
         toggle.id = "convSearchBtn";
         toggle._help = "chat.helpSearchIn";
         toggle.dataset.rank = 20;      // search never leaves the bar (fitBar)
+        toggle.setAttribute( "data-search", "" );
         var t = null;
         input.addEventListener( "input", function () { clearTimeout( t ); t = setTimeout( run, 200 ); } );
-        // Enter goes up, to the older hit (Shift+Enter down): ours, before the fold's
+        // Enter goes up, to the older hit (Shift+Enter down): ours, before the field's
         input.addEventListener( "keydown", function ( e )
         {
             if( e.key !== "Enter" || e.isComposing ) return;
@@ -1423,8 +1410,7 @@
             e.stopImmediatePropagation();
             step( e.shiftKey ? 1 : -1 );
         } );
-        fold = NayiveUI.searchFold( { bar: C.$( "#convBar" ), box: box, input: input, toggle: toggle,
-                                      step: step, onClose: stopSearch } );
+        fold = Ayni.searchField( box, { toggle: toggle, step: step, onClose: stopSearch } );
         return [ box, toggle ];
     };
 
@@ -1444,7 +1430,7 @@
         if( ! S.searching ) return;
         var q = input.value.trim();
         S.searching.q = q;
-        var f = NayiveUI.matcher( q );
+        var f = Ayni.matcher( q );
         S.searching.hits = ! f ? [] : S.order.filter( function ( id )
         {
             var m = S.msgs.get( id );
@@ -1467,7 +1453,7 @@
         if( el ) { el.classList.add( "hit" ); el.scrollIntoView( { block: "center" } ); }
     }
 
-    // The fold's × or Escape.
+    // The field's × or Escape (on an empty field).
     function stopSearch() { C.popNav( "search" ); endSearch(); }
 
     // "back", or another chat opened (conv.js): the field folds away quietly.

@@ -34,7 +34,7 @@
     }
     function addrsHave( list, want )
     {
-        return ( list || [] ).some( function ( a ) { return NayiveUI.fold( ( a.name || "" ) + " " + ( a.addr || "" ) ).indexOf( want ) >= 0; } );
+        return ( list || [] ).some( function ( a ) { return Ayni.fold( ( a.name || "" ) + " " + ( a.addr || "" ) ).indexOf( want ) >= 0; } );
     }
     function dayStart( iso ) { var p = iso.split( "-" ); return new Date( +p[ 0 ], p[ 1 ] - 1, +p[ 2 ] ).getTime(); }
 
@@ -95,7 +95,7 @@
         if( ! a ) return items;
         var since = a.since ? dayStart( a.since ) : 0;
         var until = a.until ? dayStart( a.until ) + 86400000 : 0;
-        var from = NayiveUI.fold( a.from ), to = NayiveUI.fold( a.to ), subj = NayiveUI.fold( a.subject );
+        var from = Ayni.fold( a.from ), to = Ayni.fold( a.to ), subj = Ayni.fold( a.subject );
         var out = items.filter( function ( m )
         {
             var t = new Date( m.date ).getTime();
@@ -105,7 +105,7 @@
             if( a.seen === "read" && ! m.seen ) return false;
             if( from && ! addrsHave( m.from, from ) ) return false;
             if( to && ! addrsHave( m.to, to ) ) return false;
-            if( subj && NayiveUI.fold( m.subject ).indexOf( subj ) < 0 ) return false;
+            if( subj && Ayni.fold( m.subject ).indexOf( subj ) < 0 ) return false;
             if( a.label && ( m.labels || [] ).indexOf( a.label ) < 0 ) return false;
             if( a.attach && ! m.attach ) return false;
             if( a.starred && ! m.flagged ) return false;
@@ -124,7 +124,7 @@
     function showState()
     {
         var a = S.adv;
-        E.$( "searchWrap" ).classList.toggle( "filter-on", !! a );
+        if( E.searchFold ) E.searchFold.filtered( a ? Object.keys( a ).length : 0 );
         E.$( "advBar" ).hidden = ! a;
         if( ! a ) return;
         var bits = [];

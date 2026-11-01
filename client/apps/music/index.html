@@ -51,6 +51,9 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-menus.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -59,10 +62,12 @@
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
+    <script src="../shared/ayni/ayni-menus.js" defer></script>
+    <script src="../shared/ayni/ayni-search.js" defer></script>
+    <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
-    <script src="../shared/browser.js" defer></script>
     <script>
     Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
@@ -81,7 +86,7 @@
                 { sel: '#clearQueueBtn', text: Ayni.t( 'music.introClear' ), tour: { open: '#queueBtn' } }
             ],
             // The guided tour ("Ver el tour" in the card): the card's rows, picking
-            // songs (the shared item browser), the player.
+            // songs (the shared item list), the player.
             tour: [ 'buttons', { use: 'pick', ghost: '#libContent' }, { use: 'picked', ghost: '#libContent' },
                     { sel: '#playerBar', text: Ayni.t( 'music.tourPlayer' ) } ]
         } );
@@ -112,8 +117,8 @@
     .lib-pane   { flex: 1 1 auto; min-width: 300px; display: flex; flex-direction: column; overflow: hidden; }
 
     /* ---- the tree: Library (songs, albums, artists, folders) and the
-       playlists. Its rows are the shared tree (.ntree.tree-fit, app.css); on a
-       phone it slides in from #treeBtn (the shared .tree-sheet). ---------- */
+       playlists. Its rows are Ayni's navigation tree (data-fit); on a
+       phone it slides in from #treeBtn (Ayni's .tree-sheet). ------------- */
     .tree-pane  { flex: 0 0 auto; width: 210px; overflow: auto; padding: 14px 6px 16px;
                   border-right: 1px solid var(--line); }
     #treeBtn    { display: none; }
@@ -143,9 +148,8 @@
     .song-row.is-playing { border-color: color-mix(in srgb, var(--accent) 55%, transparent);
                             background: color-mix(in srgb, var(--accent) 10%, var(--card2)); }
     .song-row.is-playing .song-title { color: var(--accent); }
-    /* Picked (shared/browser.js): the shared accent fill, over "playing" too. */
-    .song-row.is-selected { background: var(--accent); border-color: var(--accent); }
-    .song-row.is-selected :is(.song-title, .song-sub, .song-dur) { color: var(--on-accent); }
+    /* Picked (Ayni.list): Ayni's soft Accent tint, over "playing" too. */
+    .song-row[aria-selected="true"] { background: var(--accent-soft); }
     /* A playlist's song that is no longer in the library. */
     .song-row.is-missing .song-art   { background: var(--line) !important; }
     .song-row.is-missing .song-title { color: var(--text-dim); }
@@ -248,7 +252,7 @@
         <h1>Music</h1>
         <!-- The toolbar, shown once a folder is open (display: contents). -->
         <div class="tb-tools" id="tools" hidden>
-            <button class="btn" id="folderInfoBtn" type="button" data-rank="22" aria-haspopup="menu" aria-expanded="false" data-i18n-attr="data-tip:ui.folderInfo, aria-label:ui.folderInfo">
+            <button class="btn" id="folderInfoBtn" type="button" data-rank="22" popovertarget="folderMenu" data-i18n-attr="data-tip:ui.folderInfo, aria-label:ui.folderInfo">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="10.5" x2="12.01" y2="10.5"/><line x1="12" y1="13.5" x2="12" y2="17.5"/></svg>
             </button>
 
@@ -257,15 +261,15 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
             </button>
         </div>
-        <div class="topbar-actions">
-            <!-- The selection's buttons (shared/browser.js): only while something is picked. -->
+        <div class="topbar-actions tall" role="toolbar" data-i18n-attr="aria-label:ui.actions">
+            <!-- The selection's buttons (Ayni.list): only while something is picked. -->
             <div id="selActions" class="tb-group" hidden></div>
             <!-- Like #tools, shown once a folder is open. -->
             <div class="tb-group" data-tools hidden>
-                <div class="search-wrap">
-                    <input type="search" class="topbar-search" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:music.searchPh">
+                <div class="input-group search-field fold">
+                    <input type="search" class="input" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:music.searchPh">
                 </div>
-                <button class="btn" id="searchToggle" type="button" data-rank="20" data-i18n-attr="data-tip:ui.search, aria-label:ui.search">
+                <button class="btn" id="searchToggle" type="button" data-rank="20" data-search data-i18n-attr="data-tip:ui.search, aria-label:ui.search">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 </button>
                 <!-- Phones only (<= 760 px): the queue has no pane there, it opens as a sheet. -->
@@ -286,15 +290,15 @@
     </header>
 
     <!-- The folder-? button's menu: the folder (tap = change it), then the counts. -->
-    <div class="top-menu folder-menu" id="folderMenu" role="menu" hidden>
-        <button class="menu-item" id="crumb" type="button" role="menuitem" data-i18n-attr="data-tip:ui.changeFolder, aria-label:ui.changeFolder"></button>
+    <div class="panel popup controls folder-menu" popover id="folderMenu" role="dialog" aria-labelledby="folderInfoBtn">
+        <button class="btn text folder-crumb" id="crumb" type="button" data-i18n-attr="data-tip:ui.changeFolder, aria-label:ui.changeFolder"></button>
         <div class="menu-info" id="subStrip"></div>
     </div>
 
     <div class="main-row" id="mainRow" hidden>
 
-        <!-- The tree: Library and the playlists (NayiveUI.tree, see TREE below). -->
-        <nav class="tree-pane" id="treePane" data-i18n-attr="aria-label:music.library"><div id="tree" class="tree-fit"></div></nav>
+        <!-- The tree: Library and the playlists (Ayni.tree, see TREE below). -->
+        <nav class="tree-pane" id="treePane" data-i18n-attr="aria-label:music.library"><ul id="tree" data-fit data-i18n-attr="aria-label:music.library"></ul></nav>
 
         <div class="lib-pane">
             <div class="lib-content" id="libContent"></div>
@@ -560,7 +564,7 @@ async function scan()
 
     renderCollectionSummary();
     renderLibrary();
-    if( treeView ) treeView.render();      // the folders, scanned again
+    if( treeView ) treeView.build();      // the folders, scanned again
     renderQueueList();
     updatePlayerBar();
     refineTags( gen );
@@ -890,7 +894,7 @@ function computeArtists( songs )
 var MUSIC_NOTE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
 var GRIP_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg>';
 
-// One song: a row of the shared item browser (BROWSER below), which adds
+// One song: a row of the shared item list (BROWSER below), which adds
 // the tick before it. `s.missing`: a playlist's song that
 // is no longer in the library (a stub, see playlistSongs).
 function songRowHtml( s )
@@ -941,7 +945,7 @@ function renderLibrary()
 
     // The search box filters every view: the songs, and the albums / artists /
     // folder songs made of the songs it matches.
-    var q = NayiveUI.matcher( st.search );
+    var q = Ayni.matcher( st.search );
     var pool = ! q ? st.songs : st.songs.filter( function ( s )
     { return q( s.title + " " + ( s.artist || "" ) + " " + ( s.album || "" ) ); } );
     NayiveMedia.searchCount( pool.length, st.songs.length );
@@ -1023,7 +1027,7 @@ function renderLibraryDuration( song )
 }
 
 
-// The song rows themselves are the item browser's (BROWSER below): a click
+// The song rows themselves are the item list's (BROWSER below): a click
 // picks, a double-click / tap / Enter plays. Here: the album and artist
 // cards, the scope chip and "Show more".
 function wireLibraryRows()
@@ -1558,7 +1562,7 @@ var savingList = false;          // a second ✓ while the first one saves does 
 function refreshPlaylists()
 {
     if( st.filter === "playlist" && ! playlistById( st.playlistId ) ) { setFilter( "songs" ); return; }
-    if( treeView ) treeView.render();
+    if( treeView ) treeView.build();
     if( st.filter === "playlist" ) renderLibrary();
 }
 
@@ -1660,7 +1664,7 @@ function dockQueuePane()
 
 /* ---------------------------------------------------------------------------
  * TREE - Library (its four views; Folders holds the real folders) and the
- * saved playlists, in the shared tree (NayiveUI.tree, shared/browser.js).
+ * saved playlists, in the shared tree (Ayni.tree, nav).
  * A click shows that view or playlist; songs dropped on a playlist go into
  * it; a playlist's right-click / long-press plays, shuffles, renames or deletes it,
  * the Playlists row's makes a new one. On a phone it slides in (#treeBtn).
@@ -1681,7 +1685,7 @@ function playlistNodes()
 {
     return st.playlists.filter( function ( p ) { return p && p.id; } ).map( function ( p )
     {
-        return { id: "pl:" + p.id, name: p.name, icon: ICON.list, badge: ( p.paths || [] ).length ? String( p.paths.length ) : "" };
+        return { id: "pl:" + p.id, name: p.name, icon: ICON.list, count: ( p.paths || [] ).length ? String( p.paths.length ) : "" };
     } );
 }
 
@@ -1689,13 +1693,13 @@ function treeRoots()
 {
     var T = Ayni.t;
     return [
-        { id: "lib", name: T( "music.library" ), icon: ICON.library, noMenu: true, group: true, kids: [
+        { id: "lib", name: T( "music.library" ), icon: ICON.library, noMenu: true, heading: true, children: [
             { id: "v:songs",   name: T( "music.songs" ),   icon: MUSIC_NOTE_SVG, noMenu: true },
             { id: "v:albums",  name: T( "music.albums" ),  icon: ICON.albums,    noMenu: true },
             { id: "v:artists", name: T( "music.artists" ), icon: ICON.artists,   noMenu: true },
-            { id: "v:folders", name: T( "music.folders" ), icon: FOLDER_SVG,     noMenu: true, kids: NayiveMedia.folderNodes( st.folderTree, FOLDER_SVG ) }
+            { id: "v:folders", name: T( "music.folders" ), icon: FOLDER_SVG,     noMenu: true, children: NayiveMedia.folderNodes( st.folderTree, FOLDER_SVG ) }
         ] },
-        { id: "pls", name: T( "music.playlists" ), icon: ICON.list, group: true, kids: playlistNodes() }
+        { id: "pls", name: T( "music.playlists" ), icon: ICON.list, heading: true, children: playlistNodes() }
     ];
 }
 
@@ -1739,7 +1743,7 @@ function treeMenu( id, x, y, anchor )
             { id: "delete",  label: T( "music.deleteList" ),  icon: "trash", key: "Del", danger: true, run: function () { deletePlaylist( pid ); } }
         ];
     }
-    if( items ) NayiveUI.menuAt( x, y, items, { anchor: anchor } );
+    if( items ) Ayni.menuAt( items, { x: x, y: y, anchor: anchor } );
 }
 
 function setFilter( f, folder )
@@ -1749,7 +1753,7 @@ function setFilter( f, folder )
     listShown = LIST_PAGE;
     $( "#libContent" ).scrollTop = 0;
     renderLibrary();
-    if( treeView ) treeView.render();
+    if( treeView ) treeView.build();
 }
 
 function setShuffle( on )
@@ -1918,11 +1922,11 @@ async function confirmName()
 }
 
 /* ---------------------------------------------------------------------------
- * BROWSER - the song rows are the shared item browser's (shared/browser.js):
+ * BROWSER - the song rows are the shared item list's (Ayni.list):
  * a click picks (Ctrl / Shift add), a double-click, Enter or a tap plays, a
  * long-press picks on touch. One action list feeds the header group, the
  * menu (right-click) and the keys; what does not fit the header goes into
- * its one ⋮ (NayiveUI.fitBar).
+ * its one ⋮ (Ayni.fitBar).
  * -------------------------------------------------------------------------*/
 var browse = null;
 
@@ -1969,11 +1973,11 @@ function pickPlaylist( ids )
     var paths = songsOf( ids ).map( function ( s ) { return s.path; } );
     if( ! paths.length ) return;
     var here = st.filter === "playlist" ? "pl:" + st.playlistId : null;
-    NayiveUI.pickNode( {
+    Ayni.pickNode( {
         title:   Ayni.t( "music.addToPlaylist" ),
         okLabel: Ayni.t( "music.addToPlaylist" ),
         lit:     null,
-        roots:   function () { return [ { id: "new", name: Ayni.t( "music.newList" ), icon: "plus" } ].concat( playlistNodes() ); },
+        items:   function () { return [ { id: "new", name: Ayni.t( "music.newList" ), icon: "plus" } ].concat( playlistNodes() ); },
         disabled: function ( id ) { return id === here; }
     } ).then( function ( id )
     {
@@ -2009,7 +2013,7 @@ function musicActions()
 function wireBrowser()
 {
     treeView = NayiveMedia.libraryTree( treeOpen, {
-        roots:   treeRoots,
+        items:   treeRoots,
         current: currentNode,
         go:      goNode,
         menu:    treeMenu,
@@ -2022,15 +2026,15 @@ function wireBrowser()
     document.addEventListener( "keydown", function ( e )
     {
         if( e.key !== "Enter" || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || ! browse ) return;
-        if( browse.ids().length < 2 || NayiveUI.menuOpen() || document.querySelector( "dialog.panel[open]" ) ) return;
+        if( browse.ids().length < 2 || !! document.querySelector( ".panel.menu:popover-open" ) || document.querySelector( "dialog.panel[open]" ) ) return;
         var a = document.activeElement;
         if( a && a !== document.body && ! $( "#libContent" ).contains( a ) ) return;   // a button, a field, the tree: theirs
         e.preventDefault();
         playSongs( songsOf( browse.ids() ) );
     } );
 
-    browse = NayiveUI.browser( {
-        list:    $( "#libContent" ),
+    browse = Ayni.list( $( "#libContent" ), {
+        main:    true,
         row:     ".song-row",
         idOf:    function ( el ) { return el.getAttribute( "data-path" ); },
         bar:     $( "#selActions" ),
@@ -2044,14 +2048,14 @@ function wireBrowser()
     // the dragged songs (every picked one when a picked row is dragged).
     $( "#libContent" ).addEventListener( "dragstart", function ()
     {
-        var ids = NayiveUI.dragIds();
+        var ids = Ayni.dragIds();
         st.dragPayload = ids ? { type: "library", songs: songsOf( ids ) } : null;
     } );
 
     // Del / F2 on a playlist's tree row, as on its menu.
     $( "#tree" ).addEventListener( "keydown", function ( e )
     {
-        var row = e.target.closest( ".tree-row" );
+        var row = e.target.closest( "[role=\"treeitem\"]" );
         if( ! row || row.dataset.id.indexOf( "pl:" ) !== 0 || e.ctrlKey || e.metaKey || e.altKey ) return;
         var pid = row.dataset.id.slice( 3 );
         if( e.key === "Delete" ) { e.preventDefault(); deletePlaylist( pid ); }
@@ -2068,7 +2072,6 @@ function wireStaticUI()
     { st.search = e.target.value; listShown = LIST_PAGE; renderLibrary(); } );
 
     NayiveMedia.wireSearchToggle();                     // the search fold
-    NayiveMedia.wireFolderInfo();                       // folder-? -> path + counts
     NayiveMedia.wireCrumbPicker( { app: "music" } );    // crumb -> folder picker
 
     $( "#reloadBtn" ).addEventListener( "click", function ()
@@ -2155,7 +2158,7 @@ async function boot()
     wireBrowser();
 
     await loadPlaylists();
-    treeView.render();
+    treeView.build();
     await scan();
 }
 

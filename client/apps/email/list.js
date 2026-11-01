@@ -6,7 +6,7 @@
  * Search: the words go to the mail server (Enter), which looks in the
  * senders, subjects and texts of this tray.
  *
- * PICKING AND OPENING is the shared item browser (browse.js): a click picks,
+ * PICKING AND OPENING is the shared item list (browse.js): a click picks,
  * a double-click (a tap) opens. The rows here carry a stable id (m._id) for it.
  */
 ( function ()
@@ -185,7 +185,7 @@
             // split: the message open beside the list keeps its object (the
             // reader and the bar hold it), with what the list says now
             if( S.open ) items = items.map( function ( m ) { return E.acctOf( m ) === E.acctOf( S.open ) && m.ref === S.open.ref ? Object.assign( S.open, m ) : m; } );
-            // each row's id for the item browser (the message open keeps its
+            // each row's id for the item list (the message open keeps its
             // own; on a quiet redraw, a row still there keeps its id too)
             if( quiet )
             {
@@ -276,11 +276,11 @@
         if( m.flagged ) subj.insertAdjacentHTML( "beforeend", E.icon( "star", "star" ) );
         subj.appendChild( E.chips( m.labels ) );
 
-        // the round tick is the item browser's (drawn here: the grid places it)
+        // the tick is the item list's (Ayni.pickTick, drawn here: the grid places it)
         var el = h( "div", { class: "mail-row" + ( m.seen ? "" : " unread" ) +
                                     ( E.split && S.open === m ? " is-current" : "" ),
                              attrs: { "data-id": m._id, "data-ref": m.ref, role: "option" } },
-                    h( "span", { class: "mail-tickbox", html: NayiveUI.tickHtml() } ),
+                    h( "span", { class: "mail-tickbox", html: Ayni.pickTick() } ),
                     h( "div", { class: "who", text: who } ),
                     h( "div", { class: "when", text: E.shortDate( m.date ), attrs: { title: E.longDate( m.date ) } } ),
                     subj,

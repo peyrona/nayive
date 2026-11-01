@@ -9,7 +9,7 @@
  *     labels.js    Nayive's labels: the picker, the settings dialog
  *     actions.js   what can be done to messages, the pick dialog
  *     search.js    the advanced search
- *     browse.js    the shared item browser on the list, the tree of trays
+ *     browse.js    the shared item list on the list, the tree of trays
  *                  and labels, the one action list
  *     email.js     start()
  *

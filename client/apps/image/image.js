@@ -150,7 +150,7 @@ async function start()
 }
 
 // The header keeps to one row (a phone): what does not fit goes into the ⋮
-// (NayiveUI.fitBar) - the tools first, Save last. The editor makes its tool
+// (Ayni.fitBar) - the tools first, Save last. The editor makes its tool
 // buttons (data-ie), so they are ranked once they are there.
 const HEAD_RANKS = { editorSaveBtn: 1, undo: 2, redo: 3, crop: 4, rotate: 5, editorSaveAsBtn: 6, adjust: 7, resize: 8, reset: 9 };
 
@@ -161,7 +161,7 @@ function rankHeader()
         const r = HEAD_RANKS[ b.id ] || HEAD_RANKS[ b.dataset.ie ];
         if( r ) b.dataset.rank = r;
     } );
-    NayiveUI.fitBar( document.querySelector( '.topbar' ) );
+    Ayni.fitBar( document.querySelector( '.topbar' ) );
 }
 
 function setBusy( on )

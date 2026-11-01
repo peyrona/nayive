@@ -127,9 +127,9 @@
         } );
         input.addEventListener( "input", function () { if( ! input.value ) E.search( "" ); } );
         // The funnel inside opens the advanced search (search.js).
-        E.searchFold = NayiveUI.searchFold( { box: E.$( "searchWrap" ), input: input, toggle: E.$( "searchBtn" ), tip: false,
-                                              filter: E.openAdvSearch, filterTitle: "mail.advTitle",
-                                              onClose: E.clearSearch } );
+        E.searchFold = Ayni.searchField( E.$( "searchWrap" ), { tip: false, filter: E.openAdvSearch, filterTip: E.T( "mail.advTitle" ),
+                                                               onClose: E.clearSearch } );
+        E.searchFold.filtered( 0 );        // the funnel's tooltip from the start
 
         // the phone's Back closes a message instead of leaving the app
         window.addEventListener( "popstate", function () { if( S.open ) E.closeMessage( false ); } );

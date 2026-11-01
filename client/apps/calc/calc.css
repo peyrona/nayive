@@ -279,7 +279,7 @@ body.calc-painting #gridHost .htCore td { cursor: copy; }
    name.) .is-active (shared app.css) marks it while the toolbar is showing. */
 #fmtBtn { display: none; }
 
-/* The "⋮" menu: .top-menu / .menu-item from app.css, anchored by shared/ui.js. */
+/* The "⋮" and "?" menus are Ayni menus (shared/ayni/ayni-menus.css). */
 
 /* The toolbar's own "⋮": opens the rest of it in place (its open tint is
    in shared/app.css). Phone only, and last in the DOM so it is last in the row. */
@@ -287,9 +287,9 @@ body.calc-painting #gridHost .htCore td { cursor: copy; }
 
 /* ---- MENU MODE (see PULL-DOWN MENUS in the script) -------------------
    The user picks ONE chrome: the icon toolbar, or the classic
-   "Archivo · Edición · Ver …" bar. #menuBar, .menu-top and .menu-panel
-   are styled once in shared/app.css; what belongs to Calc is only what
-   has to disappear.
+   "Archivo · Edición · Ver …" bar. #menuBar and .menu-top are styled once
+   in shared/app.css, its menus are Ayni's; what belongs to Calc is only
+   what has to disappear.
 
    The toolbar collapses to height 0 with visibility:hidden - never
    display:none. The menu entries WORK BY CLICKING THOSE VERY BUTTONS, so
@@ -371,14 +371,11 @@ body.calc-painting #gridHost .htCore td { cursor: copy; }
    ours that opens over the grid has to be lifted clear of 210. Same
    order as app.css, just moved up.
 
-     .top-menu   the "⋮" popup AND the pull-down panels (#menuPanel,
-                 #menuSub). At 150 a panel was drawn BEHIND A, B, C.
-     .popup      the toolbar's group cards and the border picker. At the
-                 shared 200 a card opened low enough to fall behind a
-                 resize guide.
-     others      the coach marks. (Dialogs, the info popup and the
+     .popup      the formula panel (#fePanel). At the shared 200 it fell
+                 behind a resize guide.
+     others      the coach marks. (Menus, the toolbar's group cards, the
+                 border picker, dialogs, the info popup and the
                  notifications are in the top layer: above all of it.) */
-.top-menu              { z-index: 400; }
 .popup                 { z-index: 400; }
 .coach-overlay         { z-index: 700; }
 

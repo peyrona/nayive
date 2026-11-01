@@ -503,11 +503,11 @@
         else
         {
             // a person's list keeps these two in its ⋮
-            rows.push( { sel: "#listMenu .menu-item:nth-child(1)", name: "⋮ → " + T( "chat.notifications" ), text: T( "chat.helpBell" ), tour: { open: "#listMore" } } );
-            rows.push( { sel: "#listMenu .menu-item:nth-child(2)", name: "⋮ → " + T( "chat.homeIcon" ), text: T( "chat.helpHomeIcon" ), tour: { open: "#listMore" } } );
+            rows.push( { sel: "#listMenu [role=menuitem]:nth-of-type(1)", name: "⋮ → " + T( "chat.notifications" ), text: T( "chat.helpBell" ), tour: { open: "#listMore" } } );
+            rows.push( { sel: "#listMenu [role=menuitem]:nth-of-type(2)", name: "⋮ → " + T( "chat.homeIcon" ), text: T( "chat.helpHomeIcon" ), tour: { open: "#listMore" } } );
         }
         // The guided tour ("Ver el tour" in the card): the card's rows, then the
-        // picked chats' actions (the shared item browser).
+        // picked chats' actions (the shared item list).
         NayiveUI.showIntro( { app: "chat", title: "Chat", lead: T( owner ? "chat.introLead" : "chat.introLeadGuest" ), buttons: rows,
                               tour: [ "buttons" ].concat( owner ? [ { use: "picked", ghost: "#vList" } ] : [] ) } );
     };
@@ -524,9 +524,9 @@
             var name = b.getAttribute( "aria-label" ) || b.title;
             rows.push( { sel: "#" + b.id, name: b.classList.contains( "fit-out" ) ? "⋮ → " + name : name, text: T( b._help ) } );
         } );
-        [].forEach.call( document.querySelectorAll( "#convMenu .menu-item" ), function ( b, i )
+        [].forEach.call( document.querySelectorAll( "#convMenu [role=menuitem]" ), function ( b, i )
         {
-            rows.push( { sel: "#convMenu .menu-item:nth-child(" + ( i + 1 ) + ")", name: "⋮ → " + b.textContent, text: T( b._help ), tour: { open: "#convMoreBtn" } } );
+            rows.push( { sel: "#convMenu [role=menuitem]:nth-of-type(" + ( i + 1 ) + ")", name: "⋮ → " + b.textContent, text: T( b._help ), tour: { open: "#convMoreBtn" } } );
         } );
         rows.push( { sel: "#fmtBtn", text: T( "chat.helpFmt" ) } );
         if( C.$( "#emojiBtn" ) ) rows.push( { sel: "#emojiBtn", text: T( "chat.helpEmoji" ) } );

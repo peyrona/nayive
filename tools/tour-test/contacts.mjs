@@ -43,7 +43,7 @@ await startTour( c );
 await walk( c, "full", {
     7:  s => /contact-row/.test( s.lit ) && ! s.ghost || "lights a real row",
     8:  s => /pick-tick/.test( s.lit ) && s.tap || "lights a row's tick",
-    9:  s => /sel-group|selActions|btn/.test( s.lit ) && ! s.ghost || "picks a row and lights the selection group",
+    9:  s => /pick-group|selActions|btn/.test( s.lit ) && ! s.ghost || "picks a row and lights the selection group",
     10: s => /azRail/.test( s.lit ) || "lights the A-Z rail" } );
 ok( await tourGone( c ) && await picked( c ) === 0, "nothing stays picked" );
 ok( ! ( await c.toasts() ).length, "no toast", await c.toasts() );

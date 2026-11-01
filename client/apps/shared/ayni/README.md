@@ -19,7 +19,7 @@ Most interfaces grow one screen at a time, and every screen invents its own litt
 
 - **Consistent.** One look per state across every control. Disabled is always faded, read-only is always a soft tint, an error is always a red border with a small "!".
 - **Congruent.** Each sign means one thing. A filled button is the default, and nothing else. A small dot means "this button has a second action". A small triangle means "this opens something".
-- **Intuitive.** Things work the way people already expect: Esc closes, Enter runs the default button, typing jumps to a match in any list, and a long tap means "more for this thing".
+- **Intuitive.** Things work the way people already expect: Esc closes, Enter runs the default button, typing jumps to a match in a list, and a long tap means "more for this thing".
 
 ## What makes it different
 
@@ -46,10 +46,10 @@ Most interfaces grow one screen at a time, and every screen invents its own litt
 | Family | Controls |
 | --- | --- |
 | **Buttons** | Push buttons (normal, small, bordered), default and busy buttons, toggles, popup buttons, second-action buttons, buttons over pictures, text buttons for wide calls to action, radio buttons, check boxes with a mixed state, switches |
-| **Lists** | Single and multiple selection lists with type-ahead, drop-down list, combo box, all with one list picker on every device |
-| **Texts** | Text fields with buttons inside, search field with filter, password show/hide, text area with a counter, number field, progress, info labels |
+| **Lists** | Item lists that pick like a file manager (Ctrl+click, Shift ranges, touch picking with a long tap), with the picked items' actions in the title row, grids of cards, drag and drop onto folders; pick lists with type-ahead; drop-down list, combo box, all with one list picker on every device; a tree view that navigates beside a list or edits in place, with Move to… |
+| **Texts** | Text fields with buttons inside, one search field and one search rule (words in any order, "phrase", -word, accents ignored) that folds behind a magnifier in a title row, with a filter, a count and stepping through hits, a find bar for documents, password show/hide, text area with a counter, number field, progress, info labels |
 | **Pickers** | Slider, date field, date and time, a calendar with month and year views and date limits |
-| **Menus** | Menu bar, pull-down menus, pop-up menus (right-click, long tap, Shift+F10), toolbar, popups that hold any control |
+| **Menus** | Menu bar, pull-down menus with one level of submenus, pop-up menus (right-click, long tap, Shift+F10), menus built in code, toolbars in groups that fit their row by rank (the rest in one More menu), tool groups, popups that hold any control |
 | **Feedback** | Tooltips, notifications (four kinds, stacked, Undo with Ctrl+Z while it shows), progress notifications, status bar, loading and empty states |
 | **Layout** | Panels, tabs (closable, scrollable, keyboard-friendly), group boxes, a splitter with collapse and reset, scrolling everywhere |
 | **Desktop** | Taskbar at the top or bottom, applications launcher with search, one chip per window with its controls, clock widget, windows with a title row toolbar and their own modeless dialogs |
@@ -67,12 +67,18 @@ Copy the `ayni-*` files, `tz-geo.json` and the `i18n/` folder next to your page:
 <link rel="stylesheet" href="ayni-buttons.css">
 <link rel="stylesheet" href="ayni-toasts.css">
 <link rel="stylesheet" href="ayni-dialogs.css">
+<link rel="stylesheet" href="ayni-menus.css">
+<link rel="stylesheet" href="ayni-search.css">
+<link rel="stylesheet" href="ayni-lists.css">
 <link rel="stylesheet" href="ayni.css">
 <script src="ayni-icons.js" defer></script>
 <script src="ayni-base.js" defer></script>
 <script src="ayni-buttons.js" defer></script>
 <script src="ayni-toasts.js" defer></script>
 <script src="ayni-dialogs.js" defer></script>
+<script src="ayni-menus.js" defer></script>
+<script src="ayni-search.js" defer></script>
+<script src="ayni-lists.js" defer></script>
 <script src="ayni.js" defer></script>
 
 <button class="btn primary" data-i18n-attr="aria-label:new, data-tip:new">
@@ -95,6 +101,7 @@ Ayni is at version 0.1.0. The design is still being closed, so the markup and th
 - [ ] **Nayive's look.** Colours, type, corners, icons and languages taken from Nayive, the first app built on Ayni (rules written, code under way).
 - [ ] **Desktop mode.** From 1024 px wide, Ayni switches on its own to a desktop with windows and a taskbar; below that there is no desktop mode. Under way: the taskbar (at the top or bottom, with the launcher, one chip per window and the clock) and the window are in, see the [desktop page](https://peyrona.github.io/ayni/gallery/desktop.html).
 - [x] **Tree view.** Optional root, hidden items, drag and drop, keyboard moves, cut/copy/paste, insert, delete with Undo, rename in place and loading on demand.
+- [ ] **Item lists and the navigation tree.** Picking like a file manager, the picked items' actions in the title row, drop on folders, Move to… (rules written, code under way).
 - [ ] **Accessibility for everyone.** Screen readers, captions, right-to-left languages and Windows High Contrast come once the design is closed.
 
 ---
@@ -115,12 +122,18 @@ Ayni is at version 0.1.0. The design is still being closed, so the markup and th
   <link rel="stylesheet" href="ayni-buttons.css">
   <link rel="stylesheet" href="ayni-toasts.css">
   <link rel="stylesheet" href="ayni-dialogs.css">
+  <link rel="stylesheet" href="ayni-menus.css">
+  <link rel="stylesheet" href="ayni-search.css">
+  <link rel="stylesheet" href="ayni-lists.css">
   <link rel="stylesheet" href="ayni.css">
   <script src="ayni-icons.js" defer></script>
   <script src="ayni-base.js" defer></script>
   <script src="ayni-buttons.js" defer></script>
   <script src="ayni-toasts.js" defer></script>
   <script src="ayni-dialogs.js" defer></script>
+  <script src="ayni-menus.js" defer></script>
+  <script src="ayni-search.js" defer></script>
+  <script src="ayni-lists.js" defer></script>
   <script src="ayni.js" defer></script>
   <script src="app.js" defer></script>
 </head>
@@ -154,17 +167,22 @@ The markup of each control is the one in `gallery/index.html`: copy a specimen f
 | Tooltip | `data-tip` on any element |
 | Info label | `button.info-tip` with `popovertarget="ayni-help"` and `data-help` |
 | Tabs | `[role="tablist"]` with `[role="tab"]` and `[role="tabpanel"]`; `data-closable` and a `[data-close]` span for closable tabs; `data-hash` keeps the tab in the address |
-| List box | `ul.lb[role="listbox"]`, `aria-multiselectable="true"` for several |
+| Pick list (list box) | `ul.lb[role="listbox"]`, `aria-multiselectable="true"` for several |
+| Item list (a view's main list) | rows with `data-id` in a container, wired with `Ayni.list(container, { actions, bar, open, … })`; the picked group is an empty `.tb-group` in the title row |
 | Drop-down list and combo box | `.picker` with `data-picker="list"` or `data-picker="combo"` |
 | Text field with buttons inside | `.input-group` |
-| Search field | `.input-group.search-field` with a `[data-clear]` button |
+| Search field | `.input-group.search-field` with a `[data-clear]` button; `.fold` after a `.btn[data-search]` folds it behind that magnifier in a title row; `.btn.filter-btn` inside for filters (`.is-active` while on) |
+| Find bar (in a document) | `.find-bar[role="search"]` above the document, wired with `Ayni.findBar` |
 | Password with show/hide | a `.btn` with `data-reveal` inside the `.input-group` |
 | Text area that grows with its text (optional) | `textarea.input[data-autogrow]`; set `--autogrow-max` to change the 240px limit |
 | Text area with a count (optional) | `.ta-wrap` with `textarea[maxlength]` and `.ta-count`; a plain `textarea.input` has none |
 | Number field | `.input-group.spin` with `data-min`, `data-max`, `data-step` on the input |
 | Field error | `aria-invalid="true"` plus `aria-describedby` pointing at a `.error` element with the message |
-| Menu, pop-up menu | `.panel.menu[popover][role="menu"]` with `[role="menuitem"]` buttons; menu bar is `[role="menubar"]` |
+| Menu, pop-up menu | `.panel.menu[popover][role="menu"]` with `[role="menuitem"]` buttons (`.icon`, text, `<kbd>`); `menuitemcheckbox` / `menuitemradio` with `aria-checked`; `.danger`; `.caption`; `[role="separator"]`; menu bar is `[role="menubar"]` |
+| Submenu | an item with `aria-haspopup="menu"` and `data-submenu="id"` naming another `.panel.menu` (one level) |
 | Popup with controls | `.panel.popup.controls[popover]` |
+| Tool group | `.panel.popup.tools[popover]` with the real `.btn` tools; `data-lit-by="id id"` on its button names the toggles that light it |
+| Toolbar | `[role="toolbar"]` (one Tab stop) with `.tb-group` children; `data-rank="n"` on a tool says when it leaves an overfull row (1 = last) |
 | Dialog | `dialog.panel` (small) or `dialog.panel.big` with `header`, `.body` and `footer`; any element with `data-open-dialog="id"` opens it, a `.btn[data-close]` closes it. Small dialogs fit their content (300-460 px) and stay floating; big ones (880 × 640) fill the screen below 1024 px. Only the dialog's buttons and Esc close it |
 | Splitter | `.split` (`.split.rows` for top and bottom) with two `.pane` and a `.splitter` between them |
 | Light/dark toggle | `data-theme-toggle` on a button |
@@ -177,7 +195,13 @@ The markup of each control is the one in `gallery/index.html`: copy a specimen f
 A few controls need one call because they take options:
 
 ```js
-Ayni.toolbar(document.querySelector('#my-toolbar'));                 // one Tab stop, arrows move
+Ayni.menuAt(items, { anchor: button });                              // a menu built from a list: { label, icon, key, danger, disabled, checked, sub, run }
+Ayni.fitBar(titleRow, { more: () => items });                        // tools leave by rank into one More menu, then the app's items
+Ayni.searchField(field, { step: (d) => { … } });                     // a search that steps through its hits (Enter / Shift+Enter); count('3 / 12')
+Ayni.searchField(field).filtered(2);                                 // the filter icon turns Accent, its tooltip "Filters: 2"
+Ayni.findBar(bar, { find, step, replace, selected, onClose });       // a find bar above a document; count(at, total)
+const test = Ayni.matcher('bill "light blue" -paid');               // test(text) is true for a match; null when nothing is asked
+Ayni.longTap(list, '.row', (row, x, y) => { … });                    // long tap with the ring (lists: start picking)
 Ayni.calendar(element, (date) => { … });                             // inline calendar
 Ayni.dateField(input, { popup, onChange: (date) => { … } });         // YYYY-MM-DD field with a calendar popup
 Ayni.dateTimeField(input, { popup, value, onChange: (date) => { … } }); // YYYY-MM-DD HH:MM
@@ -212,17 +236,19 @@ Controls tell the page what happened with DOM events that bubble, so one listene
 | `ayni:launch` | `.launcher` | `{ app, item }`: an app was picked |
 | `ayni:window` | `.panel.window` | `{ window, state }`: open, select, minimise, maximise, restore or close |
 | `ayni:close` | `.panel.window` | `{ window }`, before it closes; cancelable |
+| `ayni:search` | `.search-field` | `{ text, test }`: after each change (on Enter for a `data-enter` field); `test` is `Ayni.matcher(text)` |
+| `ayni:searchclose` | `.search-field` | the field was emptied and folded, or closed |
 | `ayni:dismiss` | an open menu or popup, before the page scroll or a resize closes it | cancel it with `preventDefault()` to keep the popup |
 
 ### JavaScript API
 
-Everything lives on `window.Ayni`: `ready`, `init`, `status(text)`, `toast(kind, text, { undo, final, keepOnLeave, action, persist })` (returns `{ close() }`), `settleUndo()`, `dialog({ title, big })` (returns `{ dialog, body, footer, show(), close() }`), `dialogButton(role, tip, icon)`, `confirm(options)` (`true`, `false` or `'other'`), `alert(options)`, `ask(options)` (the text, or `null`), `autoSave(field, save, options)`, `progress(text, { pct, onStop })` (returns `{ set(text, pct), end() }`), `setBusy`, `setTip(element, text)`, `place(popup)`, `contextMenu`, `toolbar`, `tree(element, { root, items })` (returns the tree's controller: `data()`, `add`, `remove`, `rename`, `move`, `hide`, `showHidden`, `select`, `selected`, `path`), `calendar`, `dateField`, `dateTimeField`, `fillHelp(body, entries)` (the touch Help dialog), `focusFirstError(root)`, `isTouch()`, `setTouchPreview(on)`, `isDark()`, `setTheme('light' | 'dark' | 'sun' | null)` (`null` = follow the system), `theme.setPlace(lat, lon)` (for the sun), `theme.schemes` (the user's own schemes), `supported()` (false on a browser older than the target), `t(key)`, `tf(key, values)`, `i18n` (`ready`, `lang()`, `setLang(code)`, `apply(element)`), `icon(name)`, `setIcon(element, name)`, `icons.add(set)`, `icons.use(set)` (see [Icons](#icons)), `windows.select(w)`, `windows.minimise(w)`, `windows.maximise(w)`, `windows.restore(w)`, `windows.close(w)`, `setTaskbarEdge(desktop, edge)`, `isDesktop()`, the date helpers in `Ayni.dates`, and `version`.
+Everything lives on `window.Ayni`: `ready`, `init`, `status(text)`, `toast(kind, text, { undo, final, keepOnLeave, action, persist })` (returns `{ close() }`), `settleUndo()`, `dialog({ title, big })` (returns `{ dialog, body, footer, show(), close() }`), `dialogButton(role, tip, icon)`, `confirm(options)` (`true`, `false` or `'other'`), `alert(options)`, `ask(options)` (the text, or `null`), `autoSave(field, save, options)`, `progress(text, { pct, onStop })` (returns `{ set(text, pct), end() }`), `searchField(field, { filter, filterTip, step, onClose, tip, toggle })` (returns `{ open, close, isOpen, count(text), canStep(on), clear, filtered(what) }`), `matcher(text)` (the search rule as a test, or `null`), `fold(text)`, `findBar(bar, { find, step, replace, selected, onClose })` (returns `{ open(withReplace, text), close, isOpen, count(at, total) }`), `setBusy`, `setTip(element, text)`, `place(popup)`, `menuAt(items, options)` (returns `{ close() }`), `fillMenu(menu, items)`, `contextMenu`, `longTap(area, selector, fn)`, `keyLabel(keys)`, `toolbar`, `fitBar(row, { more, btn })`, `list(element, options)` (an item list: returns `{ ids, has, set, clear, selectAll, toggle, refresh, redraw, focus, menu, picking, setActions, run, key, items }`), `dropZone(host, { sel, target, can, drop })`, `tree(element, { root, items })` or `tree(element, { nav: true, items, current, go, isOpen, setOpen, menu, list, drag, drop, sheet })` (returns the tree's controller: `build()`, `data()`, `add`, `remove`, `rename`, `move`, `hide`, `showHidden`, `select`, `selected`, `path`), `pickNode({ title, items, current, disabled, okLabel, note })` (Move to…: the picked id, or `null`), `calendar`, `dateField`, `dateTimeField`, `fillHelp(body, entries)` (the touch Help dialog), `focusFirstError(root)`, `isTouch()`, `setTouchPreview(on)`, `isDark()`, `setTheme('light' | 'dark' | 'sun' | null)` (`null` = follow the system), `theme.setPlace(lat, lon)` (for the sun), `theme.schemes` (the user's own schemes), `supported()` (false on a browser older than the target), `t(key)`, `tf(key, values)`, `i18n` (`ready`, `lang()`, `setLang(code)`, `apply(element)`), `icon(name)`, `setIcon(element, name)`, `icons.add(set)`, `icons.use(set)` (see [Icons](#icons)), `windows.select(w)`, `windows.minimise(w)`, `windows.maximise(w)`, `windows.restore(w)`, `windows.close(w)`, `setTaskbarEdge(desktop, edge)`, `isDesktop()`, the date helpers in `Ayni.dates`, and `version`.
 
 ### Icons
 
 An icon is `<span class="icon" data-icon="name"></span>`, and `Ayni.icon(name)` returns the same markup for code. Ayni draws it from the icon set in use; `Ayni.setIcon(element, name)` changes it.
 
-The drawings are Nayive's: 24 × 24 grid, rounded ends, 2 px stroke unless an icon reads better with another. Names are plain English words joined by hyphens. `ayni-icons.js` holds only the icons the controls need: `apps`, `arrow-down`, `arrow-up`, `calendar`, `check`, `chev-down`, `chev-right`, `close`, `copy`, `cut`, `edit`, `error`, `eye`, `eye-off`, `file`, `filter`, `folder`, `help`, `info`, `maximise`, `minimise`, `minus`, `more`, `ok`, `paste`, `plus`, `restore`, `search`, `today`, `trash`, `undo` and `warn` (also in `Ayni.icons.names`). Your app brings its own icons with `Ayni.icons.add({ name: '<svg …>' })`, as `gallery/demo-icons.js` does for the gallery. Never paste an SVG into the page: write `<span class="icon" data-icon="name"></span>`.
+The drawings are Nayive's: 24 × 24 grid, rounded ends, 2 px stroke unless an icon reads better with another. Names are plain English words joined by hyphens. `ayni-icons.js` holds only the icons the controls need: `apps`, `arrow-down`, `arrow-up`, `calendar`, `check`, `chev-down`, `chev-right`, `chev-up`, `close`, `copy`, `cut`, `edit`, `error`, `eye`, `eye-off`, `file`, `filter`, `folder`, `help`, `info`, `maximise`, `minimise`, `minus`, `more`, `ok`, `paste`, `plus`, `restore`, `search`, `today`, `trash`, `undo` and `warn` (also in `Ayni.icons.names`). Your app brings its own icons with `Ayni.icons.add({ name: '<svg …>' })`, as `gallery/demo-icons.js` does for the gallery. Never paste an SVG into the page: write `<span class="icon" data-icon="name"></span>`.
 
 To use another icon set, give Ayni a map from its names to the set's names:
 
@@ -253,16 +279,22 @@ The page follows the system setting until the user picks light or dark (`ayni-th
 | --- | --- |
 | `ayni-i18n.js` | The language layer: loads the texts first, `data-i18n` markup, `Ayni.t()` |
 | `i18n/*.json` | Ayni's own texts, one file per language |
-| `ayni-base.css` | The base: both colour schemes, corners, spacing, type, motion, the icon box and the Panel |
-| `ayni-base.js` | The base: light and dark (with Sun mode and own schemes), icons, tooltips, touch (`Ayni.isTouch`), `Ayni.t`, `Ayni.supported`, start-up and `Ayni.ready` |
+| `ayni-base.css` | The base: both colour schemes, corners, spacing, type, motion, the icon box, the Panel and the text field look (`.input`, `.input-group`) |
+| `ayni-base.js` | The base: light and dark (with Sun mode and own schemes), icons, tooltips, touch (`Ayni.isTouch`), the search rule (`Ayni.matcher`, `Ayni.fold`), `Ayni.t`, `Ayni.supported`, start-up and `Ayni.ready` |
 | `ayni-buttons.css` | Buttons family: round and text buttons, toggles, second action, busy, buttons over pictures, switches, check boxes, radios |
 | `ayni-buttons.js` | Buttons family: `Ayni.setBusy`, the second action, Enter runs the default button, the rule checks, switches |
 | `ayni-toasts.css` | Notifications family: notifications and progress notifications (needs `ayni-buttons.css`) |
 | `ayni-toasts.js` | Notifications family: `Ayni.toast` with Undo, `Ayni.settleUndo`, `Ayni.progress` |
 | `ayni-dialogs.css` | Dialogs family: `dialog.panel`, small and big, modal and modeless (needs `ayni-buttons.css`) |
 | `ayni-dialogs.js` | Dialogs family: Esc, the first field, moving, `Ayni.dialog`, `Ayni.dialogButton`, `Ayni.confirm`, `Ayni.alert`, `Ayni.ask`, `Ayni.autoSave` |
-| `ayni.css` | The look of the controls not yet in a family file, and the touch sizes |
-| `ayni.js` | The behaviour of the controls not yet in a family file; a family file hands its start-up to `Ayni.core.family()` |
+| `ayni-menus.css` | Menus family: menus, submenus, the menu bar, toolbars and their groups, tool groups, popups (needs `ayni-buttons.css`) |
+| `ayni-menus.js` | Menus family: menus and submenus, the menu bar, `Ayni.menuAt`, `Ayni.contextMenu`, `Ayni.longTap`, `Ayni.keyLabel`, `Ayni.toolbar`, `Ayni.fitBar`, `Ayni.place`, closing on scroll, resize and window blur |
+| `ayni-search.css` | Search family: the search field, folded or plain, its count, filter button and up / down pair (needs `ayni-buttons.css`) |
+| `ayni-lists.css` | Lists family: list boxes, item lists (ticks, picked rows, the picked group), drag and drop markers, the tree view, the navigation tree and its phone sheet, Move to… (needs `ayni-buttons.css`, `ayni-menus.css`) |
+| `ayni-lists.js` | Lists family: type-ahead, the list box, `Ayni.list`, `Ayni.dropZone`, `Ayni.tree` (editable, or `nav`), `Ayni.pickNode`, `Ayni.keyMatches` (needs `ayni-menus.js`, and `ayni-dialogs.js` for Move to…) |
+| `ayni-search.js` | Search family: the search field (clear, Esc, folding, count, filter, steps, Enter-only with Go), `Ayni.searchField`, the find bar (`Ayni.findBar`), Ctrl+F |
+| `ayni.css` | The look of the controls not yet in a family file, and the touch sizes (needs `ayni-menus.css` and `ayni-lists.css`) |
+| `ayni.js` | The behaviour of the controls not yet in a family file (needs `ayni-menus.js` and `ayni-lists.js`, loaded before it); a family file hands its start-up to `Ayni.core.family()` |
 | `ayni-icons.js` | The built-in icons, only those the controls use (Nayive's drawings) |
 | `tz-geo.json` | The main city of each time zone, for Sun mode on a device that gives no place |
 | `icons/lucide.js` | Map from Ayni's icon names to [Lucide](https://lucide.dev)'s, for `Ayni.icons.use()` |

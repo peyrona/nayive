@@ -196,17 +196,18 @@ button.who { cursor: pointer; }
     cursor: pointer;
 }
 .row:hover          { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.row[aria-selected="true"]:hover { background: var(--accent-soft); }
 .row:focus-visible  { outline: 2px solid var(--accent); outline-offset: -2px; }
 .row.is-open        { background: color-mix(in srgb, var(--text) 10%, transparent); }
-/* The owner's list on the item browser (shared/browser.js, app.css ITEM
-   BROWSER). A row has no room for a column of ticks: the tick sits on the
-   picture's corner. No ⋮ on the row: right-click or a long-press opens the menu. */
+/* The owner's list is an Ayni item list (Ayni.list, ayni-lists.css): picked
+   rows take its soft Accent tint. A row has no room for a column of ticks:
+   the tick sits on the picture's corner. No ⋮ on the row: right-click or a
+   long-press opens the menu. */
 #rows .row                          { position: relative; }
-#rows .row.is-selected              { background: color-mix(in srgb, var(--accent) 22%, transparent); }
-#rows .row > .pick-tick             { position: absolute; left: 8px; bottom: 6px; z-index: 1; background: var(--head); }
-#rows .row.is-selected > .pick-tick { background: var(--accent); }
+#rows .row > .pick-tick             { position: absolute; left: 8px; bottom: 6px; z-index: 1; }
+#rows .row:not([aria-selected="true"]) > .pick-tick { background: var(--head); }
 /* While chats are picked the selection group joins the header; the search
-   and the tools leave only when there is no room (NayiveUI.fitBar: tools
+   and the tools leave only when there is no room (Ayni.fitBar: tools
    rank after the actions), into the header's one ⋮. The icon + "Chat" stay;
    no "× N" chip (list.js count: false). */
 @media (hover: none), (pointer: coarse)
@@ -585,8 +586,6 @@ button.who { cursor: pointer; }
 .send:disabled { opacity: 0.5; cursor: default; }
 
 /* the Send button's menu (held down): over the button, inside the composer */
-.composer .send-menu { position: absolute; right: 8px; bottom: calc(100% + 4px); z-index: 6; min-width: 0; }
-.composer .send-menu .menu-label.note { font-weight: 400; padding: 2px 12px 6px; max-width: 16rem; }
 
 /* Settings: one width for both tabs, so it does not jump when they switch;
    no pack - its long hints would stretch it to the full 460px */

@@ -57,6 +57,9 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-menus.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -65,10 +68,12 @@
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
+    <script src="../shared/ayni/ayni-menus.js" defer></script>
+    <script src="../shared/ayni/ayni-search.js" defer></script>
+    <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
-    <script src="../shared/browser.js" defer></script>
     <script>
     Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
@@ -84,7 +89,7 @@
                 { sel: '#postersBtn',   text: Ayni.t( 'movies.introPosters' ) }
             ],
             // The guided tour ("Ver el tour" in the card): the card's rows, picking
-            // films (the shared item browser), the player.
+            // films (the shared item list), the player.
             tour: [ 'buttons', { use: 'pick', ghost: '#libContent' }, { use: 'picked', ghost: '#libContent' },
                     { sel: '#playerBar', text: Ayni.t( 'movies.tourPlayer' ) } ]
         } );
@@ -106,8 +111,8 @@
 
     /* ---- main row: the tree and the library --------------------------- */
     /* The tree: Films, Genres, Folders (the real folders under it). Its rows
-       are the shared tree (.ntree.tree-fit, app.css); on a phone it slides in
-       from #treeBtn (the shared .tree-sheet). */
+       are Ayni's navigation tree (data-fit); on a phone it slides in
+       from #treeBtn (Ayni's .tree-sheet). */
     .tree-pane  { flex: 0 0 auto; width: 200px; overflow: auto; padding: 14px 6px 16px;
                   border-right: 1px solid var(--line); }
     #treeBtn    { display: none; }
@@ -149,11 +154,9 @@
                    cursor: default; text-align: left; font: inherit; color: inherit;
                    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
                    transition: border-color var(--tr-fast), background-color var(--tr-fast); }
-    /* Picked (shared/browser.js): the accent frame and title strip. */
-    .poster-card.is-selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
-    .poster-card.is-selected .poster-body { background: var(--accent); }
-    .poster-card.is-selected :is(.poster-title, .poster-sub) { color: var(--on-accent); }
-    /* The browser's tick sits on the poster's top-left corner. */
+    /* Picked (Ayni.list): Ayni's soft Accent tint, and an Accent frame. */
+    .poster-card[aria-selected="true"] { border-color: var(--accent); }
+    /* The list's tick sits on the poster's top-left corner. */
     .poster-art > .pick-tick { position: absolute; top: 8px; left: 8px; z-index: 2;
                                background: color-mix(in srgb, #000 35%, transparent); border-color: rgba(255,255,255,.85); }
     .poster-card:hover     { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
@@ -274,7 +277,7 @@
         <h1>Movies</h1>
         <!-- The toolbar, shown once a folder is open (display: contents). -->
         <div class="tb-tools" id="tools" hidden>
-            <button class="btn" id="folderInfoBtn" type="button" data-rank="22" aria-haspopup="menu" aria-expanded="false" data-i18n-attr="data-tip:ui.folderInfo, aria-label:ui.folderInfo">
+            <button class="btn" id="folderInfoBtn" type="button" data-rank="22" popovertarget="folderMenu" data-i18n-attr="data-tip:ui.folderInfo, aria-label:ui.folderInfo">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="10.5" x2="12.01" y2="10.5"/><line x1="12" y1="13.5" x2="12" y2="17.5"/></svg>
             </button>
 
@@ -283,15 +286,15 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
             </button>
         </div>
-        <div class="topbar-actions">
-            <!-- The selection's buttons (shared/browser.js): only while something is picked. -->
+        <div class="topbar-actions tall" role="toolbar" data-i18n-attr="aria-label:ui.actions">
+            <!-- The selection's buttons (Ayni.list): only while something is picked. -->
             <div id="selActions" class="tb-group" hidden></div>
             <!-- Like #tools, shown once a folder is open. -->
             <div class="tb-group" data-tools hidden>
-                <div class="search-wrap">
-                    <input type="search" class="topbar-search" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:movies.searchPh">
+                <div class="input-group search-field fold">
+                    <input type="search" class="input" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:movies.searchPh">
                 </div>
-                <button class="btn" id="searchToggle" type="button" data-rank="20" data-i18n-attr="data-tip:ui.search, aria-label:ui.search">
+                <button class="btn" id="searchToggle" type="button" data-rank="20" data-search data-i18n-attr="data-tip:ui.search, aria-label:ui.search">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 </button>
                 <button class="btn" id="postersBtn" type="button" data-rank="24" data-i18n-attr="data-tip:movies.findPostersTip, aria-label:movies.findPosters">
@@ -311,14 +314,14 @@
     </header>
 
     <!-- The folder-? button's menu: the folder (tap = change it), then the counts. -->
-    <div class="top-menu folder-menu" id="folderMenu" role="menu" hidden>
-        <button class="menu-item" id="crumb" type="button" role="menuitem" data-i18n-attr="data-tip:ui.changeFolder, aria-label:ui.changeFolder"></button>
+    <div class="panel popup controls folder-menu" popover id="folderMenu" role="dialog" aria-labelledby="folderInfoBtn">
+        <button class="btn text folder-crumb" id="crumb" type="button" data-i18n-attr="data-tip:ui.changeFolder, aria-label:ui.changeFolder"></button>
         <div class="menu-info" id="subStrip"></div>
     </div>
 
     <div class="main-row" id="mainRow" hidden>
-        <!-- The tree: Films, Genres, Folders (NayiveUI.tree, see BROWSER below). -->
-        <nav class="tree-pane" id="treePane" data-i18n-attr="aria-label:movies.library"><div id="tree" class="tree-fit"></div></nav>
+        <!-- The tree: Films, Genres, Folders (Ayni.tree, see BROWSER below). -->
+        <nav class="tree-pane" id="treePane" data-i18n-attr="aria-label:movies.library"><ul id="tree" data-fit data-i18n-attr="aria-label:movies.library"></ul></nav>
         <div class="lib-pane">
             <div class="lib-content" id="libContent"></div>
 
@@ -643,7 +646,7 @@ async function scan()
     loadSynopses();
     renderCollectionSummary();
     renderLibrary();
-    if( treeView ) treeView.render();      // the folders, scanned again
+    if( treeView ) treeView.build();      // the folders, scanned again
     loadDurations();
 }
 
@@ -1066,7 +1069,7 @@ function moviesUnder( path ) { return st.movies.filter( function ( mv ) { return
 
 function filteredMovies()
 {
-    var q = NayiveUI.matcher( st.search );
+    var q = Ayni.matcher( st.search );
     if( ! q ) return st.movies;
     return st.movies.filter( function ( mv )
     { return q( mv.title + " " + genreName( mv ) + " " + ( mv.year || "" ) ); } );
@@ -1122,11 +1125,11 @@ function posterCardHtml( mv )
                    ( mv.year && mv.duration ? " · " : "" ) +
                    ( mv.duration ? fmtRuntime( mv.duration ) : "" );
 
-    // A row of the shared item browser (BROWSER below): its tick on the
+    // A row of the shared item list (BROWSER below): its tick on the
     // poster's corner.
     return '<div class="poster-card' + ( active ? ' is-active' : '' ) + '" data-open="' + esc( mv.path ) + '">' +
         '<span class="poster-art" ' + artStyle( mv.color, mv.poster ) + '>' +
-            NayiveUI.tickHtml() +
+            Ayni.pickTick() +
             ( mv.poster ? '' : FILM_ICON ) +
             ( isWatched( mv ) ? '<span class="poster-seen">' + CHECK_ICON + '</span>' : '' ) +
             '<span class="poster-scrim"><button class="btn primary transport-btn play-btn" data-play="' + esc( mv.path ) + '" data-i18n-attr="data-tip:movies.watchNow, aria-label:movies.watchNow">' + PLAY_ICON + '</button></span>' +
@@ -1267,7 +1270,7 @@ function renderRuntime( mv )
     $$( '.poster-sub[data-runtime="' + cssEsc( mv.path ) + '"]' ).forEach( function ( el ) { el.textContent = sub || "—"; } );
 }
 
-// The poster cards themselves are the item browser's (BROWSER below): a
+// The poster cards themselves are the item list's (BROWSER below): a
 // click picks, a double-click / tap / Enter opens the film. Here: the ▶ on
 // a poster and the "Keep watching" cards, the detail's buttons, the genre
 // cards and the ← / × out of a view.
@@ -1315,7 +1318,7 @@ function openMovie( path )
     st.search = "";
     $( "#searchInput" ).value = "";
     renderLibrary();
-    if( treeView ) treeView.render();
+    if( treeView ) treeView.build();
 }
 
 /* ---------------------------------------------------------------------------
@@ -1507,11 +1510,11 @@ function updatePositionState() { NayiveMedia.positionState( video ); }
 
 /* ---------------------------------------------------------------------------
  * BROWSER - the tree (Films, Genres, Folders with the real folders) and the
- * poster cards as rows of the shared item browser (shared/browser.js): a
+ * poster cards as rows of the shared item list (Ayni.list): a
  * click picks (Ctrl / Shift add), a double-click, Enter or a tap opens the
  * film, a long-press picks on touch. One action list feeds the header group,
  * the menu (right-click) and the keys; what does not fit the header goes
- * into its one ⋮ (NayiveUI.fitBar).
+ * into its one ⋮ (Ayni.fitBar).
  * -------------------------------------------------------------------------*/
 var treeView = null, browse = null;
 var treeOpen = {};                               // the open rows, this visit
@@ -1522,7 +1525,7 @@ function treeRoots()
     return [
         { id: "v:movies",  name: T( "movies.movies" ),  icon: FILM_ICON,   noMenu: true },
         { id: "v:genres",  name: T( "movies.genres" ),  icon: GENRE_ICON,  noMenu: true },
-        { id: "v:folders", name: T( "movies.folders" ), icon: FOLDER_ICON, noMenu: true, kids: NayiveMedia.folderNodes( st.folderTree, FOLDER_ICON ) }
+        { id: "v:folders", name: T( "movies.folders" ), icon: FOLDER_ICON, noMenu: true, children: NayiveMedia.folderNodes( st.folderTree, FOLDER_ICON ) }
     ];
 }
 
@@ -1596,12 +1599,12 @@ function movieActions()
 function wireBrowser()
 {
     treeView = NayiveMedia.libraryTree( treeOpen, {
-        roots:   treeRoots,
+        items:   treeRoots,
         current: currentNode,
         go:      goNode
     } );
-    browse = NayiveUI.browser( {
-        list:    $( "#libContent" ),
+    browse = Ayni.list( $( "#libContent" ), {
+        main:    true,
         row:     ".poster-card",
         idOf:    function ( el ) { return el.getAttribute( "data-open" ); },
         bar:     $( "#selActions" ),
@@ -1624,7 +1627,7 @@ function setFilter( f, folder )
     st.selectedFolder = folder || null;
     $( "#libContent" ).scrollTop = 0;
     renderLibrary();
-    if( treeView ) treeView.render();
+    if( treeView ) treeView.build();
 }
 
 function wireStaticUI()
@@ -1637,7 +1640,6 @@ function wireStaticUI()
     } );
 
     NayiveMedia.wireSearchToggle();                     // the search fold
-    NayiveMedia.wireFolderInfo();                       // folder-? -> path + counts
     NayiveMedia.wireCrumbPicker( { app: "movies" } );   // crumb -> folder picker
 
     $( "#reloadBtn" ).addEventListener( "click", function ()

@@ -93,7 +93,7 @@ section( "A5 · WRITE: A WORD ADDED IN ANOTHER WINDOW BETWEEN THE READ AND THE W
     await c.send( "Input.dispatchMouseEvent", { type: "mousePressed", x: at.x, y: at.y, button: "right", buttons: 2, clickCount: 1 } );
     await c.send( "Input.dispatchMouseEvent", { type: "mouseReleased", x: at.x, y: at.y, button: "right", buttons: 0, clickCount: 1 } );
     const addText = await c.evaluate( `Ayni.tf( 'write.addToDict', { word: ${JSON.stringify( WORD )} } )` );
-    const ITEM = `Array.prototype.find.call( document.querySelectorAll( 'button.menu-item' ), function ( e ) { return e.offsetParent && e.textContent.indexOf( ${JSON.stringify( addText )} ) !== -1; } )`;
+    const ITEM = `Array.prototype.find.call( document.querySelectorAll( '#ayni-menu [role^="menuitem"]' ), function ( e ) { return e.offsetParent && e.textContent.indexOf( ${JSON.stringify( addText )} ) !== -1; } )`;
     ok( await c.until( ITEM, 10000 ), "its menu offers \"" + addText + "\"" );
 
     // The other window adds "Nayive" right after this one reads the list.

@@ -50,8 +50,7 @@
 .local-row > label[for] { cursor: pointer; }
 
 /* DICTIONARY */
-/* The shared search field (app.css SEARCH FOLD), always open, full width. */
-.dic-search.search-fold { max-width: none; }
+/* The dictionary's search field is Ayni's (shared/ayni/ayni-search.css), full width. */
 .dict-main          { padding: 14px 0;
                       display: flex; flex-direction: column; gap: 12px; min-height: 120px; }
 .dict-main .hint    { margin: 0; font-size: 0.9rem; color: var(--text-dim); }

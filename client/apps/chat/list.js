@@ -242,14 +242,14 @@
         }
         else head.appendChild( h( "h1", { class: "app-title-guest", text: "Chat" } ) );
 
-        // type=text, not search: the browser's own clear cross would sit next to ours
-        var search = h( "input", { class: "topbar-search", attrs: { type: "text", enterkeyhint: "search", id: "listSearchInput",
+        var search = h( "input", { class: "input", attrs: { type: "search", enterkeyhint: "search", id: "listSearchInput",
                                    placeholder: T( "chat.search" ), "aria-label": T( "chat.search" ), autocomplete: "off" },
                                    on: { input: function () { S.query = search.value; C.renderList(); } } } );
-        var box = h( "div", { class: "search-wrap" }, search );
+        var box = h( "div", { class: "input-group search-field fold" }, search );
         var searchBtn = C.btn( "search", "chat.search", null );
         searchBtn.id = "listSearch";
         searchBtn.dataset.rank = 20;      // what leaves the bar first: tools after the picked chats' actions (fitBar)
+        searchBtn.setAttribute( "data-search", "" );
         var moreBtn = C.btn( "more", "chat.menu", null );
         moreBtn.id = "listMore";
 
@@ -269,17 +269,18 @@
                 ( b[ 0 ] === "plus" ? tools : sys ).appendChild( el );
             } );
         else sys.appendChild( moreBtn );
-        var actions = h( "div", { class: "topbar-actions" }, tools, sys );
+        var actions = h( "div", { class: "topbar-actions tall", attrs: { role: "toolbar", "aria-label": T( "ui.actions" ) } }, tools, sys );
         actions.appendChild( h( "div", { class: "sync-indicator", attrs: { id: "syncIndicator" } } ) );   // the plug, last
-        // The owner: the item browser's selection group comes first (browser.js
+        // The owner: the item list's picked group comes first (Ayni.list
         // draws it while chats are picked; empty and hidden until then).
-        var selBar = owner && NayiveUI.browser ? h( "div", { class: "tb-group", attrs: { id: "selActions", hidden: true } } ) : null;
+        var selBar = owner ? h( "div", { class: "tb-group", attrs: { id: "selActions", hidden: true } } ) : null;
         if( selBar ) actions.insertBefore( selBar, tools );
         head.appendChild( actions );
+        Ayni.init( actions );                 // made after Ayni started: one Tab stop, the arrows move
 
-        // The shared fold (ui.js): the magnifier opens the field, and only a
-        // bar too narrow for it sends the buttons aside; its × and Escape clear it.
-        NayiveUI.searchFold( { bar: head, box: box, input: search, toggle: searchBtn } );
+        // Ayni's folded search field: the magnifier opens it, and a bar too
+        // narrow for it sends tools into the ⋮ (fitBar); its × and Escape clear it.
+        Ayni.searchField( box, { toggle: searchBtn } );
 
         var hint = h( "div", { class: "hint-bar", attrs: { id: "listHint", hidden: true } } );
 
@@ -302,24 +303,17 @@
 
         if( selBar ) wireBrowser( rows, selBar, search, searchBtn );
         if( owner ) return;
-        var menu = h( "div", { class: "top-menu", attrs: { id: "listMenu", hidden: true } } );
+        var menu = C.menu( "listMenu", moreBtn );
         [ [ "bell", "chat.notifications", function () { C.guestNotifications(); } ],
           [ "home", "chat.homeIcon", function () { C.guestHomeIcon(); } ],
           [ "help", "chat.help", C.showHelp ]
-        ].forEach( function ( it )
-        {
-            var b = h( "button", { class: "menu-item", attrs: { type: "button" } }, C.ic( it[ 0 ] ), T( it[ 1 ] ) );
-            b._act = it[ 2 ];
-            menu.appendChild( b );
-        } );
-        document.body.appendChild( menu );
-        NayiveUI.wireMenu( { btn: moreBtn, menu: menu, onPick: function ( item ) { if( item._act ) item._act(); } } );
+        ].forEach( function ( it ) { menu.appendChild( C.menuRow( it[ 0 ], it[ 1 ], it[ 2 ] ) ); } );
     };
 
     // ---------------------------------------------------------------------
-    // the item browser (shared/browser.js, the owner's page): pick chats and
+    // the item list (Ayni.list, the owner's page): pick chats and
     // act on them - right-click, a long-press, the header group (what does
-    // not fit it goes into the header's one ⋮, shared/browser.js fitBar).
+    // not fit it goes into the header's one ⋮, Ayni.fitBar).
     // Each action calls what the open chat's bar calls (conv.js, list.js).
     // ---------------------------------------------------------------------
 
@@ -371,10 +365,10 @@
               label: function ( ids ) { return T( anyNot( ids, "pin" ) ? "chat.pin" : "chat.unpin" ); },
               run: function ( ids ) { eachPref( ids, { pin: anyNot( ids, "pin" ) } ); } },
             { id: "mute", rank: 3, group: 1,
-              icon: function ( ids ) { return anyNot( ids, "mute" ) ? "bellOff" : C.ic( "bell" ).outerHTML; },
+              icon: function ( ids ) { return anyNot( ids, "mute" ) ? "bell-off" : C.ic( "bell" ).outerHTML; },
               label: function ( ids ) { return T( anyNot( ids, "mute" ) ? "chat.mute" : "chat.unmute" ); },
               run: function ( ids ) { eachPref( ids, { mute: anyNot( ids, "mute" ) } ); } },
-            { id: "read", label: T( "chat.markRead" ), icon: "mailOpen", rank: 5, group: 1,
+            { id: "read", label: T( "chat.markRead" ), icon: "mail-open", rank: 5, group: 1,
               when: function ( ids ) { return chatsOf( ids ).some( function ( c ) { return c.unread; } ); },
               run: function ( ids ) { ids.forEach( function ( id ) { C.markConvRead( id ); } ); } },
             // Delete chat: the whole chat goes - the person, or the group
@@ -389,8 +383,8 @@
 
     function wireBrowser( rows, bar, search, searchBtn )
     {
-        C.browse = NayiveUI.browser( {
-            list:    rows,
+        C.browse = Ayni.list( rows, {
+            main:    true,
             row:     ".row[data-conv]",
             idOf:    function ( el ) { return el.dataset.conv; },
             bar:     bar,
@@ -406,8 +400,7 @@
             // Side by side a click only opens: the open chat's bar has its
             // buttons, so the list's would show them twice (his call,
             // 2026-10-05). Ctrl/Shift+click and the right-click still pick.
-            clickOpens: function () { return MQ_WIDE.matches; },
-            search:  function () { if( search.offsetParent ) search.focus(); else searchBtn.click(); }
+            clickOpens: function () { return MQ_WIDE.matches; }
         } );
     }
 
@@ -418,7 +411,7 @@
         if( S.filter === "unread" && ! c.unread ) return false;
         if( S.filter === "groups" && c.kind !== "g" ) return false;
         if( ! S.query ) return true;
-        var q = NayiveUI.matcher( S.query );
+        var q = Ayni.matcher( S.query );
         return ! q || q( c.name + "\n" + ( c.last && c.last.text || "" ) );
     }
 
@@ -507,8 +500,8 @@
         if( c.mute ) l2.appendChild( h( "span", { class: "flag" }, C.ic( "bell-off" ) ) );
         if( c.unread ) l2.appendChild( h( "span", { class: "badge", text: String( c.unread ) } ) );
 
-        // The owner's list: the item browser opens and picks (wireBrowser).
-        // A person's page (no browser.js): a click opens, as before.
+        // The owner's list: the item list opens and picks (wireBrowser).
+        // A person's page (no item list): a click opens, as before.
         return h( "div", { class: "row" + ( c.unread ? " unread" : "" ) + ( S.open === c.id ? " is-open" : "" ),
                            attrs: { role: "button", tabindex: "0" }, data: { conv: c.id },
                            on: C.browse ? {} : { click: function () { C.openConv( c.id ); },
@@ -818,7 +811,7 @@
         function drawCards()
         {
             var typed = input.value.trim();
-            var q = card && typed === card.name ? null : NayiveUI.matcher( typed );
+            var q = card && typed === card.name ? null : Ayni.matcher( typed );
             var shown = book.filter( function ( c ) { return ! q || q( c.name ); } ).slice( 0, 200 );
             cards.textContent = "";
             if( ! shown.length ) cards.appendChild( h( "p", { class: "list-note", text: T( book.length ? "chat.noMatch" : "chat.noContacts" ) } ) );

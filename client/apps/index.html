@@ -56,6 +56,9 @@
     <link rel="stylesheet" href="shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="shared/ayni/ayni-dialogs.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-menus.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-search.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="shared/theme.css">
     <link rel="stylesheet" href="shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -64,6 +67,9 @@
     <script src="shared/ayni/ayni-buttons.js" defer></script>
     <script src="shared/ayni/ayni-toasts.js" defer></script>
     <script src="shared/ayni/ayni-dialogs.js" defer></script>
+    <script src="shared/ayni/ayni-menus.js" defer></script>
+    <script src="shared/ayni/ayni-search.js" defer></script>
+    <script src="shared/ayni/ayni-lists.js" defer></script>
     <script src="shared/ui.js" defer></script>
     <script src="shared/store.js" defer></script>
     <script>
@@ -373,7 +379,7 @@
         button.tile:disabled:hover { background: none; }
         button.tile:disabled:active { transform: none; }
 
-        /* Office's and Records' popups: the shared .top-menu card, laid out as ONE
+        /* Office's and Records' popups: an Ayni tool group (.panel.popup.tools), laid out as ONE
            row of tiles the size of the grid's (the ids outweigh the phone rule's
            width: 100%). Tools has four: two by two. */
         #officeMenu, #recordsMenu, #moreMenu  { flex-direction: row; gap: 4px; min-width: 0; }
@@ -527,18 +533,18 @@
             </a>
 
             <!-- Office (2026-09-23): Write, Calc and Text in a popup (#officeMenu, under the grid). -->
-            <button class="tile" id="officeBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="officeMenu">
+            <button class="tile" id="officeBtn" type="button" popovertarget="officeMenu" aria-haspopup="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
                 <span>Office</span>
             </button>
             <!-- Records (2026-09-23): Contacts, Bookmarks and Passwords in a popup (#recordsMenu, under the grid). -->
-            <button class="tile" id="recordsBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="recordsMenu">
+            <button class="tile" id="recordsBtn" type="button" popovertarget="recordsMenu" aria-haspopup="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="10" y1="7" x2="14" y2="7"></line><line x1="10" y1="17" x2="14" y2="17"></line></svg>
                 <span>Records</span>
             </button>
             <!-- Tools (2026-10-28): Find my devices, Split, Language and Calculator
                  in a popup (#moreMenu, under the grid). -->
-            <button class="tile" id="moreBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="moreMenu">
+            <button class="tile" id="moreBtn" type="button" popovertarget="moreMenu" aria-haspopup="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
                 <span>Tools</span>
             </button>
@@ -572,54 +578,54 @@
 
         </div>
 
-        <!-- Office's and Records' popups (2026-09-23): the shared "more" menu card
-             (NayiveUI.wireMenu) holding one row of real launcher tiles - links, so
-             the desktop's menu opens them as windows, like the grid's. -->
-        <div class="top-menu" id="officeMenu" role="menu" hidden>
-            <a class="tile" role="menuitem" href="write/index.html">
+        <!-- Office's and Records' popups (2026-09-23): an Ayni tool group (popovertarget
+             on the tile) holding one row of real launcher tiles - links, so the
+             desktop's menu opens them as windows, like the grid's. -->
+        <div class="panel popup tools" popover id="officeMenu" role="group" aria-labelledby="officeBtn">
+            <a class="tile" href="write/index.html">
                 <svg viewBox="0 0 512 512" fill="currentColor"><g transform="translate(45 465) rotate(-48)"><path d="M0 0 28 -14 82 -36C96 -36 110 -27 122 -19L122 19C110 27 96 36 82 36L28 14Z"></path><rect x="132" y="-26" width="350" height="52"></rect><path d="M494 -26 522 -26C542 -26 550 -14 550 0 550 14 542 26 522 26L494 26Z"></path></g><rect x="262" y="220" width="176" height="50" rx="12"></rect><path fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" d="M294 270 294 300C294 314 228 312 228 332L228 445C228 460 240 472 255 472L445 472C460 472 472 460 472 445L472 332C472 312 406 314 406 300L406 270"></path><path d="M228 355 472 355 472 445C472 460 460 472 445 472L255 472C240 472 228 460 228 445Z"></path></svg>
                 <span>Write</span>
             </a>
-            <a class="tile" role="menuitem" href="calc/index.html">
+            <a class="tile" href="calc/index.html">
                 <svg viewBox="0 0 512 512" fill="currentColor"><g transform="translate(-213.2 -558.1) scale(1.8891 3.2191)"><g transform="translate(37.3 3.7)"><path d="m 159.5,210.8 v 7.2 h 25.2 v 16.5 H 159.5 V 300 h -21.5 v -65.6 h -19.9 v -16.5 h 19.9 v -5.7 q 0,-14.8 6.2,-20.5 6.2,-5.7 22.9,-5.7 h 17.7 v 16.5 h -16.8 q -4.8,0 -6.6,1.8 -1.7,1.8 -1.8,6.5 z"></path><g transform="translate(67.4 112.5) scale(.625)"><path d="m 243.4,186.2 q -9.7,17.5 -14.4,33.9 -4.7,16.4 -4.7,32.8 0,16.3 4.7,32.8 4.7,16.5 14.4,34.1 h -16.7 q -11.6,-16.9 -17.3,-33.3 -5.6,-16.5 -5.6,-33.5 0,-17 5.6,-33.5 5.7,-16.6 17.3,-33.3 z"></path><path d="M 329.9,218 302.2,257.2 332.3,300 H 307.2 L 291.1,272.4 275.1,300 h -25 l 30.3,-42.8 -27.9,-39.3 h 25 l 13.6,24.5 13.7,-24.5 z"></path><path d="m 338.9,186.2 h 16.7 q 11.6,16.7 17.2,33.3 5.7,16.5 5.7,33.5 0,17.1 -5.6,33.5 -5.6,16.4 -17.3,33.3 h -16.7 q 9.7,-17.6 14.4,-34.1 4.7,-16.6 4.7,-32.8 0,-16.4 -4.7,-32.8 -4.7,-16.4 -14.4,-33.9 z"></path></g></g></g></svg>
                 <span>Calc</span>
             </a>
-            <a class="tile" role="menuitem" href="text/index.html">
+            <a class="tile" href="text/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline><line x1="14" y1="4" x2="10" y2="20"></line></svg>
                 <span>Text</span>
             </a>
         </div>
-        <div class="top-menu" id="recordsMenu" role="menu" hidden>
-            <a class="tile" role="menuitem" href="contact/index.html">
+        <div class="panel popup tools" popover id="recordsMenu" role="group" aria-labelledby="recordsBtn">
+            <a class="tile" href="contact/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"></rect><circle cx="9" cy="11" r="2.2"></circle><path d="M5.5 17.5c0-2.2 1.7-3.3 3.5-3.3s3.5 1.1 3.5 3.3"></path><line x1="14" y1="10" x2="18" y2="10"></line><line x1="14" y1="14" x2="18" y2="14"></line></svg>
                 <span>Contacts</span>
             </a>
-            <a class="tile" role="menuitem" href="bookmarks/index.html">
+            <a class="tile" href="bookmarks/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
                 <span>Bookmarks</span>
             </a>
-            <a class="tile" role="menuitem" href="passwords/index.html">
+            <a class="tile" href="passwords/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="M10.7 12.3 21 2"></path><path d="m15.5 7.5 3 3"></path><path d="m18 5 2.5 2.5"></path></svg>
                 <span>Passwords</span>
             </a>
         </div>
 
         <!-- Tools' popup (2026-10-28). -->
-        <div class="top-menu" id="moreMenu" role="menu" hidden>
+        <div class="panel popup tools" popover id="moreMenu" role="group" aria-labelledby="moreBtn">
             <!-- Find my devices: disabled until the script below finds a phone or a last known position. -->
-            <button class="tile" role="menuitem" id="findBtn" type="button" disabled>
+            <button class="tile" id="findBtn" type="button" disabled>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v5"></path><line x1="9.5" y1="18" x2="9.51" y2="18"></line><circle cx="16.5" cy="14.5" r="3.5"></circle><line x1="19" y1="17" x2="22" y2="20"></line></svg>
                 <span data-i18n="find.title"></span>
             </button>
-            <a class="tile" role="menuitem" href="split/index.html">
+            <a class="tile" href="split/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 7A7 7 0 1 0 16.5 17"></path><line x1="3" y1="10.2" x2="13.5" y2="10.2"></line><line x1="3" y1="13.8" x2="13.5" y2="13.8"></line></svg>
                 <span>Split</span>
             </a>
-            <a class="tile" role="menuitem" href="language/index.html">
+            <a class="tile" href="language/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="6.5"></circle><ellipse cx="9" cy="9" rx="2.8" ry="6.5"></ellipse><path d="M2.5 9h13"></path><path d="M15 14h5.5a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3l-2.5 2.2v-2.2a1.5 1.5 0 0 1-1.5-1.5v-3a1.5 1.5 0 0 1 1.5-1.5z"></path></svg>
                 <span>Language</span>
             </a>
-            <a class="tile" role="menuitem" href="calculator/index.html">
+            <a class="tile" href="calculator/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"></path></svg>
                 <span>Calculator</span>
             </a>
@@ -918,50 +924,25 @@
     <script>
         // Office's, Records' and Tools' popups (2026-09-23; Tools 2026-10-28):
         // Write / Calc / Text, Contacts / Bookmarks / Passwords and Find my
-        // devices / Split / Language / Calculator, on the shared "more" menu
-        // (NayiveUI.wireMenu). Two clicks never reach that one's closing, so
-        // they close a card here, on the window, in the capture phase (before
-        // anybody can stop them): a pick in the card - it closes itself on a
-        // <button> only, these are links, and the desktop's menu
-        // (desktop/index.html) stops link clicks on the document - and a press
-        // on the OTHER popup's tile, whose button stops its own click.
+        // devices / Split / Language / Calculator, as Ayni tool groups (the
+        // tile opens its popup: popovertarget; Ayni places it, above the tile
+        // when there is no room below, and closes it on a pick, a press
+        // outside, Escape or a scroll). The desktop's menu (desktop/index.html)
+        // stops link clicks on the document before they reach the popup, so a
+        // pick closes its card here, on the window, in the capture phase.
         Ayni.i18n.ready.then( function ()
         {
-            if( ! window.NayiveUI ) return;
-            var pops = [ [ 'officeBtn', 'officeMenu' ], [ 'recordsBtn', 'recordsMenu' ], [ 'moreBtn', 'moreMenu' ] ].map( function ( ids )
-            {
-                return { btn:  document.getElementById( ids[ 0 ] ),
-                         card: document.getElementById( ids[ 1 ] ),
-                         menu: NayiveUI.wireMenu( { btn: ids[ 0 ], menu: ids[ 1 ] } ) };
-            } ).filter( function ( p ) { return p.menu; } );
-
-            // A card that would run off the bottom (Tools, on the last row) opens
-            // above its tile instead. Runs after wireMenu's own click has placed it.
-            pops.forEach( function ( p )
-            {
-                p.btn.addEventListener( 'click', function ()
-                {
-                    if( p.card.hidden ) return;
-                    var b = p.btn.getBoundingClientRect(), r = p.card.getBoundingClientRect();
-                    if( r.bottom > window.innerHeight - 6 && b.top - r.height - 4 >= 6 ) p.card.style.top = ( b.top - r.height - 4 ) + 'px';
-                } );
-            } );
-
+            var cards = [ 'officeMenu', 'recordsMenu', 'moreMenu' ].map( function ( id ) { return document.getElementById( id ); } );
             window.addEventListener( 'click', function ( e )
             {
-                var t = e.target;
-                pops.forEach( function ( p )
-                {
-                    var pick  = p.card.contains( t ) && t.closest( 'a[href]' );
-                    var other = pops.some( function ( q ) { return q !== p && q.btn.contains( t ); } );
-                    if( pick || other ) p.menu.close();
-                } );
+                var a = e.target.closest( 'a[href]' ), card = a && a.closest( '.panel.popup.tools' );
+                if( card && card.matches( ':popover-open' ) ) card.hidePopover();
             }, true );
 
             // The launcher going away closes them too: its page hidden (another
             // app, another tab) or, on the desktop, its menu shut - every way
             // the desktop shuts it (desktop/index.html, closeMenu) calls this.
-            function closeAll() { pops.forEach( function ( p ) { p.menu.close(); } ); }
+            function closeAll() { cards.forEach( function ( c ) { if( c.matches( ':popover-open' ) ) c.hidePopover(); } ); }
             document.addEventListener( 'visibilitychange', function () { if( document.hidden ) closeAll(); } );
             window.NayiveLauncher = { closePopups: closeAll };
         } );

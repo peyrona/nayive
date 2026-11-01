@@ -2,7 +2,9 @@
  * find.js - Write's find / replace bar (#findBar in index.html): Ctrl+F, Ctrl+H,
  * Edicion > Buscar / Reemplazar and the toolbar's magnifier.
  *
- * A strip above the pages, as in Text. The engine finds (findMatches, with
+ * A strip above the pages: Ayni's find bar (Ayni.findBar draws it and keeps its
+ * keys: Enter / Shift+Enter step, Enter in the replacement replaces, Esc clears
+ * then closes; its buttons never take the cursor). The engine finds (findMatches, with
  * match case) and selects a match (selectMatch, which also scrolls it into
  * view); every match on screen gets a mark of ours, drawn the way the spell
  * check draws its red lines (proofing-overlay.js, runRects) in #findLayer.
@@ -37,15 +39,10 @@ const SCROLL_MS = 120;      // after the last scroll: newly painted pages get th
 export function createFindBar( o )
 {
     const bar      = document.getElementById( 'findBar' );
-    const input    = document.getElementById( 'findInput' );
-    const repl     = document.getElementById( 'replInput' );
-    const count    = document.getElementById( 'findCount' );
-    const caseBtn  = document.getElementById( 'findCaseBtn' );
-    const toggle   = document.getElementById( 'findReplToggle' );
-    const replRow  = document.getElementById( 'findReplRow' );
     const scroller = document.getElementById( 'editor' );
     const layer    = document.getElementById( 'findLayer' );
 
+    let query = '';            // what the bar's field asks for
     let matches = [];          // body matches for the current query, in document order
     let current = -1;          // index into `matches`, -1 = none picked yet
     let matchCase = false;
@@ -54,7 +51,32 @@ export function createFindBar( o )
 
     //---- the bar -------------------------------------------------------------
 
-    function isOpen() { return ! bar.hidden; }
+    const fb = Ayni.findBar( bar, {
+        // The words or Match case changed: a new look, a moment after the last key.
+        find: function( text, opts )
+        {
+            query = text; matchCase = !! opts.matchCase;
+            clearTimeout( typeT );
+            typeT = setTimeout( function() { search( true ); }, TYPE_MS );
+        },
+        step:    step,
+        replace: function( text, all ) { if( all ) replaceAll( text ); else replaceOne( text ); },
+        // The selection, when it is a word or a phrase, is what to look for.
+        selected: function()
+        {
+            const ed = o.editor();
+            try { return ( ed && ed.query( { type: 'selectedText' } ) ) || ''; } catch( _ ) { return ''; }
+        },
+        onClose: function()
+        {
+            clearTimeout( typeT ); clearTimeout( editT );
+            matches = []; current = -1;
+            layer.textContent = '';
+            o.focus();                 // the last match stays selected, as in Word
+        }
+    } );
+
+    function isOpen() { return fb.isOpen(); }
 
     function open( withReplace )
     {
@@ -62,42 +84,16 @@ export function createFindBar( o )
         if( ! ed ) return;
 
         if( hooked !== ed ) { ed.on( 'change', onDocChange ); hooked = ed; }
-
-        // The selection, when it is a word or a phrase, is what to look for.
-        let sel = '';
-        try { sel = ed.query( { type: 'selectedText' } ) || ''; } catch( _ ) {}
-        if( sel && sel.length <= 100 && sel.indexOf( '\n' ) < 0 ) input.value = sel;
-
-        bar.hidden = false;
-        showReplace( !! withReplace );
-
-        input.focus();
-        input.select();
-        search( true );
+        fb.open( !! withReplace );
     }
 
-    function close()
-    {
-        if( ! isOpen() ) return;
-
-        bar.hidden = true;
-        clearTimeout( typeT ); clearTimeout( editT );
-        matches = []; current = -1;
-        layer.textContent = '';
-        o.focus();                 // the last match stays selected, as in Word
-    }
-
-    function showReplace( on )
-    {
-        replRow.hidden = ! on;
-        toggle.setAttribute( 'aria-expanded', String( on ) );
-    }
+    function close() { fb.close(); }
 
     //---- finding -------------------------------------------------------------
 
     function find()
     {
-        const ed = o.editor(), q = input.value;
+        const ed = o.editor(), q = query;
         if( ! ed || ! q ) return [];
 
         let list = [];
@@ -142,7 +138,7 @@ export function createFindBar( o )
     // have changed since).
     function step( dir )
     {
-        if( ! input.value ) return;
+        if( ! query ) return;
 
         const was = matches[ current ];
         matches = find();
@@ -168,31 +164,31 @@ export function createFindBar( o )
         } );
     }
 
-    function replaceOne()
+    function replaceOne( text )
     {
         const ed = o.editor();
-        if( ! ed || ! o.ready() || ! input.value ) return;
+        if( ! ed || ! o.ready() || ! query ) return;
 
         matches = find();
         if( ! matches.length ) { current = -1; paint(); return; }
 
         const i = Math.max( 0, Math.min( current, matches.length - 1 ) );
-        if( ! putOver( ed, matches[ i ], repl.value ) ) { Ayni.toast( 'err', Ayni.t( 'write.actionFailed' ) ); return; }
+        if( ! putOver( ed, matches[ i ], text ) ) { Ayni.toast( 'err', Ayni.t( 'write.actionFailed' ) ); return; }
 
         // The next one is the match that now sits at the same index.
         matches = find();
         if( matches.length ) select( i ); else { current = -1; paint(); }
     }
 
-    function replaceAll()
+    function replaceAll( text )
     {
         const ed = o.editor();
-        if( ! ed || ! o.ready() || ! input.value ) return;
+        if( ! ed || ! o.ready() || ! query ) return;
 
         const list = find();
         let failed = 0;
 
-        for( let i = list.length - 1; i >= 0; i-- ) if( ! putOver( ed, list[ i ], repl.value ) ) failed++;
+        for( let i = list.length - 1; i >= 0; i-- ) if( ! putOver( ed, list[ i ], text ) ) failed++;
 
         // How many, and that Undo takes them back one at a time (quirks.js,
         // replaceAllOneStepPerMatch) - fifty Ctrl+Z are a surprise otherwise.
@@ -205,10 +201,7 @@ export function createFindBar( o )
 
     function paint()
     {
-        count.textContent = ! input.value ? ''
-                          : matches.length ? ( current + 1 > 0 ? current + 1 : '–' ) + ' / ' + matches.length
-                          : Ayni.t( 'write.find.noResults' );
-        bar.classList.toggle( 'is-empty', !! input.value && ! matches.length );
+        fb.count( current + 1, matches.length );      // "3 / 12", "– / 12", a red "0"
 
         layer.textContent = '';
         if( ! matches.length ) return;
@@ -251,64 +244,6 @@ export function createFindBar( o )
     }, { passive: true } );
 
     new ResizeObserver( function() { if( isOpen() ) paint(); } ).observe( document.getElementById( 'editorHost' ) );
-
-    //---- wiring --------------------------------------------------------------
-
-    input.addEventListener( 'input', function()
-    {
-        clearTimeout( typeT );
-        typeT = setTimeout( function() { search( true ); }, TYPE_MS );
-    } );
-
-    // Enter = next, Shift+Enter = previous, Escape = close. Ctrl+F / Ctrl+H in
-    // the bar itself switch the replace row, as in the document.
-    input.addEventListener( 'keydown', function( e ) { onKey( e, false ); } );
-    repl.addEventListener(  'keydown', function( e ) { onKey( e, true  ); } );
-
-    function onKey( e, inRepl )
-    {
-        const mod = ( e.ctrlKey || e.metaKey ) && ! e.altKey;
-
-        if( e.key === 'Escape' ) { e.preventDefault(); e.stopPropagation(); close(); return; }
-
-        if( e.key === 'Enter' )
-        {
-            e.preventDefault();
-            if( inRepl ) replaceOne(); else step( e.shiftKey ? -1 : 1 );
-            return;
-        }
-
-        if( mod && ! e.shiftKey && ( e.code === 'KeyF' || e.code === 'KeyH' ) )
-        {
-            e.preventDefault();
-            showReplace( e.code === 'KeyH' );
-            ( e.code === 'KeyH' ? repl : input ).focus();
-        }
-    }
-
-    // The bar's buttons never take the focus from the box the user typed in.
-    bar.addEventListener( 'mousedown', function( e ) { if( e.target.closest( 'button' ) ) e.preventDefault(); } );
-
-    document.getElementById( 'findPrevBtn'  ).addEventListener( 'click', function() { step( -1 ); } );
-    document.getElementById( 'findNextBtn'  ).addEventListener( 'click', function() { step( 1 ); } );
-    document.getElementById( 'findCloseBtn' ).addEventListener( 'click', close );
-    document.getElementById( 'replOneBtn'   ).addEventListener( 'click', replaceOne );
-    document.getElementById( 'replAllBtn'   ).addEventListener( 'click', replaceAll );
-
-    toggle.addEventListener( 'click', function()
-    {
-        const on = replRow.hidden;
-        showReplace( on );
-        ( on ? repl : input ).focus();
-    } );
-
-    caseBtn.addEventListener( 'click', function()
-    {
-        matchCase = ! matchCase;
-        caseBtn.setAttribute( 'aria-pressed', String( matchCase ) );
-        search( true );
-        input.focus();
-    } );
 
     return { open: open, close: close, isOpen: isOpen };
 }

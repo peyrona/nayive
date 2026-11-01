@@ -1,0 +1,74 @@
+/* Ayni library 0.1.0, menus family: menus, submenus, the menu bar, toolbars and their groups, tool groups and popups
+   with controls. Load it after ayni-base.css (the Panel) and ayni-buttons.css (tools are .btn). Behaviour:
+   ayni-menus.js. Rules: guidelines ch. 9. */
+
+/* ---------- Menus and the menu bar ---------- */
+[role="menubar"] { display: flex; gap: 2px; padding: 2px; background: var(--panel-head-bg); border: var(--panel-border); border-radius: var(--ctl-radius); }
+[role="menubar"] > button { font: inherit; color: var(--text); background: none; border: 0; border-radius: var(--radius-s); padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+[role="menubar"] > button:hover { background: color-mix(in srgb, var(--text) 9%, transparent); }
+[role="menubar"] > button[aria-expanded="true"] { background: color-mix(in srgb, var(--text) 16%, transparent); }
+.panel.menu { position: fixed; inset: auto; min-width: 200px; padding: 4px; gap: 0; }
+.panel.menu:not(:popover-open) { display: none; }
+/* RULE: a menu row is the tick column (only in a menu with check or radio items), the icon slot (only in a menu with
+   icons; kept empty on a row without one), the text, and the shortcut or the submenu arrow at the right. Rows are
+   compact with a mouse and 44 px high on touch. Under the pointer a row takes the same grey tint as a button; Accent
+   is only the keyboard's focus ring */
+.menu [role^="menuitem"] { font: inherit; font-size: .92rem; color: var(--text); text-align: left; background: none; border: 0;
+  border-radius: var(--radius-s); padding: 7px 10px; display: flex; align-items: center; gap: 10px; cursor: pointer;
+  white-space: nowrap; flex: none; min-width: 0; }
+.menu [role^="menuitem"] > .icon { --icon: 18px; flex: none; color: var(--text-dim); }
+.menu [role^="menuitem"] > .icon.none { width: 18px; height: 18px; }
+.menu [role^="menuitem"] > .tick { flex: none; width: 15px; display: inline-flex; color: var(--accent); visibility: hidden; }
+.menu [role^="menuitem"] > .tick .icon { --icon: 15px; }
+.menu [role^="menuitem"][aria-checked="true"] > .tick { visibility: visible; }
+.menu [role^="menuitem"] > .label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.menu [role^="menuitem"] > kbd { font: .78rem var(--font-mono); color: var(--text-dim); margin-left: auto; padding-left: 18px; flex: none; }
+.menu [role^="menuitem"][aria-haspopup="menu"]::after { content: "\203A"; margin-left: auto; padding-left: 18px; color: var(--text-dim); font-size: 1.1em; line-height: 1; }
+.menu [role^="menuitem"]:hover, .menu [role^="menuitem"][aria-expanded="true"] { background: color-mix(in srgb, var(--text) 9%, transparent); }
+.menu [role^="menuitem"]:active { background: color-mix(in srgb, var(--text) 14%, transparent); }
+.menu [role^="menuitem"]:focus { outline: none; }
+.menu [role^="menuitem"]:focus-visible { background: color-mix(in srgb, var(--text) 9%, transparent); outline: 2px solid var(--accent); outline-offset: -2px; }
+/* A danger item (Delete): its text and icon in the Danger colour */
+.menu [role^="menuitem"].danger, .menu [role^="menuitem"].danger > .icon { color: var(--danger); }
+/* RULE: a disabled item is faded and the arrow keys skip it; it still takes the pointer, so its tooltip says why */
+.menu [role^="menuitem"][aria-disabled="true"] { opacity: .42; cursor: default; }
+.menu [role^="menuitem"][aria-disabled="true"]:hover { background: none; }
+.menu [role="separator"] { height: 1px; border: 0; background: var(--line); margin: 4px 6px; flex: none; }
+/* A caption heads a group of items ("Sort by") */
+.menu .caption { padding: 6px 10px 2px; font-size: .75rem; font-weight: 600; color: var(--text-dim); flex: none; max-width: 18rem; }
+
+/* ---------- Toolbar ---------- */
+[role="toolbar"] { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 3px; background: var(--panel-head-bg); border: var(--panel-border); border-radius: var(--ctl-radius); }
+[role="toolbar"] .btn:not(.sm) { --btn: 30px; }
+[role="toolbar"].tall .btn:not(.sm) { --btn: 36px; }   /* an app's title row: 36 px buttons; a small one stays small */
+/* RULE: in a title row (a header, or a toolbar marked .tall) the toolbar sits plain on the row and keeps one line; tools that do not fit leave
+   by rank (Ayni.fitBar). A toolbar on its own (above a tree) is a tinted strip with a border */
+header [role="toolbar"], [role="toolbar"].tall { background: none; border: 0; border-radius: 0; padding: 0; flex-wrap: nowrap; min-width: 0; }
+/* A tool that did not fit its row (Ayni.fitBar): it is listed in the More menu instead */
+.fit-out { display: none !important; }
+/* RULE: tools come in groups (.tb-group). A group with nothing showing takes no room, and the line between two groups
+   is drawn only when a group before it shows. A folded search (display none, never [hidden]) is nothing showing */
+.tb-group { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+.tb-group[hidden], .tb-group:not(:has(> :not([hidden]):not(.fit-out):not(.search-field.fold:not(.is-open))))  { display: none; }
+[role="toolbar"] > .tb-group:not([hidden]):has(> :not([hidden]):not(.fit-out):not(.search-field.fold:not(.is-open))) ~ .tb-group::before {
+  content: ""; flex: none; align-self: stretch; width: 1px; margin: 6px 4px; background: var(--line); }
+
+/* ---------- Popups ---------- */
+.panel.popup { position: fixed; inset: auto; }
+.panel.popup:not(:popover-open) { display: none; }
+.panel.popup.controls { width: min(300px, calc(100vw - 16px)); max-height: min(320px, calc(100dvh - 16px)); padding: 12px; gap: 12px; display: flex; flex-direction: column; }
+.panel.popup.controls:not(:popover-open) { display: none; }
+.panel.popup.controls h4 { margin: 0; font-size: .72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); }
+/* Tool group: the real tools of a group, in a row under the one button that stands for them */
+.panel.popup.tools { padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.panel.popup.tools:not(:popover-open) { display: none; }
+
+/* RULE: menus and popups scroll, and are never larger than the screen */
+.panel.menu, .panel.popup { overflow: auto; max-height: calc(100dvh - 16px); max-width: calc(100vw - 16px); }
+
+/* ---------- Touch ---------- */
+html.touch [role="toolbar"], html.touch [role="menubar"] { gap: 8px; }
+html.touch [role="menubar"] > button { min-width: var(--touch); min-height: var(--touch); }
+html.touch .menu [role^="menuitem"] { min-height: var(--touch); padding: 8px 12px; font-size: .95rem; }
+/* Shortcuts mean nothing without a keyboard */
+html.touch .menu [role^="menuitem"] > kbd { display: none; }

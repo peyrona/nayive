@@ -162,31 +162,31 @@ try
 
     // Edit through the row's right-click menu (no row ⋮ since 2026-10-05).
     await c.evaluate( "( () => { const r = document.querySelector('.bm-item').getBoundingClientRect(); document.querySelector('.bm-item .bm-title').dispatchEvent( new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 60, clientY: r.top + 10 }) ); } )(); true" );
-    ok( await c.evaluate( "!document.querySelector('.item-menu').hidden && !!document.querySelector('.item-menu [data-act=edit]')" ), "right-click opens the item menu" );
-    ok( await c.evaluate( "document.querySelector('.bm-item').classList.contains('is-selected') && !document.getElementById('selActions').hidden" ), "…on that row, picked (the header group shows)" );
-    await c.evaluate( "document.querySelector('.item-menu [data-act=edit]').click(); document.getElementById('bmFav').checked = true; document.getElementById('bmSaveBtn').click(); true" );
+    ok( await c.evaluate( "!( ! document.querySelector('#ayni-menu')?.matches(':popover-open') ) && !!document.querySelector('#ayni-menu [data-act=edit]')" ), "right-click opens the item menu" );
+    ok( await c.evaluate( "document.querySelector('.bm-item').getAttribute('aria-selected') === 'true' && !document.getElementById('selActions').hidden" ), "…on that row, picked (the header group shows)" );
+    await c.evaluate( "document.querySelector('#ayni-menu [data-act=edit]').click(); document.getElementById('bmFav').checked = true; document.getElementById('bmSaveBtn').click(); true" );
     ok( await c.evaluate( "allBookmarks()[0].favorite === true" ), "edit: favourite set" );
 
     console.log( "FOLDERS / MOVE / CYCLE" );
     await c.evaluate( "document.getElementById('newFolderBtn').click(); document.getElementById('folderName').value = 'Dev'; document.getElementById('folderSaveBtn').click(); true" );
     const dev = await c.evaluate( "Object.values( data.nodes ).find( n => n.title === 'Dev' ).id" );
     // Subfolder from the tree row's right-click menu.
-    await c.evaluate( `document.querySelector('.tree-row[data-id="${dev}"]').dispatchEvent( new MouseEvent('contextmenu', { bubbles: true, clientX: 60, clientY: 120 }) ); true` );
-    await c.evaluate( "document.querySelector('.item-menu [data-act=subfolder]').click(); document.getElementById('folderName').value = 'Frontend'; document.getElementById('folderSaveBtn').click(); true" );
+    await c.evaluate( `document.querySelector('[role=treeitem][data-id="${dev}"] > .ti').dispatchEvent( new MouseEvent('contextmenu', { bubbles: true, clientX: 60, clientY: 120 }) ); true` );
+    await c.evaluate( "document.querySelector('#ayni-menu [data-act=subfolder]').click(); document.getElementById('folderName').value = 'Frontend'; document.getElementById('folderSaveBtn').click(); true" );
     const fe = await c.evaluate( "Object.values( data.nodes ).find( n => n.title === 'Frontend' ).id" );
     ok( await c.evaluate( `node('${fe}').parentId === '${dev}'` ), "tree menu: new subfolder" );
-    ok( await c.evaluate( `!!document.querySelector('.tree-row[data-id="${fe}"]')` ), "tree shows the subfolder (parent opened)" );
+    ok( await c.evaluate( `!!document.querySelector('[role=treeitem][data-id="${fe}"]')` ), "tree shows the subfolder (parent opened)" );
 
     const bid = bm.id;
-    // "Move to…" is the shared tree in a dialog (NayiveUI.pickNode).
+    // "Move to…" is the shared tree in a dialog (Ayni.pickNode).
     await c.evaluate( `openMoveSheet( ['${bid}'] ); true` );
-    ok( await waitFor( c, "!!document.querySelector('dialog.panel[open] .pick-tree .tree-row')" ), "move dialog shows the folder tree" );
-    await c.evaluate( `( () => { const P = 'dialog.panel[open] .pick-tree '; const d = document.querySelector( P + '.tree-row[data-id="${dev}"]' ); if( d.getAttribute('aria-expanded') !== 'true' ) d.querySelector('[data-twisty]').click(); document.querySelector( P + '.tree-row[data-id="${fe}"]' ).click(); document.querySelector('dialog.panel[open] .pick-ok').click(); } )(); true` );
+    ok( await waitFor( c, "!!document.querySelector('dialog.panel[open] .pick-node [role=treeitem]')" ), "move dialog shows the folder tree" );
+    await c.evaluate( `( () => { const P = 'dialog.panel[open] .pick-node '; const d = document.querySelector( P + '[role=treeitem][data-id="${dev}"]' ); if( d.getAttribute('aria-expanded') !== 'true' ) d.querySelector('.tw').click(); document.querySelector( P + '[role=treeitem][data-id="${fe}"]' ).firstElementChild.click(); document.querySelector('dialog.panel[open] .pick-ok').click(); } )(); true` );
     ok( await waitFor( c, `node('${bid}').parentId === '${fe}'` ), "Move to… moves the bookmark" );
     await c.evaluate( `openMoveSheet( ['${dev}'] ); true` );
-    await waitFor( c, "!!document.querySelector('dialog.panel[open] .pick-tree .tree-row')" );
-    await c.evaluate( `( () => { const d = document.querySelector('dialog.panel[open] .pick-tree .tree-row[data-id="${dev}"]'); if( d.getAttribute('aria-expanded') !== 'true' ) d.querySelector('[data-twisty]').click(); } )(); true` );
-    ok( await c.evaluate( `[ '${dev}', '${fe}' ].every( id => document.querySelector('dialog.panel[open] .pick-tree .tree-row[data-id="' + id + '"]').classList.contains('is-off') ) && !document.querySelector('dialog.panel[open] .pick-tree .tree-row[data-id="root"]').classList.contains('is-off')` ), "move dialog greys the folder and its subfolders" );
+    await waitFor( c, "!!document.querySelector('dialog.panel[open] .pick-node [role=treeitem]')" );
+    await c.evaluate( `( () => { const d = document.querySelector('dialog.panel[open] .pick-node [role=treeitem][data-id="${dev}"]'); if( d.getAttribute('aria-expanded') !== 'true' ) d.querySelector('.tw').click(); } )(); true` );
+    ok( await c.evaluate( `[ '${dev}', '${fe}' ].every( id => document.querySelector('dialog.panel[open] .pick-node [role=treeitem][data-id="' + id + '"]').getAttribute('aria-disabled') === 'true' ) && document.querySelector('dialog.panel[open] .pick-node [role=treeitem][data-id="root"]').getAttribute('aria-disabled') !== 'true'` ), "move dialog greys the folder and its subfolders" );
     await c.evaluate( "document.querySelector('dialog.panel[open] .pick-cancel').click(); true" );
 
     // Drag Dev onto its own subfolder: refused with a toast, nothing moves.
@@ -196,12 +196,12 @@ try
         const dt = new DataTransfer();
         s.dispatchEvent( new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }) );
         d.dispatchEvent( new DragEvent('dragover',  { bubbles: true, cancelable: true, dataTransfer: dt }) );
-        const lit = d.classList.contains('drop-target');
+        const lit = d.classList.contains('drop-in');
         d.dispatchEvent( new DragEvent('drop',      { bubbles: true, cancelable: true, dataTransfer: dt }) );
         s.dispatchEvent( new DragEvent('dragend',   { bubbles: true, dataTransfer: dt }) );
         return lit; } )()`;
-    ok( await c.evaluate( `document.querySelector('.tree-row[data-id="${dev}"]').draggable === true` ), "tree rows are draggable with a mouse" );
-    const litBad = await c.evaluate( dragJs( `.tree-row[data-id="${dev}"]`, `.tree-row[data-id="${fe}"]` ) );
+    ok( await c.evaluate( `document.querySelector('[role=treeitem][data-id="${dev}"] > .ti').draggable === true` ), "tree rows are draggable with a mouse" );
+    const litBad = await c.evaluate( dragJs( `[role=treeitem][data-id="${dev}"] > .ti`, `[role=treeitem][data-id="${fe}"] > .ti` ) );
     ok( ! litBad && await c.evaluate( `node('${dev}').parentId === ROOT && node('${fe}').parentId === '${dev}'` ), "drag into own subfolder: nothing moves" );
     ok( await c.evaluate( "window.__toasts.some( t => /cannot go inside itself/.test( t ) )" ), "…and an error toast", await c.evaluate( "window.__toasts" ) );
 
@@ -224,11 +224,11 @@ try
         const dt = new DataTransfer();
         s.dispatchEvent( new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }) );
         d.dispatchEvent( new DragEvent('dragover',  { bubbles: true, cancelable: true, dataTransfer: dt, clientX: x, clientY: y }) );
-        const marks = [ 'drop-before', 'drop-after', 'drop-target' ].filter( k => d.classList.contains( k ) );
+        const marks = [ 'drop-before', 'drop-after', 'drop-in' ].filter( k => d.classList.contains( k ) );
         d.dispatchEvent( new DragEvent('drop',      { bubbles: true, cancelable: true, dataTransfer: dt, clientX: x, clientY: y }) );
         s.dispatchEvent( new DragEvent('dragend',   { bubbles: true, dataTransfer: dt }) );
         return marks; } )()`;
-    const row = id => `.tree-row[data-id="${id}"]`;
+    const row = id => `[role=treeitem][data-id="${id}"] > .ti`;   // the row
     await c.evaluate( "goFolder(ROOT); [ 'TA', 'TB', 'TC' ].forEach( function( n ) { makeFolder( n, ROOT ); } ); save(); render(); true" );
     const T3 = JSON.parse( await c.evaluate( "JSON.stringify( Object.fromEntries( [ 'TA', 'TB', 'TC' ].map( n => [ n, Object.values( data.nodes ).find( x => x.title === n ).id ] ) ) )" ) );
     const order = id => c.evaluate( `node('${id}').children.map( node ).filter( n => /^T[ABC]$/.test( n.title ) ).map( n => n.title ).join()` );
@@ -238,7 +238,7 @@ try
     marks = await c.evaluate( treeDrag( row( T3.TC ), row( T3.TB ), "after" ) );
     ok( marks.join() === "drop-after" && await order( "root" ) === "TA,TB,TC", "bottom edge: after it (a line below)", { marks, order: await order( "root" ) } );
     marks = await c.evaluate( treeDrag( row( T3.TA ), row( T3.TB ), "inside" ) );
-    ok( marks.join() === "drop-target" && await c.evaluate( `node('${T3.TA}').parentId === '${T3.TB}'` ), "middle: inside it, as before" );
+    ok( marks.join() === "drop-in" && await c.evaluate( `node('${T3.TA}').parentId === '${T3.TB}'` ), "middle: inside it, as before" );
     await c.evaluate( `toggleOpen( '${T3.TB}', true ); renderTree(); true` );
     await c.evaluate( treeDrag( row( T3.TC ), row( T3.TB ), "after" ) );
     ok( await order( T3.TB ) === "TC,TA", "bottom edge of an OPEN folder: its first place inside", await order( T3.TB ) );
@@ -251,7 +251,7 @@ try
     ok( await order( T3.TB ) === "TC,TA" && await c.evaluate( "window.__toasts.length === 0" ), "onto its own edge: nothing happens, no toast" );
     await c.evaluate( `goFolder('${dev}'); true` );
     marks = await c.evaluate( treeDrag( `.bm-item[data-id="${bid}"]`, row( T3.TB ), "before" ) );
-    ok( marks.join() === "drop-target" && await c.evaluate( `node('${bid}').parentId === '${T3.TB}'` ), "a bookmark card on a row's edge goes inside (only folders reorder)" );
+    ok( marks.join() === "drop-in" && await c.evaluate( `node('${bid}').parentId === '${T3.TB}'` ), "a bookmark card on a row's edge goes inside (only folders reorder)" );
     await c.evaluate( `moveNodes( [ '${bid}' ], '${dev}' ); save(); render(); true` );
     await flushed( c );
     const onDisk = JSON.parse( fs.readFileSync( FILE, "utf8" ) );
@@ -280,16 +280,18 @@ try
                  t( 'Müller', 'Mueller' ), t( 'muller', 'Müller' ), ! t( 'fue', 'fumar' ) ].join();
     } )()` );
     ok( langs === "true,true,true,true,true,true,true", "ß, œ, ’ and German umlauts (ü = ue)", langs );
-    ok( await c.evaluate( "document.querySelector('.search-fold').classList.contains('is-open') && !!document.querySelector('.search-fold .search-shut')" ), "while searching: the field is open, with its ×" );
+    ok( await c.evaluate( "document.querySelector('.search-field.fold').classList.contains('is-open') && !!document.querySelector('.search-field.fold [data-clear]')" ), "while searching: the field is open, with its ×" );
     await c.evaluate( "setQuery('zzzqqq'); true" );
     ok( await c.evaluate( "!document.getElementById('emptyHint').hidden && !document.querySelector('#emptyHint [data-empty]')" ), "no results: no big button" );
-    await c.evaluate( "document.querySelector('.search-fold .search-shut').click(); true" );
-    ok( await c.evaluate( "query === '' && !document.querySelector('.search-fold').classList.contains('is-open')" ), "× clears it and folds the field" );
+    await c.evaluate( "document.querySelector('.search-field.fold [data-clear]').click(); true" );
+    ok( await c.evaluate( "query === '' && !document.querySelector('.search-field.fold').classList.contains('is-open')" ), "× clears it and folds the field" );
     await c.evaluate( "setQuery('EXÁMPLE'); true" );
-    await c.evaluate( "document.getElementById('searchInput').focus(); document.dispatchEvent( new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }) ); document.getElementById('searchInput').dispatchEvent( new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }) ); true" );
-    ok( await c.evaluate( "query === ''" ), "Esc clears the search" );
-    await c.evaluate( "document.activeElement.blur(); document.dispatchEvent( new KeyboardEvent('keydown', { key: '/', ctrlKey: true, bubbles: true }) ); true" );
-    ok( await c.evaluate( "document.activeElement.id === 'searchInput'" ), "Ctrl+/ focuses the search" );
+    await c.evaluate( "document.getElementById('searchInput').focus(); document.getElementById('searchInput').dispatchEvent( new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }) ); true" );
+    ok( await waitFor( c, "query === '' && document.querySelector('.search-field.fold').classList.contains('is-open')", 3000 ), "Esc clears the search (the field stays open)" );
+    await c.evaluate( "document.getElementById('searchInput').dispatchEvent( new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }) ); true" );
+    ok( await c.evaluate( "!document.querySelector('.search-field.fold').classList.contains('is-open')" ), "…a second Esc folds it" );
+    await c.evaluate( "document.activeElement.blur(); document.dispatchEvent( new KeyboardEvent('keydown', { key: 'f', code: 'KeyF', ctrlKey: true, bubbles: true, cancelable: true }) ); true" );
+    ok( await c.evaluate( "document.activeElement.id === 'searchInput'" ), "Ctrl+F opens and focuses the search" );
 
     console.log( "DELETE + UNDO" );
     await c.evaluate( `window.__toasts = []; deleteNodes( ['${bid}'] ); true` );
@@ -397,20 +399,20 @@ try
     await c.evaluate( "goFolder(ROOT); browse.clear(); true" );
     const card = i => `document.querySelectorAll('#items .bm-item')[${i}]`;
     await c.evaluate( `${card(0)}.click(); ${card(2)}.dispatchEvent( new MouseEvent('click', { bubbles: true, ctrlKey: true }) ); true` );
-    ok( await c.evaluate( "browse.ids().length === 2 && document.querySelectorAll('#items .bm-item.is-selected').length === 2" ), "click + Ctrl+click pick two" );
-    ok( await c.evaluate( "!document.getElementById('selActions').hidden && /2/.test( document.querySelector('#selActions .sel-count').textContent ) && !document.getElementById('filterRow').hidden" ), "the header group shows the count; the pills stay" );
+    ok( await c.evaluate( "browse.ids().length === 2 && document.querySelectorAll('#items .bm-item[aria-selected=true]').length === 2" ), "click + Ctrl+click pick two" );
+    ok( await c.evaluate( "!document.getElementById('selActions').hidden && /2/.test( document.querySelector('#selActions .pick-count').textContent ) && !document.getElementById('filterRow').hidden" ), "the header group shows the count; the pills stay" );
     await c.evaluate( `${card(0)}.click(); ${card(3)}.dispatchEvent( new MouseEvent('click', { bubbles: true, shiftKey: true }) ); true` );
     ok( await c.evaluate( "browse.ids().length === 4" ), "Shift+click picks a range" );
-    await c.evaluate( "document.querySelector('#selActions [data-sel=all]').click(); true" );
+    await c.evaluate( "document.querySelector('#selActions [data-pick=all]').click(); true" );
     ok( await c.evaluate( "browse.ids().length === document.querySelectorAll('#items .bm-item').length && browse.ids().length > 0" ), "Select all" );
     // A closed dialog gives the focus back to where it was (the search box): drop it first.
     await c.evaluate( "document.activeElement && document.activeElement.blur(); document.dispatchEvent( new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }) ); true" );
     ok( await c.evaluate( "!browse.ids().length && document.getElementById('selActions').hidden" ), "Esc clears the pick" );
     await c.evaluate( `${card(0)}.dispatchEvent( new MouseEvent('contextmenu', { bubbles: true, clientX: 300, clientY: 300 }) ); true` );
-    ok( await c.evaluate( "browse.ids().length === 1 && !document.querySelector('.item-menu').hidden && !!document.querySelector('.item-menu [data-act=delete]')" ), "right-click picks that card and opens the same menu" );
-    await c.evaluate( "NayiveUI.closeMenu(); document.getElementById('items').dispatchEvent( new MouseEvent('contextmenu', { bubbles: true, clientX: 300, clientY: 300 }) ); true" );
-    ok( await c.evaluate( "!document.querySelector('.item-menu').hidden && !!document.querySelector('.item-menu [data-act=add]') && !!document.querySelector('.item-menu [data-act=selectAll]')" ), "right-click on empty space: New bookmark, New folder, Select all" );
-    await c.evaluate( "NayiveUI.closeMenu(); browse.clear(); true" );
+    ok( await c.evaluate( "browse.ids().length === 1 && !( ! document.querySelector('#ayni-menu')?.matches(':popover-open') ) && !!document.querySelector('#ayni-menu [data-act=delete]')" ), "right-click picks that card and opens the same menu" );
+    await c.evaluate( "document.querySelectorAll('.panel.menu:popover-open').forEach( m => m.hidePopover() ); document.getElementById('items').dispatchEvent( new MouseEvent('contextmenu', { bubbles: true, clientX: 300, clientY: 300 }) ); true" );
+    ok( await c.evaluate( "!( ! document.querySelector('#ayni-menu')?.matches(':popover-open') ) && !!document.querySelector('#ayni-menu [data-act=add]') && !!document.querySelector('#ayni-menu [data-act=selectAll]')" ), "right-click on empty space: New bookmark, New folder, Select all" );
+    await c.evaluate( "document.querySelectorAll('.panel.menu:popover-open').forEach( m => m.hidePopover() ); browse.clear(); true" );
 
     console.log( "VIEWS / FILTERS / LAYOUT" );
     await c.evaluate( "document.querySelector('#filterRow [data-filter=fav]').click(); true" );
@@ -499,7 +501,7 @@ try
 
     const tk = await c.evaluate( "( () => { const f = makeFolder( 'KeyA', ROOT ); makeFolder( 'KeyB', f.id ); toggleOpen( f.id, false ); render(); focusTreeRow( f.id ); const key = k => document.activeElement.dispatchEvent( new KeyboardEvent('keydown', { key: k, bubbles: true }) ); key( 'ArrowRight' ); const opened = ui.open.includes( f.id ); key( 'ArrowRight' ); const inKid = node( document.activeElement.dataset.id ).title === 'KeyB'; key( 'ArrowLeft' ); const up = document.activeElement.dataset.id === f.id; key( 'ArrowLeft' ); const closed = ! ui.open.includes( f.id ); removeNodes( [ f.id ] ); save(); render(); return [ opened, inKid, up, closed ].join(); } )()" );
     ok( tk === "true,true,true,true", "#25 the tree answers the arrow keys", tk );
-    ok( await c.evaluate( "parseFloat( getComputedStyle( document.querySelector('.tree-row .twisty') ).width ) >= 24" ), "#25 the twisty is a 24 px target" );
+    ok( await c.evaluate( "parseFloat( getComputedStyle( document.querySelector('[role=treeitem] .tw') ).width ) >= 24" ), "#25 the twisty is a 24 px target" );
 
     await flushed( c );
     await c.evaluate( "ui.open.push( 'f_gone' ); saveUi(); true" );
@@ -606,7 +608,7 @@ try
     await openApp( c );
     await c.evaluate( "document.getElementById('moreBtn').click(); true" );
     await shot( c, "07-phone-menu-light" );
-    ok( await c.evaluate( "!! document.querySelector('.item-menu:not([hidden]) [data-act=\"mode:list\"]')" ), "phone: grid/list in the ⋮" );
+    ok( await c.evaluate( "!! document.querySelector('#ayni-menu:popover-open [data-act=\"mode:list\"]')" ), "phone: grid/list in the ⋮" );
     await c.evaluate( "document.body.click(); openBookmarkSheet( allBookmarks()[0].id ); true" );
     await shot( c, "08-phone-edit-sheet-light" );
     await c.evaluate( "document.getElementById( 'bmBackdrop' ).close(); true" );
@@ -641,7 +643,7 @@ try
     await o.send( "Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [ { x: r.x, y: r.y } ] } );
     await sleep( 700 );
     await o.send( "Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] } );
-    ok( await o.evaluate( "document.querySelector('.bm-item').classList.contains('is-selected') && document.getElementById('items').classList.contains('is-picking')" ), "touch long-press starts picking (ticks on)" );
+    ok( await o.evaluate( "document.querySelector('.bm-item').getAttribute('aria-selected') === 'true' && document.getElementById('items').classList.contains('picking')" ), "touch long-press starts picking (ticks on)" );
     ok( await o.evaluate( "document.querySelector('.bm-item').draggable === false" ), "no HTML5 drag on touch" );
     await o.evaluate( "browse.clear(); true" );
     const online = await o.evaluate( counts );

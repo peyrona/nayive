@@ -1,13 +1,13 @@
 /*
  * input.js - Bookmarks: every click, key and drag. The header and its "⋮"
- * (the shared NayiveUI.fitBar: what does not fit, then Bookmarks' own), the tree, the cards, search, the sheets' buttons, drag and drop and the
+ * (the shared Ayni.fitBar: what does not fit, then Bookmarks' own), the tree, the cards, search, the sheets' buttons, drag and drop and the
  * pane resizer. Picking, the item menu, the selection's header buttons and
- * the list keys are the shared item browser (shared/browser.js): this file
+ * the list keys are the shared item list (Ayni.list): this file
  * only gives it the action list.
  */
 "use strict";
 
-let browse      = null;   // the shared item browser on #items
+let browse      = null;   // the shared item list on #items
 let treeView    = null;   // the shared tree in #tree
 let searchTimer = null;
 
@@ -22,7 +22,6 @@ function wireAll()
     wireSheets();
     wireDragDrop();
     wireResizer();
-    wireKeys();
 
     window.addEventListener( 'resize', function() { renderCrumbs(); } );
 }
@@ -44,20 +43,13 @@ function wireHeader()
 
 function setMode( m ) { ui.mode = m; saveUi(); render(); }
 
-function focusSearch()
-{
-    $( 'listPane' ).scrollTop = 0;
-    searchFold.open();                  // unfolds and focuses it
-    $( 'searchInput' ).select();
-}
-
-// The "⋮" (NayiveUI.fitBar, wireItems): after the buttons that did not fit,
+// The "⋮" (Ayni.fitBar, wireItems): after the buttons that did not fit,
 // Import, Export, Find duplicates, the bookmarklet, the sort order - and on
 // a phone the grid / list switch, which leaves the header there.
 const SORTS = [ [ 'saved', 'bookmarks.sortSaved' ], [ 'az', 'bookmarks.sortAz' ], [ 'za', 'bookmarks.sortZa' ],
                 [ 'new', 'bookmarks.sortNew' ], [ 'old', 'bookmarks.sortOld' ] ];
 
-// Rows in the NayiveUI.menuAt format, built anew each time the ⋮ opens (so
+// Rows in the Ayni.menuAt format, built anew each time the ⋮ opens (so
 // the ticks follow the current sort and view).
 function topMenuItems()
 {
@@ -85,7 +77,7 @@ function topMenuItems()
 }
 
 //------------------------------------------------------------------------//
-// TREE  -  the shared tree (NayiveUI.tree): the arrow opens and closes, a
+// TREE  -  the shared tree (Ayni.tree, nav): the arrow opens and closes, a
 // click opens the folder, right-click / long-press give the folder the
 // same menu it has as a card, keys as in a file tree. Folders drag; the top
 // or bottom edge of a row puts a folder before / after it (a line shows
@@ -93,15 +85,15 @@ function topMenuItems()
 
 function wireTree()
 {
-    treeView = NayiveUI.tree( {
-        host:    $( 'tree' ),
-        pane:    $( 'treePane' ),
-        roots:   treeRoots,
+    treeView = Ayni.tree( $( 'tree' ), {
+        nav:     true,
+        sheet:   $( 'treePane' ),
+        items:   treeRoots,
         isOpen:  function( id ) { return ui.open.indexOf( id ) >= 0; },
         setOpen: function( id, v ) { toggleOpen( id, v ); },
         current: function() { return filter === 'all' && ! query ? curFolder : null; },
         go:      function( id ) { goFolder( id ); },
-        menu:    function( id, x, y, anchor ) { NayiveUI.menuAt( x, y, browse.items( [ id ] ), { anchor: anchor } ); },
+        menu:    function( id, x, y, anchor ) { Ayni.menuAt( browse.items( [ id ] ), { x: x, y: y, anchor: anchor } ); },
         keys:    true,                          // F2, Del... on the folder, as its menu
         drag:    function( id ) { return [ id ]; },
         drop:    { can: treeCan, drop: dropInto }
@@ -119,7 +111,7 @@ function wireTree()
 function focusTreeRow( id ) { treeView.focus( id ); }
 
 //------------------------------------------------------------------------//
-// ITEMS  -  the shared item browser: a click picks, a double-click (a tap)
+// ITEMS  -  the shared item list: a click picks, a double-click (a tap)
 // opens the link or goes into the folder. A tag chip searches that tag.
 // Every action, once: the header group (what does not fit goes into the
 // header's ⋮), the menu (right-click, long-press) and the keys read this one
@@ -170,10 +162,10 @@ function wireItems()
 
     // The header keeps to one row: what does not fit goes into its ⋮, above
     // Bookmarks' own rows.
-    NayiveUI.fitBar( document.querySelector( '.topbar' ), { btn: '#moreBtn', more: topMenuItems } );
+    Ayni.fitBar( document.querySelector( '.topbar' ), { btn: '#moreBtn', more: topMenuItems } );
 
-    browse = NayiveUI.browser( {
-        list:    items,
+    browse = Ayni.list( items, {
+        main:    true,
         row:     '.bm-item',
         bar:     $( 'selActions' ),
         actions: actionList(),
@@ -182,7 +174,6 @@ function wireItems()
         open:    openItem,
         openMiddle: function( id ) { if( ! isFolder( node( id ) ) ) openLink( id ); },
         grid:    function() { return ui.mode !== 'list'; },
-        search:  focusSearch,
         drag:    { text: function( ids ) { const b = node( ids[ 0 ] ); return b ? ( b.url || b.title ) : ''; } }
     } );
 
@@ -258,8 +249,8 @@ function setQuery( q, tag )
     $( 'listPane' ).scrollTop = 0;
 }
 
-// The magnifier unfolds the field (the shared fold); its × and Escape clear
-// the search and fold it away.
+// The magnifier unfolds the field (Ayni.searchField); its × and Escape clear
+// the search and fold it away. Ctrl+F (Ayni's) opens it from anywhere.
 let searchFold = null;
 
 function wireSearch()
@@ -270,23 +261,7 @@ function wireSearch()
         clearTimeout( searchTimer );
         searchTimer = setTimeout( function() { query = input.value.trim(); chipTag = null; render(); }, 90 );
     } );
-    searchFold = NayiveUI.searchFold( { box: input.parentElement, input: input, toggle: $( 'searchBtn' ),
-                                        onClose: function() { clearTimeout( searchTimer ); setQuery( '' ); } } );
-}
-
-//------------------------------------------------------------------------//
-// KEYS  -  the list's own keys are the browser's (shared/browser.js). Here:
-// Ctrl+/ (Cmd+/) goes to the search box too; Esc clears the search when
-// nothing is picked and nothing else is open.
-
-function wireKeys()
-{
-    document.addEventListener( 'keydown', function( e )
-    {
-        if( ( e.ctrlKey || e.metaKey ) && e.key === '/' ) { e.preventDefault(); focusSearch(); return; }
-        if( e.key !== 'Escape' || e.defaultPrevented || document.querySelector( 'dialog.panel[open]' ) || NayiveUI.menuOpen() ) return;
-        if( query ) setQuery( '' );
-    } );
+    searchFold = Ayni.searchField( input.parentElement, { onClose: function() { clearTimeout( searchTimer ); setQuery( '' ); } } );
 }
 
 //------------------------------------------------------------------------//
@@ -364,7 +339,7 @@ function enterSubmits( backId, fn )
 // inside.
 function treeZone( row, e, ids )
 {
-    if( ! row.classList.contains( 'tree-row' ) || row.dataset.id === ROOT ) return 'inside';
+    if( ! row.classList.contains( 'ti' ) || rowId( row ) === ROOT ) return 'inside';
     if( ! ids.every( function( id ) { return isFolder( node( id ) ); } ) ) return 'inside';
     const r = row.getBoundingClientRect(), y = e.clientY - r.top;
     return y < r.height * 0.3 ? 'before' : y > r.height * 0.7 ? 'after' : 'inside';
@@ -387,12 +362,15 @@ function dropInto( ids, id, zone )
     else if( ids.indexOf( id ) < 0 ) doPlace( ids, id, zone );       // onto its own edge: nothing to do
 }
 
-const DROP_SEL = '.tree-row, .bm-item.is-folder, .crumb-seg';
+const DROP_SEL = '#tree .ti, .bm-item.is-folder, .crumb-seg';
+
+// The id of a drop target: a tree row (.ti) keeps it on its item.
+function rowId( el ) { return el.dataset.id || el.parentElement.dataset.id; }
 
 function wireDragDrop()
 {
     // Folder cards and crumbs take dropped items as the tree does.
-    NayiveUI.dropZone( $( 'listPane' ), {
+    Ayni.dropZone( $( 'listPane' ), {
         sel: '.bm-item.is-folder, .crumb-seg', target: function( el ) { return el.dataset.id; },
         can: treeCan, drop: dropInto
     } );
@@ -400,28 +378,28 @@ function wireDragDrop()
     // A link from outside the page: mark the folder under it, then the sheet.
     const marks = function( keep )
     {
-        document.querySelectorAll( '.drop-target' ).forEach( function( el ) { if( el !== keep ) el.classList.remove( 'drop-target' ); } );
+        document.querySelectorAll( '.drop-in' ).forEach( function( el ) { if( el !== keep ) el.classList.remove( 'drop-in' ); } );
     };
-    document.addEventListener( 'dragleave', function( e ) { if( ! NayiveUI.dragIds() && ! e.relatedTarget ) marks( null ); } );
+    document.addEventListener( 'dragleave', function( e ) { if( ! Ayni.dragIds() && ! e.relatedTarget ) marks( null ); } );
     document.addEventListener( 'dragover', function( e )
     {
-        if( NayiveUI.dragIds() || ! linkDrag( e ) ) return;
+        if( Ayni.dragIds() || ! linkDrag( e ) ) return;
         const f = e.target.closest && e.target.closest( DROP_SEL );
         marks( f );
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
-        if( f && isFolder( node( f.dataset.id ) ) ) f.classList.add( 'drop-target' );
+        if( f && isFolder( node( rowId( f ) ) ) ) f.classList.add( 'drop-in' );
     } );
     document.addEventListener( 'drop', function( e )
     {
-        if( NayiveUI.dragIds() || ! linkDrag( e ) ) return;
+        if( Ayni.dragIds() || ! linkDrag( e ) ) return;
         e.preventDefault();
         marks( null );
         const f = e.target.closest && e.target.closest( DROP_SEL );
         const link = droppedLink( e.dataTransfer );
         if( link && ! document.querySelector( 'dialog.panel[open]' ) )
             openBookmarkSheet( null, { url: link.url, title: link.title,
-                                       folder: f && isFolder( node( f.dataset.id ) ) ? f.dataset.id : null } );
+                                       folder: f && isFolder( node( rowId( f ) ) ) ? rowId( f ) : null } );
     } );
 }
 

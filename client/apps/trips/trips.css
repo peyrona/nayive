@@ -306,8 +306,7 @@ input:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ---- "Que hay aqui" (discover.js) --------------------------------------- */
 /* The category ticks. Two columns where there is room, one on a phone. Each row
-   is a plain .share-add label from shared/app.css, so the tick and its spacing
-   look like every other tick in Nayive - only the grid is local. They are the
+   is an Ayni check box row (.choice) - only the grid is local. They are the
    dialog's content, not a footnote, so they keep the full text colour. */
 .disc-grid
 {
@@ -322,7 +321,7 @@ input:disabled { opacity: 0.5; cursor: not-allowed; }
     .disc-grid { grid-template-columns: 1fr 1fr; }
 }
 
-.disc-item { margin: 0; padding: 6px 2px; color: var(--text); }
+.disc-item { margin: 0; padding: 6px 2px; font-size: 0.86rem; color: var(--text); }   /* an Ayni .choice */
 
 /* ---- Trip -> PDF (print) ------------------------------------------------ */
 /* #printRoot is filled by exportTripPdf() just before window.print(), then

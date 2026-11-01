@@ -122,7 +122,7 @@
     async function pickMatching()
     {
         var days = +E.$( "pickOlder" ).value, seen = E.$( "pickSeen" ).value;
-        var from = NayiveUI.matcher( E.$( "pickFrom" ).value ), subj = NayiveUI.matcher( E.$( "pickSubject" ).value );
+        var from = Ayni.matcher( E.$( "pickFrom" ).value ), subj = Ayni.matcher( E.$( "pickSubject" ).value );
         var label = E.$( "pickLabel" ).value, attach = E.$( "pickAttach" ).checked, starred = E.$( "pickStarred" ).checked;
         var before = days ? Date.now() - days * 86400000 : 0;
         document.getElementById( "pickSheet" ).close();

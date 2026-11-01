@@ -107,8 +107,8 @@ try
     ok( await openMail( c ), "eMail opens with the account's Inbox" );
     await shot( c, "01-inbox" );
     // the tree: each tray's badge is how many are not read, its tooltip says that and the total
-    const trays = await c.evaluate( `[...document.querySelectorAll('#tree .tree-row')].filter( r => ! /^(labels|l:)/.test( r.dataset.id ) )
-        .map( r => r.dataset.id + '=' + ( ( r.querySelector('.tree-badge') || {} ).textContent || '0' ) + '/' + ( ( r.title.match( /(\\d+)\\D+(\\d+)/ ) || [] )[ 2 ] || '?' ) )` );
+    const trays = await c.evaluate( `[...document.querySelectorAll('#tree [role=treeitem]')].filter( r => ! /^(labels|l:)/.test( r.dataset.id ) )
+        .map( r => r.dataset.id + '=' + ( ( r.querySelector('.count') || {} ).textContent || '0' ) + '/' + ( ( ( r.firstElementChild.dataset.tip || '' ).match( /(\\d+)\\D+(\\d+)/ ) || [] )[ 2 ] || '?' ) )` );
     ok( trays.length === 5 && trays.every( t => /=\d+\/\d+$/.test( t ) ), "every tray shows not read (badge) / all (tooltip)", trays );
     const srv = await c.evaluate( "fetch('/api/mail/' + encodeURIComponent( NayiveMail.S.acct ) + '/trays').then( r => r.json() ).then( j => j.trays.find( t => t.role === 'inbox' ) )" );
     ok( trays.includes( `inbox=${srv.unread}/${srv.total}` ) && srv.total > 0, "the Inbox's numbers are the server's", { trays, srv } );
@@ -373,8 +373,8 @@ try
     const size = await c.evaluate( "document.querySelector('#readParts small').textContent" );
     ok( /^\d+\s*B/.test( size ) && parseInt( size ) >= 25 && parseInt( size ) <= 45, "its size is the file's own (not the base64's)", size );
     await c.evaluate( "window.__toasts = []; document.querySelector('#readParts .mail-part').click(); true" );
-    ok( await waitFor( c, "document.querySelector('dialog.panel[open] .fp-tree .tree-row')" ), "Save to Nayive asks for a folder" );
-    await c.evaluate( "document.querySelector('dialog.panel[open] .fp-tree .tree-row').click(); true" );     // the root: Archivos
+    ok( await waitFor( c, "document.querySelector('dialog.panel[open] .fp-tree .ti')" ), "Save to Nayive asks for a folder" );
+    await c.evaluate( "document.querySelector('dialog.panel[open] .fp-tree .ti').click(); true" );     // the root: Archivos
     await waitFor( c, "document.querySelector('dialog.panel[open] .btn.primary').ariaDisabled !== 'true'" );
     await c.evaluate( "document.querySelector('dialog.panel[open] .btn.primary').click(); true" );
     ok( await waitFor( c, "window.__toasts.some( t => /^Guardado en (?!Borradores)/.test( t ) )", 8000 ), "saved in Nayive", await lastToast( c ) );
@@ -390,13 +390,13 @@ try
     await c.evaluate( "document.getElementById('selectBtn').click(); true" );
     ok( await waitFor( c, "document.getElementById('pickSheet').open" ), "the select button opens the pick dialog" );
     await c.evaluate( "document.getElementById('pickAllBtn').click(); true" );
-    ok( await c.evaluate( "document.querySelectorAll('#list .mail-row.is-selected').length === document.querySelectorAll('#list .mail-row').length" ), "All: every row picked" );
+    ok( await c.evaluate( "document.querySelectorAll('#list .mail-row[aria-selected=true]').length === document.querySelectorAll('#list .mail-row').length" ), "All: every row picked" );
     await c.evaluate( "document.getElementById('selectBtn').click(); document.getElementById('pickAllBtn').click(); true" );
-    ok( await c.evaluate( "document.querySelectorAll('#list .mail-row.is-selected').length === 0 && document.getElementById('selActions').hidden" ), "again: none" );
+    ok( await c.evaluate( "document.querySelectorAll('#list .mail-row[aria-selected=true]').length === 0 && document.getElementById('selActions').hidden" ), "again: none" );
 
     // delete for good, with Undo (the header group of the pick)
-    const TRAY = t => `document.querySelector('#tree .tree-row[data-id=${t}]').click()`;
-    const PICKACT = a => `document.querySelector('#selActions [data-sel-act=${a}]').click()`;
+    const TRAY = t => `document.querySelector('#tree [role=treeitem][data-id=${t}]').firstElementChild.click()`;
+    const PICKACT = a => `document.querySelector('#selActions [data-pick-act=${a}]').click()`;
     await c.evaluate( `${row( "Hello 8" )}.click(); ${PICKACT( "del" )}; true` );
     await sleep( 800 );
     await c.evaluate( TRAY( "trash" ) + "; true" );
@@ -466,14 +466,14 @@ try
     const all = await c.evaluate( ROWS );
     const idle = () => waitFor( c, "!NayiveMail.S.loading", 8000 );
     await c.evaluate( "document.getElementById('searchBtn').click(); true" );
-    ok( await c.evaluate( "document.getElementById('searchWrap').classList.contains('is-open') && !!document.querySelector('#searchWrap .search-ends button.search-mark') && !document.querySelector('#searchWrap span.search-mark')" ),
+    ok( await c.evaluate( "document.getElementById('searchWrap').classList.contains('is-open') && !!document.querySelector('#searchWrap button.filter-btn') && !document.querySelector('#searchWrap [data-go]')" ),
         "the magnifier opens the box: a funnel inside, no dead magnifier" );
-    await c.evaluate( "document.querySelector('#searchWrap .search-mark').click(); true" );
+    await c.evaluate( "document.querySelector('#searchWrap .filter-btn').click(); true" );
     ok( await waitFor( c, "document.getElementById('advSheet').open", 3000 ), "the funnel opens the dialog" );
     await c.evaluate( "document.getElementById('advFrom').value = 'bob'; document.getElementById('advAttach').checked = true; document.getElementById('advGoBtn').click(); true" );
     await sleep( 300 ); await idle();
     ok( JSON.stringify( await c.evaluate( SUBJS ) ) === JSON.stringify( [ "With a file" ] ), "From bob + attachments: the one mail", await c.evaluate( SUBJS ) );
-    ok( await c.evaluate( "!document.getElementById('advBar').hidden && /bob/.test( document.getElementById('advBarText').textContent ) && document.getElementById('searchWrap').classList.contains('filter-on')" ),
+    ok( await c.evaluate( "!document.getElementById('advBar').hidden && /bob/.test( document.getElementById('advBarText').textContent ) && document.querySelector('#searchWrap .filter-btn').classList.contains('is-active')" ),
         "the bar says what is asked; the funnel is lit" );
     await c.evaluate( "NayiveMail.openAdvSearch(); document.getElementById('advClearBtn').click(); const d = document.getElementById('advSince'); d.value = '2026-09-02'; d.dispatchEvent( new Event('input') ); document.getElementById('advGoBtn').click(); true" );
     await sleep( 300 ); await idle();
@@ -486,9 +486,9 @@ try
         "From eve + the word file: nothing, and the word is in the box" );
     await c.evaluate( "document.getElementById('advOffBtn').click(); true" );
     await sleep( 300 ); await idle();
-    ok( await c.evaluate( "document.getElementById('advBar').hidden && document.getElementById('searchInput').value === 'file' && !document.getElementById('searchWrap').classList.contains('filter-on')" ),
+    ok( await c.evaluate( "document.getElementById('advBar').hidden && document.getElementById('searchInput').value === 'file' && !document.querySelector('#searchWrap .filter-btn').classList.contains('is-active')" ),
         "Remove filters: the fields go, the word stays" );
-    await c.evaluate( "document.querySelector('#searchWrap .search-shut').click(); true" );
+    await c.evaluate( "document.querySelector('#searchWrap [data-clear]').click(); true" );
     await sleep( 300 ); await idle();
     ok( await c.evaluate( ROWS ) === all && await c.evaluate( "!document.getElementById('searchWrap').classList.contains('is-open') && NayiveMail.S.query === '' && !NayiveMail.S.adv" ),
         "the × folds the box and the whole tray is back", await c.evaluate( ROWS ) );
@@ -515,8 +515,8 @@ try
         return { list: !g('listView').hidden, side: R.left >= L.right, cur: d.querySelectorAll('#list .mail-row.is-current').length,
                  first: d.querySelectorAll('#list .mail-row')[0].classList.contains('is-current'), back: g('backBtn').hidden,
                  tools: !g('composeBtn').hidden && getComputedStyle( g('listTools') ).display !== 'none',
-                 acts: !g('selActions').hidden && !!d.querySelector('#selActions [data-sel-act=reply]') && g('actions').hidden,
-                 pick: [ ...d.querySelectorAll('#list .mail-row.is-selected') ].length === 1 && d.querySelectorAll('#list .mail-row')[0].classList.contains('is-selected'),
+                 acts: !g('selActions').hidden && !!d.querySelector('#selActions [data-pick-act=reply]') && g('actions').hidden,
+                 pick: [ ...d.querySelectorAll('#list .mail-row[aria-selected=true]') ].length === 1 && d.querySelectorAll('#list .mail-row')[0].getAttribute('aria-selected') === 'true',
                  reading: d.body.classList.contains('reading'), hist: ${W}.history.state }; } )()` );
     ok( sp.list && sp.side, "the message shows on the right of the list", sp );
     ok( sp.cur === 1 && sp.first, "its row is marked", sp );
@@ -529,7 +529,7 @@ try
     await waitFor( c, `${$( "readSubject" )}.textContent !== ${JSON.stringify( subj1 )} && ${W}.NayiveMail.S.msg` );
     ok( await c.evaluate( `${FROWS}[1].classList.contains('is-current') && ${D}.querySelectorAll('#list .mail-row.is-current').length === 1` ), "another row: the mark follows" );
     await c.evaluate( `${W}.document.dispatchEvent( new ( ${W}.KeyboardEvent )( 'keydown', { key: 'Escape', bubbles: true } ) ); true` );
-    ok( await waitFor( c, `! ${W}.NayiveMail.S.open && !${$( "readNone" )}.hidden && ${D}.querySelectorAll('#list .mail-row.is-selected').length === 0`, 3000 ), "Esc clears the pick: the right side empties" );
+    ok( await waitFor( c, `! ${W}.NayiveMail.S.open && !${$( "readNone" )}.hidden && ${D}.querySelectorAll('#list .mail-row[aria-selected=true]').length === 0`, 3000 ), "Esc clears the pick: the right side empties" );
     await c.evaluate( `${FROWS}[1].click(); true` );
     await waitFor( c, `!${$( "readView" )}.hidden && ${W}.NayiveMail.S.msg` );
     await c.evaluate( `document.getElementById('f').style.width = '900px'; true` );

@@ -24,6 +24,9 @@
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
+    <script src="../shared/ayni/ayni-menus.js" defer></script>
+    <script src="../shared/ayni/ayni-search.js" defer></script>
+    <script src="../shared/ayni/ayni-lists.js" defer></script>
     <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
     <script src="../shared/gum-api.js" defer></script>
     <!-- Small shared UI helpers: backdrop open/close, toast. -->
@@ -87,6 +90,9 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-menus.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -145,8 +151,8 @@
            app.css). Phone only, and always last in the row. */
         #toolbarRow #moreToolsBtn { display: none; order: 99; }
 
-        /* The "..." menu is the shared .top-menu / .menu-item (shared/app.css),
-           anchored under its button by NayiveUI.wireMenu (via shared/office.js). */
+        /* The "..." and "?" menus are Ayni menus (shared/ayni/ayni-menus.css),
+           built by shared/office.js (buttonMenu). */
 
         /* ---- Toolbar strip ------------------------------------------------- */
 
@@ -184,8 +190,8 @@
            (hidden) button in #writeTools or runs the same engine command the
            toolbar button runs. Nothing is exclusive to one chrome.
 
-           #menuBar, .menu-top, .menu-panel and the .mi-* parts of a row are
-           styled once in shared/app.css - Calc's bar is the same one. */
+           #menuBar and .menu-top are styled once in shared/app.css, and its
+           menus are Ayni's - Calc's bar is the same one. */
 
         /* MENU MODE. The formatting strip collapses to nothing - height 0, the
            same four declarations the phone fold uses, so the real buttons stay
@@ -313,18 +319,7 @@
             background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3'%3E%3Cpath d='M0 2.5 1.5 0.5 3 2.5 4.5 0.5 6 2.5' fill='none' stroke='%23d93025' stroke-width='1'/%3E%3C/svg%3E") repeat-x left bottom;
         }
 
-        /* Buscar / Reemplazar (find.js). Layout only: the field, the buttons and
-           the pills are the shared ones. */
-        .find-bar          { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px;
-                             padding: 6px 10px; background: var(--card); border-bottom: 1px solid var(--line); }
-        .find-bar[hidden]  { display: none; }
-        .find-row          { display: flex; align-items: center; gap: 4px; }
-        .find-row[hidden]  { display: none; }
-        .find-row input    { flex: 0 1 280px; min-width: 0; }
-        .find-count        { min-width: 64px; padding: 0 4px; font-size: 0.78rem; color: var(--text-dim); text-align: center; white-space: nowrap; }
-        .find-bar.is-empty .find-count { color: var(--danger); }
-        #findReplToggle svg                      { transition: transform var(--tr-fast); }
-        #findReplToggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+        /* Buscar / Reemplazar (find.js): the bar is Ayni's (shared/ayni/ayni-search.css). */
 
         /* The marks: over the text, multiplied like a highlighter pen (the page
            is white paper in both themes), the current one stronger. */
@@ -406,7 +401,7 @@
         @media print
         {
             /* app chrome — none of it belongs on paper */
-            .topbar, #toolbarRow, #menuBar, .menu-panel, .top-menu, .popup, #tbPopup, #symPopup, #ayni-toasts,
+            .topbar, #toolbarRow, #menuBar, .panel.menu, .panel.popup, .popup, #ayni-toasts,
             dialog, .editor-loading, .session-bar, .nayive-home-link, #spellLayer,
             #findBar, #findLayer { display: none !important; }
 
@@ -461,7 +456,7 @@
             <!-- Phone only (see the phone block in the CSS above): "Aa" folds the
                  formatting row away, "⋮" holds the app's own buttons. write.js
                  moves the toolbar's "?" in here too while the phone layout is on. -->
-            <div id="topActions" class="topbar-actions">
+            <div id="topActions" class="topbar-actions tall" role="toolbar" data-i18n-attr="aria-label:ui.actions">
                 <button id="fmtBtn" class="btn" type="button" aria-expanded="true" data-i18n-attr="data-tip:write.formatBar, aria-label:write.formatBar">Aa</button>
                 <button id="moreBtn" class="btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.menu.file, aria-label:ui.menu.file">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="13" y2="17"></line></svg>
@@ -478,12 +473,12 @@
         <!-- Phone "⋮" menu. Built by write.js from the real buttons in
              #writeTools (glyph + title cloned), and each entry just clicks the
              button it came from - so there is still ONE set of handlers. -->
-        <div id="topMenu" class="top-menu" hidden></div>
+        <div id="topMenu" class="panel menu" popover role="menu"></div>
 
         <!-- Ayuda menu - Estadísticas · Atajos de teclado · Botones de la barra.
              Built by write.js from the real buttons (#statsBtn and #guideBtn in
              #helpTools, #scBtn in #fileTools), like the "⋮" menu above. -->
-        <div id="helpMenu" class="top-menu" hidden></div>
+        <div id="helpMenu" class="panel menu" popover role="menu"></div>
 
         <!-- Pull-down menu bar. Empty in the source: write.js builds it from
              the MENUS table, and it stays hidden while the toolbar chrome is
@@ -565,10 +560,10 @@
                 </button>
 
                 <span class="vsep" aria-hidden="true"></span>
-                <button id="wrOutputBtn" class="btn" type="button" data-i18n-attr="data-tip:write.grpOutput, aria-label:write.grpOutput" aria-haspopup="true">
+                <button id="wrOutputBtn" class="btn" type="button" popovertarget="outputPopup" data-i18n-attr="data-tip:write.grpOutput, aria-label:write.grpOutput" aria-haspopup="true">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
                 </button>
-                <button id="wrPageBtn" class="btn" type="button" data-i18n-attr="data-tip:write.grpPage, aria-label:write.grpPage" aria-haspopup="true">
+                <button id="wrPageBtn" class="btn" type="button" popovertarget="pagePopup" data-i18n-attr="data-tip:write.grpPage, aria-label:write.grpPage" aria-haspopup="true">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"></rect><line x1="4" y1="8" x2="20" y2="8"></line><line x1="4" y1="16" x2="20" y2="16"></line></svg>
                 </button>
                 <button id="paraBtn" class="btn" data-i18n-attr="data-tip:write.paragraph, aria-label:write.paragraph">
@@ -637,25 +632,10 @@
             </div>
         </div>
 
-        <!-- Buscar / Reemplazar (find.js): a strip above the pages, as in Text.
-             The chevrons step through the matches, the one pointing down opens
-             the replace row. -->
-        <div id="findBar" class="find-bar" role="search" hidden>
-            <div class="find-row">
-                <input id="findInput" type="text" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:write.find.findPlaceholder, aria-label:write.find.findPlaceholder">
-                <span id="findCount" class="find-count" aria-live="polite"></span>
-                <button id="findPrevBtn" class="btn sm" type="button" data-i18n-attr="data-tip:write.find.previousMatchTitle, aria-label:write.find.previousMatchTitle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                <button id="findNextBtn" class="btn sm" type="button" data-i18n-attr="data-tip:write.find.nextMatchTitle, aria-label:write.find.nextMatchTitle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
-                <button id="findCaseBtn" class="btn sm" type="button" aria-pressed="false" data-i18n-attr="data-tip:write.find.matchCase, aria-label:write.find.matchCase"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="13" font-weight="600" font-family="sans-serif" text-anchor="middle" fill="currentColor">Aa</text></svg></button>
-                <button id="findReplToggle" class="btn sm" type="button" aria-expanded="false" data-i18n-attr="data-tip:write.find.toggleReplaceTitle, aria-label:write.find.toggleReplaceTitle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>
-                <button id="findCloseBtn" class="btn sm" type="button" data-i18n-attr="data-tip:write.find.closeTitle, aria-label:write.find.closeTitle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
-            </div>
-            <div id="findReplRow" class="find-row" hidden>
-                <input id="replInput" type="text" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:write.find.replacePlaceholder, aria-label:write.find.replacePlaceholder">
-                <button id="replOneBtn" class="pill" type="button" data-i18n="write.find.replace"></button>
-                <button id="replAllBtn" class="pill" type="button" data-i18n="write.find.replaceAll"></button>
-            </div>
-        </div>
+        <!-- Buscar / Reemplazar (find.js): a strip above the pages, Ayni's find bar
+             (Ayni.findBar fills it: the field with its count and up / down, Match
+             case, the ▾ that shows the replace row, Close). -->
+        <div id="findBar" hidden></div>
 
         <!-- The scroller; the engine paints its pages into #editorHost (see the
              CSS). The overlay says "opening…" until the document is on screen;
@@ -858,17 +838,14 @@
     </dialog>
 
     <!-- Símbolos: an anchored popup off the toolbar's Ω button. -->
-    <div id="symPopup" class="popup tb-popup sym-popup" role="menu" data-i18n-attr="aria-label:write.symbols">
+    <div id="symPopup" class="panel popup tb-popup sym-popup" popover="manual" role="group" data-i18n-attr="aria-label:write.symbols">
         <div id="symTabs" class="sym-tabs"></div>
         <div id="symGrid" class="sym-grid"></div>
     </div>
 
-    <!-- The two drop-down panels: one for a menu, one for its submenu. Both are
-         built fresh on every open (an entry's tick and its greying are read from
-         the engine at that moment), and both live at body level so .topbar's
-         overflow cannot clip them. -->
-    <div id="menuPanel" class="top-menu menu-panel" role="menu" hidden></div>
-    <div id="menuSub"   class="top-menu menu-panel" role="menu" hidden></div>
+    <!-- (The pull-down menus are Ayni menus that shared/menubar.js makes, one per
+         entry of #menuBar, each built fresh on every open: an entry's tick and its
+         greying are read from the engine at that moment.) -->
 
     <!-- Insertar ▸ Imagen: the menu picks the file itself. -->
     <input id="imgInput" type="file" accept="image/*" style="display:none">
@@ -895,8 +872,8 @@
          then click the ✓ — nothing touches the table until then. The picked
          weight / style / colour are sticky (remembered after a successful apply). -->
     <!-- The tool row's group cards: one popup button (aria-haspopup) opens each, and what
-         is inside is the REAL buttons (shared/office.js, groupPopup). -->
-    <div id="outputPopup" class="popup" data-i18n-attr="aria-label:write.grpOutput">
+         is inside is the REAL buttons (an Ayni tool group, popovertarget). -->
+    <div id="outputPopup" class="panel popup tools" popover role="group" data-i18n-attr="aria-label:write.grpOutput">
         <div class="popup-row">
                 <button id="printBtn" class="btn pop-btn" data-i18n-attr="data-tip:write.print, aria-label:write.print">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
@@ -907,7 +884,7 @@
         </div>
     </div>
 
-    <div id="pagePopup" class="popup" data-i18n-attr="aria-label:write.grpPage">
+    <div id="pagePopup" class="panel popup tools" popover role="group" data-i18n-attr="aria-label:write.grpPage">
         <div class="popup-row">
                 <button id="pageSetupBtn" class="btn pop-btn" data-i18n-attr="data-tip:write.pageSetup, aria-label:write.pageSetup">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"></rect><line x1="4" y1="8" x2="20" y2="8"></line><line x1="4" y1="16" x2="20" y2="16"></line></svg>
@@ -926,7 +903,7 @@
         </div>
     </div>
 
-    <div id="tbPopup" class="popup tb-popup" role="menu" data-i18n-attr="aria-label:write.tableBorders">
+    <div id="tbPopup" class="panel popup tb-popup" popover="manual" role="group" data-i18n-attr="aria-label:write.tableBorders">
         <div class="tb-grid">
             <button type="button" data-tb="all" data-i18n-attr="data-tip:write.bAll, aria-label:write.bAll">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>

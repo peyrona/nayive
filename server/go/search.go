@@ -28,6 +28,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"golang.org/x/text/unicode/norm"
 )
@@ -35,12 +36,12 @@ import (
 // fold is a name or a searched text made accent- and case-blind: "jose"
 // finds "José", "nino" finds "Niño", "strasse" finds "Straße", "oeuvre" finds
 // "œuvre", a typed ' finds the typographic ’. It folds exactly like the
-// client's NayiveUI.fold (shared/ui.js: marks U+0300-U+036F, then foldMore),
-// so both sides agree.
+// client's Ayni.fold (shared/ayni/ayni-base.js: every mark, \p{M}, then
+// foldMore), so both sides agree.
 func fold(s string) string {
 	var b strings.Builder
 	for _, c := range norm.NFD.String(s) {
-		if c < 0x300 || c > 0x36f {
+		if !unicode.Is(unicode.M, c) {
 			b.WriteRune(c)
 		}
 	}
@@ -53,7 +54,7 @@ var foldMore = strings.NewReplacer("ß", "ss", "œ", "oe", "æ", "ae", "\u2018",
 // spelt the German way, folded: "Müller" -> "muller", "mueller". A search
 // tries every form of the name against every form of what was typed, so
 // "Mueller" finds "Müller" and back. Only umlauts are spelt out: folding
-// every "ue" would make "fue" find "fumar". As the client's foldUmlauts.
+// every "ue" would make "fue" find "fumar". As the client's (Ayni) foldUmlauts.
 func foldForms(s string) []string {
 	forms := []string{fold(s)}
 	if n := norm.NFC.String(s); strings.ContainsAny(n, "äöüÄÖÜ") {

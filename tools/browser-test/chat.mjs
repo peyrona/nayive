@@ -41,10 +41,10 @@ ok( await sel() === "" && await c.until( `NayiveChat.S.open === ${JSON.stringify
     "side by side, a click only opens the chat beside the list (picks nothing)" );
 ok( await c.evaluate( "document.getElementById('selActions').hidden" ), "…so the header shows no chat buttons (the open chat's bar has them)" );
 await mouse( c, ROW( LU ), { dx: 160, mods: 2 } );
-ok( await c.evaluate( "!document.getElementById('selActions').hidden && ! document.querySelector('#selActions .sel-count')" ), "Ctrl+click picks: the header group shows, no count chip" );
+ok( await c.evaluate( "!document.getElementById('selActions').hidden && ! document.querySelector('#selActions .pick-count')" ), "Ctrl+click picks: the header group shows, no count chip" );
 await mouse( c, ROW( JA ), { dx: 160, mods: 2 } );
 ok( await sel() === LU + "," + JA && await opened() === JA, "Ctrl+click adds one, and does not open it", [ await sel(), await opened() ] );
-ok( await c.evaluate( "document.querySelectorAll( '#rows .row.is-selected' ).length === 2" ), "the picked rows are painted" );
+ok( await c.evaluate( "document.querySelectorAll( '#rows .row[aria-selected=true]' ).length === 2" ), "the picked rows are painted" );
 await key( c, "Escape" );
 ok( await sel() === "" && await c.evaluate( "document.getElementById('selActions').hidden" ), "Esc clears; the group goes" );
 const all = await order();
@@ -69,42 +69,42 @@ await mouse( c, ROW( CA ), { dx: 160, button: "right" } );
 let rows = await menuRows( c );
 ok( await sel() === CA && rows && rows.map( r => r.act ).join() === "open,pin,mute,read,del", "right-click picks that row; the menu: Open, Pin, Mute, Mark read, Delete chat", rows );
 ok( rows && rows.every( r => ! r.off ), "…all of them on for one unread chat" );
-ok( await c.evaluate( "[ ...document.querySelectorAll('.item-menu .mi-key') ].map( k => k.textContent ).join() === 'Enter,Del'" ), "…with their keys beside them" );
+ok( await c.evaluate( "[ ...document.querySelectorAll('#ayni-menu kbd') ].map( k => k.textContent ).join() === 'Enter,Del'" ), "…with their keys beside them" );
 ok( await opened() === JA, "(a right-click does not open the chat)" );
 await key( c, "Escape" );
-ok( await c.evaluate( "document.querySelector('.item-menu').hidden" ), "Esc closes the menu" );
-ok( await c.evaluate( "! document.querySelector( '#rows [data-more], #selActions [data-sel=menu]' )" ), "no row ⋮, no ⋮ in the selection group" );
+ok( await c.evaluate( "( ! document.querySelector('#ayni-menu')?.matches(':popover-open') )" ), "Esc closes the menu" );
+ok( await c.evaluate( "! document.querySelector( '#rows [data-more], #selActions [data-pick=menu]' )" ), "no row ⋮, no ⋮ in the selection group" );
 let fs = await fitState( c, "#listHead" );
 ok( fs.acts.join() === "pin,mute,read,del" && ! fs.crowded && fs.out.length === 0, "the list's header: every action is a button, in menu order, on one row", fs );
-ok( await c.evaluate( "[ ...document.querySelectorAll( '#listHead [data-rank]:not([data-sel-act])' ) ].every( b => b.getClientRects().length || b.classList.contains( 'fit-out' ) )" ),
+ok( await c.evaluate( "[ ...document.querySelectorAll( '#listHead [data-rank]:not([data-pick-act])' ) ].every( b => b.getClientRects().length || b.classList.contains( 'fit-out' ) )" ),
     "…the tools do not step aside for the pick, they leave only for want of room" );
 ok( ! fs.more || fs.rows.every( r => [ "listSearch", "newChatBtn", "settingsBtn", "helpBtn" ].includes( r ) ), "…the narrow list's ⋮ holds only the tools that did not fit", fs );
 await mouse( c, "#rows", { button: "right" } );
 rows = await menuRows( c );
 ok( rows && rows.map( r => r.act ).join() === "newChat,selectAll" && await sel() === "", "right-click on empty space: New chat, Select all", rows );
-await c.evaluate( "document.querySelector('.item-menu [data-act=newChat]').click(); true" );
+await c.evaluate( "document.querySelector('#ayni-menu [data-act=newChat]').click(); true" );
 ok( await c.until( "document.getElementById( 'vList' ).hidden && !! document.querySelector( '.side .view .bar' )" ), "…New chat opens its screen" );
 await c.evaluate( "NayiveChat.back(); true" );
 await c.until( "! document.getElementById( 'vList' ).hidden" );
 
 section( "CHAT · PIN, MUTE, MARK READ (the server's state)" );
 await mouse( c, ROW( CA ), { dx: 160, button: "right" } );
-await c.evaluate( "document.querySelector('.item-menu [data-act=pin]').click(); true" );
+await c.evaluate( "document.querySelector('#ayni-menu [data-act=pin]').click(); true" );
 ok( await waitFor( async () => ( await conv( CA ) ).pin === true ), "Pin: the server has it pinned" );
 ok( await c.until( `document.querySelector( '#rows .row[data-conv]' ).dataset.conv === ${JSON.stringify( CA )} && !! document.querySelector( '${ROW( CA )} .flag' )` ),
     "…it goes to the top, with the pin mark" );
-ok( await c.until( `document.querySelector( '#selActions [data-sel-act=pin]' )?.dataset.tip.startsWith( 'Unpin' )` ), "the toggle now reads Unpin", await c.evaluate( "document.querySelector( '#selActions [data-sel-act=pin]' )?.dataset.tip" ) );
-await mouse( c, "#selActions [data-sel-act=pin]" );
+ok( await c.until( `document.querySelector( '#selActions [data-pick-act=pin]' )?.dataset.tip.startsWith( 'Unpin' )` ), "the toggle now reads Unpin", await c.evaluate( "document.querySelector( '#selActions [data-pick-act=pin]' )?.dataset.tip" ) );
+await mouse( c, "#selActions [data-pick-act=pin]" );
 ok( await waitFor( async () => ! ( await conv( CA ) ).pin ), "the header's Unpin: unpinned on the server" );
 await c.until( `NayiveChat.convOf( ${JSON.stringify( CA )} ).pin !== true` );
-await mouse( c, "#selActions [data-sel-act=mute]" );
+await mouse( c, "#selActions [data-pick-act=mute]" );
 ok( await waitFor( async () => ( await conv( CA ) ).mute === true ), "the header's Mute: muted on the server" );
 await c.until( `NayiveChat.convOf( ${JSON.stringify( CA )} ).mute === true` );
-await mouse( c, "#selActions [data-sel-act=mute]" );
+await mouse( c, "#selActions [data-pick-act=mute]" );
 ok( await waitFor( async () => ! ( await conv( CA ) ).mute ), "…and Unmute" );
 ok( ( await conv( CA ) ).unread === 2, "Carmen's chat: 2 unread on the server", ( await conv( CA ) ).unread );
 await mouse( c, ROW( CA ), { dx: 160, button: "right" } );
-await c.evaluate( "document.querySelector('.item-menu [data-act=read]').click(); true" );
+await c.evaluate( "document.querySelector('#ayni-menu [data-act=read]').click(); true" );
 ok( await waitFor( async () => ( await conv( CA ) ).unread === 0 ), "Mark read: read on the server", ( await conv( CA ) ).unread );
 ok( await c.until( `! document.querySelector( '${ROW( CA )} .badge' )` ) && await opened() === JA, "…the count leaves the row; the chat was not opened" );
 await mouse( c, ROW( CA ), { dx: 160, button: "right" } );
@@ -153,7 +153,7 @@ ok( await c.until( sheetOn ) && await c.evaluate( "document.querySelectorAll( 'd
 await key( c, "Escape" );
 ok( await c.until( "! document.querySelector( 'dialog.panel[open]' )" ) && await c.evaluate( `!! document.querySelector( '${ROW( JA )}' )` ), "…Esc closes it, nothing gone" );
 await mouse( c, ROW( JA ), { dx: 160, button: "right" } );
-await c.evaluate( "document.querySelector('.item-menu [data-act=del]').click(); true" );
+await c.evaluate( "document.querySelector('#ayni-menu [data-act=del]').click(); true" );
 ok( await c.until( sheetOn ), "the menu's Delete chat: the same dialog" );
 await c.evaluate( pickDel );
 ok( await c.until( `! document.querySelector( '${ROW( JA )}' )` ), "…its button: the chat leaves the list at once" );
@@ -184,7 +184,7 @@ ok( await waitFor( async () => ! ( await conv( JA ) ).id ), "the Undo gone: Javi
 section( "CHAT · A PERSON'S PAGE (BY LINK): UNCHANGED" );
 const g = await c.tab( "/c/" + carmen.token + "/" );
 ok( await g.until( `!! document.querySelector( '#rows .row[data-conv="${CA}"]' )` ), "Carmen's page lists her chat" );
-ok( await g.evaluate( "! window.NayiveUI.browser && ! window.NayiveChat.browse && ! document.getElementById( 'selActions' )" ), "…without the item browser (no browser.js there)" );
+ok( await g.evaluate( "! window.NayiveChat.browse && ! document.getElementById( 'selActions' )" ), "…without the item list (no picking there)" );
 await g.evaluate( "NayiveChat.closeConv && NayiveChat.S.open && NayiveChat.closeConv( true ); true" );
 await g.evaluate( `document.querySelector( '#rows .row[data-conv="${CA}"]' ).click(); true` );
 ok( await g.until( `NayiveChat.S.open === ${JSON.stringify( CA )} && ! document.getElementById( 'vConv' ).hidden` ), "…a click opens her chat, as before" );
@@ -215,15 +215,21 @@ ok( fs.rows.join() === CONV_BTNS.filter( t => ! fs.tools.includes( t ) ).join(),
 await finger( c, "#convMoreBtn" );
 let mrows = await menuRows( c );
 ok( mrows && mrows.map( r => r.act ).join() === fs.rows.join() && mrows.find( r => r.act === "convDeleteBtn" ), "the ⋮ opens with them (Delete among them)", mrows );
-await c.evaluate( "document.querySelector( '.item-menu [data-act=convInfoBtn]' )?.click(); true" );
-ok( await c.until( "document.getElementById( 'vConv' ).hidden && !! document.querySelector( '.main .info-wall' )" ), "…a row runs its button (Info)" );
-await c.evaluate( "NayiveChat.back(); true" );
-await c.until( "! document.getElementById( 'vConv' ).hidden" );
-await c.evaluate( "NayiveChat.back(); true" );
+// A row runs the very button it stands for (the first harmless one: not Delete, not Help).
+const probe = ( mrows || [] ).map( r => r.act ).find( a => a !== "convDeleteBtn" && a !== "convHelpBtn" );
+await c.evaluate( `window.__ran = 0; document.getElementById( ${JSON.stringify( probe )} ).addEventListener( 'click', () => __ran++ ); true` );
+await c.evaluate( `document.querySelector( '#ayni-menu [data-act=${probe}]' ).click(); true` );
+ok( await c.until( "window.__ran === 1 && ! document.getElementById( 'ayni-menu' ).matches( ':popover-open' )" ), "…a row runs its button (" + probe + "), the menu closed" );
+await c.evaluate( "document.querySelectorAll( 'dialog[open]' ).forEach( d => d.close() ); true" );
+for( let i = 0; i < 3 && await c.evaluate( "document.getElementById( 'chat' ).classList.contains( 'in-main' )" ); i++ )
+{
+    await c.evaluate( "NayiveChat.back(); true" );
+    await sleep( 300 );
+}
 ok( await c.until( "! document.getElementById( 'chat' ).classList.contains( 'in-main' )" ), "back to the list" );
 await sleep( 300 );
 await finger( c, ROW( CA ), 700 );
-ok( await c.until( `NayiveChat.browse.ids().join() === ${JSON.stringify( CA )}` ) && await c.evaluate( "document.getElementById( 'rows' ).classList.contains( 'is-picking' ) && ! document.getElementById( 'chat' ).classList.contains( 'in-main' )" ),
+ok( await c.until( `NayiveChat.browse.ids().join() === ${JSON.stringify( CA )}` ) && await c.evaluate( "document.getElementById( 'rows' ).classList.contains( 'picking' ) && ! document.getElementById( 'chat' ).classList.contains( 'in-main' )" ),
     "a long-press picks (ticks on), it does not open" );
 fs = await fitState( c, "#listHead" );
 ok( ! fs.crowded && fs.more && [ "pin", "mute", "del" ].every( a => fs.acts.includes( a ) ) && ! fs.tools.includes( "settingsBtn" ),
@@ -237,7 +243,7 @@ await finger( c, ROW( LU ) );
 ok( await sel() === CA + "," + LU && ! await opened(), "while picking, a tap adds", await sel() );
 await finger( c, ROW( CA ) );
 await finger( c, ROW( LU ) );
-ok( await c.until( "NayiveChat.browse.ids().length === 0 && ! document.getElementById( 'rows' ).classList.contains( 'is-picking' )" ), "tapping both again stops picking (no × chip in Chat, his call)" );
+ok( await c.until( "NayiveChat.browse.ids().length === 0 && ! document.getElementById( 'rows' ).classList.contains( 'picking' )" ), "tapping both again stops picking (no × chip in Chat, his call)" );
 
 section( "CHAT · THE 'N UNREAD' LINE WHEN THE FIRST UNREAD ONE IS DELETED (AA5, bugs-2)" );
 {

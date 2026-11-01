@@ -60,7 +60,7 @@ export async function drag( c, from, to )
         const dt = new DataTransfer();
         s.dispatchEvent( new DragEvent( 'dragstart', { bubbles: true, cancelable: true, dataTransfer: dt } ) );
         d.dispatchEvent( new DragEvent( 'dragover',  { bubbles: true, cancelable: true, dataTransfer: dt, clientX: x, clientY: y } ) );
-        const lit = d.classList.contains( 'drop-target' );
+        const lit = d.classList.contains( 'drop-in' );
         d.dispatchEvent( new DragEvent( 'drop',      { bubbles: true, cancelable: true, dataTransfer: dt, clientX: x, clientY: y } ) );
         s.dispatchEvent( new DragEvent( 'dragend',   { bubbles: true, dataTransfer: dt } ) );
         return lit; } )()` );
@@ -70,19 +70,20 @@ export async function drag( c, from, to )
 // that left, the ⋮ (shown?) and its rows, and whether the bar is off its row.
 export async function fitState( c, head = ".topbar, .header" )
 {
-    return c.evaluate( `( () => { const h = document.querySelector( ${JSON.stringify( head )} ); const f = h && h._fitBar;
+    return c.evaluate( `( () => { const h = document.querySelector( ${JSON.stringify( head )} ); const f = h && h.ayniFitBar;
         const vis = e => e.getClientRects().length > 0;
-        const acts = [ ...h.querySelectorAll( '[data-sel-act]' ) ];
-        return { acts: acts.filter( vis ).map( b => b.dataset.selAct ), out: acts.filter( b => b.classList.contains( 'fit-out' ) ).map( b => b.dataset.selAct ),
-                 tools: [ ...h.querySelectorAll( '[data-rank]:not([data-sel-act])' ) ].filter( vis ).map( b => b.id || b.dataset.sel || b.className ),
+        const acts = [ ...h.querySelectorAll( '[data-pick-act]' ) ];
+        return { acts: acts.filter( vis ).map( b => b.dataset.pickAct ), out: acts.filter( b => b.classList.contains( 'fit-out' ) ).map( b => b.dataset.pickAct ),
+                 tools: [ ...h.querySelectorAll( '[data-rank]:not([data-pick-act])' ) ].filter( vis ).map( b => b.id || b.dataset.pick || b.className ),
                  more: !! f && vis( f.button ), rows: f ? f.items().filter( i => ! i.sep ).map( i => i.id ) : [], crowded: !! f && f.crowded() }; } )()` );
 }
 
 // The menu's rows: [ { act, label, off } ] while it is open, else null.
 export async function menuRows( c )
 {
-    return c.evaluate( `( () => { const m = document.querySelector( '.item-menu' ); if( ! m || m.hidden ) return null;
-        return [ ...m.querySelectorAll( '.menu-item' ) ].map( b => ( { act: b.dataset.act || '', label: b.textContent.trim(), off: b.disabled } ) ); } )()` );
+    return c.evaluate( `( () => { const m = document.querySelector( '#ayni-menu' ); if( ! m || ! m.matches( ':popover-open' ) ) return null;
+        return [ ...m.querySelectorAll( ':scope > [role^="menuitem"]' ) ].map( b => ( { act: b.dataset.act || '', label: ( b.querySelector( '.label' ) || b ).textContent.trim(),
+                                                                                    off: b.getAttribute( 'aria-disabled' ) === 'true' } ) ); } )()` );
 }
 
 export function seed( s, files )

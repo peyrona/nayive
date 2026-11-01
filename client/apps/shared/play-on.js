@@ -65,9 +65,9 @@ var NayivePlayOn = ( function ()
                 var none = castAvail === false;
                 items.push( { label: T( "media.outCast" ) + ( none ? " (" + T( "media.outNoneShort" ) + ")" : "" ),
                               icon: btn.querySelector( "svg" ).outerHTML, run: castPrompt,
-                              disabled: none, title: none ? T( "media.outNone" ) : "" } );
+                              disabled: none, why: none ? T( "media.outNone" ) : "" } );
             }
-            NayiveUI.menuAt( 0, 0, items, { anchor: btn, keyboard: keyboard } );
+            Ayni.menuAt( items, { anchor: btn, keyboard: keyboard } );
         }
 
         function pickSink( id )

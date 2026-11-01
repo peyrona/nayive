@@ -381,7 +381,7 @@ function openDupSheet( auto, newFolder )
     {
         return '<div class="dup-group">' + g.items.map( function( b )
         {
-            return '<label class="dup-row">' +
+            return '<label class="choice dup-row">' +
                    '<input type="radio" name="dup' + gi + '" value="' + esc( b.id ) + '"' + ( b.id === g.keep ? ' checked' : '' ) + '>' +
                    '<span class="dup-meta"><span class="dup-title">' + ( b.favorite ? SVG.star : '' ) + esc( b.title || b.url ) + '</span>' +
                    '<span class="dup-sub">' + esc( b.url ) + '</span>' +

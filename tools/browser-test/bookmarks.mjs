@@ -36,10 +36,10 @@ section( "BOOKMARKS · MOUSE" );
 ok( await openPage(), "Bookmarks opens: the folder and three bookmarks" );
 await mouse( c, ROW( "b_a" ), { dx: 120 } );
 ok( await sel() === "b_a", "a click picks one", await sel() );
-ok( await c.evaluate( "!document.getElementById('selActions').hidden && document.querySelector('#selActions .sel-count').textContent.trim() === '1'" ), "the header group shows, count 1" );
+ok( await c.evaluate( "!document.getElementById('selActions').hidden && document.querySelector('#selActions .pick-count').textContent.trim() === '1'" ), "the header group shows, count 1" );
 await mouse( c, ROW( "b_c" ), { dx: 120, mods: 2 } );
 ok( await sel() === "b_a,b_c", "Ctrl+click adds one", await sel() );
-ok( await c.evaluate( "document.querySelectorAll('#items .bm-item.is-selected').length === 2" ), "the picked cards are painted" );
+ok( await c.evaluate( "document.querySelectorAll('#items .bm-item[aria-selected=true]').length === 2" ), "the picked cards are painted" );
 await key( c, "Escape" );
 ok( await sel() === "" && await c.evaluate( "document.getElementById('selActions').hidden" ), "Esc clears; the group goes" );
 
@@ -48,33 +48,33 @@ await mouse( c, ROW( "b_b" ), { dx: 120, button: "right" } );
 let rows = await menuRows( c );
 ok( await sel() === "b_b" && rows && [ "open", "edit", "fav", "link", "move", "delete" ].every( a => rows.some( r => r.act === a && ! r.off ) ), "right-click picks that card: every action", rows );
 ok( rows && rows.find( r => r.act === "fav" ).label.startsWith( await c.evaluate( "T( 'bookmarks.unfavourite' )" ) ), "…Beta is a favourite: the toggle says so", rows );
-ok( await c.evaluate( "[ ...document.querySelectorAll('.item-menu .mi-key') ].some( k => k.textContent === 'F2' )" ), "…and the keys beside them" );
+ok( await c.evaluate( "[ ...document.querySelectorAll('#ayni-menu kbd') ].some( k => k.textContent === 'F2' )" ), "…and the keys beside them" );
 await key( c, "Escape" );
-ok( await c.evaluate( "document.querySelector('.item-menu').hidden" ), "Esc closes the menu" );
-ok( await c.evaluate( "! document.querySelector('#items [data-more], #tree [data-more], #selActions [data-sel=menu], #topMenu')" ), "no card ⋮, no tree ⋮, no ⋮ in the selection group, no old #topMenu" );
+ok( await c.evaluate( "( ! document.querySelector('#ayni-menu')?.matches(':popover-open') )" ), "Esc closes the menu" );
+ok( await c.evaluate( "! document.querySelector('#items [data-more], #tree [data-more], #selActions [data-pick=menu], #topMenu')" ), "no card ⋮, no tree ⋮, no ⋮ in the selection group, no old #topMenu" );
 let ft = await fitState( c );
 ok( ft.acts.join() === "edit,fav,link,move,delete" && ! ft.out.length && ! ft.crowded, "wide: every action is a button, in menu order (no Open all, no New subfolder for one bookmark)", ft );
 ok( ft.more && ft.rows.filter( Boolean ).join() === OWN, "…the ⋮ shows: Bookmarks' own rows only", ft );
 await mouse( c, ROW( "b_c" ), { dx: 120, mods: 2 } );
 ft = await fitState( c );
-ok( ft.acts.join() === "openAll,edit,fav,link,move,delete" && await c.evaluate( "document.querySelector('#selActions [data-sel-act=edit]').ariaDisabled === 'true' && document.querySelector('#selActions [data-sel-act=delete]').ariaDisabled !== 'true'" ),
+ok( ft.acts.join() === "openAll,edit,fav,link,move,delete" && await c.evaluate( "document.querySelector('#selActions [data-pick-act=edit]').ariaDisabled === 'true' && document.querySelector('#selActions [data-pick-act=delete]').ariaDisabled !== 'true'" ),
     "two bookmarks: Open all comes (hideOff); Edit greyed, Delete not", ft );
 await mouse( c, ROW( "f_work" ), { dx: 120 } );
 ft = await fitState( c );
-ok( ft.acts.join() === "edit,fav,link,move,subfolder,delete" && await c.evaluate( "document.querySelector('#selActions [data-sel-act=fav]').ariaDisabled === 'true'" ),
+ok( ft.acts.join() === "edit,fav,link,move,subfolder,delete" && await c.evaluate( "document.querySelector('#selActions [data-pick-act=fav]').ariaDisabled === 'true'" ),
     "a folder: New subfolder comes (hideOff); Favourite greyed", ft );
 await mouse( c, "#moreBtn" );
 rows = await menuRows( c );
 ok( rows && rows.some( r => r.act === "import" ) && rows.some( r => r.act === "sort:az" ) && ! rows.some( r => /^mode:/.test( r.act ) ), "the ⋮ opens: import… and the sort list (no grid / list when wide)", rows );
-ok( await c.evaluate( "document.querySelector('.item-menu [data-act=\"sort:saved\"]').classList.contains('is-active') && ! document.querySelector('.item-menu [data-act=\"sort:az\"]').classList.contains('is-active')" ), "…the current sort ticked" );
-await mouse( c, '.item-menu [data-act="sort:za"]' );
+ok( await c.evaluate( "(document.querySelector('#ayni-menu [data-act=\"sort:saved\"]').getAttribute('aria-checked') === 'true') && ! (document.querySelector('#ayni-menu [data-act=\"sort:az\"]').getAttribute('aria-checked') === 'true')" ), "…the current sort ticked" );
+await mouse( c, '#ayni-menu [data-act="sort:za"]' );
 ok( await c.until( "ui.sort === 'za'" ) && await c.until( "[ ...document.querySelectorAll('#items .bm-item:not(.is-folder) .bm-title') ].map( t => t.textContent ).join() === 'Gamma,Beta,Alpha'" ), "a sort row sorts (Z-A)" );
 await mouse( c, "#moreBtn" );
-ok( await c.evaluate( "document.querySelector('.item-menu [data-act=\"sort:za\"]').classList.contains('is-active')" ), "…and is the one ticked next time" );
-await mouse( c, '.item-menu [data-act="sort:saved"]' );
+ok( await c.evaluate( "(document.querySelector('#ayni-menu [data-act=\"sort:za\"]').getAttribute('aria-checked') === 'true')" ), "…and is the one ticked next time" );
+await mouse( c, '#ayni-menu [data-act="sort:saved"]' );
 await c.until( "ui.sort === 'saved'" );
 await mouse( c, "#moreBtn" );
-await mouse( c, '.item-menu [data-act="export"]' );
+await mouse( c, '#ayni-menu [data-act="export"]' );
 ok( await c.until( "document.getElementById('exportBackdrop').open" ), "Export opens its sheet" );
 await key( c, "Escape" );
 await c.until( "! document.querySelector('dialog.panel[open]')" );
@@ -96,7 +96,7 @@ await c.send( "Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoi
 ok( await openPage(), "Bookmarks on a phone" );
 ok( await c.evaluate( "document.documentElement.scrollWidth <= innerWidth" ), "no side scroll" );
 await finger( c, ROW( "b_a" ), 700 );
-ok( await c.until( "browse.ids().join() === 'b_a'" ) && await c.evaluate( "document.getElementById('items').classList.contains('is-picking')" ), "a long-press picks (ticks on)" );
+ok( await c.until( "browse.ids().join() === 'b_a'" ) && await c.evaluate( "document.getElementById('items').classList.contains('picking')" ), "a long-press picks (ticks on)" );
 await sleep( 200 );
 ft = await fitState( c );
 // toolbar order (by group): edit fav link | move | delete; ranks 5 2 6 | 3 | 1
@@ -113,11 +113,11 @@ ok( ids.slice( -OWN.split( "," ).length - 2 ).join() === OWN + ",mode:grid,mode:
 await finger( c, "#moreBtn" );
 rows = await menuRows( c );
 ok( rows && rows.some( r => r.act === ( ft.out[ 0 ] || "searchBtn" ) ) && rows.some( r => r.act === "mode:list" ), "the ⋮ opens with them", rows );
-await c.evaluate( "document.querySelector('.item-menu [data-act=\"mode:list\"]').scrollIntoView( { block: 'nearest' } ); true" );
-await finger( c, '.item-menu [data-act="mode:list"]' );
+await c.evaluate( "document.querySelector('#ayni-menu [data-act=\"mode:list\"]').scrollIntoView( { block: 'nearest' } ); true" );
+await finger( c, '#ayni-menu [data-act="mode:list"]' );
 ok( await c.until( "ui.mode === 'list' && document.getElementById('items').classList.contains('is-list')" ), "List from the ⋮ turns the cards into rows" );
-await finger( c, "#selActions [data-sel=clear]" );
-ok( await c.until( "browse.ids().length === 0 && ! document.getElementById('items').classList.contains('is-picking')" ), "the × stops picking" );
+await finger( c, "#selActions [data-pick=clear]" );
+ok( await c.until( "browse.ids().length === 0 && ! document.getElementById('items').classList.contains('picking')" ), "the × stops picking" );
 await c.evaluate( "setMode( 'grid' ); true" );
 await c.send( "Emulation.setDeviceMetricsOverride", { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false } );
 await c.evaluate( "browse.set( [ 'b_a' ] ); true" );

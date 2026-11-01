@@ -677,7 +677,7 @@
         var actions = h( "div", { class: "editor-actions" }, extra || null, closeB );
         var titleEl = h( "div", { class: "editor-title", text: title } );
         var canvas  = h( "div", { class: "editor-canvas" } );
-        var layer = h( "div", { class: "editor-backdrop full open" }, h( "div", { class: "editor-bar" }, titleEl, actions ), canvas );
+        var layer = h( "div", { class: "editor-backdrop full open", attrs: { role: "dialog", "aria-modal": "true" } }, h( "div", { class: "editor-bar" }, titleEl, actions ), canvas );
         onTopOfDialog( layer );
         function close() { layer.remove(); document.removeEventListener( "keydown", key, true ); if( layer._onClose ) layer._onClose(); }
         // Keys belong to whatever is on top: the editor or a sheet opened from
@@ -1293,15 +1293,17 @@
         // contacts (Android's picker - a browser on iPhone has none).
         if( S.mode === "owner" )
         {
-            var search = h( "input", { attrs: { type: "search", placeholder: T( "chat.searchContacts" ) } } );
+            var search = h( "input", { class: "input", attrs: { type: "search", placeholder: T( "chat.searchContacts" ) } } );
             var list = h( "div", { class: "rows", style: "max-height:40vh;padding-bottom:0" } );
             body.insertBefore( h( "div", { class: "section-label", text: T( "chat.fromContacts" ) } ), body.firstChild );
-            body.insertBefore( h( "div", { class: "field" }, search ), body.children[ 1 ] );
+            var searchBox = h( "div", { class: "input-group search-field" }, search );
+            Ayni.searchField( searchBox );       // Ayni's field: its × clears; Esc clears, then closes the dialog
+            body.insertBefore( h( "div", { class: "field" }, searchBox ), body.children[ 1 ] );
             body.insertBefore( list, body.children[ 2 ] );
             body.insertBefore( h( "div", { class: "section-label", style: "margin-top:12px", text: T( "chat.orWrite" ) } ), body.children[ 3 ] );
             var draw = function ( all )
             {
-                var q = NayiveUI.matcher( search.value );
+                var q = Ayni.matcher( search.value );
                 list.textContent = "";
                 var shown = all.filter( function ( c ) { return ( c.tels.length || c.emails.length ) && ( ! q || q( c.name ) ); } ).slice( 0, 80 );
                 if( ! shown.length ) list.appendChild( h( "p", { class: "hint", style: "margin:6px 0", text: T( all.length ? "chat.noMatch" : "chat.noContacts" ) } ) );

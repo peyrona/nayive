@@ -1,5 +1,5 @@
 /*
- * browse.js - eMail on the shared item browser (shared/browser.js): picking
+ * browse.js - eMail on the shared item list (Ayni.list): picking
  * rows, the one menu, the keys, drag and drop, and the tree of trays and
  * labels. See docs/item-browser-plan.md.
  *
@@ -13,7 +13,7 @@
  * ONE ACTION LIST (actionList): the header group while something is picked,
  * the menu (right-click, a long press), the keys, and the reader's buttons
  * all read it. `rank` (1 = the last to leave) says which buttons a narrow
- * header keeps; the rest go into its one ⋮ (NayiveUI.fitBar) - the reader's
+ * header keeps; the rest go into its one ⋮ (Ayni.fitBar) - the reader's
  * #actions carry the same ranks (index.html). `where` hides an action in a tray where it
  * never applies (Not spam outside Spam); `when` greys it for this pick (Reply
  * needs one mail). Each runs the app's own call (actions.js, labels.js,
@@ -219,7 +219,7 @@
                 btn.ariaDisabled = false;
                 if( ! a ) return;
                 var l = typeof a.label === "function" ? a.label( ids ) : a.label;
-                var k = a.key ? " (" + NayiveUI.keyLabel( a.key ) + ")" : "";
+                var k = a.key ? " (" + Ayni.keyLabel( a.key ) + ")" : "";
                 Ayni.setTip( btn, l + k );
                 btn.setAttribute( "aria-label", l );
             } );
@@ -238,14 +238,14 @@
         document.addEventListener( "keydown", function ( e )
         {
             if( e.defaultPrevented || ! S.open || E.split || E.isComposing() ) return;
-            if( document.querySelector( "dialog.panel[open]" ) || NayiveUI.menuOpen() ) return;
+            if( document.querySelector( "dialog.panel[open]" ) || !! document.querySelector( ".panel.menu:popover-open" ) ) return;
             if( e.key === "Backspace" ) return;         // in the reader it is no "delete"
             var t = document.activeElement;
             if( t && t.closest && t.closest( "input, textarea, select, [contenteditable]" ) ) return;
             for( var i = 0; i < actions.length; i++ )
             {
                 var a = actions[ i ];
-                if( a.id === "open" || ! a.key || ! NayiveUI.keyMatches( a.key, e ) ) continue;
+                if( a.id === "open" || ! a.key || ! Ayni.keyMatches( a.key, e ) ) continue;
                 if( ! fits( a, [ S.open._id ] ) ) return;
                 e.preventDefault();
                 runOnOpen( a.id );
@@ -285,14 +285,14 @@
             var t = S.trays.filter( function ( x ) { return x.role === role; } )[ 0 ] || { role: role };
             var unread = t.unread || 0, total = t.total || 0;
             return { id: role, name: E.T( "mail.tray." + role ), icon: E.icon( role ),
-                     badge: unread ? E.count( unread ) : "",
-                     title: t.missing ? E.T( "mail.missingTray" ) : E.TF( "mail.trayCount", { unread: unread, total: total } ),
+                     count: unread ? E.count( unread ) : "",
+                     tip:   t.missing ? E.T( "mail.missingTray" ) : E.TF( "mail.trayCount", { unread: unread, total: total } ),
                      cls: "mail-node-" + role + ( t.missing ? " is-missing" : "" ),
                      noMenu: role !== "trash" && role !== "spam" };
         } );
         var kids = S.labels.map( function ( l ) { return { id: "l:" + l.id, name: l.name, icon: dot( l.color ), tail: eye( l.id ) }; } );
         if( kids.length ) kids.push( { id: "nolabel", name: E.T( "mail.noLabel" ), icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"></circle></svg>', tail: eye( "none" ), noMenu: true, noDrag: true } );
-        out.push( { id: "labels", name: E.T( "mail.labels" ), icon: E.icon( "tag" ), cls: "mail-node-labels", kids: kids } );
+        out.push( { id: "labels", name: E.T( "mail.labels" ), icon: E.icon( "tag" ), cls: "mail-node-labels", children: kids } );
         return out;
     }
 
@@ -308,7 +308,7 @@
     function eye( key )
     {
         var off = veil.has( key );
-        return { icon: off ? "eye-off" : "eye", on: off, title: E.T( off ? "mail.showTagged" : "mail.hideTagged" ) };
+        return { icon: off ? "eye-off" : "eye", on: off, tip: E.T( off ? "mail.showTagged" : "mail.hideTagged" ) };
     }
 
     E.veiled = function ( m )
@@ -329,7 +329,7 @@
         var keep = ids.filter( function ( id ) { var m = itemOf( id ); return m && ! E.veiled( m ); } );
         if( keep.length !== ids.length ) browse.set( keep );
         E.showEmpty();
-        treeView.render();
+        treeView.build();
     }
 
     function labelOfNode( id ) { return id.indexOf( "l:" ) === 0 ? E.labelById( id.slice( 2 ) ) : null; }
@@ -371,7 +371,7 @@
             items.push( { id: "deleteLabel", label: T( "mail.removeLabel" ), icon: E.icon( "trash" ), danger: true,
                           run: function () { E.deleteLabel( l ); } } );
         }
-        NayiveUI.menuAt( x, y, items, { anchor: anchor } );
+        Ayni.menuAt( items, { x: x, y: y, anchor: anchor } );
     }
 
     // What dropped mail does on a node: a label adds it; Trash deletes (Undo);
@@ -405,7 +405,7 @@
         }
     }
 
-    E.renderTree = function () { if( treeView ) treeView.render(); };
+    E.renderTree = function () { if( treeView ) treeView.build(); };
 
     // ---------------------------------------------------------------------
     // wiring (email.js start(), after the dictionary)
@@ -414,10 +414,10 @@
     E.wireBrowse = function ()
     {
         actions = actionList();
-        treeView = NayiveUI.tree( {
-            host:    E.$( "tree" ),
-            pane:    E.$( "side" ),
-            roots:   treeRoots,
+        treeView = Ayni.tree( E.$( "tree" ), {
+            nav:     true,
+            sheet:   E.$( "side" ),
+            items:   treeRoots,
             isOpen:  function ( id ) { return id === "labels" ? labelsOpen() : false; },
             setOpen: function ( id, v ) { try { localStorage.setItem( OPEN_KEY, v ? "open" : "closed" ); } catch( e ) {} },
             current: function () { return S.label ? "l:" + S.label : S.tray; },
@@ -429,9 +429,9 @@
         // The header keeps to one row: what does not fit (the pick's buttons,
         // the reader's, the tools) goes into its ⋮. Made here, not on the first
         // pick: a mail opened with nothing picked needs it too.
-        NayiveUI.fitBar( E.$( "selActions" ).closest( ".topbar" ), { btn: "#moreBtn" } );
-        E.browse = browse = NayiveUI.browser( {
-            list:     E.$( "list" ),
+        Ayni.fitBar( E.$( "selActions" ).closest( ".topbar" ), { btn: "#moreBtn" } );
+        E.browse = browse = Ayni.list( E.$( "list" ), {
+            main:     true,
             row:      ".mail-row",
             bar:      E.$( "selActions" ),
             actions:  actions,
@@ -441,7 +441,6 @@
             preview:  preview,
             active:   function () { return S.accounts.length > 0 && E.listShown() && ! E.isComposing(); },
             pickable: function ( id ) { var m = itemOf( id ); return !! m && ( ! S.only || S.only.has( m ) ) && ! E.veiled( m ); },
-            search:   function () { if( E.searchFold ) E.searchFold.open(); },
             drag:     { text: function ( ids ) { var m = itemOf( ids[ 0 ] ); return m ? m.subject || "" : ""; } },
             onSelect: function ( ids )
             {

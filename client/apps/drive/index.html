@@ -26,6 +26,9 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-menus.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -34,6 +37,9 @@
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
+    <script src="../shared/ayni/ayni-menus.js" defer></script>
+    <script src="../shared/ayni/ayni-search.js" defer></script>
+    <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
@@ -44,8 +50,6 @@
     <script src="../shared/vcard.js" defer></script>
     <!-- Small shared UI helpers: backdrop open/close, toast, viewerTz. -->
     <script src="../shared/ui.js" defer></script>
-    <!-- The item browser: picking, the selection's buttons, the one menu, the tree. -->
-    <script src="../shared/browser.js" defer></script>
     <script src="../shared/photo.js" defer></script>
     <!-- The media apps' own module. Drive uses one block of it: the upkeep of
          their path-keyed sidecars when a file is moved, renamed, copied or
@@ -67,7 +71,7 @@
                 { sel: '#searchBuilderBtn', text: Ayni.t( 'drive.introSearchBuilder' ) },
                 { sel: '#newFolderBtn',    text: Ayni.t( 'drive.introNewFolder' ) },
                 { sel: '#uploadBtn',       text: Ayni.t( 'drive.introUpload' ) },
-                // The selection's buttons (shared/browser.js) come and go with
+                // The selection's buttons (Ayni.list) come and go with
                 // what is picked, so their rows carry their own glyph and name.
                 { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>', name: Ayni.t( 'ui.download' ),      text: Ayni.t( 'drive.introDownload' ), tour: { sel: '.sel-group [data-sel-act="download"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
                 { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>', name: Ayni.t( 'ui.rename' ),        text: Ayni.t( 'drive.introRename' ), tour: { sel: '.sel-group [data-sel-act="rename"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
@@ -128,28 +132,24 @@
             <input type="file" id="uploadDirInput" webkitdirectory multiple style="display:none">
             <input type="file" id="uploadPhotoInput" accept="image/*" multiple style="display:none">
 
-            <div class="topbar-actions">
-                <!-- WHAT YOU DO TO WHAT IS PICKED (shared/browser.js draws it):
+            <div class="topbar-actions tall" role="toolbar" data-i18n-attr="aria-label:ui.actions">
+                <!-- WHAT YOU DO TO WHAT IS PICKED (Ayni.list draws it):
                      only while something is picked. It is the first group, so the
                      bar grows leftwards when it comes and the buttons after it
                      never move. -->
                 <div id="selActions" class="tb-group" hidden></div>
 
                 <div id="driveTools" class="tb-group">
-                    <!-- The shared search fold (NayiveUI.searchFold): the magnifier after
+                    <!-- The search field (Ayni.searchField, init.js): the magnifier after
                          the box opens it. The funnel inside the box opens the advanced
                          search: name rules, kinds and dates, no wildcards to learn
-                         (advsearch.js); the × after it clears and folds the box. -->
-                    <div class="search-wrap">
-                        <input type="search" id="searchInput" class="topbar-search" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:drive.searchPh, title:drive.searchTip">
-                        <!-- Stands in for the box while an advanced search is in force (advsearch.js). -->
-                        <button id="advChip" type="button" class="adv-chip" hidden>
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-                            <span id="advChipText"></span>
-                        </button>
-                        <button id="searchBuilderBtn" class="btn sm" type="button" data-i18n-attr="data-tip:drive.sbTitle, aria-label:drive.sbTitle"></button>
+                         (advsearch.js); it turns Accent while one is in force, and the
+                         × after it clears and folds the box. -->
+                    <div class="input-group search-field fold">
+                        <input type="search" id="searchInput" class="input" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:drive.searchPh, data-tip:drive.searchTip">
+                        <button id="searchBuilderBtn" class="btn filter-btn" type="button" data-i18n-attr="data-tip:drive.sbTitle, aria-label:drive.sbTitle"><span class="icon" data-icon="filter"></span></button>
                     </div>
-                    <button id="searchToggleBtn" class="btn" type="button" data-rank="20" data-i18n-attr="data-tip:ui.search, aria-label:ui.search">
+                    <button id="searchToggleBtn" class="btn" type="button" data-rank="20" data-search data-i18n-attr="data-tip:ui.search, aria-label:ui.search">
                         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                     </button>
                     <button id="newFolderBtn" class="btn" data-rank="21" data-i18n-attr="data-tip:ui.newFolder">
@@ -169,7 +169,7 @@
                 </div>
 
                 <div class="tb-group tb-sys">
-                    <!-- The buttons that do not fit the header (NayiveUI.fitBar, menus.js);
+                    <!-- The buttons that do not fit the header (Ayni.fitBar, menus.js);
                          hidden while everything fits. -->
                     <button id="moreBtn" class="btn" type="button" hidden aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.moreOptions, aria-label:ui.moreOptions">
                         <span class="icon" data-icon="more"></span>
@@ -377,14 +377,14 @@
     </dialog>
 
     <!-- Built-in image viewer (lightbox) -->
-    <div id="viewerBackdrop" class="viewer-backdrop">
+    <div id="viewerBackdrop" class="viewer-backdrop" role="dialog" aria-modal="true" aria-labelledby="viewerName">
         <button id="viewerCloseBtn" class="btn on-media viewer-close" data-i18n-attr="data-tip:ui.close, aria-label:ui.close"><span class="icon" data-icon="close"></span></button>
         <img id="viewerImg" alt="">
         <span id="viewerName" class="viewer-name"></span>
     </div>
 
     <!-- Built-in audio / video player -->
-    <div id="mediaBackdrop" class="media-backdrop">
+    <div id="mediaBackdrop" class="media-backdrop" role="dialog" aria-modal="true" aria-labelledby="mediaName">
         <button id="mediaCloseBtn" class="btn on-media viewer-close" data-i18n-attr="data-tip:ui.close, aria-label:ui.close"><span class="icon" data-icon="close"></span></button>
         <video id="mediaVideo" controls playsinline hidden></video>
         <div id="mediaAudioBox" class="media-audio-box" hidden>

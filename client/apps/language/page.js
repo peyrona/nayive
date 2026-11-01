@@ -508,8 +508,9 @@ function wire()
     $( 'ocr-btn' ).addEventListener( 'click', () => { if( ocrBusy ) ocrBusy.abort(); else $( 'ocr-file' ).click(); } );
     $( 'ocr-file' ).addEventListener( 'change', ( e ) => { onImage( e.target.files && e.target.files[ 0 ] ); e.target.value = ''; } );
     $( 'local' ).addEventListener( 'change', onLocalSwitch );
-    $( 'q' ).addEventListener( 'keydown', ( e ) => { if( e.key === 'Enter' ) { e.preventDefault(); lookup(); } } );
-    $( 'qGo' ).addEventListener( 'click', () => lookup() );
+    // Enter or the Go magnifier (Ayni: the field is data-enter); its × empties it.
+    Ayni.searchField( $( 'q' ).parentElement, { tip: false } );
+    $( 'q' ).parentElement.addEventListener( 'ayni:search', () => lookup() );
     for( const b of document.querySelectorAll( '.tb-modes .view-btn' ) ) b.addEventListener( 'click', () => showView( b.dataset.view ) );
 
     $( 'cfgBtn' ).addEventListener( 'click', openSettings );

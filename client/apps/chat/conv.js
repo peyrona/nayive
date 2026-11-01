@@ -48,16 +48,13 @@
 
         // The chat's "⋮": built once and wired once (the bar is redrawn often).
         // The owner's page: the chat's actions are buttons in the bar and the
-        // ⋮ holds only the ones that do not fit (NayiveUI.fitBar). Fitted
+        // ⋮ holds only the ones that do not fit (Ayni.fitBar). Fitted
         // while the bar is still empty, so it watches the bar itself. A
-        // person's page has no browser.js: its ⋮ keeps the menu, refilled by
-        // renderConvHead.
+        // person's page keeps the menu in its ⋮, refilled by renderConvHead.
         convMore = C.btn( "more", "chat.menu", null );
         convMore.id = "convMoreBtn";
-        if( NayiveUI.fitBar ) { NayiveUI.fitBar( head, { btn: convMore } ); return; }
-        convMenu = h( "div", { class: "top-menu", attrs: { id: "convMenu", hidden: true } } );
-        document.body.appendChild( convMenu );
-        NayiveUI.wireMenu( { btn: convMore, menu: convMenu, onPick: function ( item ) { if( item._act ) item._act(); } } );
+        if( S.mode === "owner" ) { Ayni.fitBar( head, { btn: convMore } ); return; }
+        convMenu = C.menu( "convMenu", convMore );
     };
 
     // ---------------------------------------------------------------------
@@ -209,7 +206,7 @@
         // no phone at all. This "?" explains this side only; the list's help
         // explains the list (his call, 2026-09-21).
         // The groups of every header (shared/app.css HEADER).
-        var fits = !! head._fitBar;
+        var fits = !! head.ayniFitBar;
         var calls = h( "div", { class: "tb-group" } );
         var acts  = h( "div", { class: "tb-group" } );
         // The search field + its magnifier, the same ones each time (compose.js)
@@ -239,8 +236,7 @@
                 ( call ? calls : acts ).appendChild( b );
                 return;
             }
-            var m = h( "button", { class: "menu-item" + ( it[ 6 ] ? " " + it[ 6 ] : "" ), attrs: { type: "button" } }, C.ic( it[ 1 ] ), T( it[ 2 ] ) );
-            m._act = it[ 3 ];
+            var m = C.menuRow( it[ 1 ], it[ 2 ], it[ 3 ], it[ 6 ] );
             m._help = it[ 4 ];
             convMenu.appendChild( m );
         } );
@@ -248,8 +244,11 @@
         help.id = "convHelpBtn";
         help.setAttribute( "data-intro-open", "" );   // the tour ends here (shared/ui.js)
         if( fits ) help.dataset.rank = 31;
-        head.appendChild( h( "div", { class: "topbar-actions" }, calls, acts, h( "div", { class: "tb-group tb-sys" }, convMore, help ) ) );
-        if( fits ) head._fitBar.fit();
+        var bar = h( "div", { class: "topbar-actions tall", attrs: { role: "toolbar", "aria-label": T( "ui.actions" ) } },
+                     calls, acts, h( "div", { class: "tb-group tb-sys" }, convMore, help ) );
+        head.appendChild( bar );
+        Ayni.init( bar );                     // made after Ayni started: one Tab stop, the arrows move
+        if( fits ) head.ayniFitBar.fit();
         if( C.renderCallBar ) C.renderCallBar();   // a group call on here (call.js)
     };
 
@@ -649,7 +648,7 @@
     // the list is a block already.
     C.textNodes = function ( el, text )
     {
-        var m = S.searching && NayiveUI.matcher( S.searching.q ), q = m ? m.terms.map( NayiveUI.fold ) : [];
+        var m = S.searching && Ayni.matcher( S.searching.q ), q = m ? m.terms.map( Ayni.fold ) : [];
         window.NayiveChatMarks.parse( text ).forEach( function ( bl )
         {
             if( bl.list )
@@ -705,14 +704,14 @@
         return parts.length <= 3 && parts.every( function ( g ) { return EMOJI_RE.test( g ); } );
     };
 
-    // `q` is the search's words / phrases (NayiveUI.matcher terms), folded:
+    // `q` is the search's words / phrases (Ayni.matcher terms), folded:
     // each one found gets a mark, the nearest first.
     function plain( el, s, q )
     {
         if( ! s ) return;
         // Folded text keeps the length of what is typed in nearly every case;
         // when it does not (Korean syllables split apart), no mark at all.
-        var low = q.length ? NayiveUI.fold( s ) : "", at = 0;
+        var low = q.length ? Ayni.fold( s ) : "", at = 0;
         if( low.length !== s.length ) { el.appendChild( document.createTextNode( s ) ); return; }
         for( ;; )
         {

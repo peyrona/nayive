@@ -373,19 +373,12 @@ function applySearchBuilder()
 
 // ---- while it is in force ----------------------------------------------------
 
-// The box, or the button that stands in for it.
+// While one is in force the box's funnel is Accent and says how many
+// filters ("Filters: 2"); the box stays open and usable (typing ends it).
 function showAdvSearchBox()
 {
-    const chip = document.getElementById( 'advChip' );
-    document.querySelector( '.search-wrap' ).classList.toggle( 'adv-on', !! advSearch );
-    document.getElementById( 'searchInput' ).hidden = !! advSearch;
-    chip.hidden = ! advSearch;
-    if( ! advSearch ) return;
-
-    document.getElementById( 'advChipText' ).textContent =
-        advSearch.nFilters === 1 ? T( 'drive.sbActiveOne' ) : TF( 'drive.sbActiveMany', { n: advSearch.nFilters } );
-    chip.title = advSearch.summary;
-    driveSearch.open();                 // the box stays unfolded while it is in force
+    driveSearch.filtered( advSearch ? advSearch.nFilters : 0 );
+    if( advSearch ) driveSearch.open( true );     // the box stays unfolded while it is in force
 }
 
 // The breadcrumb: "Resultados (n)", what was asked, and the way out.
@@ -410,8 +403,8 @@ function advSearchCrumbs( host, info )
     host.appendChild( out );
 }
 
-// "Quitar filtros", or Escape on the button in the box: back to the folder,
-// and the box folds away, as its × and Escape in the box itself do.
+// "Quitar filtros": back to the folder, and the box folds away, as its × and
+// Escape in the box do.
 function endAdvSearch()
 {
     driveSearch.close();                // its onClose: clearSearch, render

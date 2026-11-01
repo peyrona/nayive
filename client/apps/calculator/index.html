@@ -25,6 +25,9 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-menus.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -33,6 +36,9 @@
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
+    <script src="../shared/ayni/ayni-menus.js" defer></script>
+    <script src="../shared/ayni/ayni-search.js" defer></script>
+    <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS (and localhost). -->
@@ -78,7 +84,7 @@
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-euro"></use></svg></label>
             </div>
 
-            <div class="topbar-actions">
+            <div class="topbar-actions tall" role="toolbar" data-i18n-attr="aria-label:ui.actions">
                 <div class="tb-group">
                     <button id="histBtn" class="btn" type="button" data-i18n-attr="data-tip:calculator.history, aria-label:calculator.history">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-history"></use></svg>

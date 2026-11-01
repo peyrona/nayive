@@ -9,7 +9,7 @@
      NayiveUI.pickFolder. If that folder holds sub-folders (an album per trip,
      say) and no loose images, Photos first shows those sub-folders as an album
      index; picking one re-opens the page at ?dir=<that album>. The albums
-     tree beside the photos (ITEM BROWSER + ALBUMS in the script) does the
+     tree beside the photos (ITEM LIST + ALBUMS in the script) does the
      same for every album, and the photos are picked and acted on there like
      any list. The crumb re-opens the picker. Only a visitor who is NOT
      signed in falls back to the small built-in example set (a Lisbon trip).
@@ -56,6 +56,9 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-menus.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -64,10 +67,12 @@
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
+    <script src="../shared/ayni/ayni-menus.js" defer></script>
+    <script src="../shared/ayni/ayni-search.js" defer></script>
+    <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
-    <script src="../shared/browser.js" defer></script>
     <script src="../shared/photo.js" defer></script>
     <script>
     Ayni.i18n.ready.then( function () {
@@ -87,7 +92,7 @@
                 { sel: '#addBtn',      text: Ayni.t( 'photos.introUpload' ) }
             ],
             // The guided tour ("Ver el tour" in the card): the albums, the card's
-            // buttons, then picking photos (the shared item browser).
+            // buttons, then picking photos (the shared item list).
             tour: [ { sel: '#treePane, #treeBtn', text: Ayni.t( 'photos.tourTree' ) }, 'buttons',
                     { use: 'pick', ghost: '#grid' }, { use: 'picked', ghost: '#grid' } ]
         } );
@@ -140,6 +145,7 @@
         background: none;
     }
     body.view-list #grid .tile:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+    body.view-list #grid .tile[aria-selected="true"]:hover { background: var(--accent-soft); }
     body.view-list #grid .tile .scene
     {
         position: relative;
@@ -381,8 +387,8 @@
     /* ⏮ ⏭ are Ayni .btn.on-media, ▶ the shared .btn.primary.play-btn. */
     .pase-speed { border: 0; background: transparent; color: rgba(255, 255, 255, 0.85); cursor: pointer; font-size: 0.78rem; font-weight: 700; padding: 0 10px; min-width: 44px; font-variant-numeric: tabular-nums; }
 
-    .lb { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.92); display: none; flex-direction: column; }
-    .lb.open { display: flex; }
+    .lightbox { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.92); display: none; flex-direction: column; }
+    .lightbox.open { display: flex; }
     .lb-photo { flex: 1; position: relative; margin: 14px; }
     .lb-photo .scene { position: absolute; inset: 0; border-radius: var(--radius-m); overflow: hidden; }
     .lb-x { position: absolute; right: 14px; top: 12px; z-index: 3; }   /* look: Ayni .btn.on-media */
@@ -431,7 +437,7 @@
     /* list view: the mark goes after the name (the names stay in one column) */
     body.view-list #grid .note-mark { position: static; flex: 0 0 auto; order: 1; color: var(--text-dim); filter: none; }
 
-    /* ---------- picking (shared/browser.js) ----------
+    /* ---------- picking (Ayni.list) ----------
      * A click picks a tile, a double-click / Enter / a tap opens it. The pick
      * tick sits over the tile's top-left corner (drawn over the photo, so it
      * carries its own dark disc); in the list view it is a plain flex item at
@@ -439,9 +445,8 @@
     #grid .tile { cursor: default; }
     #grid .tile .ph { -webkit-touch-callout: none; user-select: none; }
     #grid .tile .pick-tick { position: absolute; z-index: 2; top: 6px; left: 6px; }
-    #grid .tile:not(.is-selected) .pick-tick { background: rgba(0, 0, 0, 0.28); border-color: rgba(255, 255, 255, 0.92); }
-    #grid .tile.is-selected .pick-tick { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-    body:not(.view-list) #grid .tile.is-selected::after,
+    #grid .tile:not([aria-selected="true"]) .pick-tick { background: rgba(0, 0, 0, 0.28); border-color: rgba(255, 255, 255, 0.92); }
+    body:not(.view-list) #grid .tile[aria-selected="true"]::after,
     body:not(.view-list) #grid .tile:focus-visible::after
     {
         content: "";
@@ -452,18 +457,17 @@
         pointer-events: none;
         box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 70%, var(--text));
     }
-    body:not(.view-list) #grid .tile.is-selected::after
+    body:not(.view-list) #grid .tile[aria-selected="true"]::after
     {
         box-shadow: inset 0 0 0 3px var(--accent);
-        background: color-mix(in srgb, var(--accent) 22%, transparent);
+        background: var(--accent-soft);
     }
     body.view-list #grid .tile .pick-tick { position: static; }
-    body.view-list #grid .tile:not(.is-selected) .pick-tick { background: transparent; border-color: var(--text-faint); }
-    body.view-list #grid .tile.is-selected { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+    body.view-list #grid .tile:not([aria-selected="true"]) .pick-tick { background: transparent; border-color: var(--text-faint); }
 
-    /* ---------- the albums tree (shared .ntree.tree-fit) ----------
+    /* ---------- the albums tree (Ayni's navigation tree, data-fit) ----------
      * PC + tablet: a pane beside the photos; a phone: it slides in from the
-     * folder button (#treeBtn) - the shared .tree-sheet. */
+     * folder button (#treeBtn) - Ayni's .tree-sheet. */
     .body-row { flex: 1 1 auto; min-height: 0; display: flex; }
     .body-row > .stage { min-width: 0; }
     .tree-pane { width: var(--tree-w, 220px); flex: 0 0 auto; overflow: auto; padding: 6px 4px 16px; }
@@ -521,7 +525,9 @@
             <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="16" height="16" rx="2"/><circle cx="12" cy="8" r="2"/><path d="m22 13-1.3-1.3a2.4 2.4 0 0 0-3.4 0L11 18"/><path d="M18 22H4a2 2 0 0 1-2-2V6"/></svg>
             <h1>Photos</h1>
 
-            <button class="btn" id="folderInfoBtn" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n-attr="data-tip:ui.folderInfo, aria-label:ui.folderInfo">
+            <!-- The ranks (Ayni.fitBar): this folder button leaves into the ⋮ last of all
+                 (0.5: after the picked photos' actions too); the view modes first (40-43). -->
+            <button class="btn" id="folderInfoBtn" type="button" data-rank="0.5" popovertarget="folderMenu" data-i18n-attr="data-tip:ui.folderInfo, aria-label:ui.folderInfo">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="10.5" x2="12.01" y2="10.5"/><line x1="12" y1="13.5" x2="12" y2="17.5"/></svg>
             </button>
 
@@ -531,30 +537,30 @@
             </button>
 
             <div class="tb-modes" role="tablist" data-i18n-attr="aria-label:photos.galleryMode">
-                <button class="btn" data-mode="grid" role="tab" aria-selected="true" data-i18n-attr="data-tip:photos.grid, aria-label:photos.grid">
+                <button class="btn" data-mode="grid" data-rank="40" role="tab" aria-selected="true" data-i18n-attr="data-tip:photos.grid, aria-label:photos.grid">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
                 </button>
-                <button class="btn" data-mode="lista" role="tab" aria-selected="false" data-i18n-attr="data-tip:photos.list, aria-label:photos.list">
+                <button class="btn" data-mode="lista" data-rank="41" role="tab" aria-selected="false" data-i18n-attr="data-tip:photos.list, aria-label:photos.list">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
                 </button>
-                <button class="btn" data-mode="map" role="tab" aria-selected="false" data-i18n-attr="data-tip:photos.map, aria-label:photos.map">
+                <button class="btn" data-mode="map" data-rank="42" role="tab" aria-selected="false" data-i18n-attr="data-tip:photos.map, aria-label:photos.map">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
                 </button>
-                <button class="btn" data-mode="pase" role="tab" aria-selected="false" data-i18n-attr="data-tip:photos.slideshow, aria-label:photos.slideshow">
+                <button class="btn" data-mode="pase" data-rank="43" role="tab" aria-selected="false" data-i18n-attr="data-tip:photos.slideshow, aria-label:photos.slideshow">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                 </button>
             </div>
 
             <input type="file" id="addInput" accept="image/*,video/*" multiple hidden>
 
-            <div class="topbar-actions">
-                <!-- The selection group (shared/browser.js draws it while photos are picked). -->
+            <div class="topbar-actions tall" role="toolbar" data-i18n-attr="aria-label:ui.actions">
+                <!-- The selection group (Ayni.list draws it while photos are picked). -->
                 <div id="selActions" class="tb-group" hidden></div>
                 <div class="tb-group">
-                    <div class="search-wrap">
-                        <input type="search" class="topbar-search" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:photos.searchByNamePh">
+                    <div class="input-group search-field fold">
+                        <input type="search" class="input" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:photos.searchByNamePh">
                     </div>
-                    <button class="btn" id="searchToggle" type="button" data-rank="20" data-i18n-attr="data-tip:ui.search, aria-label:ui.search">
+                    <button class="btn" id="searchToggle" type="button" data-rank="20" data-search data-i18n-attr="data-tip:ui.search, aria-label:ui.search">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     </button>
                     <button class="btn" id="addBtn" type="button" hidden data-rank="21" data-i18n-attr="data-tip:photos.uploadHere, aria-label:photos.uploadHere">
@@ -577,8 +583,8 @@
         </header>
 
         <!-- The folder-? button's menu: the folder (tap = change it), then the counts. -->
-        <div class="top-menu folder-menu" id="folderMenu" role="menu" hidden>
-            <button class="menu-item" id="crumb" type="button" role="menuitem" data-i18n-attr="data-tip:ui.changeFolder, aria-label:ui.changeFolder"></button>
+        <div class="panel popup controls folder-menu" popover id="folderMenu" role="dialog" aria-labelledby="folderInfoBtn">
+            <button class="btn text folder-crumb" id="crumb" type="button" data-i18n-attr="data-tip:ui.changeFolder, aria-label:ui.changeFolder"></button>
             <div class="menu-info" id="subStrip"></div>
         </div>
 
@@ -586,7 +592,7 @@
         <!-- The albums: the photo folder and its sub-folders (albums.* in the script). -->
         <nav id="treePane" class="tree-pane" hidden data-i18n-attr="aria-label:photos.albums">
             <div class="tree-head"><span class="section-label" data-i18n="photos.albums"></span></div>
-            <div id="tree" class="tree-fit"></div>
+            <ul id="tree" data-fit data-i18n-attr="aria-label:photos.albums"></ul>
         </nav>
         <div id="paneResizer" class="pane-resizer" role="separator" aria-orientation="vertical" hidden data-i18n-attr="title:ui.dragResize"></div>
 
@@ -632,7 +638,7 @@
         </div>
     </div>
 
-    <div class="lb" id="lb" aria-modal="true" role="dialog" data-i18n-attr="aria-label:photos.lightbox">
+    <div class="lightbox" id="lb" aria-modal="true" role="dialog" data-i18n-attr="aria-label:photos.lightbox">
         <div class="lb-photo">
             <div class="scene" id="lbScene"></div>
             <button class="btn on-media lb-x" id="lbX" data-i18n-attr="data-tip:ui.close, aria-label:ui.close"><span class="icon" data-icon="close"></span></button>
@@ -725,7 +731,7 @@ const SCAN_CACHE = NayiveMedia.scanCache( SCAN_PATH );
 // header search box has text - just those whose file name or comment matches.
 function photos()
 {
-    const q = NayiveUI.matcher( st.q );
+    const q = Ayni.matcher( st.q );
     return q ? PHOTOS.filter( p => q( p.name + '\n' + noteFor( p.id ) ) ) : PHOTOS;
 }
 // The slideshow's photos: the same, without the videos.
@@ -1837,7 +1843,7 @@ function tileBits( p )
 function tileHtml( p )
 {
     // .tmeta is shown only in list view (CSS). A <div>, not a <button>:
-    // the item browser puts its pick tick (a button) inside it.
+    // the item list puts its pick tick (a button) inside it.
     return '<div class="tile" data-id="' + esc( p.id ) + '" title="' + esc( tileTip( p ) ) + '">'
          + sceneHtml( p, true )
          + '<span class="geo-dot' + ( p.lat != null ? "" : " no" ) + '"></span>'
@@ -1851,7 +1857,7 @@ function tileHtml( p )
 const NO_SHOW_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/><line x1="3" y1="3" x2="21" y2="21"/></svg>';
 function unshown()
 {
-    const q = NayiveUI.matcher( st.q );
+    const q = Ayni.matcher( st.q );
     return q ? UNSHOWN.filter( u => q( u.name ) ) : UNSHOWN;
 }
 function unshownTileHtml( u )
@@ -2367,7 +2373,6 @@ $( "#searchInput" ).addEventListener( "input", e =>
 } );
 
 NayiveMedia.wireSearchToggle();                        // the search fold
-NayiveMedia.wireFolderInfo();                          // folder-? -> path + counts
 
 // Reload: re-list the folder from the server (picks up added / removed files).
 $( "#reloadBtn" ).addEventListener( "click", () =>
@@ -2377,7 +2382,7 @@ $( "#reloadBtn" ).addEventListener( "click", () =>
 } );
 
 // A HEIC / HEIF tile (not a photo the browser can pick: it has no data-id)
-// still answers one click. The photo tiles are the item browser's (see ITEM
+// still answers one click. The photo tiles are the item list's (see ITEM
 // BROWSER below): a click picks, a double-click / Enter / a tap opens.
 // Album-index cards carry their own handlers.
 $( "#grid" ).addEventListener( "click", e =>
@@ -2473,14 +2478,14 @@ document.addEventListener( "keydown", e =>
 } );
 
 /* ---------------------------------------------------------------------------
- * ITEM BROWSER + ALBUMS  (shared/browser.js, docs/item-browser-plan.md)
+ * ITEM LIST + ALBUMS  (Ayni.list and Ayni.tree)
  *
  * The photo tiles are picked like any list: a click picks one, Ctrl / Shift
  * add, a double-click / Enter / a tap opens it (the lightbox), a long-press
  * starts picking on a phone. ONE action list
  * (photoActions) feeds the header's selection group, the menu (right-click,
  * a long-press) and the keys; what does not fit the header goes into its
- * one ⋮ (NayiveUI.fitBar).
+ * one ⋮ (Ayni.fitBar).
  *
  * The albums are the photo folder (ROOT) and its sub-folders, in the shared
  * tree. A click opens an album by opening this page again at ?dir= (&root=
@@ -2495,8 +2500,8 @@ document.addEventListener( "keydown", e =>
  * Undo; when the open album itself moved or went, the page opens where it is
  * now (or the album above) and the Undo comes along (carryUndo).
  * -------------------------------------------------------------------------*/
-let browse   = null;          // NayiveUI.browser on #grid
-let treeView = null;          // NayiveUI.tree in #treePane
+let browse   = null;          // Ayni.list on #grid
+let treeView = null;          // Ayni.tree (nav) in #treePane
 let ROOT     = null;          // the tree's top folder (albumRoot)
 let ALBUMS   = null;          // ROOT's node of GumApi.dirTree(): { path, nodes }
 let DRIVE    = null;          // the Drive's top node of it: "Move to…" / "Copy to…" go anywhere
@@ -2559,7 +2564,7 @@ async function loadAlbums()
     if( my !== albumsSeq || ! top ) return;
     ALBUMS = top;
     DRIVE  = findDir( all, "files" ) || all;     // an admin's tree has no files/ top
-    if( treeView ) treeView.render();
+    if( treeView ) treeView.build();
 }
 
 // The tree's rows: ROOT and its sub-folders, by name. `from`: another top
@@ -2572,7 +2577,7 @@ function albumNodes( from )
     const mk = ( n, top ) => ( {
         id:     n.path,
         name:   albumName( n.path ),
-        kids:   ( n.nodes || [] ).filter( k => Array.isArray( k.nodes ) ).sort( byName ).map( k => mk( k, false ) ),
+        children: ( n.nodes || [] ).filter( k => Array.isArray( k.nodes ) ).sort( byName ).map( k => mk( k, false ) ),
         noDrag: top || RO
     } );
     return [ mk( base, true ) ];
@@ -2595,15 +2600,15 @@ function wireTree()
     treeOpen.add( ROOT );
     for( let p = DIR; p && p !== ROOT && under( p, ROOT ); p = NayiveMedia.dirOf( p ) ) treeOpen.add( NayiveMedia.dirOf( p ) );
 
-    treeView = NayiveUI.tree( {
-        host:    $( "#tree" ),
-        pane:    $( "#treePane" ),
-        roots:   () => albumNodes(),
+    treeView = Ayni.tree( $( "#tree" ), {
+        nav:     true,
+        sheet:   $( "#treePane" ),
+        items:   () => albumNodes(),
         isOpen:  id => treeOpen.has( id ),
         setOpen: ( id, v ) => { if( v ) treeOpen.add( id ); else treeOpen.delete( id ); saveTreeOpen(); },
         current: () => DIR,
         go:      id => { if( id !== DIR ) location.href = albumUrl( id ); },
-        menu:    ( id, x, y, anchor ) => NayiveUI.menuAt( x, y, albumMenu( id ), { anchor: anchor } ),
+        menu:    ( id, x, y, anchor ) => Ayni.menuAt( albumMenu( id ), { x: x, y: y, anchor: anchor } ),
         drag:    id => ( id === ROOT || RO || DEMO ) ? null : [ id ],
         drop:    { can:  ( ids, dest ) => canDropOn( ids, dest ) ? "inside" : false,
                    drop: ( ids, dest ) => { movePaths( ids, dest ); } }
@@ -2671,8 +2676,8 @@ function areaActions()
 
 function wireBrowser()
 {
-    browse = NayiveUI.browser( {
-        list:    $( "#grid" ),
+    browse = Ayni.list( $( "#grid" ), {
+        main:    true,
         row:     ".tile[data-id]",
         bar:     $( "#selActions" ),
         actions: photoActions(),
@@ -2682,7 +2687,6 @@ function wireBrowser()
         active:  () => ! $( "#lb" ).classList.contains( "open" ) && ( st.mode === "grid" || st.mode === "lista" ),
         grid:    () => st.mode !== "lista",
         open:    id => openPhoto( id ),
-        search:  () => $( "#searchToggle" ).click(),
         drag:    { can: () => ! RO && ! DEMO, text: ids => ids.map( baseName ).join( "\n" ) }
     } );
 }
@@ -2880,10 +2884,10 @@ async function pickAlbumFor( paths, mode )
 {
     if( ! paths.length ) return;
     const what = paths.length === 1 ? '"' + baseName( paths[ 0 ] ) + '"' : Ayni.tf( "drive.nItems", { n: paths.length } );
-    const dest = await NayiveUI.pickNode( {
+    const dest = await Ayni.pickNode( {
         title:    Ayni.t( mode === "move" ? "drive.moveTo" : "drive.copyTo" ),
         okLabel:  Ayni.t( mode === "move" ? "drive.move" : "ui.copy" ),
-        roots:    () => albumNodes( DRIVE ),
+        items:    () => albumNodes( DRIVE ),
         current:  DIR,
         lit:      null,
         disabled: id => mode === "move" ? ! canDropOn( paths, id ) : ( NayiveUI.isShared( id ) || paths.some( p => under( id, p ) ) ),
@@ -3169,7 +3173,7 @@ async function boot()
     }
 
     // The albums tree (its rows come in the background: the photos do not
-    // wait for them) and the item browser on the grid.
+    // wait for them) and the item list on the grid.
     ROOT   = await albumRoot();
     ALBUMS = { path: ROOT, nodes: [] };
     wireTree();
@@ -3222,7 +3226,7 @@ function renderAlbums( subs )
 {
     albumIndexShown = true;
     $( ".tb-modes" ).hidden = true;                // no gallery modes on the album index
-    $( ".topbar-actions .search-wrap" ).hidden = true;
+    $( ".topbar-actions .search-field" ).hidden = true;
     $( "#searchToggle" ).hidden = true;
     $( "#reloadBtn" ).hidden = true;
     $( "#addBtn" ).hidden = true;               // pick an album first, then upload into it

@@ -228,8 +228,8 @@ a:hover            { text-decoration: underline; opacity: 0.85; }
  *   tools, then .tb-sys: more (...), settings, help (?). A thin line between
  *   two groups that show, drawn here - never a hand-placed .sep.
  *   Buttons with data-rank leave when the bar runs out of room (highest rank
- *   first, .fit-out) and the ONE ⋮ in .tb-sys lists them (NayiveUI.fitBar in
- *   shared/browser.js): the bar stays on the title's line.
+ *   first, .fit-out) and the ONE ⋮ in .tb-sys lists them (Ayni.fitBar): the
+ *   bar stays on the title's line.
  *   A selection group that comes and goes grows the bar leftwards, so the
  *   buttons after it never move.
  * - .topbar is the tool-shell header. It is ONE row while everything fits; when
@@ -395,14 +395,12 @@ html.is-windowed .sync-indicator { display: none; }
     margin-left: auto;          /* hug the right edge while it shares the title's line */
 }
 
-/* The right-hand groups (see HEADER). A group with nothing shown takes no room,
-   and the line before a group only draws when a group before it shows. A
-   folded search box (SEARCH FOLD: display none, never [hidden]) is nothing
-   shown: else a group whose buttons all left for the ⋮ kept its line. */
-.tb-group                                   { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
-.tb-group[hidden],
-.tb-group:not(:has(> :not([hidden]):not(.fit-out):not(.search-fold:not(.is-open))))   { display: none; }
-:is(.topbar-actions, .header-actions, .ie-bar) > .tb-group:not([hidden]):has(> :not([hidden]):not(.fit-out):not(.search-fold:not(.is-open))) ~ .tb-group::before
+/* The right-hand groups (see HEADER) are Ayni's: the header's actions are an
+   Ayni toolbar (role="toolbar" .tall: one Tab stop, the arrows move) whose
+   .tb-group boxes take no room when nothing in them shows, with a line drawn
+   between two that show (shared/ayni/ayni-menus.css). The image editor's bar
+   (.ie-bar) is not a toolbar yet: it keeps the line here. */
+.ie-bar > .tb-group:not([hidden]):has(> :not([hidden]):not(.fit-out):not(.search-field.fold:not(.is-open))) ~ .tb-group::before
 {
     content: "";
     align-self: stretch;
@@ -471,13 +469,13 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
  * tools yet (Music / Movies before a folder is picked) hides its .tb-tools
  * boxes (display: contents).
  *
- * - The folder-? button (.btn[aria-haspopup]) opens a .top-menu.folder-menu
- *   (NayiveMedia.wireFolderInfo): #crumb, a .menu-item with the folder icon +
+ * - The folder-? button (popovertarget) opens an Ayni popup, .folder-menu:
+ *   #crumb, a text button with the folder icon +
  *   the folder PATH that opens the change-folder picker, then #subStrip, a
  *   .menu-info line with the item counts / genres / totals. Nothing else
  *   shows the path or the counts.
  * - .tb-modes holds the buttons that switch what is shown; the right-hand
- *   group starts with the search (it folds behind a magnifier, SEARCH FOLD
+ *   group starts with the search (it folds behind a magnifier, SEARCH
  *   below), then the app's tools, then the rescan button (#reloadBtn in all
  *   three); help is in the .tb-sys group after it.
  * - The games still use .view-bar as a row of its own (below).
@@ -487,7 +485,8 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
 .topbar .tb-modes,
 .topbar .tb-actions     { margin-right: 6px; }
 
-.folder-menu            { max-width: min(360px, calc(100vw - 12px)); }
+.folder-menu            { width: auto; max-width: min(360px, calc(100vw - 12px)); padding: 6px; gap: 2px; }
+.folder-menu .folder-crumb { width: 100%; justify-content: flex-start; text-align: left; padding: 8px 12px; border-radius: var(--radius-s); }
 .folder-menu #crumb span { overflow-wrap: anywhere; }
 .menu-info
 {
@@ -524,51 +523,19 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
 .tb-actions > .tb-sep { width: 1px; align-self: stretch; margin: 4px; background: var(--line); flex: 0 0 auto; }
 
 /* -----------------------------------------------------------------------------
- * SEARCH FOLD  - every toolbar search field (NayiveUI.searchFold, ui.js)
- *
- * At rest only the magnifier (.search-fold-toggle) shows. Opened, the field
- * (.search-fold.is-open) stands in its place and takes the room the bar has
- * left, up to 360px; the bar (.searching) stops wrapping so "too narrow" can
- * be measured. When the field would get under 180px the bar turns
- * .search-tight and its other icons step aside. Inside the field, right: a
- * funnel button (.search-mark, only for a field with a filter dialog:
- * .has-filter), an up / down pair (.search-step, a field that steps through
- * its hits in place: .has-steps), then the × (.search-shut) that folds it away. The field's
- * look is the shared input rule - see FORM FIELD below.
+ * SEARCH  - every search field is Ayni's (shared/ayni/ayni-search.css): a
+ * toolbar one is .input-group.search-field.fold behind its [data-search]
+ * magnifier; what does not fit beside it goes into the ⋮ (Ayni.fitBar).
+ * Only Nayive's header layout is here: a card .header's title grows at rest
+ * (it pushes the buttons right); while searching it keeps its width, as a
+ * .topbar's does, and the field gets the room.
  * ---------------------------------------------------------------------------*/
-.search-fold                { display: none; position: relative; flex: 1 1 auto; width: auto;
-                              min-width: 0; max-width: 360px; }
-.search-fold.is-open        { display: block; }
-.search-fold > input        { width: 100%; padding-right: 34px; }
-/* type="search" gets the browser's own × while typing (Chromium, Safari):
-   the fold's × already does that job - hide it so no app shows two. */
-.search-fold > input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; display: none; }
-.search-fold.has-filter > input { padding-right: 60px; }
-.search-fold.has-steps > input  { padding-right: 86px; }   /* up · down · × */
-.search-fold .search-ends   { position: absolute; top: 0; bottom: 0; right: 2px;
-                              display: flex; align-items: center; }
-.search-fold .search-ends .btn.sm     { width: 26px; height: 26px; }
-.search-fold .search-ends .btn.sm svg { width: 15px; height: 15px; }
-/* How many items match (fold.count), before the funnel and the ×. */
-.search-fold .search-count  { padding: 0 4px; font-size: 0.75rem; color: var(--text-dim);
-                              white-space: nowrap; font-variant-numeric: tabular-nums; pointer-events: none; }
-.search-fold .search-count[hidden] { display: none; }
-/* Filters in force (the app sets .filter-on): the funnel lit. */
-.search-fold.filter-on .search-mark { color: var(--accent); }
-.search-fold-bar.searching  { flex-wrap: nowrap; }
-.searching .search-fold-toggle { display: none; }
-/* The group holding the field grows with it: the header's buttons stay at
-   the right edge, the view bar's right after the field. */
-.topbar-actions:has(.search-fold.is-open),
-.header-actions:has(.search-fold.is-open),
-.tb-group:has(> .search-fold.is-open)       { flex: 1 1 auto; min-width: 0; justify-content: flex-end; }
-/* A card .header's title grows at rest (it pushes the buttons right); while
-   searching it keeps its width, as a .topbar's does, and the field gets the room. */
-.header.searching h1        { flex-grow: 0; }
-.search-tight .btn:not(.search-fold .btn),
-.search-tight .sep,
-.search-tight .tb-sep,
-.search-tight .tb-group::before { display: none; }
+.header:has(.search-field.fold.is-open) h1 { flex-grow: 0; }
+/* While searching the title row stops wrapping: the field squeezes to its
+   180px and what still does not fit goes into the ⋮ by rank (a wrapped row
+   would only push the whole toolbar below the title). */
+.topbar:has(.search-field.fold.is-open),
+.header:has(.search-field.fold.is-open) { flex-wrap: nowrap; }
 
 
 /* -----------------------------------------------------------------------------
@@ -1016,7 +983,7 @@ input[type="range"]
  *
  * A row in a list - a file in Drive, a trip, a saved document. A --card2
  * surface with --line border and --radius-m corners. Hover firms up the
- * border; .is-selected fills it with accent and flips the text.
+ * border. A picked row (in an Ayni item list) takes Ayni's soft Accent tint.
  * ---------------------------------------------------------------------------*/
 .card-row
 {
@@ -1031,7 +998,6 @@ input[type="range"]
     transition: border-color var(--tr-fast), background-color var(--tr-fast);
 }
 .card-row:hover        { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
-.card-row.is-selected  { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
 
 
 /* -----------------------------------------------------------------------------
@@ -1402,9 +1368,9 @@ button,
  * (x) are the coach marks' own (.coach-*). A dashed ring is a "ghost": the
  * place where the button shows up once there is something to act on.
  * ---------------------------------------------------------------------------*/
-.tour-overlay           { position: fixed; inset: 0; z-index: 2000; pointer-events: none; }   /* over every menu and popup (Calc lifts those to 400-700); over a dialog it moves into it (ui.js) */
+.tour-overlay           { position: fixed; inset: 0; z-index: 2000; pointer-events: none; }   /* a popover in the top layer, over every menu and popup; over a dialog it moves into it (ui.js hostOver) */
 .tour-overlay > *       { pointer-events: auto; }
-.tour-overlay[popover]  { width: auto; height: auto; margin: 0; padding: 0; border: 0; background: none; overflow: visible; }   /* above an open dialog (ui.js hostOver) */
+.tour-overlay[popover]  { width: auto; height: auto; margin: 0; padding: 0; border: 0; background: none; overflow: visible; }
 .tour-pane              { position: fixed; background: var(--scrim); }
 .tour-lid               { position: fixed; }
 .tour-overlay.is-tap .tour-lid { display: none; }
@@ -1566,11 +1532,9 @@ button,
 .share-drop svg    { width: 16px; height: 16px; }
 .share-drop[disabled] { opacity: 0.5; cursor: default; }
 
-/* Who else could have it: one list box, the names in three columns, a tick-box
- * in front of each. A name too wide for its column ends in "..." (full name in
- * the tooltip). The tick-box is the browser's own <input type="checkbox">
- * (coloured by the accent-color rule up in the INPUT section), so it draws the
- * same everywhere. */
+/* Who else could have it: an Ayni pick list (ul.lb), the names in three
+ * columns, the check square in front of each. A name too wide for its column
+ * ends in "..." (full name in the tooltip). */
 .share-pick
 {
     display: grid;
@@ -1578,26 +1542,10 @@ button,
     align-content: start;
     gap: 2px;
     max-height: 44vh;
-    overflow-y: auto;
     margin: 12px 0 4px;
-    padding: 4px;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    background: var(--card);
 }
-.share-user
-{
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-    padding: 8px;
-    border: 1px solid transparent;
-    border-radius: var(--radius-s);
-    cursor: pointer;
-}
-.share-user span  { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.share-user:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
+.share-pick [role="option"]      { min-width: 0; padding-top: 8px; padding-bottom: 8px; }
+.share-pick [role="option"] span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* "Pueden añadir archivos" - one tick under the people list. Deliberately not
    inside the .share-pick box: it is a property of the share, not of a person. */
@@ -1613,14 +1561,8 @@ button,
 }
 .share-add input { flex: 0 0 auto; width: auto; margin: 0; }
 .share-add > .switch { margin-left: auto; }   /* an on / off row: the text, then the switch */
-.share-user.on    { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
-.share-user input { flex: 0 0 auto; width: auto; margin: 0; }
-
-/* "Todos" - the first row of the list, the whole width. While it is ticked the
-   names are greyed out: everybody is in already. */
-.share-all { grid-column: 1 / -1; }
-.share-pick.all .share-user:not(.share-all) { opacity: 0.45; cursor: default; }
-.share-pick.all .share-user:not(.share-all):hover { background: none; }
+/* "Everybody": the on / off row above the names (it greys them out). */
+.share-all { margin: 12px 2px 0; }
 
 /* The sheet's sections: "Cualquiera con el enlace" (a trip only, on top) and
    the people. Each has a heading and a note; the divider goes only BETWEEN two
@@ -1694,8 +1636,9 @@ button,
 
 
 /* -----------------------------------------------------------------------------
- * TOOLBAR GROUP POPUP  (a popup button  ->  .popup > .popup-row > .pop-btn)
- *   -  NayiveOffice.groupPopup
+ * TOOLBAR GROUP POPUP  (a popup button  ->  .panel.popup.tools > .popup-row > .pop-btn)
+ *   -  an Ayni tool group (shared/ayni/ayni-menus.css): popovertarget on the
+ *   trigger, data-lit-by for its light
  *
  * A run of near-identical toolbar buttons - the six alignments, the four
  * row/column edits, the two sorts - costs six slots on the bar and reads as
@@ -1705,14 +1648,15 @@ button,
  * the start; this only gives the shape a name so Write and the rest can use
  * it too.
  *
- * position: fixed, anchored under its trigger in JS, like .top-menu: the
- * toolbars carry overflow and would clip an absolute child.
+ * Ayni gives the card its look and place (a popover in the top layer). The
+ * trigger opens a popup: Ayni marks it with a small triangle, so a button
+ * that opens something never looks like a button that does something.
+ * Inside, .pop-btn is a 32 px Ayni .btn; a toggle is aria-pressed.
  *
- * The trigger carries aria-haspopup: Ayni marks it with a small triangle,
- * so a button that opens something never looks like a button that does
- * something. Inside, .pop-btn is a 32 px Ayni .btn; a toggle is aria-pressed.
+ * A plain .popup (no .panel) is the older shape, shown by .open: only Calc's
+ * formula panel (#fePanel) is still one.
  * -------------------------------------------------------------------------- */
-.popup
+.popup:not(.panel)
 {
     position: fixed;
     z-index: 200;
@@ -1723,7 +1667,7 @@ button,
     border-radius: var(--radius-m);
     box-shadow: var(--elev-dialog);
 }
-.popup.open              { display: block; }
+.popup:not(.panel).open  { display: block; }
 .popup-row               { display: flex; gap: 2px; }
 .popup-row + .popup-row  { margin-top: 2px; }
 .popup-row-sep           { margin-top: 5px; padding-top: 6px; border-top: 1px solid var(--line); }
@@ -1734,8 +1678,9 @@ button,
 /* -----------------------------------------------------------------------------
  * "MORE" MENU  (.top-menu > .menu-item)  -  NayiveUI.wireMenu
  *
- * The small popup a header "⋮" button opens: view switch (Calendar), the
- * phone-only import / export (Contacts), the file buttons (Calc, Write).
+ * Only the desktop's own bar popups (desktop/index.html, until the desktop
+ * family moves to Ayni) and Chat's hold-on-a-message layer (.ctx) still use
+ * it; every other menu is an Ayni menu (shared/ayni/ayni-menus.css).
  * position: fixed and anchored under its button by shared/ui.js, so a .topbar
  * with overflow never clips it. One action per row: an 18px glyph + a label.
  * `.mi-check` marks the current choice in a radio-style menu; `.menu-sep` is a
@@ -1792,17 +1737,17 @@ button,
    the phone and drops it here, so a PC never offers the same thing twice. */
 @media (min-width: 641px)
 {
-    .top-menu .mi-phone  { display: none; }
+    .panel.menu .mi-phone { display: none; }
 }
 
 /* -----------------------------------------------------------------------------
- * PULL-DOWN MENU BAR  (#menuBar > .menu-top, .menu-panel)  -  shared/menubar.js
+ * PULL-DOWN MENU BAR  (#menuBar > .menu-top)  -  shared/menubar.js
  *
  * The classic "Archivo · Edición · Ver …" row Write and Calc offer instead of
- * their icon toolbar. The bar is one row of text buttons; the drop-downs reuse
- * the .top-menu / .menu-item vocabulary above (card, border, shadow, tick), and
- * only tighten the rows and add the two things a pull-down has that a "⋮" popup
- * does not: a shortcut column on the right and a submenu arrow.
+ * their icon toolbar: an Ayni menu bar of text buttons, across the window
+ * under the header. Its drop-downs are Ayni menus (shortcut column, ticks,
+ * one level of submenus); a row whose glyph is a character (Calc's "∑")
+ * shows it in the icon slot (.mi-char).
  *
  * Each app keeps its own `#app.is-menus …` rule for collapsing its toolbar -
  * what has to disappear differs, and Write's strip must collapse with
@@ -1814,7 +1759,7 @@ button,
     flex: 0 0 auto;
     display: flex; align-items: center; flex-wrap: wrap;
     gap: 1px; padding: 2px 6px;
-    border-bottom: 1px solid var(--line); background: var(--card);
+    border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--card);
 }
 
 .menu-top
@@ -1828,30 +1773,7 @@ button,
 .menu-top:hover                 { background: color-mix(in srgb, var(--text)  9%, transparent); }
 .menu-top[aria-expanded="true"] { background: color-mix(in srgb, var(--text) 16%, transparent); }
 
-.menu-panel                      { max-height: calc(100vh - 80px); overflow-y: auto; min-width: 236px; }
-.menu-panel .menu-item           { padding: 7px 10px; font-size: 0.9rem; gap: 8px; }
-.menu-panel .menu-item[disabled] { opacity: 0.42; cursor: default; }
-.menu-panel .menu-item[disabled]:hover { background: none; }
-.menu-panel .mi-label            { flex: 1 1 auto; }
-.menu-panel .mi-key              { flex: 0 0 auto; padding-left: 20px; color: var(--text-dim); font-size: 0.8rem; }
-.menu-panel .mi-arrow            { flex: 0 0 auto; padding-left: 20px; color: var(--text-dim); font-size: 0.8rem; }
-
-/* A colour entry (text colour / fill) shows the colour itself. */
-.menu-panel .mi-swatch
-{ width: 15px; height: 15px; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 3px; }
-
-/* The glyph before the label - the toolbar button's own icon, cloned (see
-   `iconOf` / `icon` in shared/menubar.js). A row with none keeps the empty
-   slot, so the labels of one panel still line up. A glyph that brings no fill
-   of its own (an icon-font path) takes the row's colour, as in its toolbar. */
-.menu-panel .mi-icon
-{
-    width: 18px; height: 18px; flex: 0 0 auto;
-    display: inline-flex; align-items: center; justify-content: center;
-    color: var(--text-dim);
-}
-.menu-panel .mi-icon svg              { width: 16px; height: 16px; }
-.menu-panel .mi-icon svg:not([fill])  { fill: currentColor; }
+.menu .mi-char                  { display: inline-grid; place-items: center; width: 18px; font-size: 0.95rem; line-height: 1; }
 
 
 /* -----------------------------------------------------------------------------
@@ -2588,211 +2510,13 @@ html.nv-locked body { visibility: hidden; }
 
 
 /* -----------------------------------------------------------------------------
- * ITEM BROWSER  (shared/browser.js)  -  docs/item-browser-plan.md
- *
- * One way to pick things in a list and act on them, in every list app:
- * - .pick-tick: the square tick (a checkbox: many can be picked, a round one
- *   would read as a radio button) browser.js puts at the start of each row. With a
- *   mouse it shows on hover (and on a picked row); on touch only while picking
- *   (the list has .is-picking). A card grid places it itself (absolute corner).
- * - .is-selected paints a picked row (.card-row already fills it with accent).
- * - .sel-group: the header .tb-group of the selection (× count, Select all,
- *   every action; .sel-gap starts a new menu section). What does not fit
- *   leaves (.fit-out) into the toolbar's one ⋮ (.fit-more).
- * - .item-menu: the one popup menu (right-click, long-press, the toolbar ⋮),
- *   the .top-menu look plus a key column and greyed rows.
- * - .ntree: the shared tree (side pane, "Move to…", the phone's slide-in
- *   sheet: .tree-pane.tree-sheet + .tree-backdrop).
- * - .drop-target / .drop-before / .drop-after / .dragging: drag and drop.
+ * ITEM LISTS AND TREES: Ayni's (Ayni.list, Ayni.tree, shared/ayni/ayni-lists.css).
+ * On a phone, while rows are picked, the picked group takes the view switch's room.
  * ---------------------------------------------------------------------------*/
-.pick-tick
-{
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    padding: 0;
-    margin: 0;
-    border: 1.5px solid var(--text-faint);
-    border-radius: 5px;
-    background: transparent;
-    color: transparent;
-    cursor: pointer;
-    opacity: 0;
-    transition: opacity var(--tr-fast);
-}
-.pick-tick svg                              { width: 13px; height: 13px; }
-.nb-list .is-selected .pick-tick,
-.nb-list.is-picking .pick-tick              { opacity: 1; }
-.nb-list .is-selected .pick-tick            { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.nb-list .card-row.is-selected .pick-tick   { background: var(--on-accent); border-color: var(--on-accent); color: var(--accent); }
-.nb-list.is-picking .pick-tick              { border-color: var(--text-dim); }
-
-@media (hover: hover) and (pointer: fine)
-{
-    .nb-list [aria-selected]:hover .pick-tick    { opacity: 1; }
-}
-@media (hover: none), (pointer: coarse)
-{
-    .nb-list:not(.is-picking) .pick-tick         { display: none; }
-}
-
-/* The keyboard's row. */
-.nb-list [aria-selected]:focus               { outline: none; }
-.nb-list [aria-selected]:focus-visible       { outline: 2px solid color-mix(in srgb, var(--accent) 70%, var(--text)); outline-offset: -2px; }
-
-/* The selection group in the header: the count with its ×. The × clears,
-   the number scrolls to the next pick. */
-.sel-count
-{
-    display: inline-flex;
-    align-items: center;
-    flex: none;
-    border-radius: var(--radius-pill);
-    background: color-mix(in srgb, var(--accent) 16%, transparent);
-}
-.sel-count > .btn
-{
-    width: auto;
-    padding: 0 4px 0 7px;
-    border-radius: var(--radius-pill);
-    color: var(--text);
-    font: inherit;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-}
-.sel-count > .btn + .btn           { padding: 0 10px 0 4px; min-width: 2em; }
-.sel-count svg                               { width: 15px; height: 15px; }
-.sel-count > .btn:hover                 { background: color-mix(in srgb, var(--accent) 28%, transparent); }
-/* The pick the count chip (or a closed search) just scrolled to. */
-.nb-list .nb-flash                           { animation: nb-flash 1.2s ease-out; }
-@keyframes nb-flash
-{
-    0%, 40% { outline: 3px solid var(--text); outline-offset: -3px; }
-    100%    { outline: 3px solid transparent; outline-offset: -3px; }
-}
-/* A button that did not fit (fitBar); a gap between two menu sections. */
-.fit-out                                     { display: none !important; }
-.sel-group > .sel-gap:not(:first-child)      { margin-left: 6px; }
 @media (max-width: 640px)
 {
     .topbar:has(.has-selection) > .tb-modes,
     .header:has(.has-selection) > .tb-modes      { display: none; }
-}
-
-/* The one popup menu. */
-.item-menu                                   { max-height: calc(100vh - 16px); overflow-y: auto; min-width: 220px; max-width: min(320px, calc(100vw - 16px)); }
-.item-menu .menu-item                        { padding: 8px 10px; font-size: 0.92rem; }
-.item-menu .menu-item[disabled]              { opacity: 0.42; cursor: default; background: none; }
-.item-menu .menu-item:focus-visible          { outline: 2px solid var(--accent); outline-offset: -2px; }
-.item-menu .mi-label                         { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.item-menu .mi-key                           { flex: 0 0 auto; padding-left: 18px; color: var(--text-dim); font-size: 0.78rem; }
-.item-menu .mi-noicon                        { width: 18px; flex: 0 0 auto; }
-@media (hover: none), (pointer: coarse)
-{
-    .item-menu .menu-item                    { padding: 11px 12px; font-size: 0.95rem; }
-    .item-menu .mi-key                       { display: none; }
-}
-
-/* The tree. */
-.ntree                                       { display: flex; flex-direction: column; gap: 1px; min-width: max-content; }
-.ntree .tree-row
-{
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    min-height: 30px;
-    padding: 4px 6px 4px calc(4px + var(--depth, 0) * 16px);
-    border-radius: var(--radius-s);
-    color: var(--text);
-    font-size: 0.87rem;
-    white-space: nowrap;
-    cursor: pointer;
-    user-select: none;
-}
-.ntree .tree-row:hover                       { background: color-mix(in srgb, var(--text) 7%, transparent); }
-.ntree .tree-row.is-active                   { background: var(--accent); color: var(--on-accent); }
-.ntree .tree-row:focus                       { outline: none; }
-.ntree .tree-row:focus-visible               { outline: 2px solid color-mix(in srgb, var(--accent) 70%, var(--text)); outline-offset: -2px; }
-.ntree .tree-row.is-off                      { opacity: 0.35; cursor: default; }
-.ntree .tree-row.is-off:hover                { background: none; }
-/* The arrow: a 24 px target (a finger on a tablet), the row no taller. */
-.ntree .twisty                               { display: inline-flex; width: 24px; height: 24px; margin: -4px -4px -4px -2px; flex: 0 0 auto; align-items: center; justify-content: center; color: var(--text-dim); transition: transform var(--tr-fast); }
-.ntree .twisty svg                           { width: 14px; height: 14px; }
-.ntree .twisty.leaf                          { visibility: hidden; }
-.ntree .tree-row.is-open > .twisty           { transform: rotate(90deg); }
-.ntree .tree-ic                              { display: inline-flex; flex: 0 0 auto; color: var(--text-dim); }
-.ntree .tree-ic svg                          { width: 16px; height: 16px; }
-.ntree .tree-row.is-active .twisty,
-.ntree .tree-row.is-active .tree-ic          { color: inherit; }
-.ntree .tree-name                            { flex: 1 1 auto; }
-/* .tree-fit: a side pane of fixed width (Music, Movies, Photos, Bookmarks,
-   Contacts) - the tree drops its max-content floor and a long name ends in
-   "…". Drive's has no .tree-fit: its pane scrolls sideways instead. */
-.ntree.tree-fit                              { min-width: 0; }
-.ntree.tree-fit .tree-name                   { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.ntree .tree-badge
-{
-    flex: 0 0 auto;
-    margin-left: 6px;
-    padding: 0 6px;
-    border-radius: var(--radius-pill);
-    background: color-mix(in srgb, var(--accent) 18%, transparent);
-    font-size: 0.72rem;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-}
-.ntree .tree-row.is-active .tree-badge       { background: color-mix(in srgb, var(--on-accent) 25%, transparent); }
-/* A button at the row's right end (node.tail: eMail's eye), the row no taller. */
-.ntree .tree-tail                            { flex: 0 0 auto; width: 26px; height: 26px; margin: -4px -2px -4px 6px; color: var(--text-dim); }
-.ntree .tree-tail svg                        { width: 15px; height: 15px; }
-.ntree .tree-row.is-active .tree-tail        { color: inherit; }
-
-/* "Move to…": the same tree in a dialog. */
-.pick-tree
-{
-    height: min(320px, 50vh);
-    overflow: auto;
-    margin-bottom: 12px;
-    padding: 4px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-s);
-    background: var(--bg);
-}
-
-/* Drag and drop. */
-.dragging                                    { opacity: 0.4; }
-.drop-target                                 { background: color-mix(in srgb, var(--accent) 30%, transparent) !important; outline: 2px solid var(--accent); outline-offset: -2px; }
-.drop-before                                 { box-shadow: inset 0 2px 0 var(--accent); }
-.drop-after                                  { box-shadow: inset 0 -2px 0 var(--accent); }
-
-/* The phone's slide-in tree. */
-.tree-backdrop                               { display: none; }
-@media (max-width: 640px)
-{
-    .tree-pane.tree-sheet
-    {
-        position: fixed;
-        top: 0;
-        bottom: 0;
-        left: 0;
-        z-index: 95;
-        display: block;
-        width: 82vw;
-        max-width: 300px;
-        padding-top: 12px;
-        overflow: auto;
-        background: var(--bg);
-        transform: translateX(-100%);
-        transition: transform 0.18s ease;
-    }
-    .tree-pane.tree-sheet.open               { transform: none; box-shadow: 0 0 32px rgba(0, 0, 0, 0.45); }
-    .tree-backdrop.open                      { display: block; position: fixed; inset: 0; z-index: 90; background: rgba(0, 0, 0, 0.45); }
-    .tree-sheet .ntree                       { min-width: 0; }
-    .tree-sheet .ntree .tree-row             { min-height: 40px; }
-    .tree-sheet .ntree .tree-name            { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 }
 
 /* ---------------------------------------------------------------------------
@@ -2866,9 +2590,9 @@ html.nv-locked body { visibility: hidden; }
        header that wraps) keeps their 44 px pads apart, so a finger hits the
        button it means, not its neighbour. The
        line between two groups loses its side margins (the gaps already give
-       it room). What no longer fits goes into the ⋮ (NayiveUI.fitBar). */
+       it room). What no longer fits goes into the ⋮ (Ayni.fitBar). */
     html :is(.topbar, .header, .topbar-actions, .header-actions, .tb-group, .tb-modes) { gap: 8px; }   /* rows too: a header that wraps */
-    html :is(.topbar-actions, .header-actions, .ie-bar) > .tb-group::before             { margin-inline: 0; }
+    html :is(.topbar-actions, .header-actions, .ie-bar) > .tb-group::before             { margin-inline: 0 !important; }   /* beats Ayni's toolbar line */
 
     :where(.stage-top, .subtask-row, .queue-row, .sheet-tab)
     {

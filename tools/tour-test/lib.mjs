@@ -26,12 +26,12 @@ export const state = c => c.evaluate( `( () => { const o = document.querySelecto
     const rb = r.getBoundingClientRect(), bb = b.getBoundingClientRect();
     const hit = r.hidden ? null : document.elementsFromPoint( rb.left + rb.width / 2, rb.top + rb.height / 2 ).find( e => ! o.contains( e ) );
     // The lit thing and its parents up to the first button / id: their ids and classes.
-    const names = []; for( let e = hit, i = 0; e && i < 5; e = e.parentElement, i++ ) { names.push( e.id || e.getAttribute( 'class' ) || e.tagName ); if( e.id || e.matches( 'button, [aria-selected], .nayive-home-link' ) ) break; }
+    const names = []; for( let e = hit, i = 0; e && i < 5; e = e.parentElement, i++ ) { names.push( e.id || e.dataset.menu || e.dataset.act || e.getAttribute( 'class' ) || e.tagName ); if( e.id || e.matches( 'button, [aria-selected], .nayive-home-link' ) ) break; }
     const [ a, m ] = o.querySelector( '.tour-count' ).textContent.match( /\\d+/g ).map( Number );
     return { n: a, m, text: b.querySelector( ':scope > p' ).textContent, note: n.hidden ? '' : n.textContent,
              title: o.querySelector( '.tour-head b' ).textContent,
              ghost: r.classList.contains( 'is-ghost' ), centred: r.hidden, tap: o.classList.contains( 'is-tap' ),
-             inMenu: !! ( hit && hit.closest( '.item-menu' ) ),
+             inMenu: !! ( hit && hit.closest( '#ayni-menu' ) ),
              lit: names.join( ' < ' ),
              fits: bb.left >= 0 && bb.top >= 0 && bb.right <= innerWidth && bb.bottom <= innerHeight && ! b.hidden }; } )()` );
 
@@ -45,14 +45,14 @@ export async function startTour( c )
     // A "?" that fitBar moved into the ⋮: the ⋮, then its row.
     else if( await c.evaluate( "! [ ...document.querySelectorAll( '[data-intro-open]' ) ].some( e => e.getClientRects().length && ! e.closest( '.fit-out' ) )" ) )
     {
-        await mouse( c, ( await c.evaluate( "( () => { const q = [ ...document.querySelectorAll( '[data-intro-open]' ) ].find( e => e.closest( '.fit-out' ) ); let h = q; while( h && ! h._fitBar ) h = h.parentElement; return !! h; } )()" ) )
-            ? await c.evaluate( "( () => { const q = [ ...document.querySelectorAll( '[data-intro-open]' ) ].find( e => e.closest( '.fit-out' ) ); let h = q; while( h && ! h._fitBar ) h = h.parentElement; const b = h._fitBar.button.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; } )()" )
+        await mouse( c, ( await c.evaluate( "( () => { const q = [ ...document.querySelectorAll( '[data-intro-open]' ) ].find( e => e.closest( '.fit-out' ) ); let h = q; while( h && ! h.ayniFitBar ) h = h.parentElement; return !! h; } )()" ) )
+            ? await c.evaluate( "( () => { const q = [ ...document.querySelectorAll( '[data-intro-open]' ) ].find( e => e.closest( '.fit-out' ) ); let h = q; while( h && ! h.ayniFitBar ) h = h.parentElement; const b = h.ayniFitBar.button.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; } )()" )
             : ".fit-more" );
-        await c.until( "!! document.querySelector( '.item-menu:not([hidden]) .menu-item' )" );
-        await mouse( c, await c.evaluate( `( () => { const r = [ ...document.querySelectorAll( '.item-menu:not([hidden]) .menu-item' ) ].find( m => { const q = [ ...document.querySelectorAll( '[data-intro-open]' ) ].find( e => e.closest( '.fit-out' ) ); const l = q && ( q.getAttribute( 'aria-label' ) || q.title || '' ).trim(); return !! l && ( m.textContent.trim() === l || l.indexOf( m.textContent.trim() ) === 0 ); } ); if( ! r ) return null; const b = r.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; } )()` ) );
+        await c.until( "!! document.querySelector( '#ayni-menu:popover-open [role^=menuitem]' )" );
+        await mouse( c, await c.evaluate( `( () => { const r = [ ...document.querySelectorAll( '#ayni-menu:popover-open [role^=menuitem]' ) ].find( m => { const q = [ ...document.querySelectorAll( '[data-intro-open]' ) ].find( e => e.closest( '.fit-out' ) ); const l = q && ( q.getAttribute( 'aria-label' ) || q.title || '' ).trim(); return !! l && ( m.textContent.trim() === l || l.indexOf( m.textContent.trim() ) === 0 ); } ); if( ! r ) return null; const b = r.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; } )()` ) );
     }
     else await mouse( c, "[data-intro-open]" );
-    const CARD = "dialog.panel[open] .intro-tour", MENU = ".top-menu:not([hidden]) [data-menu=\"tourBtn\"]";
+    const CARD = "dialog.panel[open] .intro-tour", MENU = ".panel.menu:popover-open [data-menu=\"tourBtn\"]";
     if( ! await c.until( `!! document.querySelector( '${CARD}' ) || !! document.querySelector( '${MENU}' )` ) ) return false;
     await mouse( c, await c.evaluate( `!! document.querySelector( '${CARD}' )` ) ? CARD : MENU );
     const up = await c.until( "!! document.querySelector( '.tour-overlay .tour-bubble:not([hidden])' )" );

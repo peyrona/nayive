@@ -472,13 +472,14 @@
     // PHONE CHROME
     //
     // On a phone the editors keep one row of favourite controls and move their
-    // file buttons behind the header's "..." (a .top-menu built from the REAL
-    // buttons - glyph and title cloned - so it never drifts from the toolbar:
+    // file buttons behind the header's "..." (an Ayni menu built from the REAL
+    // buttons - glyph and name cloned - so it never drifts from the toolbar:
     // an entry just clicks the button it came from). The "?" moves into the
     // header too, because the row it lives in folds away while you type.
 
     // Build the menu entries and wire the popup. `ids` are the buttons to
-    // mirror; the menu is the .top-menu element, the button the header "...".
+    // mirror; the menu is the page's .panel.menu element, the button the
+    // header "..." (it opens it: popovertarget). Returns the menu element.
     // `phoneOnly` names the ids that are still ON the bar on a PC (Write's
     // print, page setup, comments...): they are built all the same, so the
     // phone has them when the bar is gone, and CSS drops them above 640px so
@@ -497,118 +498,32 @@
             var svg = src && src.querySelector( "svg" );
             if( ! svg ) return;
             var item = document.createElement( "button" );
-            item.type         = "button";
-            item.className    = "menu-item" + ( phone.indexOf( id ) >= 0 ? " mi-phone" : "" );
+            var ic   = document.createElement( "span" );
+            item.type = "button";
+            item.setAttribute( "role", "menuitem" );
+            if( phone.indexOf( id ) >= 0 ) item.className = "mi-phone";
             item.dataset.menu = id;
-            item.appendChild( svg.cloneNode( true ) );
-            item.appendChild( document.createTextNode( src.getAttribute( "title" ) || id ) );
+            ic.className = "icon";
+            ic.appendChild( svg.cloneNode( true ) );
+            item.appendChild( ic );
+            item.appendChild( document.createTextNode( src.getAttribute( "aria-label" ) || src.dataset.tip || id ) );
             menu.appendChild( item );
         } );
-        return NayiveUI.wireMenu( { btn: opts.btn || "moreBtn", menu: menu, onPick: function ( item )
+        byId( opts.btn || "moreBtn" ).setAttribute( "popovertarget", menu.id );
+        menu.addEventListener( "ayni:action", function ( e )
         {
-            var src = item.dataset.menu && byId( item.dataset.menu );
+            var src = e.detail.item.dataset.menu && byId( e.detail.item.dataset.menu );
             if( src ) src.click();
-        } } );
+        } );
+        Ayni.init( menu );
+        return menu;
     }
 
     //------------------------------------------------------------------------//
-    // TOOLBAR GROUP POPUP  (paired CSS: TOOLBAR GROUP POPUP in shared/app.css)
-    //
-    // Six alignment buttons in a row cost six slots and read as one blur. One
-    // button takes their place on the bar and the six live in a .popup card
-    // under it. The buttons in that card are THE REAL ONES - they sit inside
-    // the popup in index.html, they keep their ids, their handlers and their
-    // "active" light. Nothing is cloned and nothing is moved at run time, so
-    // there is no flash on load and no second copy to keep in step.
-    //
-    //   var g = NayiveOffice.groupPopup( { btn: "fmtAlignBtn", popup: "alignPopup",
-    //                                      activeFrom: [ "fmtWrapBtn" ] } );
-    //
-    //   btn         the trigger already in the markup (Ayni marks it: aria-haspopup)
-    //   popup       the .popup element holding the real buttons
-    //   activeFrom  ids whose "active" lights the TRIGGER too, so a toggle that
-    //               is on can be seen with the card shut. Left out: never lit.
-    //   anchor      () -> a DOMRect to hang the card from, when the trigger
-    //               itself is collapsed (menu chrome). Default: the trigger.
-    //
-    // Returns { open, close, isOpen, sync }. Call sync() from wherever the app
-    // refreshes its toolbar state.
-    function groupPopup( opts )
-    {
-        var btn = typeof opts.btn   === "string" ? byId( opts.btn )   : opts.btn;
-        var pop = typeof opts.popup === "string" ? byId( opts.popup ) : opts.popup;
-        if( ! btn || ! pop ) return null;
-
-        var watch = ( opts.activeFrom || [] ).map( byId ).filter( Boolean );
-
-        function isOpen() { return pop.classList.contains( "open" ); }
-
-        function close()
-        {
-            if( ! isOpen() ) return;
-            pop.classList.remove( "open" );
-            btn.setAttribute( "aria-expanded", "false" );
-        }
-
-        function open()
-        {
-            var r = opts.anchor ? opts.anchor() : btn.getBoundingClientRect();
-            pop.style.top  = ( r.bottom + 4 ) + "px";
-            pop.style.left = r.left + "px";
-            pop.classList.add( "open" );
-
-            // nudge back inside the viewport when the trigger sits near an edge
-            var pr = pop.getBoundingClientRect();
-            if( pr.right > window.innerWidth - 8 )
-                pop.style.left = Math.max( 8, window.innerWidth - 8 - pr.width ) + "px";
-
-            btn.setAttribute( "aria-expanded", "true" );
-        }
-
-        // The trigger lights up when one of its toggles is on, so "ajustar
-        // texto" can be seen without opening the card.
-        function sync()
-        {
-            if( ! watch.length ) return;
-            btn.setAttribute( "aria-pressed", watch.some( function ( el )
-            {
-                return el.getAttribute( "aria-pressed" ) === "true";
-            } ) );
-        }
-
-        btn.addEventListener( "click", function ( e )
-        {
-            e.stopPropagation();
-            if( isOpen() ) close(); else open();
-        } );
-
-        // Pressing inside the card must not take focus off the document: Calc
-        // would lose the cell selection the button is about to format.
-        pop.addEventListener( "mousedown", function ( e )
-        {
-            if( ! e.target.closest( "input, select, textarea" ) ) e.preventDefault();
-        } );
-
-        // Every button in there is an action - it closes behind itself. The
-        // button's own handler runs as usual; this only shuts the card.
-        pop.addEventListener( "click", function ( e )
-        {
-            if( e.target.closest( "button" ) ) close();
-        } );
-
-        document.addEventListener( "click", function ( e )
-        {
-            if( isOpen() && ! pop.contains( e.target ) && ! btn.contains( e.target ) ) close();
-        } );
-        document.addEventListener( "keydown", function ( e ) { if( e.key === "Escape" ) close(); } );
-        window.addEventListener( "resize", close );
-
-        btn.setAttribute( "aria-haspopup", "true" );
-        btn.setAttribute( "aria-expanded", "false" );
-        sync();
-
-        return { open: open, close: close, isOpen: isOpen, sync: sync };
-    }
+    // TOOLBAR GROUP POPUP: an Ayni tool group (.panel.popup.tools, opened by
+    // its trigger's popovertarget; data-lit-by lights the trigger while a
+    // toggle inside is on). The buttons in it are THE REAL ONES, so nothing
+    // is cloned and nothing moves at run time. Nothing to wire here.
 
     // The "?" is the SAME button in both layouts - a second copy would break
     // the coach marks, which point at the first [data-intro-open] on the page.
@@ -638,9 +553,10 @@
     // away while you type - the "?" never in menu mode (`o.menus()`), where the
     // Ayuda menu is right there; on a PC the "?" goes back into `o.tools`
     // (before `o.helpBefore`, or last) and the File button in front of #fileSep.
-    // `o.fileClass( btn, phone )`, if given, sizes the File button for its row. Then every
-    // menu and popup `o.close()` lists is shut, the "..." expansion folded, and
-    // on a PC the row unfolded (`o.fold()`: null while it is not made yet).
+    // `o.fileClass( btn, phone )`, if given, sizes the File button for its row. Then
+    // the "..." expansion is folded, and on a PC the row unfolded (`o.fold()`:
+    // null while it is not made yet). Open menus and popups close by themselves
+    // when the screen turns (Ayni closes them on a resize).
     function phoneChrome( phone, o )
     {
         placeHelpButton( phone && ! o.menus(), "topActions", o.tools, o.helpBefore, "savedAt" );
@@ -650,7 +566,6 @@
         else        sep.parentNode.insertBefore( btn, sep );
         if( o.fileClass ) o.fileClass( btn, phone );
 
-        o.close().forEach( function ( m ) { if( m ) m.close(); } );
         var fold = o.fold();
         if( fold ) fold.setMore( false );
         if( fold && ! phone ) fold.setOpen( true );
@@ -3385,7 +3300,6 @@
         openBrowser:    openBrowser,
         fileMenu:       buttonMenu,
         buttonMenu:     buttonMenu,
-        groupPopup:     groupPopup,
         placeHelpButton: placeHelpButton,
         phoneChrome:    phoneChrome,
         foldingToolbar: foldingToolbar,

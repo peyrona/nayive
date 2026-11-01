@@ -19,6 +19,9 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-menus.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -27,6 +30,9 @@
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
+    <script src="../shared/ayni/ayni-menus.js" defer></script>
+    <script src="../shared/ayni/ayni-search.js" defer></script>
+    <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
@@ -247,11 +253,8 @@
             cursor: ns-resize !important;
         }
 
-        /* --- Overflow menu (phone only) -------------------------------- */
-        #moreBtn { display: none; }
-
-        /* The "..." menu is the shared .top-menu / .menu-item (shared/app.css),
-           anchored under its button by NayiveUI.wireMenu. Nothing local. */
+        /* The "⋮" is Ayni.fitBar's (wireTopMenu): the views on a phone, and
+           any tool that does not fit. Nothing local. */
 
         /* --- Phone layout (single breakpoint; PC + tablet keep the default) --- */
         @media (max-width: 640px)
@@ -266,8 +269,9 @@
                child breaks the line at its CONTENT width. Zero basis lets the
                month label ellipsis instead ("sept… 2026"), keeping one row. */
             .date-nav { flex: 1 1 0; justify-content: center; }
-
-            #moreBtn { display: flex; }
+            /* While searching the field takes the row: the up / down in it turn
+               the calendar to each hit, so the date arrows step aside. */
+            .topbar:has(.search-field.fold.is-open) .date-nav { display: none; }
 
             .fc-daygrid-event .tz-tag { display: none; }   /* no room for the zone tag in a phone's month cell */
 
@@ -360,28 +364,28 @@
                 </button>
             </div>
 
-            <div class="topbar-actions">
+            <div class="topbar-actions tall" role="toolbar" data-i18n-attr="aria-label:ui.actions">
                 <div class="tb-group">
-                    <!-- The shared search fold (NayiveUI.searchFold, SEARCH below). -->
-                    <div class="search-wrap">
-                        <input id="fSearch" class="search-input" type="text" autocomplete="off" data-i18n-attr="placeholder:calendar.searchPh, aria-label:ui.search">
+                    <!-- The search field (Ayni.searchField, SEARCH below). -->
+                    <div class="input-group search-field fold">
+                        <input id="fSearch" class="input" type="search" autocomplete="off" data-i18n-attr="placeholder:calendar.searchPh, aria-label:ui.search">
                     </div>
-                    <button id="searchBtn" class="btn" type="button" data-i18n-attr="data-tip:calendar.searchEvent, aria-label:calendar.searchEvent">
+                    <button id="searchBtn" class="btn" type="button" data-rank="20" data-search data-i18n-attr="data-tip:calendar.searchEvent, aria-label:calendar.searchEvent">
                         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                     </button>
-                    <button id="gotoBtn" class="btn" data-i18n-attr="data-tip:calendar.goTo">
+                    <button id="gotoBtn" class="btn" data-rank="21" data-i18n-attr="data-tip:calendar.goTo">
                         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="13" height="13" rx="2"></rect><line x1="3" y1="9" x2="16" y2="9"></line><line x1="7" y1="2" x2="7" y2="6"></line><line x1="12" y1="2" x2="12" y2="6"></line><circle cx="17" cy="17" r="4"></circle><line x1="20" y1="20" x2="22" y2="22"></line></svg>
                     </button>
                 </div>
                 <div class="tb-group tb-sys">
-                    <button id="moreBtn" class="btn" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.moreOptions">
+                    <button id="moreBtn" class="btn" type="button" hidden data-i18n-attr="data-tip:ui.moreOptions, aria-label:ui.moreOptions">
                         <span class="icon" data-icon="more"></span>
                     </button>
                     <!-- Settings: sync with phones (CalDAV) + export. The launcher's gear glyph. -->
-                    <button id="settingsBtn" class="btn" data-i18n-attr="data-tip:ui.settings, aria-label:ui.settings">
+                    <button id="settingsBtn" class="btn" data-rank="30" data-i18n-attr="data-tip:ui.settings, aria-label:ui.settings">
                         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                     </button>
-                    <button class="btn" data-intro-open type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
+                    <button class="btn" data-intro-open data-rank="31" type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                     </button>
                 </div>
@@ -389,11 +393,6 @@
             </div>
         </div>
 
-        <div id="topMenu" class="top-menu" role="menu" hidden>
-            <button type="button" class="menu-item" data-mview="timeGridDay"  role="menuitem"><span class="mi-check">&#10003;</span><span data-i18n="calendar.day"></span></button>
-            <button type="button" class="menu-item" data-mview="dayGridMonth" role="menuitem"><span class="mi-check">&#10003;</span><span data-i18n="calendar.month"></span></button>
-            <button type="button" class="menu-item" data-mview="listMonth"    role="menuitem"><span class="mi-check">&#10003;</span><span data-i18n="calendar.agenda"></span></button>
-        </div>
 
         <div id="calHost"></div>
 
@@ -1272,16 +1271,22 @@
             wireSheetUI();
         }
 
-        // Phone-only overflow menu: view switching (Día / Mes / Agenda).
-        // The shared header "..." popup (shared/ui.js): anchors itself under the button and
-        // closes on a pick, a click outside, Escape or a resize.
+        // The header's one "⋮" (Ayni.fitBar): the tools that do not fit, and
+        // on a phone the view switch (Día / Mes / Agenda), which leaves the
+        // header there.
+        const MENU_VIEWS = [ [ 'timeGridDay', 'calendar.day' ], [ 'dayGridMonth', 'calendar.month' ], [ 'listMonth', 'calendar.agenda' ] ];
+        function topMenuItems()
+        {
+            if( ! window.matchMedia( '(max-width: 640px)' ).matches ) return [];
+            const type = calendar ? calendar.view.type : '';
+            return MENU_VIEWS.map( function( v )
+            {
+                return { id: 'view:' + v[ 0 ], label: Ayni.t( v[ 1 ] ), checked: type === v[ 0 ], run: function() { showView( v[ 0 ] ); } };
+            } );
+        }
         function wireTopMenu()
         {
-            NayiveUI.wireMenu(
-            {
-                btn: 'moreBtn', menu: 'topMenu',
-                onPick: function( item ) { if( item.dataset.mview ) showView( item.dataset.mview ); }
-            } );
+            Ayni.fitBar( document.querySelector( '.topbar' ), { btn: '#moreBtn', more: topMenuItems } );
         }
 
         // Swipe on the calendar body to move to the next / previous period.
@@ -1358,10 +1363,9 @@
 
         function highlightActiveView( type )
         {
-            document.querySelectorAll( 'button[data-view], #topMenu button[data-mview]' ).forEach( function( btn )
+            document.querySelectorAll( 'button[data-view]' ).forEach( function( btn )
             {
-                const on = (btn.dataset.view || btn.dataset.mview) === type;
-                if( btn.matches( '.btn' ) ) btn.setAttribute( 'aria-pressed', on ); else btn.classList.toggle( 'is-active', on );
+                btn.setAttribute( 'aria-pressed', btn.dataset.view === type );
             });
         }
 
@@ -1677,9 +1681,7 @@
             // which fires "input" and lights every event again.
             const search = document.getElementById( 'fSearch' );
             search.addEventListener( 'input', onSearchInput );
-            searchFold = NayiveUI.searchFold( { box: search.parentElement, input: search,
-                                                toggle: document.getElementById( 'searchBtn' ),
-                                                step: stepSearch } );
+            searchFold = Ayni.searchField( search.parentElement, { step: stepSearch } );
         }
 
         function closeHelp() { document.getElementById( 'helpBackdrop' ).close(); }
@@ -1722,7 +1724,7 @@
         //------------------------------------------------------------------------//
         // SEARCH
         //
-        // The toolbar field (NayiveUI.searchFold), stepping in place like a
+        // The toolbar field (Ayni.searchField), stepping in place like a
         // browser's Find. Typing text-matches every event-def by title / notes /
         // location (accent- and case-insensitive): the calendar stays, the other
         // events fade. Up / down (Enter / Shift+Enter) walk the matching
@@ -1731,7 +1733,7 @@
         // Clicking an event opens it, as always.
 
         let searchFold = null;
-        let searchQ    = null;   // the box's test (NayiveUI.matcher); null = no search
+        let searchQ    = null;   // the box's test (Ayni.matcher); null = no search
         let searchHit  = null;   // { id, ms } of the occurrence the arrows landed on (its FullCalendar id)
         let hitScroll  = false;  // bring that event into view once it is drawn
 
@@ -1782,7 +1784,7 @@
 
         function onSearchInput()
         {
-            searchQ   = NayiveUI.matcher( document.getElementById( 'fSearch' ).value );
+            searchQ   = Ayni.matcher( document.getElementById( 'fSearch' ).value );
             searchHit = null;
             showSearchCount( searchQ ? searchHits() : [], -1 );
             repaintSearch();

@@ -5,11 +5,11 @@
  * offer as an ALTERNATIVE to their icon toolbar, plus the little switch that
  * remembers which of the two the user picked.
  *
- * Written once here because both apps need exactly the same machinery: a row of
- * text buttons, one panel under the open one, one submenu to the side, hover to
- * slide from menu to menu, click-outside to close. What differs between the two
- * apps is only the TABLE of menus and how an entry is carried out - both of
- * which come in as options.
+ * The bar is an Ayni menu bar and its menus are Ayni menus (shared/ayni/
+ * ayni-menus.js: F10, the arrows, sliding along the bar, one level of
+ * submenus, Escape, a press outside). What differs between the two apps is
+ * only the TABLE of menus and how an entry is carried out - both of which
+ * come in as options.
  *
  * THE GOLDEN RULE. A menu entry never re-implements anything. It either clicks
  * the app's real (hidden) toolbar button (`el`), calls the very function that
@@ -17,14 +17,16 @@
  * cfg.exec). So there is only ever ONE set of handlers, whichever chrome shows.
  *
  * -----------------------------------------------------------------------------
- * NayiveMenus.create( cfg ) -> { build, close, isOpen, openAt, openItems, isOpenFor, anchorRect, rect }
+ * NayiveMenus.create( cfg ) -> { build, close, isOpen, openAt, openItems, anchorRect, rect }
  *
- *   cfg.bar / .panel / .sub   element ids  (default menuBar / menuPanel / menuSub)
+ *   cfg.bar                   the bar's id (default menuBar); its menus get
+ *                             the ids menuBar-0, menuBar-1 ...
  *   cfg.menus                 [ { key|text, items: [...] } ]  - array or a function
  *   cfg.hint( scKey )         -> "Ctrl+S"   the key combo shown on the right
  *   cfg.ready()               -> false greys EVERY entry (a document still loading)
  *   cfg.enabled( it )         -> true/false, or undefined to fall through
- *   cfg.checked( it )         -> true/false, or undefined to fall through
+ *   cfg.checked( it )         -> true/false (a row that can be ticked), or
+ *                                undefined to fall through (a plain row)
  *   cfg.exec( it )            carry out an entry that has neither `run` nor `el`
  *
  * An item is:
@@ -38,7 +40,7 @@
  *   { sub: [...] | fn }       a submenu (a function is called at open time)
  *   { sep: true }             a hairline
  *   { label: 'key' }          a small heading over the rows below it (not a row)
- *   { info: 'key' }           ... on a row: an (i) at its end that shows that text
+ *   { info: 'key' }           ... on a row: that text as the row's tooltip
  *   { checked: fn }           tick when fn() says so
  *   { enabled: fn }           grey out when fn() says no
  *   { sc:'ui.openDoc' }       show that shortcut's key combo on the right
@@ -53,13 +55,11 @@
  * Anything else on an item (check, radio, arg …) is the app's business and
  * reaches it untouched through cfg.checked / cfg.enabled / cfg.exec.
  *
- * openItems( items, trigger ) opens the same panel with ANY list of items,
- * hanging under a button that is not on the bar - a toolbar drop-down (Write's
- * styles, colours, zoom ...). Same rows, same ticks, same hooks: a drop-down
- * and its menu entry can be one table. A second click on the trigger closes
- * it (isOpenFor( trigger ) says whether it is the one showing). Given a
- * rectangle instead of a button, it hangs from that - a right-click menu at
- * the pointer (Write's spelling suggestions).
+ * openItems( items, trigger ) opens the same rows in a drop-down (Ayni.menuAt)
+ * hanging under a button that is not on the bar - a toolbar drop-down
+ * (Write's styles, colours, zoom ...); a second press on the trigger closes
+ * it. Given a rectangle instead of a button, it hangs from that - a
+ * right-click menu at the pointer (Write's spelling suggestions).
  *
  * -----------------------------------------------------------------------------
  * NayiveMenus.chrome( cfg ) -> { on, mode, set, apply, sync, wire }
@@ -77,8 +77,8 @@
  * device opens the way the user left it. At boot the account's copy wins
  * (sync()); after that a click writes both (set()).
  *
- * The CSS - #menuBar, .menu-top, .menu-panel, .mi-* - lives in shared/app.css,
- * next to the .top-menu / .menu-item vocabulary the panels are built on.
+ * The bar's CSS - #menuBar, .menu-top - lives in shared/app.css; the menus
+ * look like every other Ayni menu.
  *
  * -----------------------------------------------------------------------------
  * NayiveMenus.COLORS   the text colours both menus offer (Word's and Excel's
@@ -98,15 +98,9 @@ const NayiveMenus = ( function ()
     //-------------------------------------------------------------------------
     function create( cfg )
     {
-        const BAR   = cfg.bar   || 'menuBar';
-        const PANEL = cfg.panel || 'menuPanel';
-        const SUB   = cfg.sub   || 'menuSub';
+        const BAR = cfg.bar || 'menuBar';
 
-        let openIdx    = -1;     // which top-level menu is showing, -2 a drop-down (openItems), -1 none
-        let trigger    = null;   // the button a drop-down hangs from
-        let panelItems = [];     // the items the open panel was built from
-        let subItems   = [];     // ... and its submenu
-        let lastRect   = null;   // rect of the entry that opened an anchored popup
+        let lastRect = null;     // rect of the entry that opened an anchored popup
 
         function list() { return typeof cfg.menus === 'function' ? cfg.menus() : ( cfg.menus || [] ); }
 
@@ -132,6 +126,7 @@ const NayiveMenus = ( function ()
             return true;
         }
 
+        // true / false for a row that can be ticked, null for one that cannot.
         function itemChecked( it )
         {
             if( it.checked ) return !! it.checked();
@@ -142,14 +137,19 @@ const NayiveMenus = ( function ()
                 if( r !== undefined ) return !! r;
             }
 
-            return false;
+            return null;
         }
 
-        // The glyph before the label (an <svg>, or a character), or null. Read at open time like everything
-        // else on a row, so an icon a toolbar draws late still
-        // shows up, and a bad selector costs the glyph - never the menu.
-        function iconNode( it )
+        // The glyph before the label: markup (an <svg>, or a character), or ''.
+        // Read at open time like everything else on a row, so an icon a toolbar
+        // draws late still shows up, and a bad selector costs the glyph - never
+        // the menu.
+        function iconFor( it )
         {
+            if( it.swatch )
+                return '<svg viewBox="0 0 18 18" aria-hidden="true"><rect x="2" y="2" width="14" height="14" rx="3" fill="' + it.swatch +
+                       '" stroke="currentColor" stroke-opacity=".35"></rect></svg>';
+
             const src = it.iconOf || ( it.el && ! it.icon ? '#' + it.el : null );
             let   svg = null;
 
@@ -164,233 +164,72 @@ const NayiveMenus = ( function ()
                 // A button whose glyph is a character (Calc's "∑") lends that
                 // instead - the same rule the help sheet's list follows.
                 const txt = ! svg && n && ( n.textContent || '' ).trim();
-                if( txt && txt.length <= 2 ) return document.createTextNode( txt );
+                if( txt && txt.length <= 2 )
+                {
+                    const d = document.createElement( 'span' );
+                    d.className   = 'icon mi-char';
+                    d.textContent = txt;
+                    return d.outerHTML;
+                }
             }
 
-            if( ! svg && it.icon )
-            {
-                const t = document.createElement( 'template' );
-                t.innerHTML = it.icon.charAt( 0 ) === '<' ? it.icon : Ayni.icon( it.icon );
-                svg = t.content.querySelector( 'svg' );
-            }
-
-            if( ! svg ) return null;
+            if( ! svg ) return it.icon || '';
 
             svg.removeAttribute( 'width' );          // CSS sizes it
             svg.removeAttribute( 'height' );
             svg.removeAttribute( 'id' );
             svg.setAttribute( 'aria-hidden', 'true' );
-
-            return svg;
+            return svg.outerHTML;
         }
 
-        // `glyph` undefined: the panel has no icons, so no slot at all.
-        // null: an empty slot, so this label lines up with its neighbours'.
-        function menuItemNode( it, idx, glyph )
+        // A table's rows as Ayni menu rows (Ayni.menuAt, Ayni.fillMenu).
+        function rows( items )
         {
-            if( it.sep )
+            return ( typeof items === 'function' ? items() : items || [] ).map( function ( it )
             {
-                const d = document.createElement( 'div' );
-                d.className = 'menu-sep';
-                return d;
-            }
-
-            if( it.label )
-            {
-                const d = document.createElement( 'div' );
-                d.className   = 'menu-label';
-                d.textContent = Ayni.t( it.label );
-                return d;
-            }
-
-            const b = document.createElement( 'button' );
-            b.type        = 'button';
-            b.className   = 'menu-item';
-            b.dataset.idx = String( idx );
-            b.setAttribute( 'role', 'menuitem' );
-
-            const chk = document.createElement( 'span' );
-            chk.className   = 'mi-check';
-            chk.textContent = '✓';
-            b.appendChild( chk );
-
-            if( glyph !== undefined )
-            {
-                const ic = document.createElement( 'span' );
-                ic.className = 'mi-icon';
-                if( glyph ) ic.appendChild( glyph );
-                b.appendChild( ic );
-            }
-
-            if( it.swatch )
-            {
-                const sw = document.createElement( 'span' );
-                sw.className        = 'mi-swatch';
-                sw.style.background = it.swatch;
-                b.appendChild( sw );
-            }
-
-            const lab = document.createElement( 'span' );
-            lab.className   = 'mi-label';
-            lab.textContent = it.text !== undefined ? it.text : Ayni.t( it.key );
-            b.appendChild( lab );
-
-            if( it.sub )
-            {
-                const a = document.createElement( 'span' );
-                a.className   = 'mi-arrow';
-                a.textContent = '▸';
-                b.appendChild( a );
-            }
-            else if( it.sc && cfg.hint )
-            {
-                const k = document.createElement( 'span' );
-                k.className   = 'mi-key';
-                k.textContent = cfg.hint( it.sc );
-                b.appendChild( k );
-            }
-
-            // Not a <button>: this row already is one. shared/ui.js wires it.
-            if( it.info )
-            {
-                const d = document.createElement( 'span' );
-                d.className = 'info-dot';
-                d.tabIndex  = 0;
-                d.setAttribute( 'role', 'button' );
-                d.setAttribute( 'data-info', Ayni.t( it.info ) );
-                b.appendChild( d );
-            }
-
-            if( itemChecked( it ) ) b.classList.add( 'is-active' );
-            if( ! it.sub && ! itemEnabled( it ) ) b.disabled = true;
-
-            return b;
-        }
-
-        // Icons are all or nothing per panel: once one row has a glyph, every row
-        // keeps the slot. A panel with none (fonts, sizes, colours) stays tight.
-        function fillPanel( panel, items )
-        {
-            panel.innerHTML = '';
-
-            const glyphs = items.map( function ( it ) { return it.sep || it.label ? null : iconNode( it ); } );
-            const slot   = glyphs.some( Boolean );
-
-            items.forEach( function ( it, i ) { panel.appendChild( menuItemNode( it, i, slot ? glyphs[ i ] : undefined ) ); } );
-        }
-
-        //---- placing ---------------------------------------------------------
-
-        // Under the thing that opened it, pushed left if it would fall off the edge.
-        function placePanel( panel, rect )
-        {
-            const vw = document.documentElement.clientWidth;
-
-            let left = Math.min( rect.left, vw - panel.offsetWidth - 8 );
-            if( left < 8 ) left = 8;
-
-            panel.style.top  = ( rect.bottom + 2 ) + 'px';
-            panel.style.left = left + 'px';
-        }
-
-        // A submenu goes to the RIGHT of its row, or to the left when there is no room.
-        function placeSub( panel, rect )
-        {
-            const vw = document.documentElement.clientWidth;
-            const vh = document.documentElement.clientHeight;
-
-            let left = rect.right - 2;
-            if( left + panel.offsetWidth > vw - 8 ) left = Math.max( 8, rect.left - panel.offsetWidth + 2 );
-
-            let top = rect.top - 4;
-            if( top + panel.offsetHeight > vh - 8 ) top = Math.max( 8, vh - panel.offsetHeight - 8 );
-
-            panel.style.top  = top  + 'px';
-            panel.style.left = left + 'px';
+                if( it.sep )   return { sep: true };
+                if( it.label ) return { caption: Ayni.t( it.label ) };
+                return {
+                    id:       it.el || it.cmd || it.key || '',
+                    label:    it.text !== undefined ? it.text : Ayni.t( it.key ),
+                    icon:     iconFor( it ),
+                    key:      ! it.sub && it.sc && cfg.hint ? cfg.hint( it.sc ) : '',
+                    checked:  it.sub ? null : itemChecked( it ),
+                    disabled: ! it.sub && ! itemEnabled( it ),
+                    why:      it.info ? Ayni.t( it.info ) : '',
+                    sub:      it.sub ? function () { return rows( it.sub ); } : null,
+                    run:      function ( e )
+                    {
+                        const row = e && e.target && e.target.closest && e.target.closest( '[role^="menuitem"]' );
+                        runItem( it, row && row.ayniRect );
+                    }
+                };
+            } );
         }
 
         //---- opening and closing ---------------------------------------------
 
-        function closeSub()
-        {
-            const p = gid( SUB );
-            if( ! p ) return;
-
-            p.hidden    = true;
-            p.innerHTML = '';
-            subItems    = [];
-        }
-
         function close()
         {
-            closeSub();
-
-            const p = gid( PANEL );
-            if( p ) { p.hidden = true; p.innerHTML = ''; }
-            panelItems = [];
-
-            for( const b of document.querySelectorAll( '#' + BAR + ' .menu-top' ) )
-                b.setAttribute( 'aria-expanded', 'false' );
-
-            if( trigger ) trigger.setAttribute( 'aria-expanded', 'false' );
-            trigger = null;
-
-            openIdx = -1;
+            document.querySelectorAll( '.panel.menu:popover-open' ).forEach( function ( m ) { m.hidePopover(); } );
         }
+
+        function menuOf( i ) { return gid( BAR + '-' + i ); }
 
         function openAt( i )
         {
-            close();
-
-            const btn   = document.querySelector( '#' + BAR + ' [data-menu="' + i + '"]' );
-            const panel = gid( PANEL );
-            const m     = list()[ i ];
-            if( ! btn || ! panel || ! m ) return;
-
-            panelItems = m.items;
-            fillPanel( panel, panelItems );
-
-            panel.hidden = false;              // lay it out before measuring
-            placePanel( panel, btn.getBoundingClientRect() );
-            btn.setAttribute( 'aria-expanded', 'true' );
-
-            openIdx = i;
+            const btn = document.querySelector( '#' + BAR + ' [data-menu="' + i + '"]' );
+            if( btn && menuOf( i ) && ! menuOf( i ).matches( ':popover-open' ) ) btn.click();
         }
 
-        // A drop-down off a button that is not on the bar, or off a rectangle
-        // (see the header).
+        // A drop-down off a button that is not on the bar (Ayni.menuAt: a second
+        // press on the button closes it), or off a rectangle (a right-click
+        // menu at the pointer, a list under a menu row).
         function openItems( items, anchor )
         {
-            close();
-
-            const panel = gid( PANEL );
-            if( ! panel || ! anchor ) return;
-
+            if( ! anchor ) return;
             const btn = typeof anchor.getBoundingClientRect === 'function' ? anchor : null;
-
-            panelItems = typeof items === 'function' ? items() : items;
-            fillPanel( panel, panelItems );
-
-            panel.hidden = false;              // lay it out before measuring
-            placePanel( panel, btn ? btn.getBoundingClientRect() : anchor );
-
-            trigger = btn;
-            if( trigger ) trigger.setAttribute( 'aria-expanded', 'true' );
-            openIdx = -2;
-        }
-
-        function openSubFor( row, it )
-        {
-            closeSub();
-
-            const panel = gid( SUB );
-            if( ! panel ) return;
-
-            subItems = typeof it.sub === 'function' ? it.sub() : it.sub;
-            fillPanel( panel, subItems );
-
-            panel.hidden = false;
-            placeSub( panel, row.getBoundingClientRect() );
+            Ayni.menuAt( rows( items ), btn ? { anchor: btn } : { x: anchor.left, y: anchor.bottom + 2 } );
         }
 
         // Run what an entry stands for. The rect is kept because a popup anchored
@@ -401,7 +240,6 @@ const NayiveMenus = ( function ()
             if( ! it || it.sub ) return;
 
             lastRect = rect || null;
-            close();
 
             if( it.run ) { it.run(); return; }
 
@@ -417,12 +255,17 @@ const NayiveMenus = ( function ()
 
         //---- the bar itself --------------------------------------------------
 
+        // An Ayni menu bar (shared/ayni/ayni-menus.js: F10, the arrows, sliding
+        // along it): one button and one menu per entry, the menu filled from
+        // the table each time it opens, so its rows show what is true now.
         function build()
         {
             const bar = gid( BAR );
             if( ! bar ) return;
 
-            bar.innerHTML = '';
+            bar.querySelectorAll( '.menu-top' ).forEach( function ( b ) { b.remove(); } );
+            document.querySelectorAll( '.panel.menu[data-bar="' + BAR + '"]' ).forEach( function ( m ) { m.remove(); } );
+            bar.setAttribute( 'role', 'menubar' );
 
             list().forEach( function ( m, i )
             {
@@ -430,8 +273,8 @@ const NayiveMenus = ( function ()
                 b.type         = 'button';
                 b.className    = 'menu-top';
                 b.dataset.menu = String( i );
-                b.setAttribute( 'role', 'menuitem' );
-                b.setAttribute( 'aria-haspopup', 'true' );
+                b.setAttribute( 'popovertarget', BAR + '-' + i );
+                b.setAttribute( 'aria-haspopup', 'menu' );
                 b.setAttribute( 'aria-expanded', 'false' );
 
                 // applyI18n fills it in - and re-fills it on a language change.
@@ -439,114 +282,25 @@ const NayiveMenus = ( function ()
                 else        b.textContent = m.text || '';
 
                 bar.appendChild( b );
+
+                const menu = document.createElement( 'div' );
+                menu.className   = 'panel menu';
+                menu.id          = BAR + '-' + i;
+                menu.dataset.bar = BAR;
+                menu.setAttribute( 'popover', '' );
+                menu.setAttribute( 'role', 'menu' );
+                menu.addEventListener( 'beforetoggle', function ( e )
+                {
+                    if( e.newState !== 'open' || e.target !== menu ) return;
+                    const now = list()[ i ];
+                    Ayni.fillMenu( menu, rows( now ? now.items : [] ) );
+                    menu.setAttribute( 'aria-label', b.textContent );
+                } );
+                document.body.appendChild( menu );
             } );
 
             Ayni.i18n.apply( bar );
-        }
-
-        function wire()
-        {
-            const bar   = gid( BAR );
-            const panel = gid( PANEL );
-            const sub   = gid( SUB );
-            if( ! bar || ! panel || ! sub ) return;
-
-            // Never let a menu click blur the page: the commands act on the caret
-            // (Write) or the grid selection (Calc), and a lost selection greys
-            // half of "Formato" out.
-            //
-            // A real field parked in the bar is the one exception - Calc moves its
-            // name box in here in menu mode, and a cancelled mousedown never gives
-            // an <input> the focus, so it could be seen but not typed into.
-            for( const el of [ bar, panel, sub ] )
-                el.addEventListener( 'mousedown', function ( e )
-                {
-                    if( e.target.closest( 'input, select, textarea' ) ) return;
-                    e.preventDefault();
-                } );
-
-            bar.addEventListener( 'click', function ( e )
-            {
-                const b = e.target.closest( '.menu-top' );
-                if( ! b ) return;
-
-                e.stopPropagation();
-
-                const i = Number( b.dataset.menu );
-                if( i === openIdx ) close(); else openAt( i );
-            } );
-
-            // Once one menu is open, sliding along the bar switches between them -
-            // the way a pull-down bar has always behaved.
-            bar.addEventListener( 'mouseover', function ( e )
-            {
-                if( openIdx < 0 ) return;
-
-                const b = e.target.closest( '.menu-top' );
-                if( ! b ) return;
-
-                const i = Number( b.dataset.menu );
-                if( i !== openIdx ) openAt( i );
-            } );
-
-            panel.addEventListener( 'mouseover', function ( e )
-            {
-                const row = e.target.closest( '.menu-item' );
-                if( ! row ) return;
-
-                const it = panelItems[ Number( row.dataset.idx ) ];
-                if( it && it.sub ) openSubFor( row, it ); else closeSub();
-            } );
-
-            panel.addEventListener( 'click', function ( e )
-            {
-                if( e.target.closest( '.info-dot' ) ) return;     // its text, not the row
-
-                const row = e.target.closest( '.menu-item' );
-                if( ! row || row.disabled ) return;
-
-                e.stopPropagation();
-
-                const it = panelItems[ Number( row.dataset.idx ) ];
-                if( ! it ) return;
-
-                if( it.sub ) { openSubFor( row, it ); return; }
-
-                runItem( it, row.getBoundingClientRect() );
-            } );
-
-            sub.addEventListener( 'click', function ( e )
-            {
-                if( e.target.closest( '.info-dot' ) ) return;
-
-                const row = e.target.closest( '.menu-item' );
-                if( ! row || row.disabled ) return;
-
-                e.stopPropagation();
-                runItem( subItems[ Number( row.dataset.idx ) ], row.getBoundingClientRect() );
-            } );
-
-            document.addEventListener( 'pointerdown', function ( e )
-            {
-                if( openIdx === -1 ) return;
-                if( bar.contains( e.target ) || panel.contains( e.target ) || sub.contains( e.target ) ) return;
-                if( e.target.closest( '.info-popup' ) ) return;           // reading a row's (i)
-                if( trigger && trigger.contains( e.target ) ) return;     // its own click toggles it
-
-                close();
-            }, true );
-
-            // Escape closes the open menu and goes no further - the app's own
-            // Escape chain (a popup, a dialog) must not fire at the same time.
-            document.addEventListener( 'keydown', function ( e )
-            {
-                if( e.key !== 'Escape' || openIdx === -1 ) return;
-
-                e.stopPropagation();
-                close();
-            }, true );
-
-            window.addEventListener( 'resize', close );
+            Ayni.init( bar );
         }
 
         // Where an anchored popup should hang from. In toolbar mode that is the
@@ -562,15 +316,13 @@ const NayiveMenus = ( function ()
         }
 
         build();
-        wire();
 
         return {
             build:      build,
             close:      close,
-            isOpen:     function () { return openIdx !== -1; },
+            isOpen:     function () { return !! document.querySelector( '.panel.menu:popover-open' ); },
             openAt:     openAt,
             openItems:  openItems,
-            isOpenFor:  function ( btn ) { return openIdx === -2 && trigger === btn; },
             anchorRect: anchorRect,
             rect:       function () { return lastRect; }
         };

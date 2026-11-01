@@ -12,7 +12,7 @@
 // (POST ?from=&new=, server/go/copy.go): the bytes go disk to
 // disk, never through the browser, so a big video cannot fill the tab.
 
-// The chooser is the shared "Move to…" (NayiveUI.pickNode): the folder
+// The chooser is the shared "Move to…" (Ayni.pickNode): the folder
 // tree of Home only (nothing moves or copies INTO "Shared with me"). The paths are read once, before it opens.
 async function openFolderPicker( mode )
 {
@@ -32,10 +32,10 @@ async function openFolderPicker( mode )
     const canLink  = mode === 'copy' && ! readOnlyOf( paths ) && ! anyLink( paths );
     let   shortcut = false;
 
-    const dest = await NayiveUI.pickNode( {
+    const dest = await Ayni.pickNode( {
         title:    mode === 'move' ? T( 'drive.moveTo' ) : T( 'drive.copyTo' ),
         okLabel:  mode === 'move' ? T( 'drive.move' ) : T( 'ui.copy' ),
-        roots:    function() { return treeRoots().slice( 0, 1 ); },
+        items:    function() { return treeRoots().slice( 0, 1 ); },
         current:  currentFolder,
         lit:      null,
         disabled: isBadDest,

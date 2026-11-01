@@ -22,6 +22,9 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-menus.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -30,6 +33,9 @@
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
+    <script src="../shared/ayni/ayni-menus.js" defer></script>
+    <script src="../shared/ayni/ayni-search.js" defer></script>
+    <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
@@ -46,8 +52,6 @@
     <script src="../shared/gum-api.js" defer></script>
     <!-- Small shared UI helpers: backdrop open/close, toast, viewerTz. -->
     <script src="../shared/ui.js" defer></script>
-    <!-- The item browser: picking, the one menu, the keys, the groups tree. -->
-    <script src="../shared/browser.js" defer></script>
     <script>
     Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
@@ -198,22 +202,20 @@
         .avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
         .face-pick-btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 
-        /* --- Picking (the shared item browser, see LIST in the script) ------
-           The round tick is the shared .pick-tick (app.css ITEM BROWSER);
-           a picked row is tinted like a hover, only
-           stronger. A long-press picks: the phone must not select the name
-           or pop its own copy callout while the finger is down. */
+        /* --- Picking (Ayni.list, see LIST in the script) ------------------
+           The tick and the soft Accent tint of a picked row are Ayni's
+           (ayni-lists.css). A long-press picks: the phone must not select the
+           name or pop its own copy callout while the finger is down. */
         .contact-row { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-        .contact-row.is-selected,
-        .contact-row.is-selected:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+        .contact-row[aria-selected="true"]:hover { background: var(--accent-soft); }
         .contact-row .pick-tick { margin-right: -4px; }
         .ct-star { display: flex; flex: 0 0 auto; color: var(--warn); }
         .ct-star svg { width: 15px; height: 15px; }
 
         /* --- The groups tree (All contacts, Favourites, Groups) -------------
            Above 640px the card widens and the tree sits left of the list; on a
-           phone it slides in from #treeBtn (the shared .tree-sheet, app.css);
-           its rows are the shared .ntree.tree-fit.
+           phone it slides in from #treeBtn (Ayni's .tree-sheet);
+           its rows are Ayni's navigation tree (data-fit).
            The rail and its bubble follow the wider card's right edge. */
         .ct-body { display: flex; align-items: flex-start; gap: 12px; }
         .ct-body > .list-scroll { flex: 1 1 auto; min-width: 0; }
@@ -332,8 +334,8 @@
         /* Merge preview */
         .merge-section { margin-top: 10px; }
         .merge-section > .ms-label { font-size: 0.80rem; color: var(--text-dim); margin-bottom: 4px; }
-        .merge-row { display: flex; align-items: flex-start; gap: 10px; padding: 6px 2px; font-size: 0.92rem; }
-        .merge-row input[type=checkbox] { width: 17px; height: 17px; flex: 0 0 auto; margin-top: 2px; accent-color: var(--accent); }
+        .merge-row { align-items: flex-start; gap: 10px; padding: 6px 2px; font-size: 0.92rem; }   /* an Ayni .choice */
+        .merge-row input[type=checkbox] { flex: 0 0 auto; margin-top: 2px; }
         .merge-row .mr-type { color: var(--text-dim); font-size: 0.76rem; flex: 0 0 auto; min-width: 52px; padding-top: 1px; }
         .merge-row .mr-val { color: var(--text); word-break: break-word; white-space: pre-wrap; }
         .merge-note-preview { font-size: 0.86rem; color: var(--text); white-space: pre-wrap; background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-s); padding: 8px 10px; }
@@ -365,15 +367,15 @@
                         <span id="viewName"></span>
                     </div>
 
-                    <div class="header-actions">
-                        <!-- The selection's buttons (shared/browser.js): only while something is picked. -->
+                    <div class="header-actions tall" role="toolbar" data-i18n-attr="aria-label:ui.actions">
+                        <!-- The selection's buttons (Ayni.list): only while something is picked. -->
                         <div id="selActions" class="tb-group" hidden></div>
                         <div class="tb-group">
-                            <!-- The shared search fold (NayiveUI.searchFold, wireStaticUI). -->
-                            <div class="search-wrap">
-                                <input id="searchInput" class="search-input" type="text" autocomplete="off" data-i18n-attr="placeholder:contact.searchPh0, aria-label:ui.search">
+                            <!-- The search field (Ayni.searchField, from this markup). -->
+                            <div class="input-group search-field fold">
+                                <input id="searchInput" class="input" type="search" autocomplete="off" data-i18n-attr="placeholder:contact.searchPh0, aria-label:ui.search">
                             </div>
-                            <button id="searchBtn" class="btn" type="button" data-rank="20" data-i18n-attr="data-tip:ui.search, aria-label:ui.search">
+                            <button id="searchBtn" class="btn" type="button" data-rank="20" data-search data-i18n-attr="data-tip:ui.search, aria-label:ui.search">
                                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                             </button>
                             <button id="addBtn" class="btn" data-rank="21" data-i18n-attr="data-tip:contact.newContact">
@@ -397,7 +399,7 @@
                      window both scroll on their own, under the toolbar. -->
                 <div class="ct-body">
                 <nav id="treePane" class="tree-pane" data-i18n-attr="aria-label:contact.groups">
-                    <div id="tree" class="tree-fit"></div>
+                    <ul id="tree" data-fit data-i18n-attr="aria-label:contact.groups"></ul>
                 </nav>
                 <div class="list-scroll">
                 <div id="contactList"></div>
@@ -1584,7 +1586,7 @@
 
         function nameTokens( c )
         {
-            return NayiveUI.fold( [ c.n.given, c.n.family ].filter( Boolean ).join( ' ' ) )
+            return Ayni.fold( [ c.n.given, c.n.family ].filter( Boolean ).join( ' ' ) )
                 .replace( /[^a-z0-9]+/g, ' ' ).trim().split( ' ' ).filter( Boolean );
         }
 
@@ -1598,7 +1600,7 @@
                 phones : new Set( c.tels.map( t => phoneTail( normPhone( t.value ) ) ).filter( Boolean ) ),
                 emails : new Set( emails ),
                 domains: new Set( emails.map( e => e.slice( e.indexOf( '@' ) + 1 ) ).filter( Boolean ) ),
-                org    : NayiveUI.fold( c.org || '' ).trim(),
+                org    : Ayni.fold( c.org || '' ).trim(),
                 tokens : tokens,
                 nameKey: tokens.slice().sort().join( ' ' )
             };
@@ -1772,7 +1774,7 @@
 
             // The open group is gone (renamed or deleted elsewhere): all contacts.
             if( view.indexOf( 'g:' ) === 0 && ! groupExists( view.slice( 2 ) ) ) view = 'all';
-            if( treeView ) treeView.render();
+            if( treeView ) treeView.build();
             document.getElementById( 'viewName' ).textContent = view === 'all' ? '' : viewName( view );
 
             const matcher = buildMatcher( query );
@@ -1968,7 +1970,7 @@
         // has to find the contact: being unsearchable by your own name is never acceptable.
         function contactHaystack( c )
         {
-            return NayiveUI.fold( [
+            return Ayni.fold( [
                 displayName( c ),
                 c.n.given, c.n.family,
                 c.org, c.title, c.note,
@@ -1977,12 +1979,12 @@
         }
 
         // Returns a predicate over contacts, or null when the query is empty. The
-        // shared rule on text (NayiveUI.matcher: words in any order, "phrase", -word,
+        // shared rule on text (Ayni.matcher: words in any order, "phrase", -word,
         // accent-insensitive); if the query looks like a phone number it also
         // matches against each phone reduced to bare digits.
         function buildMatcher( rawQuery )
         {
-            const qText   = NayiveUI.matcher( rawQuery );
+            const qText   = Ayni.matcher( rawQuery );
             // Phone numbers are matched by their digits only when the query looks like
             // one ("+34 600", "600-12"): "Pepe 2" must not match every phone with a 2.
             const qDigits = /^[\d\s+\-().\/]+$/.test( rawQuery.trim() ) ? rawQuery.replace( /\D/g, '' ) : '';
@@ -2002,7 +2004,7 @@
 
         function firstLetter( sName )
         {
-            const ch = NayiveUI.fold( sName ).charAt( 0 ).toUpperCase();
+            const ch = Ayni.fold( sName ).charAt( 0 ).toUpperCase();
             return /[A-Z]/.test( ch ) ? ch : '#';
         }
 
@@ -2010,7 +2012,7 @@
         {
             const name = displayName( c );
 
-            // Clicks, keys and the tick are the item browser's (LIST below).
+            // Clicks, keys and the tick are the item list's (LIST below).
             const row = document.createElement( 'div' );
             row.className = 'contact-row';
             row.dataset.uid = c.uid;
@@ -2022,7 +2024,7 @@
                 const st = document.createElement( 'span' );
                 st.className = 'ct-star';
                 st.title = T( 'contact.favourites' );
-                st.innerHTML = NayiveUI.glyph( 'star' );
+                st.innerHTML = Ayni.icon( 'star' );
                 row.appendChild( st );
             }
 
@@ -2215,11 +2217,11 @@
         async function addToGroupDialog( uids )
         {
             const NEW = '\u0000new';
-            const id  = await NayiveUI.pickNode( {
+            const id  = await Ayni.pickNode( {
                 title:   T( 'contact.addToGroup' ),
                 okLabel: T( 'contact.addToGroup' ),
                 lit:     null,
-                roots:   () => [ { id: NEW, name: T( 'contact.newGroup' ) + '…', icon: 'plus' } ]
+                items:   () => [ { id: NEW, name: T( 'contact.newGroup' ) + '…', icon: 'plus' } ]
                                .concat( allGroups().map( g => ( { id: 'g:' + g.name, name: g.name, icon: 'tag' } ) ) )
             } );
             if( id == null ) return;
@@ -2344,17 +2346,16 @@
         }
 
         //------------------------------------------------------------------------//
-        // LIST  -  the shared item browser (shared/browser.js): a click picks, a
+        // LIST  -  the shared item list (Ayni.list): a click picks, a
         // double-click (a tap, Enter) opens the card; Ctrl / Shift pick more, a
         // long-press picks on a phone. One action list feeds the header group,
         // the menu (right-click, long-press) and the keys; what does not fit
-        // the header goes into its one ⋮ (NayiveUI.fitBar).
+        // the header goes into its one ⋮ (Ayni.fitBar).
         // The tree on the left: All contacts, Favourites, Groups; contacts
         // dropped on a group join it, on Favourites become favourites.
 
-        let browse     = null;     // the item browser on #contactList
+        let browse     = null;     // the item list on #contactList
         let treeView   = null;     // the groups tree in #tree
-        let searchFold = null;
         let view       = 'all';    // 'all' | 'fav' | 'groups' (in any group) | 'g:<name>'
         let groupsOpen = true;
 
@@ -2394,7 +2395,7 @@
             { id: 'fav', icon: 'star', key: 'S', rank: 6, group: 1,
               label: ids => T( ids.length && cardsOf( ids ).every( isFav ) ? 'contact.unfavourite' : 'contact.favAdd' ),
               run: toggleFav },
-            { id: 'group', label: T( 'contact.addToGroup' ), icon: 'tagPlus', rank: 2, group: 1,
+            { id: 'group', label: T( 'contact.addToGroup' ), icon: 'tag-plus', rank: 2, group: 1,
               run: addToGroupDialog },
             { id: 'ungroup', label: T( 'contact.ungroup' ), icon: 'close', rank: 9, group: 1,
               where: () => view.indexOf( 'g:' ) === 0,
@@ -2413,10 +2414,10 @@
         function treeRoots()
         {
             return [
-                { id: 'all',    name: T( 'contact.allContacts' ), icon: 'users', badge: contacts.length || '', noMenu: true, noDrag: true },
+                { id: 'all',    name: T( 'contact.allContacts' ), icon: 'users', count: contacts.length || '', noMenu: true, noDrag: true },
                 { id: 'fav',    name: T( 'contact.favourites' ),  icon: 'star',  noMenu: true, noDrag: true },
                 { id: 'groups', name: T( 'contact.groups' ),      icon: 'tag',   noDrag: true,
-                  kids: allGroups().map( g => ( { id: 'g:' + g.name, name: g.name, icon: 'tag', badge: g.n || '', noDrag: true } ) ) }
+                  children: allGroups().map( g => ( { id: 'g:' + g.name, name: g.name, icon: 'tag', count: g.n || '', noDrag: true } ) ) }
             ];
         }
 
@@ -2441,7 +2442,7 @@
                 ];
             }
 
-            if( items ) NayiveUI.menuAt( x, y, items, { anchor: anchor } );
+            if( items ) Ayni.menuAt( items, { x: x, y: y, anchor: anchor } );
         }
 
         function treeCan( ids, id )
@@ -2457,10 +2458,10 @@
 
         function wireList()
         {
-            treeView = NayiveUI.tree( {
-                host:    document.getElementById( 'tree' ),
-                pane:    document.getElementById( 'treePane' ),
-                roots:   treeRoots,
+            treeView = Ayni.tree( document.getElementById( 'tree' ), {
+                nav:     true,
+                sheet:   document.getElementById( 'treePane' ),
+                items:   treeRoots,
                 isOpen:  id => id === 'groups' && groupsOpen,
                 setOpen: ( id, v ) => { if( id === 'groups' ) groupsOpen = v; },
                 current: () => view,
@@ -2469,8 +2470,8 @@
                 drop:    { can: treeCan, drop: treeDrop }
             } );
 
-            browse = NayiveUI.browser( {
-                list:    contactList(),
+            browse = Ayni.list( contactList(), {
+                main:    true,
                 row:     '.contact-row',
                 idOf:    el => el.dataset.uid,
                 bar:     document.getElementById( 'selActions' ),
@@ -2478,10 +2479,9 @@
                 area:    [ { id: 'new', label: T( 'contact.newContact' ), icon: 'plus', run: openEditForNew } ],
                 tree:    treeView,
                 open:    uid => openDetail( uid ),
-                search:  () => { if( searchFold ) searchFold.open(); },
                 drag:    { text: ids => cardsOf( ids ).map( displayName ).join( '\n' ) }
             } );
-            NayiveUI.fitBar( document.querySelector( '#app .header' ), { more: topMenuItems } );
+            Ayni.fitBar( document.querySelector( '#app .header' ), { more: topMenuItems } );
 
             document.getElementById( 'treeBtn' ).addEventListener( 'click', () => treeView.openSheet() );
         }
@@ -3254,9 +3254,9 @@
         {
             const withVal  = arr => arr.filter( x => ( x.value || '' ).trim() );
             const realAdrs = c => c.adrs.filter( a => a.street || a.city || a.region || a.postal || a.country );
-            const telKey   = t => { const d = normPhone( t.value ); return d ? phoneTail( d ) : NayiveUI.fold( ( t.value || '' ).trim() ); };
+            const telKey   = t => { const d = normPhone( t.value ); return d ? phoneTail( d ) : Ayni.fold( ( t.value || '' ).trim() ); };
             const mailKey  = e => normEmail( e.value );
-            const adrKey   = a => NayiveUI.fold( [ a.street, a.city, a.region, a.postal, a.country ].join( '|' ) ).replace( /[^a-z0-9|]/g, '' );
+            const adrKey   = a => Ayni.fold( [ a.street, a.city, a.region, a.postal, a.country ].join( '|' ) ).replace( /[^a-z0-9|]/g, '' );
             const urlKey   = u => ( u.value || '' ).trim().toLowerCase().replace( /\/+$/, '' );
 
             mergeModel = {
@@ -3382,7 +3382,7 @@
                 const [ type, value ] = fmt( it );
 
                 const row = document.createElement( 'label' );
-                row.className = 'merge-row';
+                row.className = 'choice merge-row';
 
                 const cb = document.createElement( 'input' );
                 cb.type = 'checkbox';
@@ -3682,11 +3682,9 @@
                 query = this.value;
                 render();
             });
-            // The magnifier opens it; its × (or Escape) empties and folds it,
-            // which fires "input" above and drops the search.
-            searchFold = NayiveUI.searchFold( { box: search.parentElement, input: search,
-                                                toggle: document.getElementById( 'searchBtn' ),
-                                                bar: document.querySelector( '.header' ) } );
+            // It is Ayni's folded search field, wired from its markup: the
+            // magnifier opens it; its × (or Escape) empties and folds it, which
+            // fires "input" above and drops the search.
 
             document.getElementById( 'detailCloseBtn'  ).addEventListener( 'click', () => closeBackdrop( 'detailBackdrop' ) );
             document.getElementById( 'detailEditBtn'    ).addEventListener( 'click', function()
@@ -3735,7 +3733,7 @@
                         return;
                     }
                 }
-                // No sheet open: Escape clears the pick (shared/browser.js).
+                // No sheet open: Escape clears the pick (Ayni.list).
             });
         }
 

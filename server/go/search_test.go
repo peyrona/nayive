@@ -114,7 +114,7 @@ func TestSearchSpec(t *testing.T) {
 func TestSearchFold(t *testing.T) {
 	root := t.TempDir()
 	for _, n := range []string{"José Niño.txt", "Canción.mp3", "Me\u0301xico.pdf", "nino.txt", "Otro.txt",
-		"Hauptstraße.txt", "Œuvre.txt", "l’eau.txt", "Müller.txt", "Mueller.odt", "fumar.txt"} {
+		"Hauptstraße.txt", "Œuvre.txt", "l’eau.txt", "Müller.txt", "Mueller.odt", "fumar.txt", "Ve\u20d7ctor.txt"} {
 		if err := os.WriteFile(filepath.Join(root, n), []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -135,6 +135,7 @@ func TestSearchFold(t *testing.T) {
 		"*méxico*":  "Me\u0301xico.pdf",
 		"*strasse*": "Hauptstraße.txt",
 		"*oeuvre*":  "Œuvre.txt",
+		"*vector*":  "Ve\u20d7ctor.txt", // a mark outside U+0300-U+036F folds too (Ayni.fold: \p{M})
 		"*l'eau*":   "l’eau.txt",
 		"*mueller*": "Mueller.odt|Müller.txt",
 		"*müller*":  "Mueller.odt|Müller.txt",

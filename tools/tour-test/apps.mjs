@@ -46,7 +46,7 @@ const APPS = {
     },
     text: {
         path: "/nayive/text/?file=files/nota.txt", ready: has( ".CodeMirror" ), seed: { "files/nota.txt": "Hola\nmundo\n" },
-        expect: { 4: s => s.inMenu === false && /newBtn|menu-item/.test( s.lit ) || "Nuevo: lit inside the open File menu" }
+        expect: { 4: s => s.inMenu === false && /newBtn/.test( s.lit ) || "Nuevo: lit inside the open File menu" }
     },
     write: {
         path: "/nayive/write/", ready: has( "#editor .superdoc-page, #editor [class*=page]" ),

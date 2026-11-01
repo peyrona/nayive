@@ -20,6 +20,9 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-menus.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -28,6 +31,9 @@
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
+    <script src="../shared/ayni/ayni-menus.js" defer></script>
+    <script src="../shared/ayni/ayni-search.js" defer></script>
+    <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <link rel="manifest" href="manifest.json">
@@ -48,14 +54,14 @@
 
         <!-- List:      [icon] eMail ......... [search] [write] [select] [settings] [?] [plug]
              Picked:    [icon] eMail ... [× 3] [all] [what can be done to them] [search]... [⋮]
-                        (the shared item browser draws that group: browse.js)
+                        (the shared item list draws that group: browse.js)
              Writing:   [←] [icon] eMail ...... [clip] [discard] [close] [send] [?] [plug]
                         (the clip opens Chat's panel: this device, Nayive, gallery)
              Reading:   [←] [icon] eMail ...... [what can be done to it] [?] [plug]
              The reader's buttons get their glyphs from core.js (data-icon); which of
              them show is the action list's own rules (browse.js, E.syncBar).
              data-rank (1 = the last to leave, as the action list's rank): what
-             does not fit the row goes into the ⋮ before the gear (NayiveUI.fitBar). -->
+             does not fit the row goes into the ⋮ before the gear (Ayni.fitBar). -->
         <div class="topbar">
             <button id="backBtn" class="btn" type="button" hidden data-i18n-attr="data-tip:mail.back, aria-label:mail.back">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
@@ -63,8 +69,8 @@
             <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><polyline points="22 6 12 13 2 6"></polyline></svg>
             <h1>eMail</h1>
 
-            <div class="topbar-actions">
-                <!-- The selection's buttons (shared/browser.js): only while something is picked. -->
+            <div class="topbar-actions tall" role="toolbar" data-i18n-attr="aria-label:ui.actions">
+                <!-- The selection's buttons (Ayni.list): only while something is picked. -->
                 <div id="selActions" class="tb-group" hidden></div>
                 <!-- What the open message or the message being written can do
                      (browse.js, syncBar). -->
@@ -94,11 +100,11 @@
                 <!-- The tray's own: list-only, so reading, picking or writing hides it (email.css). -->
                 <div id="listTools" class="tb-group">
                     <!-- Enter searches (the mail server does it: not on every key).
-                         The magnifier opens the field (NayiveUI.searchFold). -->
-                    <div id="searchWrap" class="search-wrap">
-                        <input id="searchInput" class="topbar-search" type="text" enterkeyhint="search" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:mail.search, aria-label:mail.search">
+                         The magnifier opens the field (Ayni.searchField, email.js). -->
+                    <div id="searchWrap" class="input-group search-field fold">
+                        <input id="searchInput" class="input" type="search" enterkeyhint="search" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:mail.search, aria-label:mail.search">
                     </div>
-                    <button id="searchBtn" class="btn mail-list-only" type="button" data-rank="20" data-i18n-attr="data-tip:mail.search, aria-label:mail.search">
+                    <button id="searchBtn" class="btn mail-list-only" type="button" data-rank="20" data-search data-i18n-attr="data-tip:mail.search, aria-label:mail.search">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                     </button>
                     <button id="composeBtn" class="btn mail-list-only" type="button" data-rank="21" data-icon="compose" data-i18n-attr="data-tip:mail.compose, aria-label:mail.compose"></button>
@@ -106,7 +112,7 @@
                     <button id="selectBtn" class="btn mail-list-only" type="button" data-rank="22" data-icon="selectAll" data-i18n-attr="data-tip:mail.pickGo, aria-label:mail.pickGo"></button>
                 </div>
                 <div class="tb-group tb-sys">
-                    <!-- The buttons that do not fit the header (NayiveUI.fitBar, browse.js);
+                    <!-- The buttons that do not fit the header (Ayni.fitBar, browse.js);
                          hidden while everything fits. -->
                     <button id="moreBtn" class="btn" type="button" hidden aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.moreOptions, aria-label:ui.moreOptions">
                         <span class="icon" data-icon="more"></span>
@@ -125,11 +131,11 @@
             <div id="busyLine" class="mail-busy-line" hidden></div>
             <!-- The account (a picker, only with two or more), then ONE tree: the
                  five trays, and "Labels" with Nayive's own labels under it (the
-                 shared NayiveUI.tree, browse.js). A column on a wide screen; on a
+                 shared Ayni.tree, browse.js). A column on a wide screen; on a
                  phone it slides in from the folder button over the list. -->
             <nav id="side" class="mail-side tree-pane" hidden>
                 <select id="acctSel" class="tb-select" hidden data-i18n-attr="aria-label:mail.account"></select>
-                <div id="tree" class="mail-tree"></div>
+                <ul id="tree" class="mail-tree" data-fit data-i18n-attr="aria-label:mail.labelsAndTrays"></ul>
             </nav>
 
             <main class="mail-main">
@@ -540,7 +546,6 @@
 
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
-    <script src="../shared/browser.js" defer></script>
     <script src="core.js" defer></script>
     <script src="list.js" defer></script>
     <script src="read.js" defer></script>

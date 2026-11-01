@@ -73,12 +73,12 @@ ok( await openPage(), "eMail opens the Inbox", c.logs.slice( -15 ) );
 await at( "Hello 1" );
 ok( await picked() === "Hello 1", "a click picks one row", await picked() );
 ok( await c.evaluate( "! NayiveMail.S.open && document.getElementById('readView').hidden" ), "…it does not open it" );
-ok( await c.evaluate( "!document.getElementById('selActions').hidden && document.querySelector('#selActions .sel-count').textContent.trim() === '1'" ), "the header group shows, count 1" );
+ok( await c.evaluate( "!document.getElementById('selActions').hidden && document.querySelector('#selActions .pick-count').textContent.trim() === '1'" ), "the header group shows, count 1" );
 await at( "Hello 3", { mods: 8 } );
 ok( await picked() === "Hello 1,Hello 2,Hello 3" || ( await picked() ).split( "," ).sort().join() === "Hello 1,Hello 2,Hello 3", "Shift+click picks the range", await picked() );
 await at( "Hello 2", { mods: 2 } );
 ok( ( await picked() ).split( "," ).sort().join() === "Hello 1,Hello 3", "Ctrl+click takes one out", await picked() );
-ok( await c.evaluate( "document.querySelectorAll('#list .mail-row.is-selected').length === 2" ), "the picked rows are painted" );
+ok( await c.evaluate( "document.querySelectorAll('#list .mail-row[aria-selected=true]').length === 2" ), "the picked rows are painted" );
 await shot( "e01-picked" );
 await key( c, "Escape" );
 ok( await picked() === "" && await c.evaluate( "document.getElementById('selActions').hidden" ), "Esc clears; the group goes" );
@@ -94,21 +94,21 @@ let rows = await menuRows( c );
 const act = ( id, off = false ) => rows && rows.some( r => r.act === id && r.off === off );
 ok( await picked() === "Hello 2" && act( "reply" ) && act( "forward" ) && act( "read" ) && act( "star" ) && act( "label" ) && act( "spam" ) && act( "del" ), "right-click picks that row: reply, forward, read, star, label, spam, delete", rows );
 ok( rows && ! rows.some( r => [ "notSpam", "restore", "forget" ].includes( r.act ) ), "…Not spam, Restore, Delete for good are not there (Inbox)" );
-ok( await c.evaluate( "[ ...document.querySelectorAll('.item-menu .mi-key') ].map( k => k.textContent ).join() === 'Enter,R,Shift+R,F,U,S,L,Del'" ), "…each with its key",
-    await c.evaluate( "[ ...document.querySelectorAll('.item-menu .mi-key') ].map( k => k.textContent ).join()" ) );
+ok( await c.evaluate( "[ ...document.querySelectorAll('#ayni-menu kbd') ].map( k => k.textContent ).join() === 'Enter,R,Shift+R,F,U,S,L,Del'" ), "…each with its key",
+    await c.evaluate( "[ ...document.querySelectorAll('#ayni-menu kbd') ].map( k => k.textContent ).join()" ) );
 await shot( "e02-menu" );
 await key( c, "Escape" );
-ok( await c.evaluate( "document.querySelector('.item-menu').hidden" ), "Esc closes the menu" );
+ok( await c.evaluate( "( ! document.querySelector('#ayni-menu')?.matches(':popover-open') )" ), "Esc closes the menu" );
 await at( "Hello 3", { mods: 2 } );
 await at( "Hello 3", { button: "right" } );
 rows = await menuRows( c );
 ok( await picked() === "Hello 2,Hello 3" && act( "reply", true ) && act( "del" ), "two picked, right-click on one: the menu greys Reply, keeps Delete", rows );
 await key( c, "Escape" );
-ok( await c.evaluate( "! document.querySelector('#list [data-more], #tree [data-more], #selActions [data-sel=menu]')" ), "no row ⋮, no tree ⋮, no ⋮ in the selection group" );
+ok( await c.evaluate( "! document.querySelector('#list [data-more], #tree [data-more], #selActions [data-pick=menu]')" ), "no row ⋮, no tree ⋮, no ⋮ in the selection group" );
 let ft = await fitState( c );
 ok( ft.acts.join() === "reply,replyAll,forward,read,star,label,spam,del" && ! ft.out.length && ! ft.more && ! ft.crowded,
     "wide: every action is a button, in menu order (Inbox: no Not spam, Restore, Delete for good); no ⋮", ft );
-ok( await c.evaluate( "document.querySelector('#selActions [data-sel-act=reply]').ariaDisabled === 'true' && document.querySelector('#selActions [data-sel-act=del]').ariaDisabled !== 'true'" ), "…Reply greyed for two, Delete not" );
+ok( await c.evaluate( "document.querySelector('#selActions [data-pick-act=reply]').ariaDisabled === 'true' && document.querySelector('#selActions [data-pick-act=del]').ariaDisabled !== 'true'" ), "…Reply greyed for two, Delete not" );
 await key( c, "Escape" );
 await mouse( c, await EMPTY(), { button: "right" } );
 rows = await menuRows( c );
@@ -157,13 +157,13 @@ await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click
 ok( await c.until( "[ ...document.querySelectorAll('#list .mail-row') ].some( r => r.textContent.includes( 'Hello 4' ) )", 10000 ) && !! await inTray( "inbox", "Hello 4" ) && ! await inTray( "trash", "Hello 4" ), "Undo: back in the Inbox (server too)" );
 
 section( "EMAIL · THE TREE" );
-const TR = id => `#tree .tree-row[data-id="${id}"]`;
-const trows = await c.evaluate( "[ ...document.querySelectorAll('#tree .tree-row') ].map( r => r.dataset.id ).join()" );
+const TR = id => `#tree [role=treeitem][data-id="${id}"] > .ti`;   // the row
+const trows = await c.evaluate( "[ ...document.querySelectorAll('#tree [role=treeitem]') ].map( r => r.dataset.id ).join()" );
 ok( trows === `inbox,drafts,sent,spam,trash,labels,l:${work.id},nolabel`, "one tree: the five trays, then Labels with its labels and No label", trows );
 const srv = ( await J( "GET", `/api/mail/${A}/trays` ) ).j.trays.find( t => t.role === "inbox" );
-ok( await c.evaluate( `( document.querySelector( '${TR( "inbox" )} .tree-badge' ) || {} ).textContent === '${srv.unread || ""}' || ( ${srv.unread} === 0 && ! document.querySelector( '${TR( "inbox" )} .tree-badge' ) )` ) &&
-    await c.evaluate( `/${srv.total}/.test( document.querySelector( '${TR( "inbox" )}' ).title )` ), "the Inbox's badge: not read (the server's); its tooltip: the total", srv );
-ok( await c.evaluate( `document.querySelector( '${TR( "inbox" )}' ).classList.contains('is-active')` ), "the tray on screen is lit" );
+ok( await c.evaluate( `( document.querySelector( '${TR( "inbox" )} .count' ) || {} ).textContent === '${srv.unread || ""}' || ( ${srv.unread} === 0 && ! document.querySelector( '${TR( "inbox" )} .count' ) )` ) &&
+    await c.evaluate( `/${srv.total}/.test( document.querySelector( '${TR( "inbox" )}' ).dataset.tip )` ), "the Inbox's badge: not read (the server's); its tooltip: the total", srv );
+ok( await c.evaluate( `document.querySelector( '${TR( "inbox" )}' ).parentElement.getAttribute('aria-current') === 'true'` ), "the tray on screen is lit" );
 await mouse( c, TR( "trash" ), { button: "right", dx: 40 } );
 rows = await menuRows( c );
 ok( rows && rows.length === 1 && rows[ 0 ].act === "empty", "Trash's own menu: Empty Trash", rows );
@@ -179,7 +179,7 @@ await key( c, "Escape" );
 // drop on a label: it is added
 await at( "Hello 5" );
 await c.evaluate( "window.__toasts = []; true" );
-let lit = await drag( c, `${ROW}.is-selected`, TR( "l:" + work.id ) );
+let lit = await drag( c, `${ROW}[aria-selected=true]`, TR( "l:" + work.id ) );
 const lab = async () => ( ( await J( "GET", "/api/mail/label/" + encodeURIComponent( work.id ) ) ).j.items || [] ).map( m => m.subject );
 let got = false;
 for( let i = 0; i < 50 && ! got; i++ ) { got = ( await lab() ).includes( "Hello 5" ); if( ! got ) await sleep( 100 ); }
@@ -188,7 +188,7 @@ ok( await c.until( "( window.__toasts || [] ).some( t => /Work/.test( t ) )" ) &
     "…its chip shows, a toast says so", await c.evaluate( "window.__toasts" ) );
 // drop on the Trash: deleted, with Undo
 await at( "Hello 6" );
-lit = await drag( c, `${ROW}.is-selected`, TR( "trash" ) );
+lit = await drag( c, `${ROW}[aria-selected=true]`, TR( "trash" ) );
 ok( lit === true && await c.until( "! [ ...document.querySelectorAll('#list .mail-row') ].some( r => r.textContent.includes( 'Hello 6' ) )" ) && !! await inTray( "trash", "Hello 6" ), "a row dropped on Trash: deleted (server)", lit );
 ok( await c.until( "!! document.querySelector('#ayni-toasts .toast.undo .act')" ), "…with an Undo" );
 await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
@@ -268,7 +268,7 @@ await shot( "e05-phone-read" );
 await finger( c, "#backBtn" );
 await c.until( "! NayiveMail.S.open" );
 await finger( c, ROW, 700, await I( "Hello 2" ) );
-ok( await c.until( "NayiveMail.picked().map( m => m.subject ).join() === 'Hello 2'" ) && await c.evaluate( "document.getElementById('list').classList.contains('is-picking') && ! NayiveMail.S.open" ), "a long-press picks (ticks on), it does not open" );
+ok( await c.until( "NayiveMail.picked().map( m => m.subject ).join() === 'Hello 2'" ) && await c.evaluate( "document.getElementById('list').classList.contains('picking') && ! NayiveMail.S.open" ), "a long-press picks (ticks on), it does not open" );
 await finger( c, ROW, 60, await I( "Hello 3" ) );
 ok( await c.until( "NayiveMail.picked().length === 2" ), "a tap then adds one" );
 ft = await fitState( c );
@@ -284,8 +284,8 @@ ok( mrows && mrows.some( r => r.act === ft.out[ 0 ] ), "the ⋮ opens with them"
 await key( c, "Escape" );
 ok( await c.evaluate( "document.documentElement.scrollWidth <= innerWidth && document.querySelector('.topbar').getBoundingClientRect().right <= innerWidth" ), "…and it fits" );
 await shot( "e06-phone-picking" );
-await finger( c, "#selActions [data-sel=clear]" );
-ok( await c.until( "NayiveMail.picked().length === 0 && ! document.getElementById('list').classList.contains('is-picking')" ), "the × stops picking" );
+await finger( c, "#selActions [data-pick=clear]" );
+ok( await c.until( "NayiveMail.picked().length === 0 && ! document.getElementById('list').classList.contains('picking')" ), "the × stops picking" );
 await finger( c, "#treeBtn" );
 ok( await c.until( "document.getElementById('side').classList.contains('open')" ), "the folder button slides the tree in" );
 await sleep( 300 );

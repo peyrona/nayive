@@ -5,10 +5,10 @@
 
 //------------------------------------------------------------------------//
 // INTERNAL DRAG-AND-DROP: drag files / folders onto a folder to move them.
-// The shared item browser does the dragging and the marks (menus.js wires
+// The shared item list does the dragging and the marks (menus.js wires
 // it): drop targets are folder rows in the listing and the folders above
 // the open one in the breadcrumb. External OS-file drops (uploads) are untouched — onDrop / the
-// list-pane drag-over bail out while NayiveUI.dragIds() is set.
+// list-pane drag-over bail out while Ayni.dragIds() is set.
 
 function canDropInto( destPath, paths )
 {

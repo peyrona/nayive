@@ -134,7 +134,7 @@ function renderDiscoverSheet()
     {
         const key   = c[ 0 ];
         const lab   = document.createElement( 'label' );
-        lab.className = 'share-add disc-item';
+        lab.className = 'choice disc-item';
 
         const box = document.createElement( 'input' );
         box.type    = 'checkbox';

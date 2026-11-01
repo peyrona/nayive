@@ -229,19 +229,19 @@ function saveFolderSheet()
 //------------------------------------------------------------------------//
 // MOVE TO…
 
-// The shared "Move to…" (NayiveUI.pickNode): the same tree as the side
+// The shared "Move to…" (Ayni.pickNode): the same tree as the side
 // pane, with "All" on top. A folder can not go into itself or below it.
 async function openMoveSheet( ids )
 {
     ids = ids.filter( function( id ) { return node( id ) && id !== ROOT; } );
     if( ! ids.length ) return;
     const folders = ids.filter( function( id ) { return isFolder( node( id ) ); } );
-    const dest = await NayiveUI.pickNode( {
+    const dest = await Ayni.pickNode( {
         title:    ids.length === 1
                   ? TF( 'bookmarks.moveOne', { name: node( ids[ 0 ] ).title || domainOf( node( ids[ 0 ] ).url || '' ) } )
                   : TF( 'bookmarks.moveN', { n: ids.length } ),
         okLabel:  T( 'bookmarks.moveHere' ),
-        roots:    function() { return [ { id: ROOT, name: T( 'bookmarks.all' ), kids: treeRoots() } ]; },
+        items:    function() { return [ { id: ROOT, name: T( 'bookmarks.all' ), children: treeRoots() } ]; },
         current:  node( ids[ 0 ] ).parentId,
         disabled: function( id ) { return folders.some( function( f ) { return isInside( id, f ); } ); }
     } );

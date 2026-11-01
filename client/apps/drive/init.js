@@ -76,6 +76,7 @@ function wireStaticUI()
     {
         searchQuery = e.target.value;
         bigMode     = false;                   // typing a name ends the "Biggest files" list
+        if( advSearch ) { advSearch = null; showAdvSearchBox(); }      // and an advanced search
         clearSel();
         if( searchTimer ) clearTimeout( searchTimer );
 
@@ -93,7 +94,7 @@ function wireStaticUI()
     });
     document.getElementById( 'searchInput' ).addEventListener( 'keydown', function( e )
     {
-        // (Escape is the fold's: it clears the box and folds it away.)
+        // (Escape is the field's: it clears the box, then folds it away.)
         // ArrowDown drops out of the search box straight into the file list.
         if( e.key === 'ArrowDown' && ! isPhone() )
         {
@@ -103,27 +104,14 @@ function wireStaticUI()
         }
     });
 
-    // The magnifier opens the search box (the shared fold); its funnel opens
-    // the advanced search, and its × / Escape clear the search and fold it.
-    driveSearch = NayiveUI.searchFold( {
-        box:       document.querySelector( '.search-wrap' ),
-        input:     document.getElementById( 'searchInput' ),
-        toggle:    document.getElementById( 'searchToggleBtn' ),
-        filterBtn: document.getElementById( 'searchBuilderBtn' ),
+    // The magnifier opens the search box (Ayni's folded search field); its
+    // funnel opens the advanced search dialog (advsearch.js), and its × /
+    // Escape clear the search and fold it.
+    driveSearch = Ayni.searchField( document.getElementById( 'searchInput' ).parentElement, {
+        filter:    openSearchBuilder,
+        filterTip: T( 'drive.sbTitle' ),
         onClose:   function() { clearSearch(); clearSel(); render(); }
     } );
-
-    // The magnifier inside the box: the advanced search dialog (advsearch.js).
-    // While one is in force, the button standing in for the box reopens it,
-    // and Escape on that button ends it.
-    document.getElementById( 'searchBuilderBtn' ).addEventListener( 'click', openSearchBuilder );
-    document.getElementById( 'advChip'          ).addEventListener( 'click', openSearchBuilder );
-    document.getElementById( 'advChip'          ).addEventListener( 'keydown', function( e )
-    {
-        if( e.key !== 'Escape' ) return;
-        e.stopPropagation();
-        endAdvSearch();
-    });
     document.getElementById( 'sbCancelBtn' ).addEventListener( 'click', function() { setBackdrop( 'searchBuilderBackdrop', false ); } );
     document.getElementById( 'sbSearchBtn' ).addEventListener( 'click', applySearchBuilder );
     document.getElementById( 'sbClearBtn'  ).addEventListener( 'click', clearSearchBuilder );
@@ -204,10 +192,9 @@ function wireStaticUI()
     // An indeterminate progress is not user-dismissable: Escape stops at it.
     document.getElementById( 'progressBackdrop' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Escape' ) e.preventDefault(); } );
 
-    document.addEventListener( 'keydown', onShortcutKey );
 
     const listPane = document.getElementById( 'listPane' );
-    listPane.addEventListener( 'dragover', function( e ) { if( NayiveUI.dragIds() ) return; e.preventDefault(); listPane.classList.add( 'drag-over' ); } );
+    listPane.addEventListener( 'dragover', function( e ) { if( Ayni.dragIds() ) return; e.preventDefault(); listPane.classList.add( 'drag-over' ); } );
     listPane.addEventListener( 'dragleave', function( e )
     {
         // Crossing into a child row fires dragleave on the pane too; only a

@@ -251,7 +251,7 @@ function saveFolderSheet()
 }
 
 //------------------------------------------------------------------------//
-// MOVE TO…  -  the shared dialog (NayiveUI.pickNode) with the side pane's
+// MOVE TO…  -  the shared dialog (Ayni.pickNode) with the side pane's
 // tree, "All" on top. A folder can not go into itself or below it.
 
 async function openMoveSheet( ids )
@@ -259,11 +259,11 @@ async function openMoveSheet( ids )
     ids = ids.filter( function( id ) { return !! item( id ); } );
     if( ! ids.length || ! canEdit() ) return;
     const folders = ids.filter( function( id ) { return isFolder( item( id ) ); } );
-    const dest = await NayiveUI.pickNode( {
+    const dest = await Ayni.pickNode( {
         title:    ids.length === 1 ? TF( 'passwords.moveOne', { name: item( ids[ 0 ] ).title || T( 'ui.untitled' ) } )
                                    : TF( 'passwords.moveN', { n: ids.length } ),
         okLabel:  T( 'passwords.moveHere' ),
-        roots:    function() { return [ { id: '/', name: T( 'passwords.all' ), kids: treeRoots() } ]; },
+        items:    function() { return [ { id: '/', name: T( 'passwords.all' ), children: treeRoots() } ]; },
         current:  parentOf[ ids[ 0 ] ] || '/',
         disabled: function( id ) { return id !== '/' && folders.some( function( f ) { return isInside( id, f ); } ); }
     } );

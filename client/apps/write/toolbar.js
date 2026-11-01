@@ -86,8 +86,7 @@ export function createToolbar( o )
         if( ! items ) return;
 
         e.stopPropagation();
-        if( o.menus.isOpenFor( b ) ) o.menus.close();
-        else o.menus.openItems( items, b );
+        o.menus.openItems( items, b );        // a second press closes it (Ayni.menuAt)
     } );
 
     famSel.addEventListener( 'change', function()

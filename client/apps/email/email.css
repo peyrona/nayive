@@ -5,18 +5,18 @@
    its rows, the message header and the reading frame. */
 html, body { height: 100%; overflow: hidden; }
 
-/* The search field is the shared SEARCH FOLD (app.css): only the modes that
-   put it away are eMail's (its magnifier is .mail-list-only). */
-body.reading .search-wrap,
-body.in-label .search-wrap,
+/* The search field is Ayni's (shared/ayni/ayni-search.css): only the modes
+   that put it away are eMail's (its magnifier is .mail-list-only). */
+body.reading #searchWrap,
+body.in-label #searchWrap,
 body.in-label #searchBtn { display: none; }
 
 /* The bar's modes: list-only buttons leave while reading or writing; the
    message's buttons come (browse.js, syncBar). While rows are picked the
-   shared item browser draws its group first (#selActions). */
+   shared item list draws its group first (#selActions). */
 body.reading .mail-list-only,
 body.composing .mail-list-only,
-body.composing .search-wrap,
+body.composing #searchWrap,
 body.composing #actions,
 body.reading #listTools,
 body.composing #listTools { display: none; }
@@ -76,9 +76,9 @@ body.composing #listTools { display: none; }
     .mail-busy-line::before { width: 100%; transform: none; animation: mail-busy-breathe 1.6s ease-in-out infinite; }
 }
 
-/* The tree (browse.js: the shared NayiveUI.tree): the account picker on top,
+/* The tree (browse.js: Ayni's navigation tree): the account picker on top,
    then the trays and "Labels" with the labels, in a column that scrolls. On
-   a phone it is the shared slide-in sheet (.tree-pane.tree-sheet, app.css). */
+   a phone it is Ayni's slide-in sheet (.tree-sheet, ayni-lists.css). */
 .mail-side
 {
     flex: 0 0 210px;
@@ -92,9 +92,7 @@ body.composing #listTools { display: none; }
 }
 .mail-side .tb-select { width: 100%; }
 .mail-tree         { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; }
-.mail-tree.ntree   { min-width: 0; }
-.mail-tree .tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.mail-tree .tree-row.is-missing { opacity: 0.5; }
+.mail-tree li.is-missing > .ti { opacity: 0.5; }
 .mail-tree .mail-node-labels { margin-top: 8px; }
 
 /* A phone: what is on screen, and the button that slides the tree in. */
@@ -132,7 +130,7 @@ body.composing #readRz         { display: none; }
 
 /* One row: [tick] who + when / subject + marks / the first words.
    Unread: bold, with an accent edge on the left. The round tick is the
-   shared item browser's (app.css ITEM BROWSER): on hover with a mouse, on
+   shared item list's (Ayni.list): on hover with a mouse, on
    every row while picking by touch. */
 .mail-row
 {
@@ -159,15 +157,15 @@ body.composing #readRz         { display: none; }
 .mail-row .subj svg   { width: 14px; height: 14px; flex: 0 0 auto; color: var(--text-dim); }
 .mail-row .subj .star { color: var(--warn, #E0A800); }
 .mail-row .snip       { grid-column: 2 / 4; font-size: 0.82rem; color: var(--text-dim); }
-/* Picked (the browser's .is-selected) or open beside the list (split). */
-.mail-row.is-current,
-.mail-row.is-selected { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-.mail-row.is-selected.is-current { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+/* Picked: Ayni's soft Accent tint. Open beside the list (split): a lighter
+   one; picked and open: a little more. */
+.mail-row.is-current { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.mail-row[aria-selected="true"].is-current { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 /* Touch, not picking: no tick column. */
 @media (hover: none), (pointer: coarse)
 {
-    .mail-list:not(.is-picking) .mail-tickbox { display: none; }
-    .mail-list:not(.is-picking) .mail-row     { padding-left: 4px; }
+    .mail-list:not(.picking) .mail-tickbox { display: none; }
+    .mail-list:not(.picking) .mail-row     { padding-left: 4px; }
 }
 
 /* Labels: a coloured dot (--c), on a chip, a pill or a dialog row. */

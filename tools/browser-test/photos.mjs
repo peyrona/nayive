@@ -28,7 +28,7 @@ const notes = () => { try { return JSON.parse( onDisk( s, NOTES ) ) || {}; } cat
 const c = await browser( s, { mouse: true } );
 await c.evaluate( "localStorage.setItem( 'balata-intro-dismiss:photos', '1' ); true" );
 const TILE = p => `#grid .tile[data-id="files/Pics/${p}"]`;
-const TREE = p => `#tree .tree-row[data-id="files/Pics${p ? "/" + p : ""}"]`;
+const TREE = p => `#tree [role=treeitem][data-id="files/Pics${p ? "/" + p : ""}"] > .ti`;   // the row
 const sel  = () => c.evaluate( "browse.ids().join()" );
 const L    = n => "files/Pics/Lisbon/" + n;
 const SHOTS = process.env.SHOTS || "";
@@ -44,11 +44,11 @@ async function openAlbum( dir, n )
     ok( await c.open( "/nayive/photos/index.html?dir=" + encodeURIComponent( dir ), "/nayive/photos/index.html" ) &&
         await c.until( `typeof PHOTOS !== 'undefined' && PHOTOS.length === ${n} && document.querySelectorAll( '#grid .tile[data-id]' ).length === ${n} && !! browse`, 20000 ),
         "Photos opens " + dir + " (" + n + " photos)" );
-    await c.until( "document.querySelectorAll( '#tree .tree-row' ).length > 1" );
+    await c.until( "document.querySelectorAll( '#tree [role=treeitem]' ).length > 1" );
 }
-const pickIn = async ( row ) => c.evaluate( `( () => { const P = 'dialog.panel[open] .pick-tree ';
-    const r = document.querySelector( P + '.tree-row[data-id="${row}"]' ); if( ! r ) return false;
-    r.click(); document.querySelector( 'dialog.panel[open] .pick-ok' ).click(); return true; } )()` );
+const pickIn = async ( row ) => c.evaluate( `( () => { const P = 'dialog.panel[open] .pick-node ';
+    const r = document.querySelector( P + '[role=treeitem][data-id="${row}"]' ); if( ! r ) return false;
+    r.firstElementChild.click(); document.querySelector( 'dialog.panel[open] .pick-ok' ).click(); return true; } )()` );
 const undo = () => c.evaluate( "( () => { const b = document.querySelector( '#ayni-toasts .toast.undo .act' ); if( b ) b.click(); return !! b; } )()" );
 
 section( "PHOTOS · MOUSE" );
@@ -56,12 +56,12 @@ await openAlbum( "files/Pics/Lisbon", 3 );
 await mouse( c, TILE( "Lisbon/a.png" ) );
 ok( await sel() === L( "a.png" ), "a click picks one tile, it does not open it", await sel() );
 ok( await c.evaluate( "! document.getElementById( 'lb' ).classList.contains( 'open' )" ), "…the lightbox stays shut" );
-ok( await c.evaluate( "!document.getElementById('selActions').hidden && document.querySelector('#selActions .sel-count').textContent.trim() === '1'" ), "the header group shows, count 1" );
+ok( await c.evaluate( "!document.getElementById('selActions').hidden && document.querySelector('#selActions .pick-count').textContent.trim() === '1'" ), "the header group shows, count 1" );
 await mouse( c, TILE( "Lisbon/c.png" ), { mods: 8 } );
 ok( await sel() === [ "a.png", "b.png", "c.png" ].map( L ).join(), "Shift+click picks the range", await sel() );
 await mouse( c, TILE( "Lisbon/b.png" ), { mods: 2 } );
 ok( await sel() === [ "a.png", "c.png" ].map( L ).join(), "Ctrl+click takes one out", await sel() );
-ok( await c.evaluate( "document.querySelectorAll( '#grid .tile.is-selected' ).length === 2" ), "the picked tiles are painted" );
+ok( await c.evaluate( "document.querySelectorAll( '#grid .tile[aria-selected=true]' ).length === 2" ), "the picked tiles are painted" );
 await shot( "desktop-picked" );
 await key( c, "Escape" );
 ok( await sel() === "" && await c.evaluate( "document.getElementById('selActions').hidden" ), "Esc clears; the group goes" );
@@ -87,11 +87,11 @@ let rows = await menuRows( c );
 ok( await sel() === L( "c.png" ) && rows && [ "open", "edit", "share", "download", "move", "copyTo", "info", "map", "bin" ].every( a => rows.some( r => r.act === a ) ),
     "right-click picks that tile and opens the menu with every action", rows && rows.map( r => r.act ) );
 ok( rows && rows.find( r => r.act === "map" ).off, "…Show on map is grey (no place)" );
-ok( await c.evaluate( "[ ...document.querySelectorAll('.item-menu .mi-key') ].some( k => k.textContent === 'Del' )" ), "…with the keys beside them" );
+ok( await c.evaluate( "[ ...document.querySelectorAll('#ayni-menu kbd') ].some( k => k.textContent === 'Del' )" ), "…with the keys beside them" );
 await shot( "desktop-menu" );
 await key( c, "Escape" );
-ok( await c.evaluate( "document.querySelector('.item-menu').hidden" ), "Esc closes the menu" );
-ok( await c.evaluate( "! document.querySelector('#grid [data-more], #tree [data-more], #selActions [data-sel=menu]')" ), "no tile ⋮, no tree ⋮, no ⋮ in the selection group" );
+ok( await c.evaluate( "( ! document.querySelector('#ayni-menu')?.matches(':popover-open') )" ), "Esc closes the menu" );
+ok( await c.evaluate( "! document.querySelector('#grid [data-more], #tree [data-more], #selActions [data-pick=menu]')" ), "no tile ⋮, no tree ⋮, no ⋮ in the selection group" );
 let fb = await fitState( c );
 ok( fb.acts.join() === "edit,share,download,move,copyTo,info,bin" && ! fb.out.length && ! fb.more && ! fb.crowded,
     "wide: every action is a button, in menu order (no See on map without a place); no ⋮", fb );
@@ -119,8 +119,8 @@ ok( await c.until( "!! document.querySelector( '" + TILE( "Lisbon/c.png" ) + "' 
 section( "PHOTOS · MOVE / COPY TO…, AND DRAG" );
 await mouse( c, TILE( "Lisbon/a.png" ) );
 await c.evaluate( "browse.run( 'move' ); true" );
-ok( await c.until( "!! document.querySelector( 'dialog.panel[open] .pick-tree .tree-row' )" ), "Move to… shows the folders tree" );
-ok( await c.evaluate( "document.querySelector( 'dialog.panel[open] .pick-tree .tree-row[data-id=\"files/Pics/Lisbon\"]' ).classList.contains( 'is-off' )" ), "…the album it is in is off" );
+ok( await c.until( "!! document.querySelector( 'dialog.panel[open] .pick-node [role=treeitem]' )" ), "Move to… shows the folders tree" );
+ok( await c.evaluate( "document.querySelector( 'dialog.panel[open] .pick-node [role=treeitem][data-id=\"files/Pics/Lisbon\"]' ).getAttribute( 'aria-disabled' ) === 'true'" ), "…the album it is in is off" );
 await shot( "desktop-move" );
 ok( await pickIn( "files/Pics/Granada" ), "Granada picked" );
 ok( await c.until( "! document.querySelector( '" + TILE( "Lisbon/a.png" ) + "' )" ) && exists( s, "files/Pics/Granada/a.png" ) && ! exists( s, L( "a.png" ) ), "…and moved there" );
@@ -131,9 +131,9 @@ ok( notes()[ L( "a.png" ) ] === "note a" && ! notes()[ "files/Pics/Granada/a.png
 
 await mouse( c, TILE( "Lisbon/b.png" ) );
 await c.evaluate( "browse.run( 'copyTo' ); true" );
-await c.until( "!! document.querySelector( 'dialog.panel[open] .pick-tree .tree-row[data-id=\"files/Pics/Lisbon/Tiles\"]' ) || !! document.querySelector( 'dialog.panel[open] .pick-tree .tree-row[data-id=\"files/Pics/Lisbon\"]' )" );
-await c.evaluate( `( () => { const r = document.querySelector( 'dialog.panel[open] .pick-tree .tree-row[data-id="files/Pics/Lisbon"]' );
-    if( r && r.getAttribute( 'aria-expanded' ) !== 'true' ) r.querySelector( '[data-twisty]' ).click(); return true; } )()` );
+await c.until( "!! document.querySelector( 'dialog.panel[open] .pick-node [role=treeitem][data-id=\"files/Pics/Lisbon/Tiles\"]' ) || !! document.querySelector( 'dialog.panel[open] .pick-node [role=treeitem][data-id=\"files/Pics/Lisbon\"]' )" );
+await c.evaluate( `( () => { const r = document.querySelector( 'dialog.panel[open] .pick-node [role=treeitem][data-id="files/Pics/Lisbon"]' );
+    if( r && r.getAttribute( 'aria-expanded' ) !== 'true' ) r.querySelector( '.tw' ).click(); return true; } )()` );
 ok( await pickIn( "files/Pics/Lisbon/Tiles" ), "Copy to…: Tiles picked" );
 ok( await c.until( "( window.__toasts || [] ).some( t => /copied/.test( t ) )" ) && exists( s, "files/Pics/Lisbon/Tiles/b.png" ) && exists( s, L( "b.png" ) ), "…a copy is there, the photo stays" );
 
@@ -156,7 +156,7 @@ ok( await c.until( "! document.querySelector( 'dialog.panel[open]' )" ), "…Esc
 
 await mouse( c, TILE( "Lisbon/c.png" ) );
 await c.evaluate( "browse.run( 'move' ); true" );
-ok( await c.until( "!! document.querySelector( 'dialog.panel[open] .pick-tree .tree-row[data-id=\"files/Other\"]' )" ), "Move to… shows folders outside the albums too" );
+ok( await c.until( "!! document.querySelector( 'dialog.panel[open] .pick-node [role=treeitem][data-id=\"files/Other\"]' )" ), "Move to… shows folders outside the albums too" );
 ok( await pickIn( "files/Other" ), "files/Other picked" );
 ok( await c.until( "! document.querySelector( '" + TILE( "Lisbon/c.png" ) + "' )" ) && exists( s, "files/Other/c.png" ) && ! exists( s, L( "c.png" ) ), "…and moved there" );
 ok( notes()[ "files/Other/c.png" ] === "note c", "…its note followed it", notes() );
@@ -164,7 +164,7 @@ ok( await undo(), "Undo pressed" );
 ok( await c.until( "!! document.querySelector( '" + TILE( "Lisbon/c.png" ) + "' )" ) && exists( s, L( "c.png" ) ) && notes()[ L( "c.png" ) ] === "note c", "Undo moves it back, with its note" );
 
 section( "PHOTOS · THE ALBUMS TREE" );
-ok( await c.evaluate( "document.querySelector( '" + TREE( "Lisbon" ) + "' ).classList.contains( 'is-active' )" ), "the open album is lit in the tree" );
+ok( await c.evaluate( "document.querySelector( '" + TREE( "Lisbon" ) + "' ).parentElement.getAttribute( 'aria-current' ) === 'true'" ), "the open album is lit in the tree" );
 await mouse( c, TREE( "" ), { button: "right", dx: 40 } );
 rows = await menuRows( c );
 ok( rows && rows.find( r => r.act === "newAlbum" && ! r.off ) && rows.find( r => r.act === "bin" ).off && rows.find( r => r.act === "rename" ).off, "the top album: New album only", rows );
@@ -173,19 +173,19 @@ await mouse( c, TREE( "Old" ), { button: "right", dx: 40 } );
 rows = await menuRows( c );
 ok( rows && [ "newAlbum", "rename", "move", "bin" ].every( a => rows.some( r => r.act === a && ! r.off ) ), "an album's right-click: New album, Rename, Move to…, To the bin", rows );
 await shot( "desktop-tree-menu" );
-await c.evaluate( "document.querySelector( '.item-menu [data-act=bin]' ).click(); true" );
+await c.evaluate( "document.querySelector( '#ayni-menu [data-act=bin]' ).click(); true" );
 ok( await c.until( "! document.querySelector( '" + TREE( "Old" ) + "' )" ) && ! exists( s, "files/Pics/Old" ) && await c.evaluate( "! document.querySelector( 'dialog.panel[open]' )" ), "an album goes to the bin at once" );
 ok( await undo(), "Undo pressed" );
 ok( await c.until( "!! document.querySelector( '" + TREE( "Old" ) + "' )", 8000 ) && exists( s, "files/Pics/Old/o.png" ), "…and comes back" );
 
 await mouse( c, "#grid", { dx: 20, button: "right" } );
-await c.evaluate( "document.querySelector( '.item-menu [data-act=newAlbum]' ).click(); true" );
+await c.evaluate( "document.querySelector( '#ayni-menu [data-act=newAlbum]' ).click(); true" );
 ok( await c.until( "!! document.querySelector( 'dialog.panel[open] input' )" ), "New album asks a name" );
 await c.evaluate( "{ const i = document.querySelector( 'dialog.panel[open] input' ); i.value = 'Summer'; i.dispatchEvent( new Event( 'input' ) ); document.querySelector( '#nameOk' ).click(); } true" );
 ok( await c.until( "!! document.querySelector( '" + TREE( "Lisbon/Summer" ) + "' )" ) && exists( s, "files/Pics/Lisbon/Summer" ), "…and makes it inside the open album" );
 
 await mouse( c, TREE( "Granada" ), { button: "right", dx: 40 } );
-await c.evaluate( "document.querySelector( '.item-menu [data-act=rename]' ).click(); true" );
+await c.evaluate( "document.querySelector( '#ayni-menu [data-act=rename]' ).click(); true" );
 await c.until( "!! document.querySelector( 'dialog.panel[open] input' )" );
 await c.evaluate( "{ const i = document.querySelector( 'dialog.panel[open] input' ); i.value = 'Alhambra'; i.dispatchEvent( new Event( 'input' ) ); document.querySelector( '#nameOk' ).click(); } true" );
 ok( await c.until( "!! document.querySelector( '" + TREE( "Alhambra" ) + "' )" ) && exists( s, "files/Pics/Alhambra/x.png" ) && ! exists( s, "files/Pics/Granada" ), "Rename an album" );
@@ -196,7 +196,7 @@ ok( dragAlbum === true && await c.until( "!! document.querySelector( '" + TREE( 
 
 section( "PHOTOS · THE OPEN ALBUM GOES TO THE BIN" );
 await mouse( c, TREE( "Lisbon" ), { button: "right", dx: 40 } );
-await c.evaluate( "document.querySelector( '.item-menu [data-act=bin]' ).click(); true" );
+await c.evaluate( "document.querySelector( '#ayni-menu [data-act=bin]' ).click(); true" );
 ok( await c.until( "new URLSearchParams( location.search ).get( 'dir' ) === 'files/Pics' && typeof albumIndexShown !== 'undefined' && albumIndexShown", 20000 ) && ! exists( s, "files/Pics/Lisbon" ), "binning the open album opens the one above it" );
 ok( await c.until( "!! document.querySelector( '#ayni-toasts .toast.undo .act' )" ), "…its Undo came along" );
 ok( notes()[ L( "a.png" ) ] === "note a", "…the notes of its photos are kept", notes() );
@@ -204,7 +204,7 @@ ok( await undo(), "Undo pressed" );
 ok( await c.until( "new URLSearchParams( location.search ).get( 'dir' ) === 'files/Pics/Lisbon' && typeof PHOTOS !== 'undefined' && PHOTOS.length === 2", 20000 ) && exists( s, L( "a.png" ) ) && exists( s, L( "c.png" ) ),
     "Undo brings the album back and opens it" );
 await mouse( c, TREE( "Lisbon" ), { button: "right", dx: 40 } );
-await c.evaluate( "document.querySelector( '.item-menu [data-act=rename]' ).click(); true" );
+await c.evaluate( "document.querySelector( '#ayni-menu [data-act=rename]' ).click(); true" );
 await c.until( "!! document.querySelector( 'dialog.panel[open] input' )" );
 await c.evaluate( "{ const i = document.querySelector( 'dialog.panel[open] input' ); i.value = 'Lisboa'; i.dispatchEvent( new Event( 'input' ) ); document.querySelector( '#nameOk' ).click(); } true" );
 ok( await c.until( "new URLSearchParams( location.search ).get( 'dir' ) === 'files/Pics/Lisboa' && typeof PHOTOS !== 'undefined' && PHOTOS.length === 2", 20000 ) && exists( s, "files/Pics/Lisboa/a.png" ),
@@ -236,7 +236,7 @@ ok( await c.until( "document.getElementById( 'lb' ).classList.contains( 'open' )
 await finger( c, "#lbX" );
 await c.until( "! document.getElementById( 'lb' ).classList.contains( 'open' )" );
 await finger( c, TILE( "Lisbon/a.png" ), 700 );
-ok( await c.until( "browse.ids().join() === " + JSON.stringify( L( "a.png" ) ) ) && await c.evaluate( "document.getElementById( 'grid' ).classList.contains( 'is-picking' ) && ! document.getElementById( 'lb' ).classList.contains( 'open' )" ),
+ok( await c.until( "browse.ids().join() === " + JSON.stringify( L( "a.png" ) ) ) && await c.evaluate( "document.getElementById( 'grid' ).classList.contains( 'picking' ) && ! document.getElementById( 'lb' ).classList.contains( 'open' )" ),
     "a long-press picks (ticks on), it does not open" );
 await finger( c, TILE( "Lisbon/c.png" ) );
 ok( await sel() === [ "a.png", "c.png" ].map( L ).join(), "…then a tap adds", await sel() );
@@ -249,10 +249,10 @@ await finger( c, ".topbar .fit-more" );
 const mrows = await menuRows( c );
 ok( mrows && mrows.some( r => r.act === fb.out[ 0 ] ) && mrows.some( r => r.act === "reloadBtn" ), "the ⋮ opens with them", mrows );
 await finger( c, ".topbar .fit-more" );
-ok( await c.until( "document.querySelector('.item-menu').hidden" ), "…and closes again" );
+ok( await c.until( "( ! document.querySelector('#ayni-menu')?.matches(':popover-open') )" ), "…and closes again" );
 await shot( "phone-picking" );
-await finger( c, "#selActions [data-sel=clear]" );
-ok( await c.until( "browse.ids().length === 0 && ! document.getElementById( 'grid' ).classList.contains( 'is-picking' )" ), "the × stops picking" );
+await finger( c, "#selActions [data-pick=clear]" );
+ok( await c.until( "browse.ids().length === 0 && ! document.getElementById( 'grid' ).classList.contains( 'picking' )" ), "the × stops picking" );
 await finger( c, "#treeBtn" );
 ok( await c.until( "document.getElementById( 'treePane' ).classList.contains( 'open' )" ), "the folder button slides the albums tree in" );
 await sleep( 300 );

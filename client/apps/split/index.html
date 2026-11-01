@@ -21,6 +21,9 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-menus.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -29,6 +32,9 @@
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
+    <script src="../shared/ayni/ayni-menus.js" defer></script>
+    <script src="../shared/ayni/ayni-search.js" defer></script>
+    <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS (and localhost). -->
@@ -297,19 +303,19 @@
                             <button class="pill" type="button" data-tab="balances" data-i18n="split.tabBalances"></button>
                         </div>
 
-                        <div class="header-actions">
+                        <div class="header-actions tall" role="toolbar" data-i18n-attr="aria-label:ui.actions">
                             <div class="tb-group">
-                                <!-- The shared search fold (NayiveUI.searchFold, SEARCH below): the
+                                <!-- The search field (Ayni.searchField, SEARCH below): the
                                      groups on the list, a group's expenses inside one. -->
-                                <div class="search-wrap">
-                                    <input id="searchInput" class="search-input" type="text" autocomplete="off" enterkeyhint="search" data-i18n-attr="aria-label:ui.search">
+                                <div class="input-group search-field fold">
+                                    <input id="searchInput" class="input" type="search" autocomplete="off" enterkeyhint="search" data-i18n-attr="aria-label:ui.search">
                                 </div>
-                                <button id="searchBtn" class="btn" type="button" data-i18n-attr="data-tip:ui.search, aria-label:ui.search">
+                                <button id="searchBtn" class="btn" type="button" data-rank="20" data-search data-i18n-attr="data-tip:ui.search, aria-label:ui.search">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                                     </svg>
                                 </button>
-                                <button id="addBtn" class="btn" type="button" data-i18n-attr="data-tip:split.newGroup, aria-label:split.newGroup">
+                                <button id="addBtn" class="btn" type="button" data-rank="21" data-i18n-attr="data-tip:split.newGroup, aria-label:split.newGroup">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                                         <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
                                     </svg>
@@ -319,17 +325,17 @@
                                      group somebody shared with us (read-only) hides them. -->
                                 <!-- Its own key, not split.people: that one is the members sheet's
                                      heading, where "Personas" is the right word for a title. -->
-                                <button id="peopleBtn" class="btn" type="button" hidden data-i18n-attr="data-tip:split.peopleTip, aria-label:split.peopleTip">
+                                <button id="peopleBtn" class="btn" type="button" data-rank="22" hidden data-i18n-attr="data-tip:split.peopleTip, aria-label:split.peopleTip">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                                     </svg>
                                 </button>
-                                <button id="editBtn" class="btn" type="button" hidden data-i18n-attr="data-tip:split.editGroup, aria-label:split.editGroup">
+                                <button id="editBtn" class="btn" type="button" data-rank="23" hidden data-i18n-attr="data-tip:split.editGroup, aria-label:split.editGroup">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
                                     </svg>
                                 </button>
-                                <button id="shareBtn" class="btn" type="button" hidden data-i18n-attr="data-tip:split.shareGroup, aria-label:split.shareGroup">
+                                <button id="shareBtn" class="btn" type="button" data-rank="24" hidden data-i18n-attr="data-tip:split.shareGroup, aria-label:split.shareGroup">
                                     <!-- Drive's share glyph, verbatim: the tray-with-an-arrow reads as
                                          "export a file", and this bar already has an export in the ⋮ menu. -->
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -338,21 +344,21 @@
                                 </button>
                                 <!-- Desarchivar: only on an archived group of ours. The list's row
                                      offers the bin there, so this is the one way back. -->
-                                <button id="unarchiveBtn" class="btn" type="button" hidden data-i18n-attr="data-tip:split.unarchive, aria-label:split.unarchive">
+                                <button id="unarchiveBtn" class="btn" type="button" data-rank="25" hidden data-i18n-attr="data-tip:split.unarchive, aria-label:split.unarchive">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><polyline points="9.5 15 12 12.5 14.5 15"></polyline><line x1="12" y1="12.5" x2="12" y2="18"></line>
                                     </svg>
                                 </button>
                                 <!-- Exportar PDF. It only READS the group, so a read-only one keeps it.
                                      Copiar resumen lives at the end of "Saldos" only (2026-10-01). -->
-                                <button id="pdfBtn" class="btn" type="button" hidden data-i18n-attr="data-tip:split.exportPdf, aria-label:split.exportPdf">
+                                <button id="pdfBtn" class="btn" type="button" data-rank="26" hidden data-i18n-attr="data-tip:split.exportPdf, aria-label:split.exportPdf">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>
                                     </svg>
                                 </button>
                             </div>
                             <div class="tb-group tb-sys">
-                                <button class="btn" data-intro-open type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
+                                <button class="btn" data-intro-open data-rank="31" type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                                         <circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>
                                     </svg>
@@ -700,7 +706,7 @@
         let tab     = 'entries';
         let perCur  = false;   // Saldos: true = one balance per currency, no conversion
         let search  = '';
-        let searchFold = null; // the header's search field (NayiveUI.searchFold)
+        let searchFold = null; // the header's search field (Ayni.searchField)
         let meUser  = '';      // the login name, from /api/whoami
         const sharedOwners = {};   // "shared/<slug>" -> who shared it
 
@@ -832,8 +838,9 @@
             if( tab !== 'entries' && search.trim() ) { tab = 'entries'; renderGroup(); }
             else renderEntries();
         } );
-        searchFold = NayiveUI.searchFold( { box: $( 'searchInput' ).parentElement, input: $( 'searchInput' ),
-                                            toggle: $( 'searchBtn' ), bar: document.querySelector( '.header' ) } );
+        searchFold = Ayni.searchField( $( 'searchInput' ).parentElement );
+        // What does not fit beside the open search goes into a "⋮" (Ayni.fitBar).
+        Ayni.fitBar( $( 'searchBtn' ).closest( '.header' ) );
         $( 'perCurBtn' ).addEventListener( 'click', function() { perCur = ! perCur; renderBalances(); } );
         $( 'archivedToggle' ).addEventListener( 'click', function()
         {
@@ -1148,7 +1155,7 @@
 
         function renderHome()
         {
-            const q      = NayiveUI.matcher( search );
+            const q      = Ayni.matcher( search );
             const hit    = g => ! q || q( [ g.name || '' ].concat( visibleMembers( g ).map( m => m.name || '' ) ).join( ' ' ) );
             const own    = groups.filter( g => ! g._ro && ! g.archived && hit( g ) ).sort( byName );
             const shared = groups.filter( g => g._ro && hit( g ) ).sort( byName );
@@ -1307,7 +1314,7 @@
         {
             const g    = current;
             const all  = sortedEntries( g );
-            const q    = NayiveUI.matcher( search );
+            const q    = Ayni.matcher( search );
             const rows = q ? all.filter( e => entryMatches( g, e, q ) ) : all;
 
             if( searchFold ) searchFold.count( q ? rows.length + ' / ' + all.length : '' );

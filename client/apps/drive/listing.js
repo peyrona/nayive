@@ -7,7 +7,7 @@
 // What the box asks the server, which matches basenames accent- and
 // case-blind. A query with * or ? is an anchored shell glob - the rule the
 // search box has always shown (GET ?find=). Anything else is the shared rule
-// (NayiveUI.matcher): one word or "phrase" is still a ?find= substring;
+// (Ayni.matcher): one word or "phrase" is still a ?find= substring;
 // several, or a -word, become the advanced search's name rules (has / not,
 // every one must hold).
 function buildQuery( raw )
@@ -15,7 +15,7 @@ function buildQuery( raw )
     const q = (raw || '').trim();
     if( ! q ) return null;
     if( q.indexOf( '*' ) !== -1 || q.indexOf( '?' ) !== -1 ) return { glob: q };
-    const m = NayiveUI.matcher( q );
+    const m = Ayni.matcher( q );
     if( ! m ) return null;
     if( m.terms.length === 1 && ! m.not.length ) return { glob: '*' + m.terms[ 0 ] + '*' };
     return { spec: { rules: m.terms.map( t => ( { op: 'has', text: t } ) )
@@ -232,7 +232,7 @@ function renderListing()
 // Icons shown in the listing. The document / spreadsheet / code glyphs are the
 // Write, Calc and Text app marks, so a row looks like the tool that opens it.
 // The folder, image and restore glyphs and the Write / Calc logos come from
-// the shared sets (ui.js icon, browser.js glyph), so a logo changed there
+// the shared set (Ayni.icon, with Nayive's icons from ui.js), so a logo changed there
 // changes here too; driveGlyph only puts back Drive's own markup (width and
 // height 18 when `size`, no aria-hidden), the row's DOM stays as it was.
 function driveGlyph( svg, size )
@@ -240,11 +240,11 @@ function driveGlyph( svg, size )
     svg = svg.replace( ' aria-hidden="true"', '' );
     return size ? svg.replace( '<svg ', '<svg width="' + size + '" height="' + size + '" ' ) : svg;
 }
-const SVG_FOLDER = driveGlyph( NayiveUI.glyph( 'folder' ), 18 );
+const SVG_FOLDER = driveGlyph( Ayni.icon( 'folder' ), 18 );
 // "Shared with me": the folder, with a person in it.
 const SVG_SHARED = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><circle cx="12" cy="11.6" r="1.7"></circle><path d="M8.9 17.2a3.1 3.1 0 0 1 6.2 0"></path></svg>';
 // Trash-view action glyphs: close, restore, permanent delete.
-const SVG_RESTORE = driveGlyph( NayiveUI.glyph( 'restore' ) );
+const SVG_RESTORE = driveGlyph( Ayni.icon( 'restore' ) );
 const SVG_TRASH   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>';
 const SVG_FILE   = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
 const SVG_DOC    = driveGlyph( Ayni.icon( 'write' ), 18 );
@@ -253,7 +253,7 @@ const SVG_PDF    = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" 
 // An archive (ARCHIVE_EXT): the page with a zipper down it and its pull tab.
 const SVG_ZIP    = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M11 3.5h1M10 6h1M11 8.5h1M10 11h1"></path><rect x="8.5" y="13.5" width="5" height="5" rx="1"></rect></svg>';
 const SVG_CODE   = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline><line x1="14" y1="4" x2="10" y2="20"></line></svg>';
-const SVG_IMAGE  = driveGlyph( NayiveUI.glyph( 'image' ), 18 );
+const SVG_IMAGE  = driveGlyph( Ayni.icon( 'image' ), 18 );
 // A shortcut's arrow, laid over the corner of its icon (drive.css .link-arrow).
 const SVG_LINK_ARROW = '<svg class="link-arrow" viewBox="0 0 12 12" aria-hidden="true"><rect x="0.5" y="0.5" width="11" height="11" rx="2.5"></rect><path d="M4 8.5 8.5 4M5 4h3.5v3.5"></path></svg>';
 const SVG_VIDEO  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="14" height="16" rx="2"></rect><polygon points="22 7 16 11 16 13 22 17"></polygon><polygon points="7 9 11 12 7 15" fill="currentColor" stroke="none"></polygon></svg>';
@@ -384,10 +384,10 @@ function buildListRow( node, showPath )
     const name = displayName( node );
 
     // Picking, opening, the row's tick and ⋮, its drag and the drop onto a
-    // folder row are the shared item browser's (menus.js wires it): the row
+    // folder row are the shared item list's (menus.js wires it): the row
     // is only what it shows.
     const row = document.createElement( 'div' );
-    row.className     = 'row' + (selectedPaths.has( node.path ) ? ' is-selected' : '');
+    row.className     = 'row';
     row.dataset.path  = node.path;
     if( dir ) row.dataset.dir = '1';
 

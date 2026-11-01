@@ -190,6 +190,26 @@
         return t.content.firstChild;
     };
 
+    // A person's page (no item list) keeps its ⋮ menus: an Ayni menu
+    // (shared/ayni/ayni-menus.js) the button opens (popovertarget). Each row
+    // carries its own action in _act. C.menuRow( icon, key, act, cls ) makes a row.
+    C.menu = function ( id, btn )
+    {
+        var m = C.h( "div", { class: "panel menu", attrs: { id: id, popover: "", role: "menu" } } );
+        document.body.appendChild( m );
+        btn.setAttribute( "popovertarget", id );
+        m.addEventListener( "ayni:action", function ( e ) { if( e.detail.item._act ) e.detail.item._act(); } );
+        Ayni.init( m );
+        return m;
+    };
+    C.menuRow = function ( iconName, titleKey, act, cls )
+    {
+        var b = C.h( "button", { class: cls || "", attrs: { type: "button", role: "menuitem" } },
+                     C.h( "span", { class: "icon" }, C.ic( iconName ) ), C.T( titleKey ) );
+        b._act = act;
+        return b;
+    };
+
     // A round .btn with a glyph and a translated tooltip.
     C.btn = function ( iconName, titleKey, onClick, extra )
     {

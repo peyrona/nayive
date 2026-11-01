@@ -1504,12 +1504,12 @@
     function suggest( input )
     {
         var v = input.value, cut = Math.max( v.lastIndexOf( "," ), v.lastIndexOf( ";" ) );
-        var word = NayiveUI.fold( v.slice( cut + 1 ).trim() );
+        var word = Ayni.fold( v.slice( cut + 1 ).trim() );
         if( ! book || word.length < 1 ) { hideSuggest(); return; }
-        var have = NayiveUI.fold( v );
+        var have = Ayni.fold( v );
         sugItems = book.filter( function ( c )
         {
-            return ( NayiveUI.fold( c.name ).indexOf( word ) >= 0 || NayiveUI.fold( c.email ).indexOf( word ) >= 0 ) && have.indexOf( NayiveUI.fold( c.email ) ) < 0;
+            return ( Ayni.fold( c.name ).indexOf( word ) >= 0 || Ayni.fold( c.email ).indexOf( word ) >= 0 ) && have.indexOf( Ayni.fold( c.email ) ) < 0;
         } ).slice( 0, 6 );
         if( ! sugItems.length ) { hideSuggest(); return; }
         sugField = input;

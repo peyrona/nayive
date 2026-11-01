@@ -152,7 +152,7 @@ function folderList()
 
 function sortByName( list )
 {
-    return list.slice().sort( function( a, b ) { return NayiveUI.fold( a.title ).localeCompare( NayiveUI.fold( b.title ) ); } );
+    return list.slice().sort( function( a, b ) { return Ayni.fold( a.title ).localeCompare( Ayni.fold( b.title ) ); } );
 }
 
 //------------------------------------------------------------------------//

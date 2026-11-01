@@ -23,7 +23,7 @@ store.onMerged( onFileMerged );
 // is open or something is being dragged: the re-read repaints the list.
 NayiveUI.wireRefresh( { store: store, read: loadData, guard: function()
 {
-    return !! document.querySelector( 'dialog.panel[open]' ) || !! NayiveUI.dragIds();
+    return !! document.querySelector( 'dialog.panel[open]' ) || !! Ayni.dragIds();
 } } );
 
 NayiveUI.firstRun( {
@@ -39,7 +39,7 @@ NayiveUI.firstRun( {
         { sel: '#listBtn',      text: T( 'bookmarks.introList' ) }
     ],
     // The guided tour ("Ver el tour" in the card): the folders, the card's
-    // buttons, then picking bookmarks (the shared item browser).
+    // buttons, then picking bookmarks (the shared item list).
     tour: [ { sel: '#treePane, #treeBtn', text: T( 'bookmarks.tourTree' ) }, 'buttons',
             { use: 'pick', ghost: '#items, #emptyHint' }, { use: 'picked', ghost: '#items, #emptyHint' } ]
 } );

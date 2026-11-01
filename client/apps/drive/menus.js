@@ -1,12 +1,12 @@
 /*
- * menus.js - Drive: the item browser (shared/browser.js) on the listing -
+ * menus.js - Drive: the item list (Ayni.list) on the listing -
  * its ONE action list, which feeds the header's selection group, the menu
  * (right-click, the row ⋮, the group's ⋮) and the keys - plus the header ⋮,
  * the drops on the breadcrumb, cut / paste and setBackdrop.
  */
 "use strict";
 
-let browse    = null;     // NayiveUI.browser on #listing
+let browse    = null;     // Ayni.list on #listing
 let clipboard = null;     // { mode: 'move' | 'copy', paths: [...] } set by Cortar / Copiar
 
 // The paths an action works on: the rows it was run on (actTargets), until
@@ -129,7 +129,7 @@ function treeRoots()
         return {
             id:     node.path,
             name:   depth === 0 ? ( label || homeName() ) : displayName( node ),
-            kids:   ( node.nodes || [] ).filter( isDir ).sort( byName ).map( function( c ) { return mk( c, depth + 1 ); } ),
+            children: ( node.nodes || [] ).filter( isDir ).sort( byName ).map( function( c ) { return mk( c, depth + 1 ); } ),
             noMenu: depth === 0,                   // the roots have no actions
             noDrag: depth === 0 || NayiveUI.isShared( node.path )
         };
@@ -159,10 +159,10 @@ function viewMenuItems()
 function wireBrowser()
 {
     // The header keeps to one row: what does not fit goes into its ⋮.
-    NayiveUI.fitBar( document.querySelector( '.topbar' ), { btn: '#moreBtn', more: viewMenuItems } );
+    Ayni.fitBar( document.querySelector( '.topbar' ), { btn: '#moreBtn', more: viewMenuItems } );
 
-    browse = NayiveUI.browser( {
-        list:     document.getElementById( 'listing' ),
+    browse = Ayni.list( document.getElementById( 'listing' ), {
+        main:     true,
         row:      '.row[data-path]',
         idOf:     function( el ) { return el.dataset.path; },
         bar:      document.getElementById( 'selActions' ),
@@ -183,7 +183,7 @@ function wireBrowser()
     } );
 
     // Folder rows in the listing take dropped items: a move.
-    NayiveUI.dropZone( document.getElementById( 'listing' ), {
+    Ayni.dropZone( document.getElementById( 'listing' ), {
         sel:    '.row[data-dir]',
         target: function( el ) { return el.dataset.path; },
         can:    function( ids, dest ) { return canDropInto( dest, ids ) ? 'inside' : false; },
@@ -193,7 +193,7 @@ function wireBrowser()
     // So do the folders above the open one, in the breadcrumb: the way to
     // move something up. The open folder's own crumb takes nothing (it is
     // already there).
-    NayiveUI.dropZone( document.getElementById( 'breadcrumb' ), {
+    Ayni.dropZone( document.getElementById( 'breadcrumb' ), {
         sel:    '.crumb[data-path]:not(.current)',
         target: function( el ) { return el.dataset.path; },
         can:    function( ids, dest ) { return canDropInto( dest, ids ) ? 'inside' : false; },

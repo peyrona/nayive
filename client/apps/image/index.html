@@ -25,6 +25,9 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-buttons.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-toasts.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-dialogs.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-menus.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -33,12 +36,14 @@
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
+    <script src="../shared/ayni/ayni-menus.js" defer></script>
+    <script src="../shared/ayni/ayni-search.js" defer></script>
+    <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
-    <!-- NayiveUI.fitBar: the header's ⋮ for what does not fit (image.js rankHeader). -->
-    <script src="../shared/browser.js" defer></script>
+    <!-- Ayni.fitBar: the header's ⋮ for what does not fit (image.js rankHeader). -->
     <!-- Loads and builds the editor (loadEditor / newEditor), keeps the EXIF. -->
     <script src="../shared/photo.js" defer></script>
     <!-- The photo notes sidecar and the thumbnails' upkeep. -->
@@ -77,7 +82,7 @@
             <!-- The picture's name: the desktop names the window by it. -->
             <span id="fileLabel" class="file-label"></span>
 
-            <div class="topbar-actions">
+            <div class="topbar-actions tall" role="toolbar" data-i18n-attr="aria-label:ui.actions">
                 <!-- The editor puts its tools here, then its undo / redo. -->
                 <div class="tb-group" id="editorTools"></div>
                 <div class="tb-group" id="editorHead"></div>

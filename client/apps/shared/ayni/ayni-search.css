@@ -1,0 +1,45 @@
+/* Ayni library 0.1.0, search family: the one search field (.input-group.search-field), folded behind its Search
+   button in a title row (.fold), with its count, filter button and up / down pair. Load it after ayni-base.css and
+   ayni-buttons.css. The rules are chapters 4.5 (search field) and 4.6 (find bar) of the guidelines. */
+
+/* The browser's own × while typing (Chromium, Safari): the field's [data-clear] already does that job */
+.input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; display: none; }
+
+/* RULE: a filter button's icon is grey with no filter, and accent while a filter is on */
+.btn.filter-btn { color: var(--text-dim); } .btn.filter-btn.is-active { color: var(--accent); }
+
+/* How many match ("12 / 300") or which hit ("3 / 12"): dim, before the buttons */
+.search-field > .search-count { padding-inline: 4px; font-size: .75rem; color: var(--text-dim); white-space: nowrap;
+  font-variant-numeric: tabular-nums; pointer-events: none; }
+.search-field > .search-count[hidden] { display: none; }
+
+/* RULE: folded, only its Search button shows at rest. Open, the field stands in the button's place and takes the room
+   the row has left, up to 360 px. It never gets under 180 px: a row too narrow for that is crowded, and its tools leave
+   into More by rank (Ayni.fitBar) */
+.search-field.fold { display: none; box-sizing: border-box; flex: 1 1 auto; width: auto; min-width: 180px; max-width: 360px; }
+.search-field.fold.is-open { display: flex; }
+[data-search]:has(+ .search-field.fold.is-open), .search-field.fold.is-open + [data-search] { display: none; }
+/* The toolbar and the group holding the open field grow with it, so the tools after it stay at the row's end. Nothing
+   is pushed out at the start: an overflow there could not be measured, and the row would never count as crowded */
+[role="toolbar"]:has(.search-field.fold.is-open) { flex: 1 1 auto; }
+.tb-group:has(> .search-field.fold.is-open) { flex: 1 1 auto; justify-content: safe flex-end; }
+/* "safe": a group too narrow for the field and its tools overflows at its end, where Ayni.fitBar sees it, never off the
+   start. The input itself asks for no width: a text box's own default width (about 20 letters) would keep the field
+   wider than its 180 px, and the row could never make room */
+.search-field > .input { width: 0; }
+
+/* ---------- Find bar (4.6): a strip above the document, its find row and its replace row ---------- */
+.find-bar { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; padding: 6px 12px;
+  background: var(--card); border-bottom: var(--panel-border); }
+.find-bar[hidden], .find-row[hidden] { display: none; }
+.find-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.find-row > .search-field, .find-row > .input { flex: 0 1 320px; min-width: 0; }
+/* The replacement is as tall as the find field (a search input is border-box by the browser's own rule) */
+.find-row > .input { box-sizing: border-box; }
+/* One × in the bar: its Close. Esc still clears the field first */
+.find-bar .search-field > [data-clear] { display: none; }
+/* RULE: nothing found reads as a red "0" */
+.find-bar.is-empty .search-count { color: var(--danger); }
+/* The ▾ turns up while the replace row shows */
+.btn.find-more .icon { transition: transform var(--tr-fast); }
+.btn.find-more[aria-expanded="true"] .icon { transform: rotate(180deg); }

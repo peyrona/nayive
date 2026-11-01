@@ -17,7 +17,7 @@ seed( s, { [ F ]: [ card( "a", "Ana López", "López;Ana;;;", [ "TEL;TYPE=CELL:6
 const c = await browser( s, { mouse: true } );
 await c.evaluate( "localStorage.setItem( 'balata-intro-dismiss:contact', '1' ); true" );
 const ROW  = u => `#contactList .contact-row[data-uid="${u}"]`;
-const NODE = id => `#tree .tree-row[data-id="${id}"]`;
+const NODE = id => `#tree [role=treeitem][data-id="${id}"] > .ti`;   // the row (the item holds its children too)
 const sel  = () => c.evaluate( "browse.ids().join()" );
 const shownRows = () => c.evaluate( "[ ...document.querySelectorAll('#contactList .contact-row') ].map( r => r.dataset.uid ).join()" );
 // One card's text on disk ("" when it is not there).
@@ -41,12 +41,12 @@ ok( await c.open( "/nayive/contact/" ) && await c.until( "typeof contacts !== 'u
 await mouse( c, ROW( "a" ), { dx: 120 } );
 ok( await sel() === "a", "a click picks one row" );
 ok( await c.evaluate( "! document.getElementById('detailBackdrop').open" ), "…and does not open it" );
-ok( await c.evaluate( "!document.getElementById('selActions').hidden && document.querySelector('#selActions .sel-count').textContent.trim() === '1'" ), "the header group shows, count 1" );
+ok( await c.evaluate( "!document.getElementById('selActions').hidden && document.querySelector('#selActions .pick-count').textContent.trim() === '1'" ), "the header group shows, count 1" );
 await mouse( c, ROW( "d" ), { dx: 120, mods: 8 } );
 ok( await sel() === "a,b,c,d", "Shift+click picks the range", await sel() );
 await mouse( c, ROW( "b" ), { dx: 120, mods: 2 } );
 ok( await sel() === "a,c,d", "Ctrl+click takes one out", await sel() );
-ok( await c.evaluate( "document.querySelectorAll('#contactList .contact-row.is-selected').length === 3" ), "the picked rows are painted" );
+ok( await c.evaluate( "document.querySelectorAll('#contactList .contact-row[aria-selected=true]').length === 3" ), "the picked rows are painted" );
 await key( c, "Escape" );
 ok( await sel() === "" && await c.evaluate( "document.getElementById('selActions').hidden" ), "Esc clears; the group goes" );
 await mouse( c, ROW( "a" ), { dx: 120 } );
@@ -65,10 +65,10 @@ let rows = await menuRows( c );
 ok( await sel() === "b" && rows && rows.some( r => r.act === "edit" && ! r.off ), "right-click picks that row and opens the menu" );
 ok( rows && [ "open", "fav", "group", "export", "merge", "delete" ].every( a => rows.some( r => r.act === a ) ) && rows.find( r => r.act === "merge" ).off, "…with every action (Merge off for one)", rows );
 ok( rows && rows.find( r => r.act === "fav" ).label.includes( "Remove from favourites" ), "…Bruno is a favourite: the toggle says so" );
-ok( await c.evaluate( "[ ...document.querySelectorAll('.item-menu .mi-key') ].some( k => k.textContent === 'F2' )" ), "…and the keys beside them" );
+ok( await c.evaluate( "[ ...document.querySelectorAll('#ayni-menu kbd') ].some( k => k.textContent === 'F2' )" ), "…and the keys beside them" );
 await key( c, "Escape" );
-ok( await c.evaluate( "document.querySelector('.item-menu').hidden" ), "Esc closes the menu" );
-ok( await c.evaluate( "! document.querySelector('#contactList [data-more], #tree [data-more], #selActions [data-sel=menu]')" ), "no row ⋮, no tree ⋮, no ⋮ in the selection group" );
+ok( await c.evaluate( "( ! document.querySelector('#ayni-menu')?.matches(':popover-open') )" ), "Esc closes the menu" );
+ok( await c.evaluate( "! document.querySelector('#contactList [data-more], #tree [data-more], #selActions [data-pick=menu]')" ), "no row ⋮, no tree ⋮, no ⋮ in the selection group" );
 // Share is there only where the browser can share files (headless may not).
 const SHARE = await c.evaluate( "canShareFiles()" );
 let fs = await fitState( c );
@@ -78,7 +78,7 @@ await mouse( c, ROW( "a" ), { dx: 120, mods: 2 } );
 fs = await fitState( c );
 ok( fs.acts.includes( "merge" ) && ! fs.acts.includes( "edit" ) && ! fs.out.length && fs.rows.join() === "import", "…two picked: Merge shows too, Edit leaves", fs );
 await mouse( c, ROW( "a" ), { dx: 120, mods: 2 } );
-const ALL = "#selActions [data-sel=all]";
+const ALL = "#selActions [data-pick=all]";
 await mouse( c, ALL );
 ok( await c.until( "browse.ids().length === document.querySelectorAll('#contactList .contact-row').length" ) &&
     await c.evaluate( "document.querySelector('" + ALL + "').getAttribute('aria-label') === 'Unselect all'" ), "Select all picks every row and turns into Unselect all" );
@@ -95,14 +95,14 @@ await mouse( c, "#searchBtn" );
 await c.evaluate( "{ const i = document.getElementById('searchInput'); i.value = 'carla'; i.dispatchEvent( new Event( 'input' ) ); } true" );
 ok( await c.until( "document.querySelectorAll('#contactList .contact-row').length === 1" ), "a search shows only Carla" );
 await mouse( c, ROW( "c" ), { dx: 120 } );
-await mouse( c, ".search-fold .search-shut" );
+await mouse( c, ".search-field.fold [data-clear]" );
 ok( await c.until( "document.querySelectorAll('#contactList .contact-row').length === 5" ) && await sel() === "c", "the × brings the whole list back; Carla stays picked" );
-ok( await c.until( `document.querySelector('${ ROW( "c" ) }').classList.contains('nb-flash')` ), "…and Carla's row flashes (scrolled into view)" );
+ok( await c.until( `document.querySelector('${ ROW( "c" ) }').classList.contains('flash')` ), "…and Carla's row flashes (scrolled into view)" );
 await mouse( c, ROW( "e" ), { dx: 120, mods: 2 } );
-await mouse( c, "#selActions [data-sel=jump]" );
-ok( await c.until( `document.querySelector('${ ROW( "e" ) }').classList.contains('nb-flash')` ), "a tap on the count goes to the next pick (Elena)" );
-await mouse( c, "#selActions [data-sel=jump]" );
-ok( await c.until( `document.querySelector('${ ROW( "c" ) }').classList.contains('nb-flash')` ) && await sel() === "c,e", "…and round to the first again; the picks stay" );
+await mouse( c, "#selActions [data-pick=jump]" );
+ok( await c.until( `document.querySelector('${ ROW( "e" ) }').classList.contains('flash')` ), "a tap on the count goes to the next pick (Elena)" );
+await mouse( c, "#selActions [data-pick=jump]" );
+ok( await c.until( `document.querySelector('${ ROW( "c" ) }').classList.contains('flash')` ) && await sel() === "c,e", "…and round to the first again; the picks stay" );
 await c.evaluate( "browse.clear(); true" );
 
 section( "CONTACTS · KEYS" );
@@ -138,13 +138,13 @@ ok( await disk( () => onCard( "c" ).includes( "carla@x.es" ) && onCard( "d" ) ) 
 section( "CONTACTS · MERGE" );
 await mouse( c, ROW( "a" ), { dx: 120 } );
 await mouse( c, ROW( "b" ), { dx: 120, mods: 2 } );
-await c.evaluate( "document.querySelector('#selActions [data-sel-act=merge]').click(); true" );
+await c.evaluate( "document.querySelector('#selActions [data-pick-act=merge]').click(); true" );
 ok( await c.until( "document.getElementById('mergeBackdrop').open && mergeModel.members.length === 2" ), "Merge (2 picked) opens the merge preview with both" );
 await c.evaluate( "document.getElementById('mergeCloseBtn').click(); true" );
 await sleep( 200 );
 
 section( "CONTACTS · GROUPS TREE" );
-ok( await c.evaluate( `[ 'all', 'fav', 'groups', 'g:Family', 'g:Work' ].every( id => document.querySelector( '#tree .tree-row[data-id="' + id + '"]' ) ) && ! document.querySelector( '#tree .tree-row[data-id="g:starred"]' )` ), "the tree: All, Favourites, Groups › Family, Work (starred is not a group)" );
+ok( await c.evaluate( `[ 'all', 'fav', 'groups', 'g:Family', 'g:Work' ].every( id => document.querySelector( '#tree [role=treeitem][data-id="' + id + '"]' ) ) && ! document.querySelector( '#tree [role=treeitem][data-id="g:starred"]' )` ), "the tree: All, Favourites, Groups › Family, Work (starred is not a group)" );
 await mouse( c, NODE( "g:Family" ), { dx: 40 } );
 ok( await c.until( "view === 'g:Family'" ) && await shownRows() === "a,b", "a group shows its people", await shownRows() );
 await mouse( c, NODE( "fav" ), { dx: 40 } );
@@ -161,31 +161,31 @@ ok( await drag( c, ROW( "d" ), NODE( "all" ) ) === false, "All contacts takes no
 await mouse( c, NODE( "g:Work" ), { dx: 40, button: "right" } );
 rows = await menuRows( c );
 ok( rows && rows.some( r => r.act === "renameGroup" ) && rows.some( r => r.act === "deleteGroup" ), "a group's right-click: Rename, Delete", rows );
-await c.evaluate( "document.querySelector('.item-menu [data-act=deleteGroup]').click(); true" );
+await c.evaluate( "document.querySelector('#ayni-menu [data-act=deleteGroup]').click(); true" );
 ok( await disk( () => ! /Work/.test( onDisk( s, F ) ) && onCard( "e" ) ) && await c.until( "! document.querySelector('" + NODE( "g:Work" ) + "')" ), "Delete group: the word leaves the cards, Elena stays" );
 ok( await undo() && await disk( () => cats( "e" ) === "Work" ) && await c.until( "!! document.querySelector('" + NODE( "g:Work" ) + "')" ), "…Undo brings the group back" );
 
 await mouse( c, NODE( "g:Family" ), { dx: 40, button: "right" } );
-await c.evaluate( "document.querySelector('.item-menu [data-act=renameGroup]').click(); true" );
+await c.evaluate( "document.querySelector('#ayni-menu [data-act=renameGroup]').click(); true" );
 await c.until( "!! document.getElementById('groupNameInput')" );
 await c.evaluate( "{ const i = document.getElementById('groupNameInput'); i.value = 'Familia'; i.dispatchEvent( new Event( 'input' ) ); document.getElementById('groupNameOk').click(); } true" );
 ok( await disk( () => cats( "a" ) === "Familia" && cats( "b" ) === "Familia,starred" ) && await c.until( "!! document.querySelector('" + NODE( "g:Familia" ) + "') && ! document.querySelector('" + NODE( "g:Family" ) + "')" ), "Rename group: Family → Familia on both cards (Bruno stays a favourite)", [ cats( "a" ), cats( "b" ) ] );
 
 await mouse( c, ROW( "e" ), { dx: 120 } );
 await c.evaluate( "browse.run('group'); true" );
-ok( await c.until( "!! document.querySelector('dialog.panel[open] .pick-tree .tree-row[data-id=\"g:Familia\"]')" ), "Add to group… shows the groups in the same tree" );
-await c.evaluate( "document.querySelector('dialog.panel[open] .pick-tree .tree-row[data-id=\"g:Familia\"]').click(); document.querySelector('.pick-ok').click(); true" );
+ok( await c.until( "!! document.querySelector('dialog.panel[open] .pick-node [role=treeitem][data-id=\"g:Familia\"]')" ), "Add to group… shows the groups in the same tree" );
+await c.evaluate( "document.querySelector('dialog.panel[open] .pick-node [role=treeitem][data-id=\"g:Familia\"]').firstElementChild.click(); document.querySelector('.pick-ok').click(); true" );
 ok( await disk( () => cats( "e" ) === "Work,Familia" ), "…and adds Elena to Familia", cats( "e" ) );
 await mouse( c, NODE( "g:Familia" ), { dx: 40 } );
 await c.until( "view === 'g:Familia'" );
 await mouse( c, ROW( "e" ), { dx: 120, button: "right" } );
 rows = await menuRows( c );
 ok( rows && rows.some( r => r.act === "ungroup" ), "inside a group the menu offers Remove from this group" );
-await c.evaluate( "document.querySelector('.item-menu [data-act=ungroup]').click(); true" );
+await c.evaluate( "document.querySelector('#ayni-menu [data-act=ungroup]').click(); true" );
 ok( await disk( () => cats( "e" ) === "Work" ) && await c.until( "! document.querySelector('" + ROW( "e" ) + "')" ), "…which takes her out (on disk and on screen)" );
 
 await mouse( c, NODE( "groups" ), { dx: 40, button: "right" } );
-await c.evaluate( "document.querySelector('.item-menu [data-act=newGroup]').click(); true" );
+await c.evaluate( "document.querySelector('#ayni-menu [data-act=newGroup]').click(); true" );
 await c.until( "!! document.getElementById('groupNameInput')" );
 await c.evaluate( "{ const i = document.getElementById('groupNameInput'); i.value = 'Club'; i.dispatchEvent( new Event( 'input' ) ); document.getElementById('groupNameOk').click(); } true" );
 ok( await c.until( "!! document.querySelector('" + NODE( "g:Club" ) + "')" ), "New group: Club shows in the tree" );
@@ -205,7 +205,7 @@ ok( await c.until( "document.getElementById('detailBackdrop').open" ), "a tap op
 await c.evaluate( "document.getElementById('detailCloseBtn').click(); true" );
 await sleep( 300 );
 await finger( c, ROW( "d" ), 700 );
-ok( await c.until( "browse.ids().join() === 'd'" ) && await c.evaluate( "document.getElementById('contactList').classList.contains('is-picking') && ! document.getElementById('detailBackdrop').open" ), "a long-press picks (ticks on), it does not open" );
+ok( await c.until( "browse.ids().join() === 'd'" ) && await c.evaluate( "document.getElementById('contactList').classList.contains('picking') && ! document.getElementById('detailBackdrop').open" ), "a long-press picks (ticks on), it does not open" );
 await sleep( 600 );                     // the long-press's own click is eaten for 700 ms
 await finger( c, ROW( "e" ) );
 ok( await sel() === "d,e", "…then a tap adds one", await sel() );
@@ -220,9 +220,9 @@ await finger( c, ".header .fit-more" );
 let mrows = await menuRows( c );
 ok( mrows && mrows.some( r => r.act === fs.out[ 0 ] ) && mrows.some( r => r.act === "addBtn" ), "the ⋮ opens with them", mrows );
 await finger( c, ".header .fit-more" );
-ok( await c.until( "document.querySelector('.item-menu').hidden" ), "…and closes again" );
-await finger( c, "#selActions [data-sel=clear]" );
-ok( await c.until( "browse.ids().length === 0 && ! document.getElementById('contactList').classList.contains('is-picking')" ), "the × stops picking" );
+ok( await c.until( "( ! document.querySelector('#ayni-menu')?.matches(':popover-open') )" ), "…and closes again" );
+await finger( c, "#selActions [data-pick=clear]" );
+ok( await c.until( "browse.ids().length === 0 && ! document.getElementById('contactList').classList.contains('picking')" ), "the × stops picking" );
 await finger( c, "#treeBtn" );
 ok( await c.until( "document.getElementById('treePane').classList.contains('open')" ), "the folder button slides the tree in" );
 await finger( c, NODE( "fav" ) );

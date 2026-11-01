@@ -14,7 +14,9 @@ function renderHeader()
     // it, the two groups of every header (shared/app.css HEADER): the tools,
     // then the help.
     const actions = document.createElement( 'div' );
-    actions.className = 'trip-header-actions header-actions';
+    actions.className = 'trip-header-actions header-actions tall';
+    actions.setAttribute( 'role', 'toolbar' );          // an Ayni toolbar: one Tab stop, the arrows move
+    actions.setAttribute( 'aria-label', Ayni.t( 'ui.actions' ) );
     const tools = document.createElement( 'div' );
     tools.className = 'tb-group';
     const sys = document.createElement( 'div' );
@@ -55,6 +57,7 @@ function renderHeader()
         sys.appendChild( buildHelpBtn() );
         actions.append( tools, sys, buildSyncIndicator() );
         header.appendChild( actions );
+        Ayni.init( actions );                 // made after Ayni started: one Tab stop, the arrows move
     }
     else
     {
@@ -150,6 +153,7 @@ function renderHeader()
 
         actions.append( tools, sys, buildSyncIndicator() );
         header.appendChild( actions );
+        Ayni.init( actions );                 // made after Ayni started: one Tab stop, the arrows move
     }
 
     // The field had the keys: it gets them back after the rebuild.
@@ -174,9 +178,9 @@ function buildHelpBtn()
 }
 
 //------------------------------------------------------------------------//
-// SEARCH - the shared fold (NayiveUI.searchFold), as in every app: the
-// magnifier opens the field in the toolbar, the other buttons stay unless
-// the bar is too narrow, its × (or Escape) empties and folds it. On the
+// SEARCH - Ayni's folded search field, as in every app: the magnifier
+// opens the field in the toolbar (a bar too narrow wraps below the title),
+// its × (or Escape) empties and folds it. On the
 // list it filters the trips (name, places, documents), in a trip its
 // documents and stages. Built once: renderHeader puts the same box back.
 
@@ -192,17 +196,16 @@ function searchParts()
     tripSearchView = view;
     if( tripSearchEls ) return tripSearchEls;
 
-    // type=text, not search: the browser's own clear cross would sit next to ours
     const input = document.createElement( 'input' );
-    input.type = 'text';
-    input.className = 'search-input';
+    input.type = 'search';
+    input.className = 'input';
     input.autocomplete = 'off';
     input.setAttribute( 'enterkeyhint', 'search' );
     input.placeholder = Ayni.t( 'ui.search' );
     input.setAttribute( 'aria-label', Ayni.t( 'ui.search' ) );
     input.addEventListener( 'input', function() { tripQuery = input.value; applySearch(); } );
     const box = document.createElement( 'div' );
-    box.className = 'search-wrap';
+    box.className = 'input-group search-field fold';
     box.appendChild( input );
 
     const btn = document.createElement( 'button' );
@@ -210,12 +213,13 @@ function searchParts()
     btn.type = 'button';
     btn.id = 'searchBtn';                 // the help dialog points at it
     btn.dataset.rank = 20;
+    btn.setAttribute( 'data-search', '' );
     Ayni.setTip( btn, Ayni.t( 'ui.search' ) );
     btn.setAttribute( 'aria-label', btn.dataset.tip );
     btn.innerHTML = Ayni.icon( 'search' );
 
     tripSearchEls = [ box, btn ];
-    tripSearch = NayiveUI.searchFold( { bar: document.getElementById( 'tripHeader' ), box: box, input: input, toggle: btn } );
+    tripSearch = Ayni.searchField( box, { toggle: btn } );
     return tripSearchEls;
 }
 
@@ -226,7 +230,7 @@ function searchParts()
 function applySearch()
 {
     const content = document.getElementById( 'tripContent' );
-    const q = NayiveUI.matcher( tripQuery );
+    const q = Ayni.matcher( tripQuery );
     // A stage's own documents go with their stage.
     const items = content.querySelectorAll( view === 'list' ? '.trip-card' : '.stage-item, .file-row:not(.stage-item .file-row)' );
     let shown = 0;

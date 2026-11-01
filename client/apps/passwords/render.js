@@ -2,7 +2,7 @@
  * render.js - Passwords: what is on screen while the vault is open. The tree
  * pane, the filter pills, the crumbs, the rows and the empty screens. The
  * gate (set-up, unlock, recovery key) is lock.js. Picking and the selection's
- * header buttons are the shared item browser (input.js wires it).
+ * header buttons are the shared item list (input.js wires it).
  *
  * Nothing secret is ever drawn here: a row shows the name, the user name and
  * the site, never a password.
@@ -91,15 +91,15 @@ function render()
 }
 
 //------------------------------------------------------------------------//
-// TREE  -  the shared tree (input.js makes it: NayiveUI.tree), folders only.
+// TREE  -  the shared tree (input.js makes it: Ayni.tree, nav), folders only.
 
 function treeRoots()
 {
-    function mk( f ) { return { id: f.id, name: folderName( f ), kids: sortByName( childrenOf( f.id ).filter( isFolder ) ).map( mk ) }; }
+    function mk( f ) { return { id: f.id, name: folderName( f ), children: sortByName( childrenOf( f.id ).filter( isFolder ) ).map( mk ) }; }
     return sortByName( childrenOf( ROOT ).filter( isFolder ) ).map( mk );
 }
 
-function renderTree() { if( treeView ) treeView.render(); }
+function renderTree() { if( treeView ) treeView.build(); }
 
 function toggleOpen( id, force )
 {
@@ -173,7 +173,7 @@ function sortEntries( list )
 // fields' names. Never over a password or a hidden field's value.
 function makeMatcher( q )
 {
-    const m = NayiveUI.matcher( q );
+    const m = Ayni.matcher( q );
     if( ! m ) return null;
     return function( n )
     {
@@ -211,8 +211,8 @@ function renderItems()
 
 function itemHtml( n, withPath )
 {
-    const cls   = 'card-row pw-item' + ( isFolder( n ) ? ' is-folder' : '' ) + ( browse && browse.has( n.id ) ? ' is-selected' : '' );
-    const tick  = NayiveUI.tickHtml();
+    const cls   = 'card-row pw-item' + ( isFolder( n ) ? ' is-folder' : '' );
+    const tick  = Ayni.pickTick();
     const where = withPath ? '<div class="pw-path">' + SVG.folder + '<span>' + esc( pathText( parentOf[ n.id ] ) || T( 'passwords.all' ) ) + '</span></div>' : '';
     const open  = '<div class="' + cls + '" data-id="' + esc( n.id ) + '" role="option" tabindex="-1">';
 

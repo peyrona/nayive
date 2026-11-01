@@ -13,7 +13,7 @@ seed( s, { [ F ]: [ card( "a", "Ana" ), card( "b", "Bruno" ), card( "c", "Carla"
 const before = onDisk( s, F );
 const STEPS = `[ 'search', 'pick', 'picked', { sel: '#dedupBtn', text: 'dedup' } ]`;
 const picked = c => c.evaluate( "document.querySelectorAll( '#contactList [aria-selected=\"true\"]' ).length" );
-const menuUp = c => c.evaluate( "!! document.querySelector( '.item-menu:not([hidden])' )" );
+const menuUp = c => c.evaluate( "!! document.querySelector( '#ayni-menu:popover-open' )" );
 
 section( "SHARED STEPS · WIDE (mouse)" );
 const c = await browser( s, { mouse: true, lang: "es" } );
@@ -32,7 +32,7 @@ const tk = await c.evaluate( "( () => { const b = document.querySelector( '.pick
 await mouse( c, tk );
 await c.until( "document.querySelector( '.tour-count' ).textContent.startsWith( '4' )", 3000 );
 st = await state( c );
-ok( await picked( c ) === 1 && st.n === 4 && /sel-group|btn/.test( st.lit ), "the user's tap picks the row; «picked» lights the selection group", st );
+ok( await picked( c ) === 1 && st.n === 4 && /pick-group|btn/.test( st.lit ), "the user's tap picks the row; «picked» lights the selection group", st );
 await next( c );
 ok( await picked( c ) === 0, "leaving «picked» lets the row go" );
 await key( c, "Escape" ); await tourGone( c );
@@ -43,7 +43,7 @@ await c.until( "document.getElementById( 'dedupBtn' ).classList.contains( 'fit-o
 ok( await c.evaluate( "!! document.querySelector( '#dedupBtn' ).closest( '.fit-out' )" ), "at 330 px the dedup button is in the ⋮" );
 await runSteps( c, STEPS );
 const seen = await walk( c, "narrow", {
-    5: s => s.inMenu && /dedupBtn|menu-item/.test( s.lit ) && s.note.includes( "⋮" ) || "the ⋮ opens by itself and its row is lit" } );
+    5: s => s.inMenu && /dedupBtn/.test( s.lit ) && s.note.includes( "⋮" ) || "the ⋮ opens by itself and its row is lit" } );
 const help = seen.at( -1 );
 ok( await tourGone( c ) && ! await menuUp( c ), "the ⋮ it opened is shut again", help );
 
@@ -59,7 +59,7 @@ await p.watchToasts();
 await runSteps( p, STEPS );
 await walk( p, "phone", {
     3: s => ( s.ghost || /pick-tick/.test( s.lit ) ) || "«pick» rings a row",
-    4: s => /sel-group|btn/.test( s.lit ) && ! s.ghost || "«picked» picked a row itself and lights the group" } );
+    4: s => /pick-group|btn/.test( s.lit ) && ! s.ghost || "«picked» picked a row itself and lights the group" } );
 ok( await tourGone( p ) && await picked( p ) === 0, "nothing stays picked" );
 ok( ! ( await p.toasts() ).length, "no toast on the way", await p.toasts() );
 

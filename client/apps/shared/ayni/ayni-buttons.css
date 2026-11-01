@@ -32,8 +32,6 @@
 /* RULE: a disabled button uses aria-disabled="true" (not the disabled attribute): faded, ignores clicks and Enter,
    but stays focusable and shows its tooltip, which can say why it is unavailable */
 .btn[aria-disabled="true"] { opacity: .45; cursor: default; }
-/* RULE: a filter button's icon is grey with no filter, and accent while a filter is active */
-.btn.filter-btn { color: var(--text-dim); } .btn.filter-btn.is-active { color: var(--accent); }
 /* RULE: a busy button swaps its icon for a small spinner in the same circle (no size change), ignores clicks and its
    tooltip says what is happening ("Saving…"). Set with one line: setBusy(button, 'Saving…') and setBusy(button, false). */
 .btn[aria-busy="true"] { cursor: progress; }

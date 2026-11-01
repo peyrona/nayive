@@ -129,13 +129,6 @@ const MENU_PHONE_ONLY =
     'pageSetupBtn', 'headerBtn', 'footerBtn', 'pageNumBtn', 'paraBtn'
 ];
 
-let fileMenu = null;    // set in wireStaticUI, once the DOM is there
-let helpMenu = null;    // the "?" menu, ditto
-
-// The tool row's group cards: print / PDF, and the four page ones. The buttons
-// in them are the real ones, wired below exactly as when they sat on the row.
-let groups = [];
-
 // `fold.isOpen()` is the truth now; this stays only for readability at call sites.
 function toolbarOpen() { return fold ? fold.isOpen() : true; }
 
@@ -159,7 +152,6 @@ function applyPhoneChrome()
         menus     : function() { return CHROME.on(); },
         tools     : 'writeTools',
         helpBefore: null,
-        close     : function() { return [ fileMenu, helpMenu ].concat( groups ); },
         fold      : function() { return fold; }
     } );
 }
@@ -312,17 +304,13 @@ function wireStaticUI()
     document.getElementById( 'psSize'              ).addEventListener( 'change', syncPageSizeRows );
 
     // ---- the header menu and the group cards ----
-    fileMenu = NayiveOffice.fileMenu( { btn: 'moreBtn', menu: 'topMenu',
-                                        ids: MENU_IDS, phoneOnly: MENU_PHONE_ONLY } );
+    NayiveOffice.fileMenu( { btn: 'moreBtn', menu: 'topMenu', ids: MENU_IDS, phoneOnly: MENU_PHONE_ONLY } );
 
     // Ayuda on the "?" - the same three entries the pull-down Ayuda menu holds
     // (the guide card is the third).
-    helpMenu = NayiveOffice.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
-    groups =
-    [
-        NayiveOffice.groupPopup( { btn: 'wrOutputBtn', popup: 'outputPopup' } ),
-        NayiveOffice.groupPopup( { btn: 'wrPageBtn',   popup: 'pagePopup'   } )
-    ];
+    NayiveOffice.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
+    // The group cards (#outputPopup, #pagePopup) are Ayni tool groups: their
+    // triggers open them by themselves (popovertarget in index.html).
 
     // ---- phone chrome (see PHONE CHROME above) ----
     applyPhoneChrome();
@@ -414,9 +402,10 @@ function wireStaticUI()
     {
         if( e.key === 'Escape' )
         {
-            if( fileMenu && fileMenu.isOpen() ) { fileMenu.close(); return; }
-            if( document.getElementById( 'tbPopup'  ).classList.contains( 'open' ) ) { tbPopup.close();  return; }
-            if( document.getElementById( 'symPopup' ).classList.contains( 'open' ) ) { symPopup.close(); return; }
+            // An open menu or tool group: the browser closes it (Ayni's popovers).
+            if( document.querySelector( '.panel.menu:popover-open, .panel.popup.tools:popover-open' ) ) return;
+            if( document.getElementById( 'tbPopup'  ).matches( ':popover-open' ) ) { tbPopup.close();  return; }
+            if( document.getElementById( 'symPopup' ).matches( ':popover-open' ) ) { symPopup.close(); return; }
 
             const open = document.querySelector( 'dialog.panel[open]' );
             if( open ) { setBackdrop( open.id, false ); return; }
@@ -620,8 +609,7 @@ function openSettings()
     }
 
     const gear = document.getElementById( 'settingsBtn' );
-    if( MENUBAR.isOpenFor( gear ) ) MENUBAR.close();
-    else MENUBAR.openItems( toolsItems, gear );
+    MENUBAR.openItems( toolsItems, gear );    // a second press closes it (Ayni.menuAt)
 }
 
 // Recientes from the File list (toolbar chrome): the menu's own entries, hung
@@ -1080,7 +1068,7 @@ function openSymbols()
 {
     if( ! ready ) { Ayni.toast( 'warn', Ayni.t( 'write.waitForDoc' ) ); return; }
 
-    if( document.getElementById( 'symPopup' ).classList.contains( 'open' ) ) { symPopup.close(); return; }
+    if( document.getElementById( 'symPopup' ).matches( ':popover-open' ) ) { symPopup.close(); return; }
 
     renderSymbols();
     symPopup.open();
@@ -2480,10 +2468,11 @@ function anchorRect( selector )
     return MENUBAR.anchorRect( selector, menusOn(), 'toolbar' );
 }
 
-// One anchored popup: shown just under its trigger (anchorRect), clamped to stay
-// inside the viewport, and closed by a press anywhere outside it or a resize. A
-// press on the trigger itself is let through, so the button's own command can
-// toggle it shut. `onClose` runs on every close, after the popup is hidden.
+// One anchored popup: a popover in the top layer (popover="manual" in
+// index.html), shown just under its trigger (anchorRect) and kept on screen by
+// Ayni.place, and closed by a press anywhere outside it or a resize. A press on
+// the trigger itself is let through, so the button's own command can toggle it
+// shut. `onClose` runs on every close, after the popup is hidden.
 function anchoredPopup( id, trigger, onClose )
 {
     function outside( e )
@@ -2498,16 +2487,8 @@ function anchoredPopup( id, trigger, onClose )
     {
         const pop = document.getElementById( id );
 
-        pop.classList.add( 'open' );   // lay it out before measuring
-
-        const r  = anchorRect( trigger );
-        const vw = document.documentElement.clientWidth;
-
-        let left = Math.min( r.left, vw - pop.offsetWidth - 8 );
-        if( left < 8 ) left = 8;
-
-        pop.style.top  = ( r.bottom + 4 ) + 'px';
-        pop.style.left = left + 'px';
+        pop.showPopover();   // lay it out before measuring
+        Ayni.place( pop, anchorRect( trigger ) );
 
         setTimeout( function()   // deferred, else the opening click closes it again
         {
@@ -2518,7 +2499,8 @@ function anchoredPopup( id, trigger, onClose )
 
     function close()
     {
-        document.getElementById( id ).classList.remove( 'open' );
+        const pop = document.getElementById( id );
+        if( pop.matches( ':popover-open' ) ) pop.hidePopover();
         if( onClose ) onClose();
         document.removeEventListener( 'pointerdown', outside, true );
         window.removeEventListener( 'resize', close );
@@ -2835,7 +2817,7 @@ async function openTableBorders()
 {
     if( ! ready ) return;
 
-    if( document.getElementById( 'tbPopup' ).classList.contains( 'open' ) ) { tbPopup.close(); return; }
+    if( document.getElementById( 'tbPopup' ).matches( ':popover-open' ) ) { tbPopup.close(); return; }
 
     openTbPopup();
 }
