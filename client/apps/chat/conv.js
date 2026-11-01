@@ -242,7 +242,7 @@
         } );
         var help = C.btn( "help", "chat.help", function () { C.showConvHelp(); } );
         help.id = "convHelpBtn";
-        help.setAttribute( "data-intro-open", "" );   // the tour ends here (shared/ui.js)
+        help.setAttribute( "data-help-open", "" );   // the tour ends here (Ayni.tour)
         if( fits ) help.dataset.rank = 31;
         var bar = h( "div", { class: "topbar-actions tall", attrs: { role: "toolbar", "aria-label": T( "ui.actions" ) } },
                      calls, acts, h( "div", { class: "tb-group tb-sys" }, convMore, help ) );

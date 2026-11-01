@@ -613,7 +613,7 @@ try
     await shot( c, "08-phone-edit-sheet-light" );
     await c.evaluate( "document.getElementById( 'bmBackdrop' ).close(); true" );
 
-    await c.evaluate( "document.querySelector('[data-intro-open]').click(); true" );
+    await c.evaluate( "document.querySelector('[data-help-open]').click(); true" );
     ok( await waitFor( c, "[...document.querySelectorAll('dialog.panel[open]')].some( b => /Import, export/.test( b.textContent ) )", 4000 ), "? opens the help card with the toolbar rows" );
     await shot( c, "10-help-phone" );
     // 404: the first read of a new file; 412: the two-devices check (#10).

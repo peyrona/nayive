@@ -180,20 +180,20 @@ try
     ok( await until( "window.__r === false" ), "Esc answers false" );
     await press( "#newFolderBtn" );
     await until( "document.getElementById( 'newFolderBackdrop' ).open" );
-    await ev( "( b => { const d = document.createElement( 'button' ); d.type = 'button'; d.className = 'info-dot'; d.id = 'probeDot'; d.setAttribute( 'data-info', 'A probe text that explains something.' ); b.appendChild( d ); NayiveUI.applyInfoDots(); } )( document.querySelector( '#newFolderBackdrop .body' ) ); true" );
+    await ev( "( b => { const d = document.createElement( 'button' ); d.type = 'button'; d.className = 'info-tip'; d.id = 'probeDot'; d.setAttribute( 'data-help', 'A probe text that explains something.' ); b.appendChild( d ); Ayni.init( d ); } )( document.querySelector( '#newFolderBackdrop .body' ) ); true" );
     await press( "#probeDot" );
-    ok( await until( "!! document.querySelector( '.info-popup:popover-open' )" ), "an info dot in a dialog opens its popup" );
-    ok( await ev( "( p => { const r = p.getBoundingClientRect(); const h = document.elementFromPoint( r.left + r.width / 2, r.top + r.height / 2 ); return !! h && p.contains( h ); } )( document.querySelector( '.info-popup' ) )" ), "…above the dialog, and it takes the pointer" );
+    ok( await until( "!! document.querySelector( '.info-pop:popover-open' )" ), "an info tip in a dialog opens its popup" );
+    ok( await ev( "( p => { const r = p.getBoundingClientRect(); const h = document.elementFromPoint( r.left + r.width / 2, r.top + r.height / 2 ); return !! h && p.contains( h ); } )( document.querySelector( '.info-pop' ) )" ), "…above the dialog, and it takes the pointer" );
     await key( "Escape", "Escape", 27 );
-    ok( await until( "! document.querySelector( '.info-popup:popover-open' )" ) && await ev( "document.getElementById( 'newFolderBackdrop' ).open" ), "Esc closes the popup first, the dialog stays" );
+    ok( await until( "! document.querySelector( '.info-pop:popover-open' )" ) && await ev( "document.getElementById( 'newFolderBackdrop' ).open" ), "Esc closes the popup first, the dialog stays" );
     await key( "Escape", "Escape", 27 );
     await until( "! document.getElementById( 'newFolderBackdrop' ).open" );
     await ev( "document.getElementById( 'probeDot' ).remove(); true" );
-    await press( "[data-intro-open]" );
-    ok( await until( "!! document.querySelector( 'dialog.panel.intro-sheet[open] > header > [data-close]' )" ), "the help dialog: its × in the title row" );
+    await press( "[data-help-open]" );
+    ok( await until( "!! document.querySelector( 'dialog.panel.help-card[open] > header > [data-close]' )" ), "the help dialog: its × in the title row" );
     await shot( "drive-help-light" );
     await key( "Escape", "Escape", 27 );
-    ok( await until( "! document.querySelector( 'dialog.panel.intro-sheet' )" ), "…Esc closes and removes it" );
+    ok( await until( "! document.querySelector( 'dialog.panel.help-card' )" ), "…Esc closes and removes it" );
 
     console.log( "MOVING - by the title row" );
     await press( "#newFolderBtn" );

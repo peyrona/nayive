@@ -265,7 +265,7 @@
                 var el = C.btn( b[ 0 ], b[ 1 ], b[ 2 ] );
                 el.id = b[ 3 ];
                 el.dataset.rank = b[ 4 ];
-                if( b[ 0 ] === "help" ) el.setAttribute( "data-intro-open", "" );   // the tour ends here (shared/ui.js)
+                if( b[ 0 ] === "help" ) el.setAttribute( "data-help-open", "" );   // the tour ends here (Ayni.tour)
                 ( b[ 0 ] === "plus" ? tools : sys ).appendChild( el );
             } );
         else sys.appendChild( moreBtn );

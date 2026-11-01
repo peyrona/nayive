@@ -482,7 +482,7 @@ try
 
     // "?" sits on the bar right after the "⋮" (the settings dialog is gone: its rows are in the menu).
     check( "Help: on the bar, right after the dots", await ev( "document.getElementById( 'moreBtn' ).nextElementSibling === document.getElementById( 'helpBtn' ) && document.getElementById( 'helpBtn' ).offsetWidth > 0" ) === true );
-    check( "Help: gone from the menu", await ev( "! document.querySelector( '#moreMenu [data-intro-open]' )" ) === true );
+    check( "Help: gone from the menu", await ev( "! document.querySelector( '#moreMenu [data-help-open]' )" ) === true );
     await shot( "bar-end" );
 
     const bad = c.logs.filter( l => /^EXCEPTION/.test( l ) );

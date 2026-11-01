@@ -59,6 +59,7 @@
     <link rel="stylesheet" href="shared/ayni/ayni-menus.css">
     <link rel="stylesheet" href="shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="shared/ayni/ayni-lists.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="shared/theme.css">
     <link rel="stylesheet" href="shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -70,18 +71,18 @@
     <script src="shared/ayni/ayni-menus.js" defer></script>
     <script src="shared/ayni/ayni-search.js" defer></script>
     <script src="shared/ayni/ayni-lists.js" defer></script>
+    <script src="shared/ayni/ayni-help.js" defer></script>
     <script src="shared/ui.js" defer></script>
     <script src="shared/store.js" defer></script>
     <script>
     Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
-        NayiveUI.firstRun( {
-            app:   'launcher',
+        Ayni.help( {
+            key: 'balata-intro-dismiss:launcher',
             title: Ayni.t( 'launcher.introTitle' ),
             lead:  Ayni.t( 'launcher.introLead' ),
-            autoShow:    true,
-            dismissible: true,
-            buttons: [
+            autoShow: true,
+            rows: [
                 { sel: '#plannerBtn',        name: 'Planner', text: Ayni.t( 'launcher.introPlanner' ) },
                 { sel: '#chatBtn',           name: 'Chat', text: Ayni.t( 'launcher.introChat' ) },
                 { sel: '#mailBtn',           name: 'eMail', text: Ayni.t( 'launcher.introMail' ) },
@@ -100,7 +101,7 @@
             tip: Ayni.t( 'launcher.introTip' ),
             // The guided tour ("Ver el tour" in the card): the app tiles, then the
             // card's buttons. The plug row stays out: it only shows on trouble.
-            tour: [ { sel: '.grid, .apps, #apps', text: Ayni.t( 'launcher.tourApps' ) }, 'buttons' ]
+            tour: [ { sel: '.grid, .apps, #apps', text: Ayni.t( 'launcher.tourApps' ) }, 'rows' ]
         } );
     } );
     </script>
@@ -724,7 +725,7 @@
                  places, and each must follow its own sun. -->
             <div class="scm-check-row" id="autoThemeWrap">
                 <label class="scm-check" for="autoThemeChk"><span data-i18n="acct.themeAuto"></span></label>
-                <button class="info-dot" data-i18n-attr="data-info:acct.themeAutoInfo"></button>
+                <button class="info-tip" data-i18n-attr="data-help:acct.themeAutoInfo"></button>
                 <label class="switch"><input role="switch" type="checkbox" id="autoThemeChk"></label>
             </div>
             <p class="scm-msg" id="autoThemeMsg" hidden></p>
@@ -733,7 +734,7 @@
                  <head>). The ONLY place for it (one action, one knob): a big screen,
                  or inside the desktop (it follows the change, see its OPEN THE DESKTOP). -->
             <label class="scm-assign" for="deskModeSel" id="deskModeWrap" hidden>
-                <span><span data-i18n="desktop.openMode"></span> <button class="info-dot" type="button" data-i18n-attr="data-info:desktop.openModeInfo"></button></span>
+                <span><span data-i18n="desktop.openMode"></span> <button class="info-tip" type="button" data-i18n-attr="data-help:desktop.openModeInfo"></button></span>
                 <select id="deskModeSel">
                     <option value="auto"   data-i18n="desktop.openAuto"></option>
                     <option value="always" data-i18n="desktop.openAlways"></option>
@@ -743,7 +744,7 @@
 
             <div class="scm-check-row" id="pushChkWrap">
                 <label class="scm-check" for="pushChk"><span data-i18n="acct.notifsOff"></span></label>
-                <button class="info-dot" data-i18n-attr="data-info:acct.notifsInfo"></button>
+                <button class="info-tip" data-i18n-attr="data-help:acct.notifsInfo"></button>
                 <label class="switch"><input role="switch" type="checkbox" id="pushChk"></label>
             </div>
             <!-- "Remind me N min before" lives in Planner › Settings (2026-09-27):
@@ -794,7 +795,7 @@
             <p class="scm-h" data-i18n="scm.saved"></p>
             <div class="scm-list" id="scmList"></div>
 
-            <p class="scm-h" id="scmEditTitle"><span data-i18n="scm.edit"></span><button class="info-dot" data-i18n-attr="data-info:scm.info"></button></p>
+            <p class="scm-h" id="scmEditTitle"><span data-i18n="scm.edit"></span><button class="info-tip" data-i18n-attr="data-help:scm.info"></button></p>
             <div class="scm-name-row">
                 <input class="scm-input" id="scmName" spellcheck="false" autocomplete="off" data-i18n-attr="placeholder:scm.namePh">
                 <div class="scm-seg" role="group" data-i18n-attr="aria-label:scm.kind">
@@ -2582,7 +2583,7 @@
                 return '<div class="dev-media">' +
                        '<div class="scm-check-row">' +
                            '<label class="scm-check" for="' + esc( id ) + '"><span>' + esc( T( 'dev.media' ) ) + '</span></label>' +
-                           '<button class="info-dot" type="button" data-info="' + esc( T( 'dev.mediaInfo' ) ) + '"></button>' +
+                           '<button class="info-tip" type="button" data-help="' + esc( T( 'dev.mediaInfo' ) ) + '"></button>' +
                            '<label class="switch"><input role="switch" type="checkbox" id="' + esc( id ) + '" data-dev-media="' + esc( d.id ) + '"' +
                                ( d.media ? ' checked' : '' ) + '></label>' +
                        '</div>' +

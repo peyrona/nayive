@@ -1020,81 +1020,6 @@ input[type="range"]
 
 
 /* -----------------------------------------------------------------------------
- * INFO DOT  (.info-dot)  +  INFO POPUP  (.info-popup)
- *
- * A small circled "i" you put next to a label or a control to explain it. Tap
- * it and a little popup opens with the text; tap it again, tap anywhere else,
- * press Esc or scroll and it closes. It is a POPUP, not a dialog - it has no
- * "x", no backdrop, and never blocks the page.
- *
- * On a PC (a real mouse) it ALSO opens on hover, and stays open while the
- * pointer is on the dot or on the popup itself; a click pins it, so from there
- * on it behaves like on a phone. Touch screens are unchanged. See shared/ui.js.
- *
- *     <label for="tz">Zona horaria
- *       <button class="info-dot" data-info="Las horas se guardan en UTC y se
- *       muestran en tu zona."></button>
- *     </label>
- *
- * shared/ui.js fills in the icon + ARIA and wires the open/close (it runs on
- * load and watches for dots added later; call NayiveUI.applyInfoDots(root) after
- * building markup by hand). The text comes from `data-info`; "\n" starts a new
- * line. Keep it to a sentence or two - anything longer belongs in a dialog.
- *
- * COLOUR: --link (info-blue) for both the dot and the popup's border, so it
- * stays legible at 16px in both schemes and never reads as the green --accent
- * (reserved for active / primary). The dot goes --accent only on hover / while
- * its popup is open.
- * ---------------------------------------------------------------------------*/
-.info-dot
-{
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 auto;
-    width: 16px;                /* one size for every (i) */
-    height: 16px;
-    padding: 0;
-    margin: 0 0 0 4px;
-    border: none;
-    border-radius: 50%;
-    background: transparent;
-    color: var(--link);        /* info-blue - readable at this size, not the green accent */
-    vertical-align: middle;
-    cursor: pointer;
-    transition: color var(--tr-fast);
-}
-/* :root lifts it above any container's "<class> svg" rule (.menu-item svg
-   made the menu's dots grey and smaller): a dot looks the same everywhere. */
-:root .info-dot svg     { width: 16px; height: 16px; display: block; flex: 0 0 auto; color: inherit; }
-/* A menu row already spaces its items (gap 10px): no extra margin, so the dot
-   sits as close to its label as in the Drive bin bar (gap 6 + margin 4). */
-.menu-item > .info-dot  { margin-left: 0; }
-.info-dot:hover,
-.info-dot.is-open       { color: var(--accent); }
-.info-dot:focus         { outline: none; }
-.info-dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-.info-popup
-{
-    position: fixed;             /* a popover, in the top layer: above dialogs too (ui.js) */
-    inset: auto;
-    margin: 0;
-    max-width: 260px;
-    padding: 10px 12px;
-    font-size: 0.82rem;
-    line-height: 1.4;
-    color: var(--text);
-    background: var(--card);
-    border: 1px solid var(--link);   /* info-blue, ties the popup to its dot */
-    border-radius: var(--radius-m);
-    box-shadow: var(--elev-dialog);
-    white-space: pre-wrap;       /* honour "\n" in data-info */
-}
-.info-popup a { color: var(--link); }   /* an "https://..." in data-info (ui.js setInfoText) */
-
-
-/* -----------------------------------------------------------------------------
  * SYNC INDICATOR  - defined in theme.css
  *
  * .sync-indicator  the plug glyph in the header (shared/ui.js draws it). It is
@@ -1147,37 +1072,14 @@ button,
 }
 
 
-/* -----------------------------------------------------------------------------
- * HELP DIALOG  (.intro-*)
+/* ---------------------------------------------------------------------------
+ * INSTALL-AS-APP DIALOG  (.install-*)
  *
- * Opened by the "?" button at the end of an app's toolbar (a normal toolbar
- * button carrying [data-intro-open]) - never on its own. Built on Ayni.dialog
- * by shared/ui.js (NayiveUI.firstRun / .showIntro): app name, an optional
- * one-line summary, then one row per toolbar button (its glyph + name + a short
- * explanation). The launcher's copy adds the "volver a las apps" tip and a
- * "No volver a mostrar" button, and re-opens every visit until that is clicked.
- * Closes on its corner × / Escape only, like any Nayive dialog.
+ * Built by NayiveUI.offerInstall() on Ayni.dialog, with Ayni's help-card row
+ * list (.help-list / .help-t) for the three "what you get" lines. The plain row
+ * glyph, the app logo, the numbered iOS steps and the wide buttons are its own.
  * ---------------------------------------------------------------------------*/
-.intro-btns
-{
-    list-style: none;
-    margin: 12px 0 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-}
-.intro-btns li
-{
-    display: flex;
-    gap: 10px;
-    align-items: flex-start;
-    padding: 8px 2px;
-    font-size: 0.86rem;
-    line-height: 1.35;
-}
-.intro-btns li + li  { border-top: 1px solid var(--line); }
-
-.intro-btn-i
+.install-ico
 {
     flex: 0 0 auto;
     width: 24px;
@@ -1186,212 +1088,9 @@ button,
     align-items: center;
     justify-content: center;
     color: var(--text-dim);
-    font-size: 0.8rem;
 }
-.intro-btn-i svg     { width: 18px; height: 18px; display: block; }
+.install-ico svg     { width: 18px; height: 18px; display: block; }
 
-/* A `{ section }` row: a line across, then a small subtitle over the next list. */
-.intro-sep           { border: 0; border-top: 1px solid var(--line); margin: 14px 0 0; }
-.intro-sub           { margin: 12px 0 0; font-size: 0.95rem; font-weight: 600; color: var(--text); }
-.intro-sub + .intro-btns { margin-top: 4px; }
-
-.intro-btn-t         { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.intro-btn-t b       { font-weight: 600; color: var(--text); }
-.intro-btn-t span    { color: var(--text-dim); }
-
-/* The optional `tip:` line under the list (launcher: "tap the app name / icon
-   to go back"; calendar: the daily Tareas sync). */
-.intro-home-hint
-{
-    margin-top: 14px;
-    font-size: 0.82rem;
-    line-height: 1.4;
-    color: var(--text-dim);
-}
-
-/* Launcher only: the wide "No volver a mostrar" button, alone in the bottom row. */
-.intro-dismiss
-{
-    flex: 1 1 auto;
-    min-height: 44px;
-    padding: 8px 14px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-pill);
-    background: var(--card2);
-    color: var(--text-dim);
-    font-family: inherit;
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: color var(--tr-fast), background var(--tr-fast);
-}
-.intro-dismiss:hover { color: var(--text); background: color-mix(in srgb, var(--accent) 12%, var(--card2)); }
-
-
-
-/* ---------------------------------------------------------------------------
- * COACH MARKS  (.coach-*)
- *
- * The two bubbles a brand-new user meets ONCE, in the first Nayive app they
- * open (shared/ui.js, NayiveUI.showCoach). A dim overlay over the whole page,
- * an accent ring around each target - the app name/icon and the "?" button -
- * and a small bubble hanging off each ring with a pointer and a hairline that
- * keeps the two joined when the bubble has to move aside on a phone.
- *
- * The corner button counts 9..1 before it turns into a real (x): while it is
- * counting nothing on the page can be tapped, so the two lines get read.
- * Above the page's own layers; dialogs and the info popup are in the top
- * layer, above it (the help dialog opened from it covers it).
- * ---------------------------------------------------------------------------*/
-.coach-overlay
-{
-    position: fixed;
-    inset: 0;
-    z-index: 300;
-    background: var(--scrim);
-    opacity: 0;
-    transition: opacity var(--tr-fast);
-}
-.coach-overlay.open { opacity: 1; }
-
-/* Rings + hairlines in the lower layer, bubbles in the upper one. */
-.coach-layer { position: absolute; inset: 0; pointer-events: none; }
-.coach-layer + .coach-layer > * { pointer-events: auto; }
-
-/* The target stays lit through the scrim; the ring says which one it is. */
-.coach-ring
-{
-    position: fixed;
-    border: 2px solid var(--accent);
-    border-radius: var(--radius-s);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 28%, transparent);
-    pointer-events: none;
-}
-
-/* Ring -> bubble hairline (only visible when the bubble sits away from it). */
-.coach-line
-{
-    position: fixed;
-    width: 2px;
-    background: var(--accent);
-    opacity: 0.75;
-    pointer-events: none;
-}
-
-.coach-bubble
-{
-    position: fixed;
-    max-width: 240px;
-    padding: 12px 14px;
-    background: var(--card);
-    color: var(--text);
-    border: 1px solid var(--accent);
-    border-radius: var(--radius-m);
-    box-shadow: var(--elev-dialog);
-}
-.coach-bubble p
-{
-    margin: 0;
-    padding-right: 30px;          /* room for the corner countdown / (x) */
-    font-size: 0.88rem;
-    line-height: 1.4;
-}
-
-/* The pointer: a rotated square poking out of the bubble's top edge (bottom
-   edge when the bubble had to sit above its target). ui.js sets its left. */
-.coach-arrow
-{
-    position: absolute;
-    top: -6px;
-    width: 11px;
-    height: 11px;
-    margin-left: -6px;
-    background: var(--card);
-    border-left:   1px solid var(--accent);
-    border-top:    1px solid var(--accent);
-    transform: rotate(45deg);
-}
-.coach-bubble--up .coach-arrow
-{
-    top: auto;
-    bottom: -6px;
-    border: 0;
-    border-right:  1px solid var(--accent);
-    border-bottom: 1px solid var(--accent);
-}
-
-/* Countdown, then the close (x). A 32px disc, pinned in
-   the corner and dimmed - and unclickable - while it is still a number. */
-.coach-close
-{
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    padding: 0;
-    border: 0;
-    border-radius: 50%;
-    background: transparent;
-    color: var(--text-dim);
-    font-family: inherit;
-    font-size: 0.85rem;
-    font-variant-numeric: tabular-nums;
-    cursor: default;
-}
-.coach-close svg          { width: 17px; height: 17px; display: block; }
-.coach-close:not(:disabled)
-{
-    color: var(--text);
-    cursor: pointer;
-}
-.coach-close:not(:disabled):hover
-{
-    background: color-mix(in srgb, var(--text) 9%, transparent);
-}
-
-@media (max-width: 640px)
-{
-    .coach-bubble   { max-width: 232px; }
-    .coach-bubble p { font-size: 0.85rem; }
-}
-
-/* ---------------------------------------------------------------------------
- * GUIDED TOUR  (.tour-*)
- *
- * The help card's "Ver el tour" (shared/ui.js, runTour): one lit button at a
- * time. Four dim panes frame a hole over the target; a clear lid covers the
- * hole so the page cannot be touched, except on a "tap" step, where the lid
- * goes and the user's tap reaches the real button. Ring, bubble, pointer and
- * (x) are the coach marks' own (.coach-*). A dashed ring is a "ghost": the
- * place where the button shows up once there is something to act on.
- * ---------------------------------------------------------------------------*/
-.tour-overlay           { position: fixed; inset: 0; z-index: 2000; pointer-events: none; }   /* a popover in the top layer, over every menu and popup; over a dialog it moves into it (ui.js hostOver) */
-.tour-overlay > *       { pointer-events: auto; }
-.tour-overlay[popover]  { width: auto; height: auto; margin: 0; padding: 0; border: 0; background: none; overflow: visible; }
-.tour-pane              { position: fixed; background: var(--scrim); }
-.tour-lid               { position: fixed; }
-.tour-overlay.is-tap .tour-lid { display: none; }
-.tour-ring              { pointer-events: none; transition: left var(--tr-fast), top var(--tr-fast), width var(--tr-fast), height var(--tr-fast); }
-.tour-ring.is-ghost     { border-style: dashed; }
-.tour-bubble            { max-width: 300px; }
-.tour-head              { display: flex; align-items: center; gap: 8px; margin: 0 30px 6px 0; }
-.tour-head .intro-btn-i { flex: 0 0 auto; }
-.tour-note              { margin-top: 6px !important; color: var(--text-dim); font-style: italic; }
-.tour-row               { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
-.tour-count             { flex: 1; color: var(--text-dim); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
-.intro-tour             { margin: 4px 0 10px; }
-
-/* ---------------------------------------------------------------------------
- * INSTALL-AS-APP DIALOG  (.install-*)
- *
- * Built by NayiveUI.offerInstall() on Ayni.dialog, reusing the help
- * dialog's row list (.intro-btns) for the three "what you get" lines and its
- * wide button (.intro-dismiss) for the actions. Only the app logo, the numbered
- * iOS steps and the filled primary button are new.
- * ---------------------------------------------------------------------------*/
 .install-logo
 {
     display: block;
@@ -1458,7 +1157,22 @@ button,
     gap: 8px;
     margin-top: 16px;
 }
-.intro-dismiss.primary
+.install-btn
+{
+    flex: 1 1 auto;
+    min-height: 44px;
+    padding: 8px 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    background: var(--card2);
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: color var(--tr-fast), background var(--tr-fast);
+}
+.install-btn:hover { color: var(--text); background: color-mix(in srgb, var(--accent) 12%, var(--card2)); }
+.install-btn.primary
 {
     border-color: transparent;
     background: var(--accent);
@@ -1466,7 +1180,7 @@ button,
     font-size: 0.95rem;
     font-weight: 600;
 }
-.intro-dismiss.primary:hover { background: var(--accent); color: var(--on-accent); filter: brightness(1.06); }
+.install-btn.primary:hover { background: var(--accent); color: var(--on-accent); filter: brightness(1.06); }
 .install-never { border-color: transparent; background: none; font-size: 0.8rem; min-height: 36px; }
 .install-never:hover { background: none; color: var(--text); text-decoration: underline; }
 
@@ -1585,7 +1299,9 @@ button,
 .loc-link  { display: inline-flex; align-items: center; background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 6px 12px; font-size: 0.8rem; color: var(--link); text-decoration: none; }
 .loc-link:hover { border-color: color-mix(in srgb, var(--text) 30%, transparent); }
 /* Location sending not set up: the (i) sits right after "not set up", the "+" stays right. */
-.share-link-app .info-dot                { margin-right: auto; }
+.share-link-app .info-tip                { margin-right: auto; }
+/* A menu row already spaces its items: no extra margin before its (i). */
+.menu-item > .info-tip                   { margin-left: 0; }
 
 
 /* -----------------------------------------------------------------------------
@@ -2572,12 +2288,12 @@ html.nv-locked body { visibility: hidden; }
 {
     :root { --hit: 44px; }
 
-    :where(.pill, .info-dot, .task-chevron, .stage-drag, .subtask-handle,
+    :where(.pill, .task-chevron, .stage-drag, .subtask-handle,
            h1.nayive-home-link, .app-title.nayive-home-link, .detail-heading.collapsible)
     {
         position: relative;
     }
-    :where(.pill, .info-dot, .task-chevron, .stage-drag, .subtask-handle,
+    :where(.pill, .task-chevron, .stage-drag, .subtask-handle,
            h1.nayive-home-link, .app-title.nayive-home-link, .detail-heading.collapsible)::before
     {
         content: "";

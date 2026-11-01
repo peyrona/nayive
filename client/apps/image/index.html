@@ -28,6 +28,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-menus.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -39,6 +40,7 @@
     <script src="../shared/ayni/ayni-menus.js" defer></script>
     <script src="../shared/ayni/ayni-search.js" defer></script>
     <script src="../shared/ayni/ayni-lists.js" defer></script>
+    <script src="../shared/ayni/ayni-help.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <script src="../shared/gum-api.js" defer></script>
@@ -58,10 +60,10 @@
         ];
         // a desktop window has no ←: its own close does that
         if( ! NayiveUI.windowed ) rows.unshift( { sel: '#backBtn', icon: 'back', text: Ayni.t( 'image.introBack' ) } );
-        NayiveUI.firstRun( { app: 'image', title: 'Image', lead: Ayni.t( 'image.introLead' ), buttons: rows,
+        Ayni.help( { title: 'Image', lead: Ayni.t( 'image.introLead' ), rows: rows,
             // The guided tour ("Ver el tour" in the card): the bar's buttons, the
             // editor's undo / redo, its tools, the zoom box, the note under the picture.
-            tour: [ 'buttons',
+            tour: [ 'rows',
                     { sel: '#editorHead', text: Ayni.t( 'image.tourUndo' ) },
                     { sel: '#editorTools, .fit-more', text: Ayni.t( 'image.tourTools' ) },   // a phone: the tools are in the ⋮
                     { sel: '.ie-zoom', ghost: '#editorHost', text: Ayni.t( 'image.tourView' ) },
@@ -91,7 +93,7 @@
                     <button id="editorSaveAsBtn" class="btn" type="button" data-i18n-attr="aria-label:ui.saveCopy, data-tip:drive.saveCopyEllipsis"></button>
                 </div>
                 <div class="tb-group tb-sys">
-                    <button class="btn" data-intro-open data-rank="31" type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
+                    <button class="btn" data-help-open data-rank="31" type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                     </button>
                 </div>

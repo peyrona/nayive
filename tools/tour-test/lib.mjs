@@ -1,4 +1,4 @@
-// lib.mjs - what every tour check shares (the guided tour, NayiveUI.tour in
+// lib.mjs - what every tour check shares (the guided tour, Ayni.tour in
 // shared/ui.js). Each app's file only seeds its data and lists what its own
 // steps must light. See README.md.
 import fs from "node:fs";
@@ -40,19 +40,19 @@ export const state = c => c.evaluate( `( () => { const o = document.querySelecto
 export async function startTour( c )
 {
     // No "?" at all (the launcher: its card shows by itself until dismissed): the card.
-    if( ! await c.evaluate( "!! document.querySelector( '[data-intro-open]' )" ) )
-        await c.evaluate( "NayiveUI.showIntro(); true" );
+    if( ! await c.evaluate( "!! document.querySelector( '[data-help-open]' )" ) )
+        await c.evaluate( "Ayni.help.show(); true" );
     // A "?" that fitBar moved into the ⋮: the ⋮, then its row.
-    else if( await c.evaluate( "! [ ...document.querySelectorAll( '[data-intro-open]' ) ].some( e => e.getClientRects().length && ! e.closest( '.fit-out' ) )" ) )
+    else if( await c.evaluate( "! [ ...document.querySelectorAll( '[data-help-open]' ) ].some( e => e.getClientRects().length && ! e.closest( '.fit-out' ) )" ) )
     {
-        await mouse( c, ( await c.evaluate( "( () => { const q = [ ...document.querySelectorAll( '[data-intro-open]' ) ].find( e => e.closest( '.fit-out' ) ); let h = q; while( h && ! h.ayniFitBar ) h = h.parentElement; return !! h; } )()" ) )
-            ? await c.evaluate( "( () => { const q = [ ...document.querySelectorAll( '[data-intro-open]' ) ].find( e => e.closest( '.fit-out' ) ); let h = q; while( h && ! h.ayniFitBar ) h = h.parentElement; const b = h.ayniFitBar.button.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; } )()" )
+        await mouse( c, ( await c.evaluate( "( () => { const q = [ ...document.querySelectorAll( '[data-help-open]' ) ].find( e => e.closest( '.fit-out' ) ); let h = q; while( h && ! h.ayniFitBar ) h = h.parentElement; return !! h; } )()" ) )
+            ? await c.evaluate( "( () => { const q = [ ...document.querySelectorAll( '[data-help-open]' ) ].find( e => e.closest( '.fit-out' ) ); let h = q; while( h && ! h.ayniFitBar ) h = h.parentElement; const b = h.ayniFitBar.button.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; } )()" )
             : ".fit-more" );
         await c.until( "!! document.querySelector( '#ayni-menu:popover-open [role^=menuitem]' )" );
-        await mouse( c, await c.evaluate( `( () => { const r = [ ...document.querySelectorAll( '#ayni-menu:popover-open [role^=menuitem]' ) ].find( m => { const q = [ ...document.querySelectorAll( '[data-intro-open]' ) ].find( e => e.closest( '.fit-out' ) ); const l = q && ( q.getAttribute( 'aria-label' ) || q.title || '' ).trim(); return !! l && ( m.textContent.trim() === l || l.indexOf( m.textContent.trim() ) === 0 ); } ); if( ! r ) return null; const b = r.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; } )()` ) );
+        await mouse( c, await c.evaluate( `( () => { const r = [ ...document.querySelectorAll( '#ayni-menu:popover-open [role^=menuitem]' ) ].find( m => { const q = [ ...document.querySelectorAll( '[data-help-open]' ) ].find( e => e.closest( '.fit-out' ) ); const l = q && ( q.getAttribute( 'aria-label' ) || q.title || '' ).trim(); return !! l && ( m.textContent.trim() === l || l.indexOf( m.textContent.trim() ) === 0 ); } ); if( ! r ) return null; const b = r.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; } )()` ) );
     }
-    else await mouse( c, "[data-intro-open]" );
-    const CARD = "dialog.panel[open] .intro-tour", MENU = ".panel.menu:popover-open [data-menu=\"tourBtn\"]";
+    else await mouse( c, "[data-help-open]" );
+    const CARD = "dialog.panel[open] .help-tour", MENU = ".panel.menu:popover-open [data-act=\"help-tour\"]";
     if( ! await c.until( `!! document.querySelector( '${CARD}' ) || !! document.querySelector( '${MENU}' )` ) ) return false;
     await mouse( c, await c.evaluate( `!! document.querySelector( '${CARD}' )` ) ? CARD : MENU );
     const up = await c.until( "!! document.querySelector( '.tour-overlay .tour-bubble:not([hidden])' )" );
@@ -64,7 +64,7 @@ export async function startTour( c )
 // shared parts in any app.
 export async function runSteps( c, steps )
 {
-    await c.evaluate( `NayiveUI.tour( ${steps} ); true` );
+    await c.evaluate( `Ayni.tour( ${steps} ); true` );
     const up = await c.until( "!! document.querySelector( '.tour-overlay .tour-bubble:not([hidden])' )" );
     await sleep( 200 );
     return up;

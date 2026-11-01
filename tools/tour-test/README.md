@@ -1,7 +1,8 @@
 # Tour checks
 
-The guided tour is `NayiveUI.tour` in `client/apps/shared/ui.js` (header
-comment "GUIDED TOUR"); its look is `.tour-*` in `shared/app.css`.
+The guided tour is Ayni's `Ayni.tour` (`client/apps/shared/ayni/ayni-help.js`,
+guidelines ch. 15.3); its look is `.tour-*` in `ayni-help.css`. Nayive adds
+only the "home" step (the app's name, `Ayni.tour.add`, in `shared/ui.js` HELP).
 
     node tools/tour-test/run.mjs            # all
     node tools/tour-test/run.mjs habits     # one file
@@ -15,12 +16,12 @@ data-safety harness's `server()` / `browser()`); nothing touches real data.
 
 Every app has one now; this is for a new app or a new button.
 
-1. In the app's `NayiveUI.firstRun( {...} )` (or the card it hands to
-   `showIntro` / `setIntro`) add `tour: [ ... ]` (or a function returning it;
-   `tour: true` = `[ 'buttons' ]`). The help card then shows "Ver el tour";
-   Write / Calc / Text get it as a fourth entry of their Ayuda menu
-   (shared/office.js). Never open it on its own.
-2. `'buttons'` walks the card's own rows, in order: a row with `sel` lights
+1. In the app's `Ayni.help( {...} )` (or the card it hands to
+   `Ayni.help.show`) add `tour: [ ... ]` (or a function returning it;
+   `tour: true` = `[ 'rows' ]`). The help card then shows "Take the tour";
+   Write / Calc / Text (`menu: true`) get it as a row of their Help menu
+   (shared/office.js, `Ayni.help.items`). Never open it on its own.
+2. `'rows'` walks the card's own rows, in order: a row with `sel` lights
    that button. A row with no `sel` (an idea, a row's button) joins only with
    a `tour: { sel / ghost / open / picked ... }` of its own; `tour: false`
    keeps a row out. A row whose button this layout lacks is left out, as
@@ -29,7 +30,7 @@ Every app has one now; this is for a new app or a new button.
    the ⋮ for any toolbar button fitBar moved there; the menu row of a hidden
    button that a menu copies (`data-menu="<id>"`, Write / Calc / Text).
 4. Shared steps by name, with their shared text: `'search'`, `'more'`,
-   `'pick'` (a row's round tick; the user taps it), `'picked'` (the
+   `'pick'` (a row's tick square; the user taps it), `'picked'` (the
    selection group, a row picked by the tour). Change a field with
    `{ use: 'pick', ghost: '#emptyList' }`.
 5. Step fields: `{ sel, text, title?, tap?, open?, ghost?, icon?, picked?, optional?, before?, after? }`.

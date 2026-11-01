@@ -365,7 +365,7 @@ body.trash-mode .tb-modes { display: none; }
    all but one digit, so "30" read as "3" */
 .trash-bar .trash-days input { width: 5em; padding-inline: 8px 4px; text-align: center; }
 /* Every button in the bar is a shared one: "←" an .btn, "Vaciar
-   papelera" a .btn.text.bordered.danger, the days hint an .info-dot (its size
+   papelera" a .btn.text.bordered.danger, the days hint an .info-tip (its size
    lives in app.css, so every (i) looks like this one). */
 
 /* Restore / delete-forever: two shared .btn.sm (the second .danger) */

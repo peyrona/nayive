@@ -64,6 +64,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-menus.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -75,6 +76,7 @@
     <script src="../shared/ayni/ayni-menus.js" defer></script>
     <script src="../shared/ayni/ayni-search.js" defer></script>
     <script src="../shared/ayni/ayni-lists.js" defer></script>
+    <script src="../shared/ayni/ayni-help.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/ui.js" defer></script>
     <script src="../shared/store.js" defer></script>
@@ -338,8 +340,8 @@
         #moreMenu #lockMin            { width: calc(4.5em + 10px); text-align: center; }
         #moreMenu #lockText           { margin-left: auto; width: 150px; }
         #moreMenu .menu-item[hidden]  { display: none; }
-        /* The (i) dots of the menu: their popup must sit above it. */
-        .info-popup { z-index: 100001; }
+        /* The (i) of the menu: its popup must sit above it. */
+        .info-pop { z-index: 100001; }
 
         /* THE TILE SWITCH (see TILE / UNTILE): "Free ()== Tile" - the shared .switch
            between two words. A word picks its side, the switch flips; the side in
@@ -566,8 +568,8 @@
                  bar (Free/Tile) and what has no room there (Lock now, the clock, the bar).
                  More rows will come; see MORE below. -->
             <button id="moreBtn" class="btn" type="button" aria-expanded="false" data-i18n-attr="data-tip:ui.moreOptions, aria-label:ui.moreOptions"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="12" cy="19" r="1.8"></circle></svg></button>
-            <!-- HELP - the shared help card (NayiveUI.firstRun, see HELP below). -->
-            <button id="helpBtn" class="btn" data-intro-open type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></button>
+            <!-- HELP - the shared help card (Ayni.help, see HELP below). -->
+            <button id="helpBtn" class="btn" data-help-open type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></button>
             <!-- ONE connection status for every window (see SYNC below); hidden until one has its own. -->
             <button id="syncIndicator" class="sync-indicator" type="button" hidden data-i18n-attr="data-tip:ui.synced"></button>
         </div>
@@ -577,10 +579,10 @@
         <div class="top-menu" id="moreMenu" role="menu" hidden>
             <!-- BATTERY ON THE BAR - set.battBar (2026-10-04): the #batt on the bar (see
                  BATTERY). Always the first row; greyed with no battery or no browser API. -->
-            <label class="menu-item switch end" id="battRow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line><line x1="6" y1="11" x2="6" y2="13"></line><line x1="10" y1="11" x2="10" y2="13"></line></svg><span data-i18n="desktop.battBar"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:desktop.battBarInfo"></span><input role="switch" type="checkbox" id="battBarChk" disabled></label>
+            <label class="menu-item switch end" id="battRow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line><line x1="6" y1="11" x2="6" y2="13"></line><line x1="10" y1="11" x2="10" y2="13"></line></svg><span data-i18n="desktop.battBar"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.battBarInfo"></span><input role="switch" type="checkbox" id="battBarChk" disabled></label>
             <!-- WEATHER ON THE BAR - set.weatherBar (2026-10-02): the #wxBtn on the bar
                  (see WEATHER). A label, so flipping it leaves the menu open. -->
-            <label class="menu-item switch end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path></svg><span data-i18n="desktop.weatherBar"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:desktop.weatherBarInfo"></span><input role="switch" type="checkbox" id="weatherBarChk"></label>
+            <label class="menu-item switch end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path></svg><span data-i18n="desktop.weatherBar"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.weatherBarInfo"></span><input role="switch" type="checkbox" id="weatherBarChk"></label>
             <!-- WINDOWS - how the windows behave on the desk. -->
             <div class="menu-sep"></div>
             <div class="menu-label" data-i18n="desktop.windowsLabel"></div>
@@ -593,10 +595,10 @@
             </div>
             <!-- STICKY WINDOWS - on: a window dropped on an edge of the desk takes that
                  half (see drag). A label, not a button, so flipping it leaves the menu open. -->
-            <label class="menu-item switch end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="12" y1="4" x2="12" y2="20"></line></svg><span data-i18n="desktop.sticky"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:desktop.stickyInfo"></span><input role="switch" type="checkbox" id="stickyChk"></label>
+            <label class="menu-item switch end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="12" y1="4" x2="12" y2="20"></line></svg><span data-i18n="desktop.sticky"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.stickyInfo"></span><input role="switch" type="checkbox" id="stickyChk"></label>
             <!-- SCALE ON OPEN - new windows start with Scale on (set.scaleNew; see SCALE).
                  The (i) is a span, not a button: a button would close the menu. -->
-            <label class="menu-item switch end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 11 5 5 11 5"></polyline><polyline points="19 13 19 19 13 19"></polyline><line x1="5" y1="5" x2="19" y2="19"></line></svg><span data-i18n="desktop.scaleNew"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:desktop.scaleNewInfo"></span><input role="switch" type="checkbox" id="scaleNewChk"></label>
+            <label class="menu-item switch end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 11 5 5 11 5"></polyline><polyline points="19 13 19 19 13 19"></polyline><line x1="5" y1="5" x2="19" y2="19"></line></svg><span data-i18n="desktop.scaleNew"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.scaleNewInfo"></span><input role="switch" type="checkbox" id="scaleNewChk"></label>
             <!-- THE CLOCK - what it shows beside the time (see THE CLOCK). Labels, not
                  buttons, so a change leaves the menu open. -->
             <div class="menu-sep"></div>
@@ -633,7 +635,7 @@
             <div class="menu-item lock-row">
                 <select id="lockSel" data-i18n-attr="aria-label:acct.locker"></select>
                 <span class="lock-min"><input id="lockMin" type="number" min="0" max="999" step="1" inputmode="numeric"
-                       data-i18n-attr="title:acct.lockerMin, aria-label:acct.lockerMin"> <span data-i18n="acct.lockerUnit"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:acct.lockerOff"></span></span></div>
+                       data-i18n-attr="title:acct.lockerMin, aria-label:acct.lockerMin"> <span data-i18n="acct.lockerUnit"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:acct.lockerOff"></span></span></div>
             <label class="menu-item" id="lockTextWrap" hidden><span data-i18n="acct.lockerText"></span>
                 <input id="lockText" type="text" maxlength="60" spellcheck="false"></label>
             <!-- Bellas artes' or Science's own settings (shared/lockers/culture-settings.js): per USER. -->
@@ -665,7 +667,7 @@
          optional text; Play starts it. Pause / Play and Stop live on the chip. -->
     <dialog class="panel" id="cdBackdrop" aria-labelledby="cdTitle">
         <header>
-            <h2><span id="cdTitle"></span> <button class="info-dot" id="cdNote" type="button" data-i18n-attr="data-info:desktop.cdNote"></button></h2>
+            <h2><span id="cdTitle"></span> <button class="info-tip" id="cdNote" type="button" data-i18n-attr="data-help:desktop.cdNote"></button></h2>
         </header>
         <div class="body">
             <div class="field-row cd-nums">
@@ -2309,7 +2311,7 @@
         {
             var up = [].some.call( doc.querySelectorAll( 'dialog.panel[open]' ), function ( b )
             {
-                return ! b.classList.contains( 'intro-sheet' );
+                return ! b.classList.contains( 'help-card' );
             } );
             if( up && ! menu.classList.contains( 'full' ) )
             {
@@ -3167,11 +3169,10 @@
     document.addEventListener( 'DOMContentLoaded', function () { ( window.Ayni ? Ayni.i18n.ready : Promise.resolve() ).then( function ()
     {
         if( ! window.NayiveUI ) return;
-        NayiveUI.firstRun( {
-            app:   'desktop',
+        Ayni.help( {
             title: 'Nayive',
             lead:  t( 'desktop.helpLead' ),
-            buttons: [
+            rows: [
                 { sel: '#menuBtn',       icon: 'grid', text: t( 'desktop.helpMenu' ) },
                 // tour: ("Ver el tour" in the card) a window, its bar button, the
                 // ⋮'s Tile switch, the bar's weather and battery - or, with no
@@ -3186,7 +3187,7 @@
                 { sel: '#clock',         svg: CLOCK_SVG, name: t( 'desktop.tabClock' ), text: t( 'desktop.helpClock' ) },
                 { sel: '#moreBtn',       icon: 'more', text: t( 'desktop.helpMore' ) }
             ],
-            tour: [ 'buttons' ]
+            tour: [ 'rows' ]
         } );
     } ); } );
 

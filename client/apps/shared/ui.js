@@ -17,8 +17,8 @@
  *   - the viewer's IANA time zone
  *   - (the texts are Ayni's: Ayni.t / Ayni.tf / Ayni.i18n, shared/ayni/)
  *   - dialog action buttons: the one Nayive style (see Calendar -> "Ir a mes").
- *   - the info dot: a circled "i" by a label that opens a small popup
- *     (NayiveUI.applyInfoDots; paired CSS .info-dot / .info-popup in app.css).
+ *   - (the "?" help card, the tour, the first-visit marks and the info "i"
+ *     are Ayni's: Ayni.help / tour / coach, .info-tip, shared/ayni/ayni-help.js)
  *   - (dialogs are Ayni's dialog.panel, shared/ayni/ayni-dialogs.js: opening,
  *     Esc, the first field, moving, Ayni.confirm / alert / ask / autoSave)
  *   - embedded mode: when the page runs inside another Nayive page's <iframe>
@@ -216,7 +216,7 @@
                     if( ! n || n.nodeType !== 1 ) continue;
                     if( n.matches && n.matches( 'input[type="date"], input[type="time"]' ) ) localizeDateTimeInput( n );
                     localizeDateTimeInputs( n );
-                    applyInfoDots( n );
+                    if( n.matches( ".info-tip" ) || n.querySelector( ".info-tip" ) ) Ayni.init( n );
                     applyHomeLinks( n );
                     applySyncDots( n );
                     watchToastLifts( n );
@@ -265,7 +265,6 @@
         lock: '<rect x="4.5" y="10.5" width="15" height="10.5" rx="2.2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>',
         key: '<circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2"/><path d="m15.5 7.5 3 3"/><path d="m18 5 2.5 2.5"/>',
         pause: '<g stroke-width="2.2"><line x1="9" y1="5" x2="9" y2="19"/><line x1="15" y1="5" x2="15" y2="19"/></g>',
-        play: '<g stroke-width="2.2"><polygon points="7 4 19 12 7 20 7 4"/></g>',
         stop: '<g stroke-width="2.2"><rect x="6" y="6" width="12" height="12" rx="1.5"/></g>',
         // Item list and tree actions (were browser.js glyphs, 2026-11-01).
         move: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><polyline points="12 10 15 13 12 16"/><line x1="8" y1="13" x2="15" y2="13"/>',
@@ -463,191 +462,6 @@
     }
 
     //------------------------------------------------------------------------//
-    // INFO DOT + POPUP  - a circled "i" next to a label / control that opens a
-    // small explanatory popup. NOT a dialog: no "x", no backdrop. It closes on a
-    // second tap, a tap outside, Escape, or a scroll / resize. Text is read from
-    // the trigger's `data-info` ("\n" -> new line). Paired CSS: shared/app.css
-    // (.info-dot / .info-popup).
-    //
-    // ON A PC (a real mouse: "hover: hover" AND "pointer: fine") the popup also
-    // opens on hover, so the texts can be read by just sweeping the dots. Leaving
-    // the dot closes it after a short delay - long enough to cross the 6px gap
-    // into the popup, which keeps itself open while the pointer is inside it, so
-    // the long admin texts can be read. A CLICK PINS the popup: it then behaves
-    // exactly as on a phone (stays until a second click / outside / Esc / scroll).
-    // The hover check is done per event, not once at load, so plugging a mouse in
-    // later works. All of it is wired ONCE in applyInfoDots(), never per dot.
-
-    var infoPopupEl  = null;    // the single shared popup node (lazy)
-    var infoOpenDot  = null;    // the .info-dot it currently belongs to, or null
-    var infoByHover  = false;   // true while the open popup came from hover (not pinned)
-    var infoCloseTmr = null;    // pending "mouse left" close
-
-    // A PC, i.e. something that can really hover. Touch screens report
-    // "hover: none" and coarse pointers, so they keep the tap-only behaviour.
-    function infoHoverable()
-    {
-        return !! ( window.matchMedia
-                    && window.matchMedia( "(hover: hover) and (pointer: fine)" ).matches );
-    }
-
-    function infoCancelClose()
-    {
-        if( infoCloseTmr ) { clearTimeout( infoCloseTmr ); infoCloseTmr = null; }
-    }
-
-    function infoCloseSoon()
-    {
-        infoCancelClose();
-        infoCloseTmr = setTimeout( function()
-        {
-            infoCloseTmr = null;
-            if( infoByHover ) closeInfo();      // a click may have pinned it meanwhile
-        }, 180 );
-    }
-
-    function onInfoEnter( e )
-    {
-        if( ! infoHoverable() ) return;
-        infoCancelClose();
-        var dot = e.currentTarget;
-        if( infoOpenDot === dot ) return;
-        closeInfo();
-        openInfo( dot );
-        infoByHover = true;
-    }
-
-    function onInfoLeave()
-    {
-        if( infoByHover ) infoCloseSoon();
-    }
-
-    function closeInfo()
-    {
-        infoCancelClose();
-        infoByHover = false;
-        if( ! infoOpenDot ) return;
-        infoOpenDot.classList.remove( "is-open" );
-        infoOpenDot = null;
-        if( infoPopupEl && infoPopupEl.matches( ":popover-open" ) ) infoPopupEl.hidePopover();
-
-        document.removeEventListener( "pointerdown", onInfoOutside, true );
-        document.removeEventListener( "keydown", onInfoKey, true );
-        window.removeEventListener( "scroll", closeInfo, true );
-        window.removeEventListener( "resize", closeInfo, true );
-    }
-
-    function onInfoOutside( e )
-    {
-        if( infoPopupEl && infoPopupEl.contains( e.target ) ) return;
-        if( infoOpenDot && infoOpenDot.contains( e.target ) ) return;   // the dot handles its own toggle
-        closeInfo();
-    }
-
-    function onInfoKey( e )
-    {
-        // preventDefault: the browser's own Escape would also close a dialog under it
-        if( e.key === "Escape" ) { e.preventDefault(); e.stopPropagation(); closeInfo(); }
-    }
-
-    function openInfo( dot )
-    {
-        if( ! infoPopupEl )
-        {
-            infoPopupEl = document.createElement( "div" );
-            infoPopupEl.className = "info-popup";
-            infoPopupEl.setAttribute( "role", "tooltip" );
-            infoPopupEl.popover = "manual";             // the top layer: above an open dialog too
-            // Reading the text means putting the pointer ON the popup: keep it
-            // open while it is there, close it again when the pointer leaves.
-            infoPopupEl.addEventListener( "mouseenter", infoCancelClose );
-            infoPopupEl.addEventListener( "mouseleave", onInfoLeave );
-        }
-
-        // Inside an open dialog the popup lives in it: outside, a modal dialog
-        // would keep it from taking the pointer (reading by hover needs it).
-        var host = dot.closest( "dialog[open]" ) || document.body;
-        if( infoPopupEl.parentNode !== host )
-        {
-            if( infoPopupEl.matches( ":popover-open" ) ) infoPopupEl.hidePopover();
-            host.appendChild( infoPopupEl );
-        }
-        if( host !== document.body ) host.addEventListener( "close", closeInfo, { once: true } );
-
-        infoByHover = false;                            // openInfo() alone = pinned
-
-        setInfoText( infoPopupEl, dot.getAttribute( "data-info" ) || "" );
-        if( ! infoPopupEl.matches( ":popover-open" ) ) infoPopupEl.showPopover();
-        infoPopupEl.style.visibility = "hidden";        // measure before placing
-        infoPopupEl.style.left = "0px";
-        infoPopupEl.style.top  = "0px";
-
-        var r    = dot.getBoundingClientRect();
-        var pw   = infoPopupEl.offsetWidth;
-        var ph   = infoPopupEl.offsetHeight;
-        var vw   = document.documentElement.clientWidth;
-        var vh   = document.documentElement.clientHeight;
-        var gap  = 6;
-        var pad  = 8;
-
-        var left = r.left;
-        if( left + pw > vw - pad ) left = vw - pad - pw;
-        if( left < pad ) left = pad;
-
-        var top = r.bottom + gap;                       // below the dot by default
-        if( top + ph > vh - pad && r.top - gap - ph >= pad )
-            top = r.top - gap - ph;                     // flip above if it would overflow
-
-        infoPopupEl.style.left = left + "px";
-        infoPopupEl.style.top  = top + "px";
-        infoPopupEl.style.visibility = "visible";
-
-        infoOpenDot = dot;
-        dot.classList.add( "is-open" );
-
-        document.addEventListener( "pointerdown", onInfoOutside, true );
-        document.addEventListener( "keydown", onInfoKey, true );
-        window.addEventListener( "scroll", closeInfo, true );
-        window.addEventListener( "resize", closeInfo, true );
-    }
-
-    // The popup's text, with every "https://..." in it made a link (new tab).
-    // Text nodes only, never innerHTML. A tap on the link does not close the
-    // popup first: onInfoOutside ignores presses inside it.
-    function setInfoText( el, text )
-    {
-        el.textContent = "";
-        text.split( /(https:\/\/\S+)/ ).forEach( function ( part, i )
-        {
-            if( i % 2 === 0 )
-            {
-                if( part ) el.appendChild( document.createTextNode( part ) );
-                return;
-            }
-            var a = document.createElement( "a" );
-            a.href        = part;
-            a.target      = "_blank";
-            a.rel         = "noopener";
-            a.textContent = part;
-            el.appendChild( a );
-        } );
-    }
-
-    function onInfoClick( e )
-    {
-        e.preventDefault();
-        var dot = e.currentTarget;
-        if( infoOpenDot === dot )
-        {
-            // Clicking a popup opened by hover PINS it (the pointer is still on
-            // the dot, so closing here would just look like the click failed).
-            if( infoByHover ) { infoByHover = false; infoCancelClose(); }
-            else closeInfo();
-        }
-        else { closeInfo(); openInfo( dot ); }
-    }
-
-    //------------------------------------------------------------------------//
     // SYNC INDICATOR GLYPH
     //
     // Every app's header carries a `.sync-indicator`. It used to be a filled dot
@@ -824,49 +638,6 @@
     }
     window.addEventListener( "resize", placeSyncChips );
     document.addEventListener( "scroll", placeSyncChips, { capture: true, passive: true } );
-
-    // Wire every <button class="info-dot"> under `root` (default: document).
-    // Idempotent; fills in the icon + ARIA if missing.
-    function applyInfoDots( root )
-    {
-        var scope = root && root.querySelectorAll ? root : document;
-        var list  = [].slice.call( scope.querySelectorAll( ".info-dot" ) );
-
-        // querySelectorAll only sees descendants - include `scope` itself if it
-        // is a dot (a node just added by the MutationObserver).
-        if( scope.nodeType === 1 && scope.matches && scope.matches( ".info-dot" ) )
-            list.push( scope );
-
-        for( var i = 0; i < list.length; i++ )
-        {
-            var d = list[ i ];
-            if( d._nayiveInfo ) continue;
-            d._nayiveInfo = true;
-
-            if( d.tagName === "BUTTON" && ! d.getAttribute( "type" ) )
-                d.setAttribute( "type", "button" );
-            if( ! d.innerHTML.trim() ) d.innerHTML = Ayni.icon( "info" );
-            if( ! d.getAttribute( "aria-label" ) )
-                d.setAttribute( "data-i18n-attr",
-                                ( d.getAttribute( "data-i18n-attr" ) ? d.getAttribute( "data-i18n-attr" ) + ", " : "" )
-                                + "aria-label:ui.moreInfo" );
-
-            d.addEventListener( "click", onInfoClick );
-            d.addEventListener( "mouseenter", onInfoEnter );
-            d.addEventListener( "mouseleave", onInfoLeave );
-        }
-    }
-
-    //------------------------------------------------------------------------//
-    // APP KEY  - the <name> in /nayive/<name>/. Used as the first-run intro's
-    // per-app localStorage suffix and to switch the "back to the launcher"
-    // hint off on the launcher itself.
-
-    function appKey()
-    {
-        var m = ( location.pathname || "" ).match( /\/(?:nayive|apps)\/([^\/]+)/ );
-        return m ? m[ 1 ] : "app";
-    }
 
     // (CONFIRM / ALERT / ASK FOR ONE NAME are Ayni's: Ayni.confirm, Ayni.alert,
     // Ayni.ask - shared/ayni/ayni-dialogs.js.)
@@ -1057,231 +828,48 @@
     }
 
     //------------------------------------------------------------------------//
-    // HELP DIALOG  ("what is this app, and what does each toolbar button do")
-    //
-    //   NayiveUI.firstRun( {
-    //       app:   "photos",             // default: the <name> in /nayive/<name>/
-    //       title: "Photos",
-    //       lead:  "Las fotos de una carpeta de tu Drive.",   // optional summary
-    //                                     // (an array: one paragraph per entry)
-    //       buttons: [                   // one row per toolbar button
-    //           { sel: "#addBtn", text: "Sube fotos a esta carpeta." },
-    //           { sel: "[data-intro-open]", text: "Abre esta ayuda." },
-    //           { icon: "grid", name: "Vistas", text: "Cuadricula, mapa o pase." }
-    //       ],
-    //       // { section: "Ajustes" } in `buttons`: a line + subtitle, then the rows go on
-    //       tip: "Consejo: ...",          // extra line under the list (launcher)
-    //       autoShow: true,               // open on load until dismissed (launcher)
-    //       dismissible: true             // add a "No volver a mostrar" button
-    //   } );
-    //
-    // A row's glyph + name come from the real button named by `sel` (so they
-    // always match what is on screen); `text` is the hand-written explanation.
-    // `{ icon, name, text }` describes a row with no single button behind it;
-    // `icon` next to `sel` swaps just the glyph (two buttons that look alike).
-    // `svg` (ready markup) is for an app's own glyph that the shared set lacks.
-    // Apps never auto-open the dialog - it opens only from the toolbar "?"
-    // button ([data-intro-open], wired here) or NayiveUI.showIntro(). The launcher
-    // passes autoShow + dismissible: it re-opens every visit until the user
-    // clicks "No volver a mostrar" (localStorage "balata-intro-dismiss:<app>").
+    // HELP  - the "?" card, the guided tour, the first-visit marks and the info
+    // "i" are Ayni's (Ayni.help / Ayni.tour / Ayni.coach, .info-tip[data-help]:
+    // shared/ayni/ayni-help.js). Nayive adds only what is Nayive's own:
+    //  - every tour starts at the app's name ("home": tap it to go back);
+    //  - the first-visit marks ring the app's name and its "?", once for all
+    //    apps ("balata-coach-seen"), never in a Planner frame, nor in Chat
+    //    (its "?" opens its own cards: it never had them), nor on the launcher
+    //    (no app name there: Ayni gives up without using the flag).
 
-    var introOpts = null;
-    var introHeld = false;      // set by holdIntro() when something more important must own the screen
+    var HOME_SEL = ".app-icon.nayive-home-link, h1.nayive-home-link";
 
-    // Write / Calc / Text put a three-entry Ayuda menu on the "?" (Estadisticas,
-    // Atajos de teclado, Botones de la barra) instead of opening this card
-    // straight away - the card is one of the three entries. They say so with
-    // NayiveUI.setHelpMenu( true ) and open the menu themselves; the "?" keeps
-    // its data-intro-open, so the coach marks and placeHelpButton still find it.
-    var helpIsMenu = false;
+    function onScreen( el )
+    {
+        if( ! el || ! el.getBoundingClientRect ) return false;
+        var r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+    }
 
-    // Suppress the auto-opening help card for this page load and close it if it
-    // is already up. The launcher calls this when a first-time user must set a
-    // password before anything else.
+    if( window.Ayni && Ayni.tour )
+    {
+        Ayni.tour.add( "home", function () { return { sel: HOME_SEL, text: t( "ui.coach.home" ), optional: true }; }, "first" );
+        if( ! EMBEDDED && location.pathname.indexOf( "/nayive/chat/" ) !== 0 )
+            i18nReady.then( function ()
+            {
+                setTimeout( function ()
+                {
+                    Ayni.coach( [ { sel: HOME_SEL,           text: t( "ui.coach.home" ) },
+                                  { sel: "[data-help-open]", text: t( "ui.coach.help" ) } ],
+                                { key: "balata-coach-seen" } );
+                }, 700 );
+            } );
+    }
+
+    // Something more important owns the screen this load (the launcher's
+    // mandatory password): no help card, no first-visit marks, no install offer.
+    var introHeld = false;
     function holdIntro()
     {
         introHeld = true;
-        var x = document.querySelector( "dialog.panel[open] .intro-close" );
+        if( window.Ayni && Ayni.help ) Ayni.help.hold();
+        var x = document.querySelector( "dialog.panel[open] .install-close" );
         if( x ) x.click();
-    }
-
-    // The glyph for one list row: a named shared icon when the row gives one
-    // (it wins over `sel`, e.g. to tell two same-looking buttons apart), else
-    // the real button's <svg> (cloned so CSS sizes it), else the button's short
-    // text, else a dot.
-    function introGlyph( it, el )
-    {
-        var span = document.createElement( "span" );
-        span.className = "intro-btn-i";
-
-        var svg = el && el.querySelector && el.querySelector( "svg" );
-        if( it.svg )
-        {
-            span.innerHTML = it.svg;
-        }
-        else if( it.icon )
-        {
-            span.innerHTML = Ayni.icon( it.icon );
-        }
-        else if( svg )
-        {
-            var c = svg.cloneNode( true );
-            c.removeAttribute( "width" );
-            c.removeAttribute( "height" );
-            span.appendChild( c );
-        }
-        else
-        {
-            var t = el && ( el.textContent || "" ).trim();
-            span.textContent = t && t.length <= 2 ? t : "•";
-        }
-        return span;
-    }
-
-    function buildIntro( opts )
-    {
-        var app   = opts.app || appKey();
-        var d     = Ayni.dialog( { cls: "intro-sheet", title: opts.title } );
-        var sheet = d.body;
-
-        // One paragraph, or several: `lead` takes a string or an array of them,
-        // so an app can add a note under its summary without a new option.
-        if( opts.lead )
-        {
-            [].concat( opts.lead ).forEach( function ( line )
-            {
-                if( ! line ) return;
-                var p = document.createElement( "p" );
-                p.className   = "text";
-                p.textContent = String( line );
-                sheet.appendChild( p );
-            } );
-        }
-
-        // The guided tour, when the app has one: first thing under the lead.
-        // Not when the "?" is a menu (Write / Calc / Text): the tour is a
-        // menu entry there (#tourBtn, shared/office.js).
-        if( opts.tour && ! helpIsMenu )
-        {
-            var tb = document.createElement( "button" );
-            tb.type      = "button";
-            tb.className = "btn text primary sm intro-tour";
-            tb.innerHTML = Ayni.icon( "play" ) + "<span></span>";
-            tb.lastChild.textContent = t( "ui.tour.open" );
-            tb.addEventListener( "click", function ()
-            {
-                d.close();
-                setTimeout( function () { runTour( opts.tour, opts ); }, 250 );
-            } );
-            sheet.appendChild( tb );
-        }
-
-        var rows = opts.buttons || [];
-        if( rows.length )
-        {
-            var ul = document.createElement( "ul" );
-            ul.className = "intro-btns";
-
-            for( var i = 0; i < rows.length; i++ )
-            {
-                var it = rows[ i ];
-
-                // { section: "Title" }: a line, a subtitle, then a fresh list.
-                if( it.section )
-                {
-                    if( ul.children.length ) sheet.appendChild( ul );
-                    sheet.appendChild( document.createElement( "hr" ) ).className = "intro-sep";
-                    var sh = document.createElement( "h3" );
-                    sh.className   = "intro-sub";
-                    sh.textContent = it.section;
-                    sheet.appendChild( sh );
-                    ul = document.createElement( "ul" );
-                    ul.className = "intro-btns";
-                    continue;
-                }
-
-                var el = it.sel ? document.querySelector( it.sel ) : null;
-                if( it.sel && ! el ) continue;         // button not on this screen
-
-                var li = document.createElement( "li" );
-                li.appendChild( introGlyph( it, el ) );
-
-                var boxx = document.createElement( "div" );
-                boxx.className = "intro-btn-t";
-
-                var name = it.name
-                        || ( el && ( el.dataset.tip || el.getAttribute( "title" ) || el.getAttribute( "aria-label" ) ) )
-                        || "";
-                if( name )
-                {
-                    var nb = document.createElement( "b" );
-                    nb.textContent = name;
-                    boxx.appendChild( nb );
-                }
-                var tx = document.createElement( "span" );
-                tx.textContent = it.text || "";
-                boxx.appendChild( tx );
-
-                li.appendChild( boxx );
-                ul.appendChild( li );
-            }
-            sheet.appendChild( ul );
-        }
-
-        if( opts.tip )
-        {
-            var hint = document.createElement( "p" );
-            hint.className   = "text intro-home-hint";
-            hint.textContent = String( opts.tip );
-            sheet.appendChild( hint );
-        }
-
-        function finish() { d.close(); }
-
-        // Close (x) in the title row, like every other Nayive dialog: the
-        // header stays put while a long button list scrolls under it.
-        var xb = xButton( "btn intro-close", finish, opts.confirm );
-        xb.setAttribute( "data-close", "" );
-        d.header.appendChild( xb );
-
-        // The launcher keeps its wide "No volver a mostrar" button at the bottom.
-        if( opts.dismissible )
-        {
-            var row = d.footer;
-            var db = document.createElement( "button" );
-            db.type      = "button";
-            db.className = "intro-dismiss";
-            db.textContent = opts.dismissLabel || t( "ui.dontShowAgain" );
-            db.addEventListener( "click", function ()
-            {
-                try { localStorage.setItem( "balata-intro-dismiss:" + app, "1" ); }
-                catch ( e ) {}
-                finish();
-            } );
-            row.appendChild( db );
-        }
-
-        d.show();
-    }
-
-    function introDismissed( app )
-    {
-        try { return localStorage.getItem( "balata-intro-dismiss:" + app ) === "1"; }
-        catch ( e ) { return true; }        // no storage -> treat as dismissed
-    }
-
-    function doShowIntro( opts, deferIfBusy )
-    {
-        opts = opts || introOpts;
-        if( ! opts || introHeld ) return;
-
-        // don't stack on top of a folder picker / other open sheet
-        if( deferIfBusy && document.querySelector( "dialog.panel[open]" ) )
-        {
-            setTimeout( function () { doShowIntro( opts, false ); }, 800 );
-            return;
-        }
-        buildIntro( opts );
     }
 
     //------------------------------------------------------------------------//
@@ -1447,887 +1035,6 @@
                 if( e.data && e.data.chat === "new" ) askChatUnread();
             } );
     }
-
-    //------------------------------------------------------------------------//
-    // COACH MARKS  - the two bubbles a brand-new user sees ONCE, ever
-    //
-    // The first time anybody opens ANY Nayive app (one flag for all of them,
-    // localStorage "balata-coach-seen") a dim overlay rings the two things a
-    // novice never finds on their own and hangs a small bubble off each:
-    //
-    //     [icono] Fotos   <- "toca el nombre o el icono y vuelves al inicio"
-    //     [?]             <- "aqui esta la ayuda de esta aplicacion"
-    //
-    // Each bubble carries its own (x) in its top-right corner, but that corner
-    // shows a 9..1 countdown first: the (x) only works once the count is over,
-    // so the two lines cannot be swatted away before they have been read.
-    // Escape is swallowed for the same 9 seconds.
-    //
-    // It never shows on the launcher (no app icon and no "?" there). The flag is
-    // written the moment the count reaches 0 - not when the bubbles are closed,
-    // and not when they open - so whoever sat through the 9 seconds never sees
-    // it again, while whoever quit the app first meets it in the next one.
-    // showCoach( true ) forces it back for a demo or a test.
-
-    var COACH_KEY  = "balata-coach-seen";
-    var COACH_SECS = 9;
-    var coachOpen  = false;
-
-    function coachSeen()
-    {
-        try { return localStorage.getItem( COACH_KEY ) === "1"; }
-        catch ( e ) { return true; }          // no storage -> never nag
-    }
-
-    function onScreen( el )
-    {
-        if( ! el || ! el.getBoundingClientRect ) return false;
-        var r = el.getBoundingClientRect();
-        return r.width > 0 && r.height > 0;
-    }
-
-    // A plain box from a DOMRect, and the box that holds two of them (the app
-    // icon and its <h1> are one single target).
-    function boxOf( el )
-    {
-        var r = el.getBoundingClientRect();
-        return { left: r.left, top: r.top, right: r.right, bottom: r.bottom,
-                 width: r.width, height: r.height };
-    }
-
-    function boxUnion( a, b )
-    {
-        var l = Math.min( a.left, b.left ), t2 = Math.min( a.top, b.top );
-        var r = Math.max( a.right, b.right ), b2 = Math.max( a.bottom, b.bottom );
-        return { left: l, top: t2, right: r, bottom: b2, width: r - l, height: b2 - t2 };
-    }
-
-    // The two things we point at, or null while they are not on screen yet
-    // (trips builds its header - and its "?" - in JS, well after firstRun).
-    function coachTargets()
-    {
-        var ico  = document.querySelector( ".app-icon.nayive-home-link" );
-        var h1   = document.querySelector( "h1.nayive-home-link" );
-        var help = document.querySelector( "[data-intro-open]" );
-
-        var home = [];
-        if( onScreen( ico ) ) home.push( ico );
-        if( onScreen( h1 )  ) home.push( h1 );
-        if( ! home.length || ! onScreen( help ) ) return null;
-
-        return [
-            { els:  home,
-              text: t( "ui.coach.home" ) },
-            { els:  [ help ],
-              text: t( "ui.coach.help" ) }
-        ];
-    }
-
-    function buildCoach( items )
-    {
-        var over = document.createElement( "div" );
-        over.className = "coach-overlay";
-        over.setAttribute( "role", "dialog" );
-        over.setAttribute( "aria-modal", "true" );
-
-        // Nothing behind the overlay can be touched while it is up: the overlay
-        // covers the viewport and eats the tap itself (a tap on the very "?" we
-        // are pointing at must not open the help sheet UNDER the bubble). Only
-        // the bubbles opt back in - see .coach-layer in app.css.
-
-        // Two layers so a later mark's ring / hairline never draws over an
-        // earlier mark's bubble: rings and lines below, bubbles on top.
-        var back = document.createElement( "div" );
-        back.className = "coach-layer";
-        over.appendChild( back );
-
-        var front = document.createElement( "div" );
-        front.className = "coach-layer";
-        over.appendChild( front );
-
-        var marks = [];
-
-        for( var i = 0; i < items.length; i++ ) marks.push( makeMark( items[ i ] ) );
-
-        function makeMark( it )
-        {
-            var ring = document.createElement( "div" );        // outline around the target
-            ring.className = "coach-ring";
-
-            var line = document.createElement( "div" );        // hairline ring -> bubble
-            line.className = "coach-line";
-
-            var bub = document.createElement( "div" );
-            bub.className = "coach-bubble";
-
-            var arrow = document.createElement( "span" );      // the bubble's pointer
-            arrow.className = "coach-arrow";
-            bub.appendChild( arrow );
-
-            var btn = document.createElement( "button" );      // countdown, then (x)
-            btn.type      = "button";
-            btn.className = "coach-close";
-            btn.ariaDisabled  = true;
-            Ayni.setTip( btn, t( "ui.coach.wait" ) );
-            btn.setAttribute( "aria-label", btn.dataset.tip );
-            bub.appendChild( btn );
-
-            var p = document.createElement( "p" );
-            p.textContent = it.text;
-            bub.appendChild( p );
-
-            back.appendChild( ring );
-            back.appendChild( line );
-            front.appendChild( bub );
-
-            var m = { it: it, ring: ring, line: line, bub: bub, arrow: arrow,
-                      btn: btn, alive: true };
-            btn.addEventListener( "click", function () { closeMark( m ); } );
-            return m;
-        }
-
-        // Where this mark's target is right now (both header pieces together).
-        function targetBox( m )
-        {
-            var box = null;
-            for( var i = 0; i < m.it.els.length; i++ )
-            {
-                var el = m.it.els[ i ];
-                if( ! onScreen( el ) ) continue;
-                box = box ? boxUnion( box, boxOf( el ) ) : boxOf( el );
-            }
-            return box;
-        }
-
-        // Lay the rings and the bubbles out over the live page. Re-run on every
-        // resize / scroll / close, so a bubble never drifts off its button.
-        function place()
-        {
-            var vw = window.innerWidth, vh = window.innerHeight, PAD = 8, taken = [];
-            var boxes = [];
-
-            // The ringed buttons are obstacles too: a bubble that lands on top
-            // of the other target hides the very thing it is pointing at (the
-            // phone header wraps, so the "?" sits right under the app icon).
-            for( var j = 0; j < marks.length; j++ )
-            {
-                boxes[ j ] = marks[ j ].alive ? targetBox( marks[ j ] ) : null;
-                if( boxes[ j ] )
-                    taken.push( { left: boxes[ j ].left - 6, top: boxes[ j ].top - 6,
-                                  w: boxes[ j ].width + 12, h: boxes[ j ].height + 12 } );
-            }
-
-            for( var i = 0; i < marks.length; i++ )
-            {
-                var m = marks[ i ];
-                if( ! m.alive ) continue;
-
-                var r = boxes[ i ];
-                if( ! r )                       // target went away (a mode switch)
-                {
-                    m.ring.hidden = m.line.hidden = m.bub.hidden = true;
-                    continue;
-                }
-                m.ring.hidden = m.line.hidden = m.bub.hidden = false;
-
-                m.ring.style.left   = ( r.left   -  5 ) + "px";
-                m.ring.style.top    = ( r.top    -  5 ) + "px";
-                m.ring.style.width  = ( r.width  + 10 ) + "px";
-                m.ring.style.height = ( r.height + 10 ) + "px";
-
-                var bw = m.bub.offsetWidth, bh = m.bub.offsetHeight;
-                var cx = r.left + r.width / 2;
-
-                var below = r.bottom + 16 + bh + PAD <= vh;     // the header case
-                var top   = below ? r.bottom + 16 : r.top - 16 - bh;
-                var left  = Math.max( PAD, Math.min( cx - bw / 2, vw - bw - PAD ) );
-
-                // Push this bubble under anything already claimed - a ringed
-                // button or a bubble placed before it (top only ever grows, so
-                // the walk always ends).
-                for( var k = 0; k < taken.length; k++ )
-                {
-                    var o = taken[ k ];
-                    if( left < o.left + o.w + 6 && o.left < left + bw + 6 &&
-                        top  < o.top  + o.h + 6 && o.top  < top  + bh + 6 )
-                    {
-                        top = o.top + o.h + 14;
-                        k   = -1;               // start the check again
-                    }
-                }
-                top = Math.max( PAD, Math.min( top, vh - bh - PAD ) );
-                taken.push( { left: left, top: top, w: bw, h: bh } );
-
-                m.bub.style.left = left + "px";
-                m.bub.style.top  = top  + "px";
-                m.bub.classList.toggle( "coach-bubble--up", ! below );
-
-                // The pointer always sits over the target's centre...
-                m.arrow.style.left = Math.max( 12, Math.min( cx - left, bw - 12 ) ) + "px";
-
-                // ...and a hairline joins it to the ring when the bubble had to
-                // move away (phone, second bubble pushed down).
-                var lTop = below ? r.bottom + 5 : top + bh;
-                var lBot = below ? top          : r.top - 5;
-                m.line.style.left   = ( cx - 1 ) + "px";
-                m.line.style.top    = lTop + "px";
-                m.line.style.height = Math.max( 0, lBot - lTop ) + "px";
-            }
-        }
-
-        //--- the shared 9-second countdown -----------------------------------
-        var secs  = COACH_SECS;
-        var timer = null;
-
-        function paint()
-        {
-            for( var i = 0; i < marks.length; i++ )
-            {
-                var b = marks[ i ].btn;
-                if( secs > 0 ) { b.textContent = String( secs ); continue; }
-
-                b.innerHTML = Ayni.icon( "close" );
-                b.ariaDisabled  = false;
-                Ayni.setTip( b, t( "ui.close" ) );
-                b.setAttribute( "aria-label", b.dataset.tip );
-            }
-
-            // Count over = it has been read: remember it and never show it
-            // again. Written HERE, not when the overlay opens, so somebody who
-            // closes the app after 3 seconds still meets it in the next one.
-            if( secs <= 0 )
-            {
-                try { localStorage.setItem( COACH_KEY, "1" ); }
-                catch ( e ) {}
-            }
-        }
-
-        function onKey( e )
-        {
-            if( e.key !== "Escape" ) return;
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();       // no app shortcut fires either
-            if( secs <= 0 ) finish();
-        }
-
-        function closeMark( m )
-        {
-            if( ! m.alive || secs > 0 ) return;
-            m.alive = false;
-            [ m.ring, m.line, m.bub ].forEach( function ( n )
-            {
-                if( n.parentNode ) n.parentNode.removeChild( n );
-            } );
-
-            for( var i = 0; i < marks.length; i++ ) if( marks[ i ].alive ) { place(); return; }
-            finish();
-        }
-
-        var done = false;
-        function finish()
-        {
-            if( done ) return;
-            done = true;
-            if( timer ) clearInterval( timer );
-            follow( false, place, onKey );
-            if( over.parentNode ) over.parentNode.removeChild( over );
-            coachOpen = false;
-        }
-
-        document.body.appendChild( over );
-        paint();
-        place();
-        requestAnimationFrame( place );         // once the bubbles have their real size
-        over.classList.add( "open" );
-
-        timer = setInterval( function ()
-        {
-            secs--;
-            paint();
-            if( secs <= 0 ) { clearInterval( timer ); timer = null; }
-        }, 1000 );
-
-        follow( true, place, onKey );
-    }
-
-    // Show the coach marks now. `force` ignores the "seen it" flag (demo/test).
-    function showCoach( force )
-    {
-        if( coachOpen || introHeld ) return false;
-        if( ! force && coachSeen() ) return false;
-
-        var items = coachTargets();
-        if( ! items ) return false;
-
-        coachOpen = true;
-        buildCoach( items );        // the "seen it" flag is set when the count ends
-        return true;
-    }
-
-    // Called from firstRun in every app. The header may still be JS-built
-    // (trips) or a folder picker may own the screen (photos / music / movies on
-    // their very first run), so keep looking for a while - and if we give up,
-    // give up WITHOUT setting the flag, so the next app gets its turn.
-    function maybeCoach( tries )
-    {
-        // Framed (Planner): the icon / title it would ring are hidden, and the
-        // host page is where a newcomer is looking anyway.
-        if( EMBEDDED || coachOpen || coachSeen() || introHeld ) return;
-
-        var busy = !! document.querySelector( "dialog.panel[open]" );
-        if( ! busy && showCoach( false ) ) return;
-
-        if( tries < ( busy ? 100 : 15 ) )
-            setTimeout( function () { maybeCoach( tries + 1 ); }, 600 );
-    }
-
-    function firstRun( opts )
-    {
-        introOpts = opts || {};
-
-        if( ! firstRun._wired )
-        {
-            firstRun._wired = true;
-            document.addEventListener( "click", function ( e )
-            {
-                var t = e.target;
-                // The app's own Ayuda menu (setHelpMenu): the "?" opens it by
-                // itself (popovertarget), so its click is left alone.
-                if( t && t.closest && t.closest( "[data-intro-open]" ) && ! helpIsMenu )
-                {
-                    e.preventDefault();
-                    doShowIntro( introOpts, false );
-                }
-            }, true );
-        }
-
-        // Apps never auto-open. The launcher passes autoShow and re-opens every
-        // visit until the user dismisses it for good.
-        if( introOpts.autoShow && ! introDismissed( introOpts.app || appKey() ) )
-            setTimeout( function () { doShowIntro( introOpts, true ); }, 400 );
-
-        // Brand-new user, first app ever: point at the two things nobody finds
-        // on their own (see COACH MARKS). Once in a lifetime, all apps share it.
-        setTimeout( function () { maybeCoach( 0 ); }, 700 );
-    }
-
-    function showIntro( opts ) { doShowIntro( opts || introOpts, false ); }
-
-    // Re-point the "?" at another card without re-running firstRun (which would
-    // also restart the coach-mark polling). For an app whose one screen becomes
-    // two: Split calls it from render() with the list card or the group card.
-    function setIntro( opts ) { if( opts ) introOpts = opts; }
-
-    // "The ? opens my own Ayuda menu, not the card." See helpIsMenu above.
-    function setHelpMenu( on ) { helpIsMenu = on !== false; }
-
-    //------------------------------------------------------------------------//
-    // GUIDED TOUR  - a spotlight walk through the app, one button at a time
-    //
-    //   NayiveUI.firstRun( { ..., tour: [ step, ... ] } )   // or a function that
-    //                                                       // returns them at start;
-    //                                                       // true = [ "buttons" ]
-    //   step = "buttons"         // the help card's rows, in order (helpSteps)
-    //        | "search"          // a SHARED step by name (TOUR_SHARED below):
-    //                            // "search", "more", "pick", "picked"
-    //        | { use: "pick", ghost: "#empty" }   // a shared step, some fields changed
-    //        | {
-    //     sel:   "#addBtn",      // what to light up (the first one on screen)
-    //     text:  "...",          // the bubble
-    //     title: "...",          // optional bold line over the text
-    //     tap:   true,           // the user taps it to go on; the tap reaches the
-    //                            // app (Siguiente taps it for them)
-    //     open:  "#moreBtn",     // `sel` hides behind this (a folded panel, a
-    //                            // tab, a menu): tapped first, tapped again on
-    //                            // leaving. A list is a chain, each opener
-    //                            // showing the next. A hidden button with a menu
-    //                            // twin (data-menu="<its id>") lights the twin
-    //     ghost: "#list",        // `sel` is not there yet (no items): ring this
-    //     icon:  "check",        // area instead, with this glyph in the bubble
-    //     optional: true,        // not in this layout at all (Planner's frame):
-    //                            // dropped when the tour starts
-    //     picked: true,          // needs a row picked (a selection action): the
-    //                            // first row is picked, and let go after the
-    //                            // last step in a row of such steps
-    //     before / after: fn     // anything else the step sets up / puts back
-    //   }
-    //
-    // Nothing is skipped: a hidden button is reached the way a user would reach
-    // it and a missing one gets its ghost; with none of them the bubble shows
-    // centred, still with its text. A toolbar button that fitBar moved into
-    // the ⋮ (no room) needs nothing from the app: the tour opens the ⋮ and
-    // lights its row. Every tour starts at the app's name ("home") and ends
-    // at the "?" itself. It never opens on its own: the help card's "Ver el
-    // tour" button (or NayiveUI.tour()) starts it.
-
-    var tourOpen = false;
-
-    // An opener whose menu or popup is not showing (any more).
-    function shut( o )
-    {
-        var id = o.getAttribute( "popovertarget" ), p = id && document.getElementById( id );
-        if( p ) return ! p.matches( ":popover-open" );
-        return o.getAttribute( "aria-expanded" ) === "false";
-    }
-
-    function firstShown( sel )
-    {
-        if( ! sel ) return null;
-        var all = document.querySelectorAll( sel );
-        for( var i = 0; i < all.length; i++ ) if( onScreen( all[ i ] ) ) return all[ i ];
-        return null;
-    }
-
-    // The steps every app has, with one text for all of them. "pick" and
-    // "picked" are the item list's (Ayni.list): the tick of a
-    // row, then the selection group in the header with that row picked.
-    var TOUR_SHARED = {
-        home:   function () { return { sel: ".app-icon.nayive-home-link, h1.nayive-home-link", text: t( "ui.coach.home" ), optional: true }; },
-        search: function () { return { sel: "[data-search]", text: t( "ui.tour.search" ) }; },
-        more:   function () { return { sel: ".fit-more", text: t( "ui.tour.more" ), optional: true }; },
-        pick:   function () { return { sel: ".pick-tick", ghost: "[aria-selected]", tap: true, text: t( "ui.tour.pick" ) }; },
-        picked: function () { return { sel: ".pick-group:not([hidden])", text: t( "ui.tour.picked" ), picked: true }; },
-        help:   function () { return { sel: "[data-intro-open]", text: t( "ui.tour.helpAgain" ), optional: true }; }
-    };
-
-    // "picked" with nothing picked (Siguiente on a phone, where the ticks only
-    // show while picking): pick the first row the way its tick would.
-    function tourPickOne()
-    {
-        if( firstShown( ".pick-group:not([hidden])" ) ) return;
-        var tk = document.querySelector( "[aria-selected] .pick-tick" );
-        if( tk ) tk.click();
-    }
-    function tourUnpick()
-    {
-        var x = firstShown( '.pick-group [data-pick="clear"]' );
-        if( x ) x.click();
-    }
-
-    // The help card's rows as tour steps ("buttons" in a tour): a row with a
-    // `sel` lights that button with the row's text (its name, if given, as the
-    // title); a row with no `sel` is an idea, not a button, and joins only
-    // with a `tour: { sel / ghost ... }` of its own; `tour: false` keeps a row
-    // out. A row whose button this layout does not have at all is left out,
-    // as the card leaves it out.
-    function helpSteps( rows )
-    {
-        var out = [];
-        ( rows || [] ).forEach( function ( r )
-        {
-            if( ! r || r.section || r.tour === false ) return;
-            if( ! r.sel && ! r.tour ) return;
-            var st = { sel: r.sel, text: r.text, title: r.name || "", optional: ! r.tour };
-            if( r.icon ) st.icon = r.icon;
-            if( r.tour ) for( var k in r.tour ) st[ k ] = r.tour[ k ];
-            out.push( st );
-        } );
-        return out;
-    }
-
-    // src: the steps (or a function returning them); help: the help card's
-    // options, whose `buttons` the "buttons" step expands. `tour: true` is
-    // [ "buttons" ].
-    function tourSteps( src, help )
-    {
-        var s = typeof src === "function" ? src() : src;
-        if( s === true ) s = [ "buttons" ];
-        var list = [];
-        [ "home" ].concat( s || [], [ "help" ] ).forEach( function ( it )
-        {
-            if( it === "buttons" ) { list = list.concat( helpSteps( help && help.buttons ) ); return; }
-            if( ! it ) return;
-            if( typeof it === "string" ) { if( TOUR_SHARED[ it ] ) list.push( TOUR_SHARED[ it ]() ); return; }
-            if( ! it.use || ! TOUR_SHARED[ it.use ] ) { list.push( it ); return; }
-            var base = TOUR_SHARED[ it.use ]();
-            for( var k in it ) if( k !== "use" ) base[ k ] = it[ k ];
-            list.push( base );
-        } );
-        // The "?" closes every tour once: a help row naming it gives way.
-        var last = list.length - 1;
-        list = list.filter( function ( it, i ) { return i === last || it.sel !== "[data-intro-open]"; } );
-        // Only what this layout has at all: an optional step needs its button
-        // on screen or tucked in the ⋮.
-        return list.filter( function ( it )
-        {
-            return it && ( ! it.optional || it.open || firstShown( it.sel ) || inFitMenu( it.sel ) );
-        } );
-    }
-
-    // The menu row standing for a hidden button: Write / Calc / Text build
-    // their File and Ayuda menus FROM hidden buttons (shared/office.js
-    // buttonMenu), each row carrying data-menu="<the button's id>".
-    function menuTwin( sel )
-    {
-        var all = sel ? document.querySelectorAll( sel ) : [];
-        for( var i = 0; i < all.length; i++ )
-        {
-            var r = all[ i ].id && firstShown( '.panel.menu [data-menu="' + all[ i ].id + '"]' );
-            if( r ) return r;
-        }
-        return null;
-    }
-
-    // A toolbar button that Ayni.fitBar moved into the ⋮ for
-    // lack of room: { opener: the ⋮, row: () => its menu row once open }.
-    function inFitMenu( sel )
-    {
-        var all = sel ? document.querySelectorAll( sel ) : [];
-        for( var i = 0; i < all.length; i++ )
-        {
-            var out = all[ i ].closest( ".fit-out" );
-            if( ! out ) continue;
-            var h = out;
-            while( h && ! h.ayniFitBar ) h = h.parentElement;
-            var more = h && h.ayniFitBar.button;
-            if( ! more || ! onScreen( more ) ) continue;
-
-            var b  = all[ i ].matches( "button" ) ? all[ i ] : out.querySelector( "button:not([hidden])" ) || out;
-            var id = b.id || b.dataset.selAct || b.dataset.act || "";
-            var label = ( b.getAttribute( "aria-label" ) || b.title || "" ).trim();
-            return {
-                opener: more,
-                row: function ()
-                {
-                    var rows = document.querySelectorAll( "#ayni-menu:popover-open [role^='menuitem']" );
-                    for( var j = 0; j < rows.length; j++ )
-                    {
-                        var r = rows[ j ], txt = ( r.querySelector( ".label" ) || r ).textContent.trim();
-                        if( id ? r.dataset.act === id
-                               : label && label.indexOf( txt ) === 0 ) return onScreen( r ) ? r : null;
-                    }
-                    return null;
-                }
-            };
-        }
-        return null;
-    }
-
-    function runTour( steps, help )
-    {
-        steps = tourSteps( steps, help );
-        if( tourOpen || ! steps.length ) return false;
-        tourOpen = true;
-
-        var over = document.createElement( "div" );
-        over.className = "tour-overlay";
-        over.setAttribute( "role", "dialog" );
-        over.setAttribute( "aria-modal", "true" );
-
-        // Four dim panes around the hole, a clear lid over it (gone on a tap
-        // step, so the tap reaches the real button), the ring, the bubble.
-        var panes = [];
-        for( var i = 0; i < 4; i++ )
-        {
-            panes.push( over.appendChild( document.createElement( "div" ) ) );
-            panes[ i ].className = "tour-pane";
-        }
-        var lid  = over.appendChild( document.createElement( "div" ) );
-        lid.className = "tour-lid";
-        var ring = over.appendChild( document.createElement( "div" ) );
-        ring.className = "coach-ring tour-ring";
-
-        var bub = over.appendChild( document.createElement( "div" ) );
-        bub.className = "coach-bubble tour-bubble";
-        var arrow = bub.appendChild( document.createElement( "span" ) );
-        arrow.className = "coach-arrow";
-
-        var xb = bub.appendChild( xButton( "coach-close", null, t( "ui.tour.quit" ) ) );
-
-        var head  = bub.appendChild( document.createElement( "div" ) );
-        head.className = "tour-head";
-        var glyph = head.appendChild( document.createElement( "span" ) );
-        glyph.className = "intro-btn-i";
-        var title = head.appendChild( document.createElement( "b" ) );
-
-        var para = bub.appendChild( document.createElement( "p" ) );
-        var note = bub.appendChild( document.createElement( "p" ) );
-        note.className = "tour-note";
-
-        var row  = bub.appendChild( document.createElement( "div" ) );
-        row.className = "tour-row";
-        var count = row.appendChild( document.createElement( "span" ) );
-        count.className = "tour-count";
-        var back = row.appendChild( document.createElement( "button" ) );
-        back.type      = "button";
-        back.className = "btn text bordered sm";
-        back.textContent = t( "ui.tour.back" );
-        var next = row.appendChild( document.createElement( "button" ) );
-        next.type      = "button";
-        next.className = "btn text primary sm";
-
-        var idx = -1, cur = null, token = 0, ended = false;
-
-        // What a step opened, shut again from the last: an opener is pressed
-        // again only while what it revealed - the next opener, or for the last
-        // one the lit row - is still out (a press elsewhere may have shut it).
-        function leave( to )
-        {
-            if( ! cur ) return;
-            var c = cur;
-            cur = null;
-            if( c.s.picked && ! ( steps[ to ] && steps[ to ].picked ) ) tourUnpick();
-            if( c.s.after ) { try { c.s.after(); } catch ( e ) {} }
-            // The next step opens the same thing (the File menu, row after
-            // row): it stays open - no flicker - and the next step shuts it.
-            if( steps[ to ] && c.s.open && JSON.stringify( steps[ to ].open ) === JSON.stringify( c.s.open ) ) return c.opened;
-            for( var i = c.opened.length - 1; i >= 0; i-- )
-            {
-                var shown = i === c.opened.length - 1 ? c.find() : onScreen( c.opened[ i + 1 ] );
-                if( shown && onScreen( c.opened[ i ] ) ) c.opened[ i ].click();
-            }
-            return [];
-        }
-
-        function go( i )
-        {
-            var carried = leave( i ) || [];
-            if( i >= steps.length ) { finish(); return; }
-            idx = Math.max( 0, i );
-            var my = ++token;
-            var s  = steps[ idx ];
-            cur = { s: s, el: null, opened: carried, find: function () { return firstShown( s.sel ) || ( s.open ? menuTwin( s.sel ) : null ); } };
-            if( s.picked ) tourPickOne();
-            if( s.before ) { try { s.before(); } catch ( e ) {} }
-
-            var el = cur.find();
-            if( el || ! s.sel ) { show( el ); return; }
-
-            // Not on screen: open what hides it - the app's `open` (one opener,
-            // or a chain: each one shows the next), else the ⋮ fitBar put it in -
-            // or give a tap / a re-render a moment to bring it in.
-            var chain = [].concat( s.open || [] ), fm = null;
-            if( ! chain.some( function ( o ) { return firstShown( o ); } ) && ( fm = inFitMenu( s.sel ) ) )
-            {
-                chain = [ fm.opener ];
-                cur.find = fm.row;
-            }
-            if( ! chain.length && firstShown( s.ghost ) ) { show( null ); return; }
-            bub.hidden = true;
-            var end = Date.now() + 500;
-            ( function poll()
-            {
-                if( my !== token ) return;
-                var e = cur.find();
-                if( e ) { show( e ); return; }
-                // The next opener in the chain that is out and not pressed yet -
-                // or pressed, but its menu has closed since: a press on the
-                // tour (Siguiente) is a press outside the menu, and the browser
-                // closes it (Ayni's menus are popovers).
-                for( var k = 0; k < chain.length; k++ )
-                {
-                    var o = typeof chain[ k ] === "string" ? firstShown( chain[ k ] ) : ( onScreen( chain[ k ] ) ? chain[ k ] : null );
-                    if( ! o || cur.find() ) continue;
-                    var was = cur.opened.indexOf( o ) >= 0;
-                    if( was ? shut( o ) : k >= cur.opened.length )
-                    {
-                        o.click();
-                        if( ! was ) cur.opened.push( o );
-                        end = Date.now() + 1500;
-                        break;
-                    }
-                }
-                if( Date.now() >= end ) { show( null ); return; }
-                setTimeout( poll, 80 );
-            } )();
-        }
-
-        function show( el )
-        {
-            var s = cur.s;
-            cur.el    = el;
-            cur.ghost = el ? null : firstShown( s.ghost );
-            var target = el || cur.ghost;
-            if( target && target.scrollIntoView ) target.scrollIntoView( { block: "nearest", inline: "nearest" } );
-
-            var tap = !! ( el && s.tap );
-            over.classList.toggle( "is-tap", tap );
-            ring.classList.toggle( "is-ghost", !! cur.ghost );
-
-            glyph.hidden = ! ( cur.ghost && s.icon );
-            if( ! glyph.hidden ) glyph.innerHTML = Ayni.icon( s.icon );
-            title.textContent = s.title || "";
-            head.hidden = glyph.hidden && ! s.title;
-            para.textContent = s.text || "";
-            note.textContent = tap ? t( "ui.tour.tapIt" ) : cur.ghost ? t( "ui.tour.ghost" )
-                             : el && cur.opened.length && cur.opened[ 0 ].classList.contains( "fit-more" ) ? t( "ui.tour.inMore" ) : "";
-            note.hidden = ! note.textContent;
-
-            count.textContent = tf( "ui.tour.step", { n: idx + 1, m: steps.length } );
-            back.hidden = idx === 0;
-            next.textContent = idx === steps.length - 1 ? t( "ui.tour.done" ) : t( "ui.tour.next" );
-
-            bub.hidden = false;
-            place();
-            requestAnimationFrame( place );
-            try { next.focus( { preventScroll: true } ); } catch ( e ) {}
-        }
-
-        function setBox( n, l, tp, w, h )
-        {
-            n.style.left   = l + "px";
-            n.style.top    = tp + "px";
-            n.style.width  = Math.max( 0, w ) + "px";
-            n.style.height = Math.max( 0, h ) + "px";
-        }
-
-        // The tour is a popover in the top layer, so it shows over the menus
-        // and popups it points into (Ayni's popovers, top layer too). Above an
-        // open dialog it lives in the innermost one: outside it, the modal
-        // dialog would cover it and keep its presses. A menu or popup opened
-        // after it would cover it, so it is shown again, on top (`lift`).
-        // Checked on every placing, when a dialog closes, and when a menu or
-        // popup opens.
-        function hostOver( lift )
-        {
-            if( ended ) return;
-            var dl = [].filter.call( document.querySelectorAll( "dialog[open]" ), function ( d ) { return d.matches( ":modal" ); } ).pop();
-            var host = dl || document.body;
-            if( over.parentNode !== host )
-            {
-                if( over.matches( ":popover-open" ) ) over.hidePopover();
-                host.appendChild( over );
-            }
-            if( over.popover !== "manual" ) over.popover = "manual";
-            if( lift && over.matches( ":popover-open" ) )
-            {
-                var f = document.activeElement;
-                over.hidePopover();
-                over.showPopover();
-                if( f && over.contains( f ) ) try { f.focus( { preventScroll: true } ); } catch ( e ) {}
-            }
-            if( ! over.matches( ":popover-open" ) ) over.showPopover();
-        }
-        function onDialogClose() { setTimeout( function () { hostOver(); place(); } ); }
-        function onPopOpen( e )
-        {
-            if( e.newState !== "open" || e.target === over || ! e.target.matches || ! e.target.matches( ".panel.menu, .panel.popup" ) ) return;
-            setTimeout( function () { hostOver( true ); place(); } );
-        }
-
-        function place()
-        {
-            hostOver();
-            if( ! cur || bub.hidden ) return;
-            var vw = window.innerWidth, vh = window.innerHeight, PAD = 8;
-            var target = ( cur.el && onScreen( cur.el ) ) ? cur.el
-                       : ( cur.ghost && onScreen( cur.ghost ) ) ? cur.ghost : null;
-
-            var bw = bub.offsetWidth, bh = bub.offsetHeight;
-
-            if( ! target )                      // nothing to point at: centred
-            {
-                setBox( panes[ 0 ], 0, 0, vw, vh );
-                for( var k = 1; k < 4; k++ ) setBox( panes[ k ], 0, 0, 0, 0 );
-                lid.hidden = ring.hidden = arrow.hidden = true;
-                bub.style.left = Math.max( PAD, ( vw - bw ) / 2 ) + "px";
-                bub.style.top  = Math.max( PAD, ( vh - bh ) / 2 ) + "px";
-                return;
-            }
-            lid.hidden = ring.hidden = arrow.hidden = false;
-
-            // The hole: the target plus a margin, kept inside the viewport.
-            var r = target.getBoundingClientRect();
-            var L = Math.max( 0, r.left - 5 ),  T = Math.max( 0, r.top - 5 );
-            var R = Math.min( vw, r.right + 5 ), B = Math.min( vh, r.bottom + 5 );
-
-            setBox( panes[ 0 ], 0, 0, vw, T );                  // above
-            setBox( panes[ 1 ], 0, B, vw, vh - B );             // below
-            setBox( panes[ 2 ], 0, T, L, B - T );               // left
-            setBox( panes[ 3 ], R, T, vw - R, B - T );          // right
-            setBox( lid,  L, T, R - L, B - T );
-            setBox( ring, L, T, R - L, B - T );
-
-            // Bubble under the hole, else over it, else inside its lower part
-            // (a big area like a month grid).
-            var cx = ( L + R ) / 2, top, up = false;
-            if( B + 14 + bh + PAD <= vh )      top = B + 14;
-            else if( T - 14 - bh >= PAD )      { top = T - 14 - bh; up = true; }
-            else                               top = vh - bh - PAD;
-            var left = Math.max( PAD, Math.min( cx - bw / 2, vw - bw - PAD ) );
-
-            bub.style.left = left + "px";
-            bub.style.top  = top  + "px";
-            bub.classList.toggle( "coach-bubble--up", up );
-            arrow.hidden = top < B && top + bh > T;            // sits on the target
-            arrow.style.left = Math.max( 12, Math.min( cx - left, bw - 12 ) ) + "px";
-        }
-
-        // A tap on the lit target of a tap step: let the app act, then go on.
-        function onTap( e )
-        {
-            if( ! cur || ! cur.el || ! cur.s.tap ) return;
-            if( ! cur.el.contains( e.target ) ) return;
-            var want = idx + 1;
-            setTimeout( function () { if( ! ended && idx === want - 1 ) go( want ); }, 0 );
-        }
-
-        function onKey( e )
-        {
-            if( e.key === "Escape" )
-            {
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                finish();
-            }
-            else if( e.key === "ArrowRight" ) { e.preventDefault(); next.click(); }
-            else if( e.key === "ArrowLeft" && idx > 0 ) { e.preventDefault(); go( idx - 1 ); }
-        }
-
-        // Taps on the dim panes / the lid end here: the page behind never sees
-        // them (an outside-click would close a menu we opened).
-        [ "click", "pointerdown", "mousedown", "touchstart" ].forEach( function ( ev )
-        {
-            over.addEventListener( ev, function ( e ) { e.stopPropagation(); } );
-        } );
-
-        xb.addEventListener( "click", finish );
-        back.addEventListener( "click", function () { go( idx - 1 ); } );
-        next.addEventListener( "click", function ()
-        {
-            if( cur && cur.el && cur.s.tap && onScreen( cur.el ) ) cur.el.click();   // onTap goes on
-            else go( idx + 1 );
-        } );
-
-        function finish()
-        {
-            if( ended ) return;
-            ended = true;
-            token++;
-            leave();
-            document.removeEventListener( "click", onTap, true );
-            document.removeEventListener( "close", onDialogClose, true );
-            document.removeEventListener( "toggle", onPopOpen, true );
-            follow( false, place, onKey );
-            if( over.parentNode ) over.parentNode.removeChild( over );
-            tourOpen = false;
-        }
-
-        document.body.appendChild( over );
-        document.addEventListener( "click", onTap, true );
-        document.addEventListener( "close", onDialogClose, true );
-        document.addEventListener( "toggle", onPopOpen, true );
-        follow( true, place, onKey );
-        go( 0 );
-        return true;
-    }
-
-    // The coach marks and the tour keep their overlay on its targets: `place`
-    // runs on resize, turn and scroll, `onKey` gets every key first. `on`
-    // false takes them off again.
-    function follow( on, place, onKey )
-    {
-        var f = on ? "addEventListener" : "removeEventListener";
-        document[ f ]( "keydown", onKey, true );
-        window[ f ]( "resize", place );
-        window[ f ]( "orientationchange", place );
-        window[ f ]( "scroll", place, true );
-    }
-
-    // NayiveUI.tour() - the steps given to firstRun, or these ones.
-    function tour( steps ) { return runTour( steps || ( introOpts && introOpts.tour ), introOpts ); }
 
     //------------------------------------------------------------------------//
     // FOLDER PICKER
@@ -3146,12 +1853,12 @@
         var li = document.createElement( "li" );
 
         var ic = document.createElement( "span" );
-        ic.className = "intro-btn-i";
+        ic.className = "install-ico";
         ic.innerHTML = Ayni.icon( iconName );
         li.appendChild( ic );
 
         var box = document.createElement( "div" );
-        box.className = "intro-btn-t";
+        box.className = "help-t";
         var b  = document.createElement( "b" );
         b.textContent = name;
         var sp = document.createElement( "span" );
@@ -3169,7 +1876,7 @@
         var li = document.createElement( "li" );
 
         var ic = document.createElement( "span" );
-        ic.className = "intro-btn-i";
+        ic.className = "install-ico";
         ic.innerHTML = Ayni.icon( iconName );
         li.appendChild( ic );
 
@@ -3185,7 +1892,7 @@
 
     function buildInstall( mode, manual )
     {
-        var d     = Ayni.dialog( { id: "nayive-install-bar", cls: "intro-sheet install-sheet" } );
+        var d     = Ayni.dialog( { id: "nayive-install-bar", cls: "install-sheet" } );
         var back  = d.dialog;
         var sheet = d.body;
 
@@ -3193,7 +1900,7 @@
         back._finish = finish;
 
         // The x in the title row, like every other Nayive dialog.
-        var xb = d.header.appendChild( xButton( "btn intro-close", finish ) );
+        var xb = d.header.appendChild( xButton( "btn install-close", finish ) );
         xb.setAttribute( "data-close", "" );
 
         var logo = document.createElement( "img" );
@@ -3219,7 +1926,7 @@
         if( mode !== "installed" )
         {
             var ul = document.createElement( "ul" );
-            ul.className = "intro-btns";
+            ul.className = "help-list";
             ul.appendChild( installRow( "grid", t( "ui.install.b1n" ),
                 t( "ui.install.b1" ) ) );
             ul.appendChild( installRow( "fullscreen", t( "ui.install.b2n" ),
@@ -3288,7 +1995,7 @@
         {
             var go = document.createElement( "button" );
             go.type        = "button";
-            go.className   = "intro-dismiss primary";
+            go.className   = "install-btn primary";
             go.textContent = t( "ui.install.cta" );
             go.addEventListener( "click", async function ()
             {
@@ -3312,14 +2019,14 @@
         {
             var later = document.createElement( "button" );
             later.type        = "button";
-            later.className   = "intro-dismiss";
+            later.className   = "install-btn";
             later.textContent = t( "ui.notNow" );
             later.addEventListener( "click", function () { snoozeInstall(); finish(); } );
             acts.appendChild( later );
 
             var never = document.createElement( "button" );
             never.type        = "button";
-            never.className   = "intro-dismiss install-never";
+            never.className   = "install-btn install-never";
             never.textContent = t( "ui.install.dismiss" );
             never.addEventListener( "click", function () { neverShowInstall(); finish(); } );
             acts.appendChild( never );
@@ -3427,12 +2134,12 @@
         if( introHeld || document.querySelector( "dialog.panel[open]" ) )
             return void setTimeout( warnChrome, 800 );     // never on top of another dialog
 
-        var d     = Ayni.dialog( { id: "nayive-chrome-warn", cls: "intro-sheet install-sheet" } );
+        var d     = Ayni.dialog( { id: "nayive-chrome-warn", cls: "install-sheet" } );
         var sheet = d.body;
         function finish() { d.close(); }
         d.dialog._finish = finish;
 
-        var xb = d.header.appendChild( xButton( "btn intro-close", finish ) );
+        var xb = d.header.appendChild( xButton( "btn install-close", finish ) );
         xb.setAttribute( "data-close", "" );
 
         var h = document.createElement( "h2" );
@@ -3457,7 +2164,7 @@
         acts.className = "install-actions";
         var never = document.createElement( "button" );
         never.type        = "button";
-        never.className   = "intro-dismiss install-never";
+        never.className   = "install-btn install-never";
         never.textContent = t( "ui.install.dismiss" );
         never.addEventListener( "click", function ()
         {
@@ -5113,13 +3820,12 @@
         applyI18n();
         applySheetButtons();
         localizeDateTimeInputs();
-        applyInfoDots();
         applyHomeLinks();
         applySyncDots();
         startChatDot();
 
         // uiInit runs at DOMContentLoaded; the dictionary usually lands a moment
-        // later, and applySheetButtons / applyInfoDots may have added keys of
+        // later, and applySheetButtons may have added keys of
         // their own, so translate once more when it does.
         i18nReady.then( function () { applyI18n(); } );
 
@@ -5166,19 +3872,13 @@
         h:                 h,             // build DOM: h( "div", { class, text, on, attrs, data }, kids… )
         attachPanel:       attachPanel,   // the clip's round-button panel (Chat, eMail)
         applySheetButtons: applySheetButtons,
-        applyInfoDots:     applyInfoDots,
         applyHomeLinks:    applyHomeLinks,
         applySyncDots:     applySyncDots,
         windowed:          WINDOWED,     // true inside a desktop window
         askPassword: askPassword,
         fmtBytes:   fmtBytes,
         ensureRoom: ensureRoom,
-        firstRun:  firstRun,      // register the help dialog for this app
-        setIntro:  setIntro,      // swap that dialog when the app changes screen
-        setHelpMenu: setHelpMenu, // the "?" opens the app's own Ayuda menu instead
-        showIntro: showIntro,     // open it now (the toolbar "?" button)
-        tour:      tour,          // the guided spotlight tour (firstRun's `tour` steps)
-        holdIntro: holdIntro,     // suppress + close the auto help card for this load
+        holdIntro: holdIntro,     // no help card / first-visit marks / install offer this load
         isShared:     isShared,
         sharedWithMe: sharedWithMe,   // everything shared WITH us, fetched once per page
         canAddTo:     canAddTo,

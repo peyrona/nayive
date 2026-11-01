@@ -126,8 +126,8 @@ const PHONE = window.matchMedia( '(max-width: 640px)' );
 O.fileMenu( { btn: 'moreBtn', menu: 'topMenu',
               ids: [ 'newBtn', 'openBtn', 'recentBtn', 'saveBtn', 'importBtn', 'saveAsBtn', 'restoreBtn', 'lockBtn', 'printBtn', 'pdfBtn', 'scBtn' ] } );
 
-// Ayuda on the "?" - the three entries O.HELP_ITEMS names (the pull-down
-// Ayuda menu shows the same ones; the guide card is the third).
+// Help on the "?" - the rows O.helpItems names (the menu bar's Help menu
+// shows the same ones).
 O.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
 
 // ---- the toolbar's group cards ----
@@ -1358,7 +1358,7 @@ const MENUS =
 },
 {
     key: 'ui.menu.help',
-    items: O.HELP_ITEMS
+    items: O.helpItems
 }
 ];
 

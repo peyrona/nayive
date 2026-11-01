@@ -27,6 +27,7 @@
     <script src="../shared/ayni/ayni-menus.js" defer></script>
     <script src="../shared/ayni/ayni-search.js" defer></script>
     <script src="../shared/ayni/ayni-lists.js" defer></script>
+    <script src="../shared/ayni/ayni-help.js" defer></script>
     <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
     <script src="../shared/gum-api.js" defer></script>
     <!-- Small shared UI helpers: backdrop open/close, toast. -->
@@ -46,11 +47,11 @@
     <script>
     Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
-        NayiveUI.firstRun( {
-            app:   'write',
+        Ayni.help( {
             title: 'Write',
+            menu:  true,
             lead:  Ayni.t( 'write.introLead' ),
-            buttons: [
+            rows: [
                 { sel: '#chromeMenusBtn',  text: Ayni.t( 'write.chromeNote' ) },
                 { sel: '#fmtBtn',          text: Ayni.t( 'write.introFormatBar' ) },
                 { sel: '#moreToolsBtn',    text: Ayni.t( 'write.introMoreBar' ) },
@@ -68,13 +69,13 @@
                 { sel: '#restoreBtn',      text: Ayni.t( 'write.introRestore' ), tour: { open: '#moreBtn' } },
                 { sel: '#lockBtn',         text: Ayni.t( 'write.introLock' ), tour: { open: '#moreBtn' } },
                 { sel: '#paraBtn',         text: Ayni.t( 'write.introPara' ), tour: { open: '#moreBtn' } },
-                { sel: '#statsBtn',        text: Ayni.t( 'write.introStats' ), tour: { open: '#helpBtn' } },
+                { sel: '#statsBtn',        text: Ayni.t( 'write.introStats' ), tour: { open: '#helpBtn', sel: '#helpMenu [data-act="statsBtn"]' } },
                 { sel: '#scBtn',           text: Ayni.t( 'write.introShortcuts' ), tour: { open: '#moreBtn' } }
             ],
             // The guided tour (Ayuda ▸ Ver el tour): the page, then the card's rows;
             // `tour: { open }` lights a row inside the menu or popup that holds it
             // (a list: the first one on screen - a phone keeps these in the ⋮).
-            tour: [ { sel: '#editor', text: Ayni.t( 'write.introLead' ) }, 'buttons' ]
+            tour: [ { sel: '#editor', text: Ayni.t( 'write.introLead' ) }, 'rows' ]
         } );
     } );
     </script>
@@ -93,6 +94,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-menus.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -224,7 +226,7 @@
              - the app's own buttons (#writeTools) leave the row and come back in
                the header's "⋮" menu (#topMenu). The "?" is MOVED into the
                header by write.js, so help stays reachable while the row is
-               folded (and so there is still only one [data-intro-open] on the
+               folded (and so there is still only one [data-help-open] on the
                page - a second copy would misdirect the coach marks).
              - #fmtBtn ("Aa") in the header folds / unfolds the row.
            Pinch zoom is allowed here (the viewport does not forbid it): the
@@ -475,9 +477,8 @@
              button it came from - so there is still ONE set of handlers. -->
         <div id="topMenu" class="panel menu" popover role="menu"></div>
 
-        <!-- Ayuda menu - Estadísticas · Atajos de teclado · Botones de la barra.
-             Built by write.js from the real buttons (#statsBtn and #guideBtn in
-             #helpTools, #scBtn in #fileTools), like the "⋮" menu above. -->
+        <!-- Help menu - Statistics · Keyboard shortcuts · the help card · the
+             tour. Filled by NayiveOffice.helpMenu (shared/office.js) when it opens. -->
         <div id="helpMenu" class="panel menu" popover role="menu"></div>
 
         <!-- Pull-down menu bar. Empty in the source: write.js builds it from
@@ -577,7 +578,7 @@
                 </button>
                 <!-- Ayuda. Opens the three-entry menu below (#helpMenu), not the
                      guide card: the card is one of the three entries. -->
-                <button id="helpBtn" class="btn" data-intro-open type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
+                <button id="helpBtn" class="btn" data-help-open type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                 </button>
             </div>
@@ -618,16 +619,12 @@
                 </button>
             </div>
 
-            <!-- AYUDA: the two entries with no button of their own on the bar -
-                 the statistics sheet and the guide card that names every toolbar
-                 button. Hidden here for the same reason as #fileTools: the menu
-                 is built FROM it, so glyph, title and handler live in one place. -->
+            <!-- AYUDA: the statistics sheet has no button of its own on the bar.
+                 Hidden here for the same reason as #fileTools: the Help menu
+                 clones its glyph and title (O.helpMenu). -->
             <div id="helpTools" hidden>
                 <button id="statsBtn" class="btn" data-i18n-attr="data-tip:write.stats, aria-label:write.stats">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"></line><line x1="10" y1="20" x2="10" y2="4"></line><line x1="16" y1="20" x2="16" y2="9"></line><line x1="21" y1="20" x2="3" y2="20"></line></svg>
-                </button>
-                <button id="guideBtn" class="btn" type="button" data-i18n-attr="data-tip:ui.toolbarButtons, aria-label:ui.toolbarButtons">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="8" rx="2"></rect><line x1="6" y1="9" x2="6" y2="9"></line><line x1="10" y1="9" x2="10" y2="9"></line><line x1="14" y1="9" x2="14" y2="9"></line><line x1="18" y1="9" x2="18" y2="9"></line><line x1="7" y1="18" x2="17" y2="18"></line><line x1="7" y1="21" x2="13" y2="21"></line></svg>
                 </button>
             </div>
         </div>

@@ -137,9 +137,9 @@ ok( await c.until( "document.getElementById( 'convMuteBtn' )?.dataset.tip.starts
 await mouse( c, "#convMuteBtn" );
 ok( await waitFor( async () => ! ( await conv( LU ) ).mute ), "…and Unmute" );
 await mouse( c, "#convHelpBtn" );
-ok( await c.until( "[ ...document.querySelectorAll( '.intro-btns b' ) ].some( b => b.textContent === 'Their link' )" ), "the bar's ? explains its buttons", await c.evaluate( "[ ...document.querySelectorAll( '.intro-btns b' ) ].map( b => b.textContent )" ) );
+ok( await c.until( "[ ...document.querySelectorAll( '.help-list b' ) ].some( b => b.textContent === 'Their link' )" ), "the bar's ? explains its buttons", await c.evaluate( "[ ...document.querySelectorAll( '.help-list b' ) ].map( b => b.textContent )" ) );
 await key( c, "Escape" );
-await c.until( "! document.querySelector( '.intro-btns' )?.offsetParent" );
+await c.until( "! document.querySelector( '.help-list' )?.offsetParent" );
 
 section( "CHAT · DELETE CHAT (LIST) vs DELETE ALL MESSAGES (OPEN CHAT)" );
 const sheetOn = "!! document.querySelector( 'dialog.panel[open]' )";

@@ -59,6 +59,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-menus.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -70,6 +71,7 @@
     <script src="../shared/ayni/ayni-menus.js" defer></script>
     <script src="../shared/ayni/ayni-search.js" defer></script>
     <script src="../shared/ayni/ayni-lists.js" defer></script>
+    <script src="../shared/ayni/ayni-help.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
@@ -77,11 +79,10 @@
     <script>
     Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
-        NayiveUI.firstRun( {
-            app:   'photos',
+        Ayni.help( {
             title: 'Photos',
             lead:  Ayni.t( 'photos.introLead' ),
-            buttons: [
+            rows: [
                 { sel: '#folderInfoBtn', text: Ayni.t( 'photos.introFolder' ) },
                 { sel: '#searchToggle', text: Ayni.t( 'photos.introSearch' ) },
                 { sel: '#reloadBtn',   text: Ayni.t( 'photos.introRescan' ) },
@@ -93,7 +94,7 @@
             ],
             // The guided tour ("Ver el tour" in the card): the albums, the card's
             // buttons, then picking photos (the shared item list).
-            tour: [ { sel: '#treePane, #treeBtn', text: Ayni.t( 'photos.tourTree' ) }, 'buttons',
+            tour: [ { sel: '#treePane, #treeBtn', text: Ayni.t( 'photos.tourTree' ) }, 'rows',
                     { use: 'pick', ghost: '#grid' }, { use: 'picked', ghost: '#grid' } ]
         } );
     } );
@@ -326,7 +327,7 @@
         font-weight: 700;
         color: var(--text);
     }
-    .map-head .info-dot { margin: 0; }
+    .map-head .info-tip { margin: 0; }
 
     .strip
     {
@@ -574,7 +575,7 @@
                     </button>
                 </div>
                 <div class="tb-group tb-sys">
-                    <button class="btn" data-intro-open data-rank="31" type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
+                    <button class="btn" data-help-open data-rank="31" type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                     </button>
                 </div>
@@ -603,7 +604,7 @@
                 <div class="lmap" id="lmap"></div>
                 <div class="map-head">
                     <span data-i18n="photos.places"></span>
-                    <button class="info-dot" data-i18n-attr="data-info:photos.placesInfo"></button>
+                    <button class="info-tip" data-i18n-attr="data-help:photos.placesInfo"></button>
                 </div>
                 <div class="map-empty" id="mapEmpty" hidden data-i18n="photos.noPlaces"></div>
                 <button class="pill" id="nogeoChip" hidden></button>

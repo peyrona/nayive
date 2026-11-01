@@ -526,7 +526,7 @@
     // is cloned and nothing moves at run time. Nothing to wire here.
 
     // The "?" is the SAME button in both layouts - a second copy would break
-    // the coach marks, which point at the first [data-intro-open] on the page.
+    // the coach marks, which point at the first [data-help-open] on the page.
     // `phone` -> append it to phoneHost (last, as in every other header);
     // else put it back in pcHost, before `before` (or last).
     // `before` / `headerBefore` name an element to put the "?" IN FRONT OF,
@@ -535,7 +535,7 @@
     // after the two chrome buttons and before the sync dot.
     function placeHelpButton( phone, phoneHost, pcHost, before, headerBefore )
     {
-        var help = document.querySelector( "[data-intro-open]" );
+        var help = document.querySelector( "[data-help-open]" );
         if( ! help ) return;
 
         var anchor = headerBefore && byId( headerBefore );
@@ -3009,45 +3009,44 @@
     }
 
     //------------------------------------------------------------------------//
-    // HELP  -  the "?" and the Ayuda menu: the same three entries in Write,
-    // Calc and Text, each clicking its own real (hidden) button, so the two
-    // chromes cannot drift and there is still one set of handlers.
+    // HELP  -  the "?" menu of Write, Calc and Text, and the menu bar's Help
+    // menu: Statistics and Keyboard shortcuts (each clicks its own real, hidden
+    // button - #statsBtn, #scBtn - so there is one set of handlers), then
+    // Ayni's help rows: the card and the tour (Ayni.help.items). The card is
+    // given with `menu: true`, so the "?" opens this menu, not the card.
 
-    var HELP_ITEMS =
-    [
-        { key: "write.stats",       el: "statsBtn" },
-        { key: "write.shortcuts",   el: "scBtn"    },
-        { key: "ui.toolbarButtons", el: "guideBtn" }
-    ];
-    var HELP_IDS = HELP_ITEMS.map( function ( it ) { return it.el; } );
+    function helpItems()
+    {
+        return [ { key: "write.stats",     el: "statsBtn" },
+                 { key: "write.shortcuts", el: "scBtn"    } ]
+            .concat( Ayni.help.items().map( function ( h )
+            {
+                return { cmd: h.id, text: h.label, icon: Ayni.icon( h.icon ), run: h.run };
+            } ) );
+    }
 
-    //   var menu = NayiveOffice.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
+    //   NayiveOffice.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
     //
-    // Wires the three hidden entries (#statsBtn, #scBtn, #guideBtn: the guide
-    // card) and builds the "?" menu (#helpBtn -> #helpMenu) from them;
-    // setHelpMenu leaves the "?" click to that menu. Returns the menu.
+    // Wires the two hidden buttons and fills the "?" menu (#helpBtn ->
+    // #helpMenu) each time it opens. Returns the menu.
     function helpMenu( o )
     {
         byId( "statsBtn" ).addEventListener( "click", o.stats );
         byId( "scBtn"    ).addEventListener( "click", o.shortcuts );
-        byId( "guideBtn" ).addEventListener( "click", function () { NayiveUI.showIntro(); } );
-        // A fourth entry, "Ver el tour" (NayiveUI.tour, shared/ui.js): made here,
-        // beside the three, so no page carries its own copy.
-        var tools = byId( "helpTools" ), ids = HELP_IDS.slice();
-        if( tools && NayiveUI.tour )
+        var menu = byId( "helpMenu" );
+        byId( "helpBtn" ).setAttribute( "popovertarget", menu.id );
+        menu.addEventListener( "beforetoggle", function ( e )
         {
-            var tb = byId( "tourBtn" ) || tools.appendChild( document.createElement( "button" ) );
-            tb.id = "tourBtn";
-            tb.type = "button";
-            tb.className = "btn tb-btn";
-            Ayni.setTip( tb, t( "ui.tour.open" ) );
-            tb.setAttribute( "aria-label", tb.dataset.tip );
-            tb.innerHTML = Ayni.icon( "play" );
-            tb.addEventListener( "click", function () { NayiveUI.tour(); } );
-            ids.push( "tourBtn" );
-        }
-        var menu = buttonMenu( { btn: "helpBtn", menu: "helpMenu", ids: ids } );
-        NayiveUI.setHelpMenu( true );
+            if( e.newState !== "open" ) return;
+            Ayni.fillMenu( menu, helpItems().map( function ( it )
+            {
+                if( it.run ) return { id: it.cmd, label: it.text, icon: it.icon, run: it.run };
+                var b = byId( it.el ), svg = b.querySelector( "svg" ).cloneNode( true );
+                svg.removeAttribute( "width" );
+                svg.removeAttribute( "height" );
+                return { id: it.el, label: Ayni.t( it.key ), icon: svg.outerHTML, run: function () { b.click(); } };
+            } ) );
+        } );
         return menu;
     }
 
@@ -3309,8 +3308,7 @@
         showShortcuts:  showShortcuts,
         showStats:      showStats,
         appConfig:      appConfig,
-        HELP_ITEMS:     HELP_ITEMS,
-        HELP_IDS:       HELP_IDS,
+        helpItems:      helpItems,
         helpMenu:       helpMenu,
         clip:           clip
     };

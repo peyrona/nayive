@@ -27,6 +27,7 @@
     <link rel="stylesheet" href="shared/ayni/ayni-menus.css">
     <link rel="stylesheet" href="shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="shared/ayni/ayni-lists.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="shared/theme.css">
     <link rel="stylesheet" href="shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -38,6 +39,7 @@
     <script src="shared/ayni/ayni-menus.js" defer></script>
     <script src="shared/ayni/ayni-search.js" defer></script>
     <script src="shared/ayni/ayni-lists.js" defer></script>
+    <script src="shared/ayni/ayni-help.js" defer></script>
     <script src="shared/locker.js"></script>
     <script src="shared/ui.js" defer></script>
     <!-- Only for signing a regular account out (the 403 below): its saves
@@ -275,7 +277,7 @@
                 <tr>
                     <th class="col-user">Username</th>
                     <th class="col-quota">Quota&nbsp;GiB</th>
-                    <th class="col-photo">Photo&nbsp;px<button class="info-dot" data-info="Photos are the biggest thing most people store, and a phone photo is far larger than any screen can show.&#10;&#10;Give a user a number here and their browser shrinks every photo they upload so that neither side is longer than that many pixels - the shape is kept, nothing is squashed - and saves it as JPEG. 2048 is a good value: still sharp on any screen or TV, and about ten times smaller than the original.&#10;&#10;When the original is a JPEG (what every phone camera makes), its date and GPS position are carried over, so the map and the timeline keep working.&#10;&#10;Leave it empty to store the photos exactly as they come out of the camera."></button></th>
+                    <th class="col-photo">Photo&nbsp;px<button class="info-tip" data-help="Photos are the biggest thing most people store, and a phone photo is far larger than any screen can show.&#10;&#10;Give a user a number here and their browser shrinks every photo they upload so that neither side is longer than that many pixels - the shape is kept, nothing is squashed - and saves it as JPEG. 2048 is a good value: still sharp on any screen or TV, and about ten times smaller than the original.&#10;&#10;When the original is a JPEG (what every phone camera makes), its date and GPS position are carried over, so the map and the timeline keep working.&#10;&#10;Leave it empty to store the photos exactly as they come out of the camera."></button></th>
                     <th class="col-use">Usage</th>
                     <th class="col-pass">Password</th>
                     <th class="col-act"><div class="row-acts"><button class="btn primary" id="addUser" data-tip="Add a user"><span class="icon" data-icon="plus"></span></button></div></th>

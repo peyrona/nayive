@@ -1,0 +1,88 @@
+/* Ayni library 0.1.0, help family: the info label, the Help card, the guided tour and first-visit marks.
+   Needs ayni-base.css and ayni-buttons.css (the card's button copies, the tour's text buttons). The rules are chapters
+   14.2 and 15 of the guidelines; the behaviour is in ayni-help.js. */
+
+/* RULE: the info label is a small "i" icon in a circle, 16 px, in the link colour, right after a label; Accent while
+   its popup is open or under the pointer. On touch it keeps its look with a 44 px invisible hit area. */
+.info-tip { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none; width: 16px; height: 16px;
+  margin: 0 0 0 4px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--link); vertical-align: middle;
+  cursor: pointer; transition: color var(--tr-fast); }
+.info-tip .icon { --icon: 16px; }
+.info-tip::after { content: ""; position: absolute; inset: -8px; }
+html.touch .info-tip::after { inset: -14px; }
+.info-tip:hover, .info-tip[aria-expanded="true"] { color: var(--accent); }
+.info-tip:focus { outline: none; }
+.info-tip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.label-row > .info-tip { margin-left: 0; }
+
+/* Its popup: not a dialog (no ×, nothing dimmed); in the top layer, inside an open dialog when the "i" is in one */
+.info-pop { position: fixed; inset: auto; margin: 0; box-sizing: border-box; max-width: min(260px, calc(100vw - 16px)); padding: 10px 12px;
+  font-size: .82rem; line-height: 1.4; color: var(--text); background: var(--card); border: 1px solid var(--link);
+  border-radius: var(--radius-m); box-shadow: var(--elev-dialog); white-space: pre-wrap; overflow-wrap: anywhere; }
+.info-pop a { color: var(--link); }
+
+/* RULE: the Help card is a small dialog: the lead, See the tour, one row per button (a small copy of the round button,
+   its tooltip in bold, a sentence), sections as a line and a subtitle, an optional tip line. */
+.help-tour { align-self: flex-start; margin: 4px 0 10px; }
+.help-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; }
+.help-list li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 2px; font-size: .86rem; line-height: 1.35; }
+.help-list li + li { border-top: 1px solid var(--line); }
+html .help-ico { --btn: 28px; flex: none; pointer-events: none; font-size: .8rem; }
+.help-ico .icon { --icon: 16px; }
+.help-ico svg { width: 16px; height: 16px; }
+.help-t { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding-top: 4px; }
+.help-t b { font-weight: 600; color: var(--text); }
+.help-t span { color: var(--text-dim); }
+.help-sep { border: 0; border-top: 1px solid var(--line); margin: 14px 0 0; }
+.help-group { margin: 12px 0 0; font-size: .95rem; font-weight: 600; color: var(--text); }
+.help-group + .help-list { margin-top: 4px; }
+.help-tip { margin-top: 14px; font-size: .82rem; line-height: 1.4; color: var(--text-dim); }
+.help-dismiss { flex: 1 1 auto; justify-content: center; }
+
+/* ---------- Bubbles: shared by the tour and the first-visit marks ---------- */
+.coach-ring { position: fixed; border: 2px solid var(--accent); border-radius: var(--radius-s);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 28%, transparent); pointer-events: none; }
+.coach-line { position: fixed; width: 2px; background: var(--accent); opacity: .75; pointer-events: none; }
+.coach-bubble { position: fixed; box-sizing: border-box; max-width: 240px; padding: 12px 14px; background: var(--card); color: var(--text);
+  border: 1px solid var(--accent); border-radius: var(--radius-m); box-shadow: var(--elev-dialog); }
+.coach-bubble p { margin: 0; padding-right: 30px; font-size: .88rem; line-height: 1.4; }
+/* The pointer pokes out of the top edge, or the bottom one when the bubble sits above its target */
+.coach-arrow { position: absolute; top: -6px; width: 11px; height: 11px; margin-left: -6px; background: var(--card);
+  border-left: 1px solid var(--accent); border-top: 1px solid var(--accent); transform: rotate(45deg); }
+.coach-bubble.up .coach-arrow { top: auto; bottom: -6px; border: 0; border-right: 1px solid var(--accent); border-bottom: 1px solid var(--accent); }
+/* The corner ×; on the first-visit marks it counts down first, dimmed and dead while it is a number */
+.coach-close { position: absolute; top: 6px; right: 6px; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+  padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text); font: inherit; font-size: .85rem;
+  font-variant-numeric: tabular-nums; cursor: pointer; }
+.coach-close .icon { --icon: 17px; }
+.coach-close[aria-disabled="true"] { color: var(--text-dim); cursor: default; }
+.coach-close:not([aria-disabled="true"]):hover { background: color-mix(in srgb, var(--text) 9%, transparent); }
+html.touch .coach-close::after { content: ""; position: absolute; inset: -7px; }
+@media (max-width: 640px) {
+  .coach-bubble { max-width: 232px; }
+  .coach-bubble p { font-size: .85rem; }
+}
+
+/* RULE: first-visit marks: a dimmed layer over the page; only the bubbles take presses */
+.coach-overlay { position: fixed; inset: 0; z-index: 300; background: var(--scrim); opacity: 0; transition: opacity var(--tr-fast); }
+.coach-overlay.open { opacity: 1; }
+.coach-layer { position: absolute; inset: 0; pointer-events: none; }
+.coach-layer + .coach-layer > * { pointer-events: auto; }
+
+/* RULE: the tour: four dim panes frame a hole over the target; a clear lid covers the hole so the page cannot be
+   touched, except on a tap step. A dashed ring marks where a button will appear. A popover in the top layer, over the
+   menus and popups it opens; over a modal dialog it lives inside it. */
+.tour-overlay { position: fixed; inset: 0; z-index: 2000; pointer-events: none; }
+.tour-overlay[popover] { width: auto; height: auto; margin: 0; padding: 0; border: 0; background: none; overflow: visible; }
+.tour-overlay > * { pointer-events: auto; }
+.tour-pane { position: fixed; background: var(--scrim); }
+.tour-lid { position: fixed; }
+.tour-overlay.is-tap .tour-lid { display: none; }
+.tour-ring { pointer-events: none; transition: left var(--tr-fast), top var(--tr-fast), width var(--tr-fast), height var(--tr-fast); }
+.tour-ring.is-ghost { border-style: dashed; }
+.tour-bubble { max-width: 300px; }
+.tour-head { display: flex; align-items: center; gap: 8px; margin: 0 30px 6px 0; }
+.tour-head[hidden], .tour-head > [hidden] { display: none; }
+.tour-note { margin-top: 6px !important; color: var(--text-dim); font-style: italic; }
+.tour-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.tour-count { flex: 1; color: var(--text-dim); font-size: .8rem; font-variant-numeric: tabular-nums; }

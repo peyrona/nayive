@@ -508,8 +508,8 @@
         }
         // The guided tour ("Ver el tour" in the card): the card's rows, then the
         // picked chats' actions (the shared item list).
-        NayiveUI.showIntro( { app: "chat", title: "Chat", lead: T( owner ? "chat.introLead" : "chat.introLeadGuest" ), buttons: rows,
-                              tour: [ "buttons" ].concat( owner ? [ { use: "picked", ghost: "#vList" } ] : [] ) } );
+        Ayni.help.show( { title: "Chat", lead: T( owner ? "chat.introLead" : "chat.introLeadGuest" ), rows: rows,
+                              tour: [ "rows" ].concat( owner ? [ { use: "picked", ghost: "#vList" } ] : [] ) } );
     };
 
     // The rows are read off the bar's buttons and the ⋮ menu themselves
@@ -537,6 +537,6 @@
         rows.push( { icon: "forward", name: T( "chat.holdName" ), text: T( "chat.helpHold" ), tour: { sel: "#wall .msg", ghost: "#wall" } } );
         rows.push( { icon: "check", name: T( "chat.ticksName" ), text: T( "chat.helpTicks" ), tour: { sel: "#wall .msg", ghost: "#wall" } } );
         rows.push( { svg: C.icon( "music" ), name: T( "chat.watchPlay" ), text: T( "chat.helpWatch" ), tour: { ghost: "#wall", sel: "#wall .watch" } } );
-        NayiveUI.showIntro( { app: "chat", title: "Chat", buttons: rows, tour: [ "buttons" ] } );
+        Ayni.help.show( { title: "Chat", rows: rows, tour: [ "rows" ] } );
     };
 } )();

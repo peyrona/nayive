@@ -306,8 +306,7 @@ function wireStaticUI()
     // ---- the header menu and the group cards ----
     NayiveOffice.fileMenu( { btn: 'moreBtn', menu: 'topMenu', ids: MENU_IDS, phoneOnly: MENU_PHONE_ONLY } );
 
-    // Ayuda on the "?" - the same three entries the pull-down Ayuda menu holds
-    // (the guide card is the third).
+    // Help on the "?" - the same rows the menu bar's Help menu holds.
     NayiveOffice.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
     // The group cards (#outputPopup, #pagePopup) are Ayni tool groups: their
     // triggers open them by themselves (popovertarget in index.html).
@@ -408,7 +407,7 @@ function wireStaticUI()
             if( document.getElementById( 'symPopup' ).matches( ':popover-open' ) ) { symPopup.close(); return; }
 
             const open = document.querySelector( 'dialog.panel[open]' );
-            if( open ) { setBackdrop( open.id, false ); return; }
+            if( open ) { if( open.id ) setBackdrop( open.id, false ); return; }   // no id: Ayni's own (the help card) closes itself
 
             if( find && find.isOpen() ) { find.close(); return; }
         }
@@ -2368,7 +2367,7 @@ const MENUS = [
 },
 {
     key: 'ui.menu.help',
-    items: NayiveOffice.HELP_ITEMS   // the "?" shows the same three (shared/office.js)
+    items: NayiveOffice.helpItems   // the "?" shows the same rows (shared/office.js)
 } ];
 
 // What the toolbar's drop-downs open (toolbar.js): the same tables.

@@ -22,6 +22,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-menus.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -33,6 +34,7 @@
     <script src="../shared/ayni/ayni-menus.js" defer></script>
     <script src="../shared/ayni/ayni-search.js" defer></script>
     <script src="../shared/ayni/ayni-lists.js" defer></script>
+    <script src="../shared/ayni/ayni-help.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Vendored libs (all pinned, no build step). Order matters: CodeMirror core first,
@@ -91,11 +93,11 @@
     <script>
     Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
-        NayiveUI.firstRun( {
-            app:   'text',
+        Ayni.help( {
             title: 'Text',
+            menu:  true,
             lead:  Ayni.t( 'text.introLead' ),
-            buttons: [
+            rows: [
                 { sel: '#moreBtn',      text: Ayni.t( 'text.introFileMenu' ) },
                 // tour: the File menu rows are lit inside the open menu
                 { sel: '#newBtn',       text: Ayni.t( 'write.introNew' ),     tour: { open: '#moreBtn' } },
@@ -113,7 +115,7 @@
                 { sel: '#zoomInBtn',    text: Ayni.t( 'text.introZoomIn' ) }
             ],
             // The guided tour (Ayuda ▸ Ver el tour): the page, then the card's rows.
-            tour: [ { sel: '#panes', text: Ayni.t( 'text.introLead' ) }, 'buttons' ]
+            tour: [ { sel: '#panes', text: Ayni.t( 'text.introLead' ) }, 'rows' ]
         } );
     } );
     </script>
@@ -368,7 +370,7 @@
 
             <!-- Ayuda. Opens the three-entry menu below (#helpMenu), not the
                  guide card: the card is one of the three entries. -->
-            <button id="helpBtn" class="btn tb-btn" data-intro-open type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
+            <button id="helpBtn" class="btn tb-btn" data-help-open type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
             </button>
 
@@ -407,10 +409,9 @@
                 </button>
             </div>
 
-            <!-- AYUDA: the three entries, none of which has a button of its own
-                 on the bar. Hidden, like Write's and Calc's #fileTools: the menu
-                 is built FROM these buttons (glyph and title cloned) and an entry
-                 clicks the one it came from, so there is one set of handlers. -->
+            <!-- AYUDA: Statistics and Keyboard shortcuts have no button of their
+                 own on the bar. Hidden: the Help menu clones their glyph and title
+                 and clicks them, so there is one set of handlers (O.helpMenu). -->
             <div id="helpTools" hidden>
                 <button id="statsBtn" class="btn tb-btn" type="button" data-i18n-attr="data-tip:write.stats, aria-label:write.stats">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"></line><line x1="10" y1="20" x2="10" y2="4"></line><line x1="16" y1="20" x2="16" y2="9"></line><line x1="21" y1="20" x2="3" y2="20"></line></svg>
@@ -418,15 +419,11 @@
                 <button id="scBtn" class="btn tb-btn" type="button" data-i18n-attr="data-tip:write.shortcuts, aria-label:write.shortcuts">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6" y2="10"></line><line x1="10" y1="10" x2="10" y2="10"></line><line x1="14" y1="10" x2="14" y2="10"></line><line x1="18" y1="10" x2="18" y2="10"></line><line x1="7" y1="14" x2="17" y2="14"></line></svg>
                 </button>
-                <button id="guideBtn" class="btn tb-btn" type="button" data-i18n-attr="data-tip:ui.toolbarButtons, aria-label:ui.toolbarButtons">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="8" rx="2"></rect><line x1="6" y1="9" x2="6" y2="9"></line><line x1="10" y1="9" x2="10" y2="9"></line><line x1="14" y1="9" x2="14" y2="9"></line><line x1="18" y1="9" x2="18" y2="9"></line><line x1="7" y1="18" x2="17" y2="18"></line><line x1="7" y1="21" x2="13" y2="21"></line></svg>
-                </button>
             </div>
         </div>
 
-        <!-- Ayuda menu - Estadísticas · Atajos de teclado · Botones de la barra.
-             Built by wireStaticUI() from #helpTools above (shared/office.js,
-             buttonMenu): an Ayni menu, placed under the "?" when it opens. -->
+        <!-- Help menu - Statistics · Keyboard shortcuts · the help card · the
+             tour. Filled by O.helpMenu (shared/office.js) when it opens. -->
         <div id="helpMenu" class="panel menu" popover role="menu"></div>
 
         <!-- File menu - built by wireStaticUI() from #fileTools above. -->
@@ -668,8 +665,7 @@
             syncLock();
             new MutationObserver( syncLock ).observe( lockBtn, { attributes: true, attributeFilter: [ 'hidden' ] } );
 
-            // Ayuda (see AYUDA below): the "?" opens a three-entry menu built
-            // from the three hidden #helpTools buttons (the guide card is the third).
+            // Help (see AYUDA below): the "?" opens the Help menu (O.helpMenu).
             O.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
 
             const marginInput = document.getElementById( 'marginInput' );
@@ -703,12 +699,9 @@
         }
 
         //------------------------------------------------------------------------//
-        // AYUDA  -  the "?" menu: Estadisticas, Atajos de teclado, Botones de la barra
-        //
-        // The same three entries Write and Calc carry, and the same two sheets
-        // (shared/office.js, showStats / showShortcuts). Text writes no menu of
-        // its own: O.buttonMenu mirrors the hidden #helpTools buttons, exactly
-        // as the other two editors mirror their file buttons.
+        // AYUDA  -  the "?" menu: Statistics, Keyboard shortcuts, the help card
+        // and the tour - the same rows Write and Calc carry, and the same two
+        // sheets (shared/office.js: helpMenu, showStats / showShortcuts).
 
         const IS_MAC = NayiveUI.isMac;
         const MOD    = IS_MAC ? '⌘' : T( 'ui.keyCtrl' ) + '+';   // "Strg+" in German

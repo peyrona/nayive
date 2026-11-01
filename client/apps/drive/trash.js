@@ -100,10 +100,10 @@ function renderTrashBar()
         dwrap.appendChild( document.createTextNode( ' ' + T( 'acct.days' ) ) );
 
         const dinfo = document.createElement( 'button' );
-        dinfo.className = 'info-dot';
-        dinfo.setAttribute( 'data-info', T( 'drive.trashDaysInfo' ) );
+        dinfo.className = 'info-tip';
+        dinfo.setAttribute( 'data-help', T( 'drive.trashDaysInfo' ) );
         dwrap.appendChild( dinfo );
-        if( window.NayiveUI ) NayiveUI.applyInfoDots( dwrap );
+        Ayni.init( dwrap );
 
         bar.appendChild( dwrap );
     }

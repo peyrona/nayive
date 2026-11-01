@@ -160,19 +160,19 @@ function renderHeader()
     if( searchHadFocus ) { tripSearchEls[ 0 ].firstChild.focus( { preventScroll: true } ); searchHadFocus = false; }
 
     // The "?" answers about the screen you are on (see TRIPS_INTRO).
-    if( window.TRIPS_INTRO && NayiveUI.setIntro )
-        NayiveUI.setIntro( view === 'detail' ? TRIPS_INTRO.stages : TRIPS_INTRO.home );
+    if( window.TRIPS_INTRO )
+        Ayni.help( view === 'detail' ? TRIPS_INTRO.stages : TRIPS_INTRO.home );
 }
 
-// The toolbar "?" - opens whichever card NayiveUI.setIntro last picked.
+// The toolbar "?" - opens whichever card Ayni.help last picked.
 function buildHelpBtn()
 {
     const b = document.createElement( 'button' );
     b.className = 'btn';
     b.type = 'button';
-    Ayni.setTip( b, Ayni.t( 'ui.help' ) );
-    b.setAttribute( 'aria-label', Ayni.t( 'ui.help' ) );
-    b.setAttribute( 'data-intro-open', '' );
+    Ayni.setTip( b, Ayni.t( 'ayni.help' ) );
+    b.setAttribute( 'aria-label', Ayni.t( 'ayni.help' ) );
+    b.setAttribute( 'data-help-open', '' );
     b.appendChild( svgIcon( ICON_HELP, 18 ) );
     return b;
 }

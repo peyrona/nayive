@@ -67,8 +67,8 @@ const ICON_HELP     = '<circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a
 function docsLabelInfoDot()
 {
     const dot = document.createElement( 'button' );
-    dot.className = 'info-dot';
-    dot.setAttribute( 'data-i18n-attr', 'data-info:trips.docsInfo' );
+    dot.className = 'info-tip';
+    dot.setAttribute( 'data-i18n-attr', 'data-help:trips.docsInfo' );
     return dot;
 }
 

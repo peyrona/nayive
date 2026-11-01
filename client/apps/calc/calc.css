@@ -324,7 +324,7 @@ body.calc-painting #gridHost .htCore td { cursor: copy; }
        "⋮" menu is where they live. The "?" is MOVED into the header by
        wireStaticUI()
        so help stays reachable while the toolbar is folded (one single
-       [data-intro-open] on the page - a second copy would misdirect
+       [data-help-open] on the page - a second copy would misdirect
        the coach marks).
      - #fmtBtn ("Aa") folds / unfolds; the toolbar also folds itself the
        moment a cell editor opens, which is when the keyboard arrives. */

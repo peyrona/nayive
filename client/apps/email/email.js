@@ -70,14 +70,13 @@
     {
         var T = E.T;
         var NO_MAIL = "#list [aria-selected], #listEmpty, #noAcct, #list";
-        NayiveUI.firstRun( {
-            app:   "email",
+        Ayni.help( {
             title: "eMail",
             lead:  T( "mail.introLead" ),
             // tour: ("Ver el tour" in the card) what each row lights - a message's
             // own buttons with the first one picked, a ghost on the list while
             // there is none (no account yet, an empty tray).
-            buttons: [
+            rows: [
                 { svg: E.icon( "inbox" ), name: T( "mail.tray.inbox" ) + " · " + T( "mail.tray.trash" ), text: T( "mail.introTree" ), tour: { sel: "#tree, #treeBtn", ghost: NO_MAIL, icon: "folder" } },
                 { icon: "forward", name: T( "mail.introReadName" ), text: T( "mail.introOpen" ), tour: { sel: "#list [aria-selected]", ghost: NO_MAIL } },
                 { icon: "search", name: T( "mail.search" ), text: T( "mail.introSearch" ), tour: { sel: "#searchBtn", ghost: NO_MAIL } },
@@ -90,7 +89,7 @@
                 { svg: E.icon( "tag" ), name: T( "mail.labels" ), text: T( "mail.introLabelMenu" ), tour: { sel: "#tree, #treeBtn", ghost: NO_MAIL, icon: "folder" } },
                 { sel: "#setBtn", text: T( "mail.introSettings" ) }
             ],
-            tour: [ "buttons" ]
+            tour: [ "rows" ]
         } );
     }
 

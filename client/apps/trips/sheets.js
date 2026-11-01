@@ -95,8 +95,8 @@ function renderTripSheet()
     // positions (a location app, photos with GPS) for its Journey map; only an OFF is
     // written - on is the key left out (server/go/positions.go).
     const trackInfo = document.createElement( 'button' );
-    trackInfo.className = 'info-dot';
-    trackInfo.setAttribute( 'data-info', T( 'trips.trackInfo' ) );
+    trackInfo.className = 'info-tip';
+    trackInfo.setAttribute( 'data-help', T( 'trips.trackInfo' ) );
     const track = switchRow( 'share-add', 'tripTrackSw', tripDraft.track !== false, [ document.createTextNode( T( 'trips.track' ) ), trackInfo ] );
     track.input.addEventListener( 'change', function()
     {

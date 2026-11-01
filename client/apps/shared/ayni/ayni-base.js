@@ -39,7 +39,7 @@ const LOCALE = window.Ayni?.i18n?.lang() || 'en';
    No SVG is pasted into a page. */
 const ICONS = Object.freeze(['arrow-down', 'arrow-up', 'calendar', 'case', 'check', 'check-all', 'chev-down', 'chev-right', 'chev-up', 'close', 'copy', 'cut',
   'apps', 'edit', 'error', 'eye', 'eye-off', 'file', 'filter', 'folder', 'help', 'info', 'maximise', 'minimise', 'minus', 'more', 'ok',
-  'moon', 'paste', 'plus', 'restore', 'search', 'sun', 'today', 'trash', 'undo', 'warn']);
+  'moon', 'paste', 'play', 'plus', 'restore', 'search', 'sun', 'today', 'trash', 'undo', 'warn']);
 let iconSet = null;
 const noIcon = new Set();
 /* A line icon carries its stroke settings as attributes, not only through CSS: a copy of the svg taken out of its

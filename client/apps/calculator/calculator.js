@@ -513,9 +513,9 @@ Ayni.i18n.ready.then( function()
 
     const rows = [ { sel: '#histBtn', text: T( 'calculator.introHistory' ) } ];
     if( ! $( 'backBtn' ).hidden ) rows.unshift( { sel: '#backBtn', icon: 'back', text: T( 'calculator.introBack' ) } );
-    NayiveUI.firstRun( { app: 'calculator', title: 'Calculator', lead: T( 'calculator.introLead' ), buttons: rows,
+    Ayni.help( { title: 'Calculator', lead: T( 'calculator.introLead' ), rows: rows,
         // The guided tour: the two modes, the keypad, then the currency parts.
-        tour: [ 'buttons',
+        tour: [ 'rows',
                 { sel: '#modeSwitch', text: T( 'calculator.tourModes' ) },
                 { sel: '#keys',     text: T( 'calculator.tourKeys' ) },
                 // hidden in arithmetic mode: then the Currency tab stands in for them

@@ -21,6 +21,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-menus.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -32,6 +33,7 @@
     <script src="../shared/ayni/ayni-menus.js" defer></script>
     <script src="../shared/ayni/ayni-search.js" defer></script>
     <script src="../shared/ayni/ayni-lists.js" defer></script>
+    <script src="../shared/ayni/ayni-help.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Vendored libs (all pinned, no build step). Order matters: classic scripts run before the deferred module script below. -->
@@ -57,11 +59,11 @@
     <script>
     Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
-        NayiveUI.firstRun( {
-            app:   'calc',
+        Ayni.help( {
             title: 'Calc',
+            menu:  true,
             lead:  Ayni.t( 'calc.introLead' ),
-            buttons: [
+            rows: [
                 { sel: '#chromeMenusBtn', text: Ayni.t( 'calc.chromeNote' ) },
                 { sel: '#fmtBtn',       text: Ayni.t( 'calc.introToolbar' ) },
                 { sel: '#moreBtn',      text: Ayni.t( 'calc.introFileMenu' ) },
@@ -84,7 +86,7 @@
             ],
             // The guided tour (Ayuda ▸ Ver el tour): the sheet, then the card's rows;
             // `tour: { open }` lights a row inside the File menu.
-            tour: [ { sel: '#gridHost', text: Ayni.t( 'calc.introLead' ) }, 'buttons' ]
+            tour: [ { sel: '#gridHost', text: Ayni.t( 'calc.introLead' ) }, 'rows' ]
         } );
     } );
     </script>
@@ -136,9 +138,8 @@
              it came from - so there is still ONE set of handlers. -->
         <div id="topMenu" class="panel menu" popover role="menu"></div>
 
-        <!-- Ayuda menu - Estadísticas · Atajos de teclado · Botones de la barra.
-             Built by wireStaticUI() from the real buttons in #helpTools, the
-             same way as the "⋮" menu above. -->
+        <!-- Help menu - Statistics · Keyboard shortcuts · the help card · the
+             tour. Filled by NayiveOffice.helpMenu (shared/office.js) when it opens. -->
         <div id="helpMenu" class="panel menu" popover role="menu"></div>
 
         <!-- The pull-down bar. Built and wired by shared/menubar.js from the
@@ -264,7 +265,7 @@
             </button>
             <!-- Ayuda. Opens the three-entry menu (#helpMenu) rather than the
                  guide card: the card is one of the three entries. -->
-            <button id="helpBtn" class="btn fmt-btn" data-intro-open type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
+            <button id="helpBtn" class="btn fmt-btn" data-help-open type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
             </button>
 
@@ -317,16 +318,13 @@
             </button>
         </div>
 
-        <!-- AYUDA: the two entries with no button of their own anywhere on the
-             bar. Hidden here for the same reason as #fileTools above - the menu
-             is built FROM them, so glyph, title and handler live in one place.
-             (The third entry, Atajos de teclado, is #scBtn just above.) -->
+        <!-- AYUDA: Statistics has no button of its own anywhere on the bar.
+             Hidden here for the same reason as #fileTools above - the Help menu
+             clones its glyph and title (O.helpMenu). Keyboard shortcuts is
+             #scBtn just above. -->
         <div id="helpTools" hidden>
             <button id="statsBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:write.stats, aria-label:write.stats">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"></line><line x1="10" y1="20" x2="10" y2="4"></line><line x1="16" y1="20" x2="16" y2="9"></line><line x1="21" y1="20" x2="3" y2="20"></line></svg>
-            </button>
-            <button id="guideBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:ui.toolbarButtons, aria-label:ui.toolbarButtons">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="8" rx="2"></rect><line x1="6" y1="9" x2="6" y2="9"></line><line x1="10" y1="9" x2="10" y2="9"></line><line x1="14" y1="9" x2="14" y2="9"></line><line x1="18" y1="9" x2="18" y2="9"></line><line x1="7" y1="18" x2="17" y2="18"></line><line x1="7" y1="21" x2="13" y2="21"></line></svg>
             </button>
         </div>
 
@@ -380,7 +378,7 @@
         </header>
         <div class="body">
             <div class="field">
-                <label for="setDec"><span data-i18n="calc.setDec"></span> <button class="info-dot" type="button" data-i18n-attr="data-info:calc.setDecInfo"></button></label>
+                <label for="setDec"><span data-i18n="calc.setDec"></span> <button class="info-tip" type="button" data-i18n-attr="data-help:calc.setDecInfo"></button></label>
                 <select id="setDec">
                     <option value="" data-i18n="calc.setByLang"></option>
                     <option value=",">1.234,5</option>
@@ -389,7 +387,7 @@
             </div>
 
             <div class="field">
-                <label for="setDate"><span data-i18n="calc.setDate"></span> <button class="info-dot" type="button" data-i18n-attr="data-info:calc.setDateInfo"></button></label>
+                <label for="setDate"><span data-i18n="calc.setDate"></span> <button class="info-tip" type="button" data-i18n-attr="data-help:calc.setDateInfo"></button></label>
                 <select id="setDate">
                     <option value="" data-i18n="calc.setByLang"></option>
                     <option value="dd/mm/yyyy">31/12/2026</option>
@@ -401,7 +399,7 @@
 
             <div class="field-row">
                 <div class="field">
-                    <label for="setFont"><span data-i18n="calc.setFont"></span> <button class="info-dot" type="button" data-i18n-attr="data-info:calc.setFontInfo"></button></label>
+                    <label for="setFont"><span data-i18n="calc.setFont"></span> <button class="info-tip" type="button" data-i18n-attr="data-help:calc.setFontInfo"></button></label>
                     <select id="setFont"></select>     <!-- #fmtFontFamily's options (calc.js wireSettings) -->
                 </div>
                 <div class="field">

@@ -42,8 +42,8 @@ function locationSection()
     function infoButton()
     {
         const info = document.createElement( 'button' );
-        info.className = 'info-dot';
-        info.setAttribute( 'data-info', t( 'trips.loc.info' ) );
+        info.className = 'info-tip';
+        info.setAttribute( 'data-help', t( 'trips.loc.info' ) );
         return info;
     }
 
@@ -205,7 +205,7 @@ function locationSection()
                 box.appendChild( appAddress( a, base + '/' + a.key, i === cards.length - 1 ) );
             } );
 
-        NayiveUI.applyInfoDots( box );
+        Ayni.init( box );
     }
 
     function load()

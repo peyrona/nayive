@@ -537,11 +537,10 @@ async function start()
     markPairs();
 }
 
-NayiveUI.firstRun( {
-    app:   'language',
+Ayni.help( {
     title: 'Language',
     lead:  T( 'language.introLead' ),
-    buttons: [
+    rows: [
         { sel: '#tabTr',   text: T( 'language.introTr' ) },
         { sel: '#tabDic',  text: T( 'language.introDic' ) },
         { sel: '#ocr-btn', text: T( 'language.introOcr' ) },
@@ -549,7 +548,7 @@ NayiveUI.firstRun( {
         { sel: '#cfgBtn',  text: T( 'language.introCfg' ) },
         { sel: '.local-row', text: T( 'language.tourLocal' ) }
     ],
-    tour: [ { sel: '#langbar', text: T( 'language.tourLangs' ) }, 'buttons' ]
+    tour: [ { sel: '#langbar', text: T( 'language.tourLangs' ) }, 'rows' ]
 } );
 
 await NayiveUI.bootWithStore( null, start );

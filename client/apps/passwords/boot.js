@@ -23,11 +23,10 @@ NayiveUI.wireRefresh( { store: store, read: loadData, guard: function()
     return gateBusy || !! document.querySelector( 'dialog.panel[open]' ) || !! Ayni.dragIds();
 } } );
 
-NayiveUI.firstRun( {
-    app:   'passwords',
+Ayni.help( {
     title: 'Passwords',
     lead:  T( 'passwords.introLead' ),
-    buttons: [
+    rows: [
         { icon: 'search', name: T( 'ui.search' ), text: T( 'passwords.introSearch' ), tour: { sel: '#searchBtn' } },
         { sel: '#addBtn',       text: T( 'passwords.introAdd' ) },
         { sel: '#lockBtn',      text: T( 'passwords.introLock' ) },
@@ -37,7 +36,7 @@ NayiveUI.firstRun( {
     tour: function()
     {
         // Only an open vault has these buttons to show.
-        return isOpen() ? [ { sel: '#treePane, #treeBtn', text: T( 'passwords.tourTree' ) }, 'buttons',
+        return isOpen() ? [ { sel: '#treePane, #treeBtn', text: T( 'passwords.tourTree' ) }, 'rows',
                             { use: 'pick', ghost: '#items, #emptyHint' }, { use: 'picked', ghost: '#items, #emptyHint' } ]
                         : [ { sel: '#gate .pw-gate-card', text: T( 'passwords.tourGate' ) } ];
     }

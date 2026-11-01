@@ -24,6 +24,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-menus.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -35,6 +36,7 @@
     <script src="../shared/ayni/ayni-menus.js" defer></script>
     <script src="../shared/ayni/ayni-search.js" defer></script>
     <script src="../shared/ayni/ayni-lists.js" defer></script>
+    <script src="../shared/ayni/ayni-help.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS (and localhost). -->
@@ -358,7 +360,7 @@
                                 </button>
                             </div>
                             <div class="tb-group tb-sys">
-                                <button class="btn" data-intro-open data-rank="31" type="button" data-i18n-attr="data-tip:ui.help, aria-label:ui.help">
+                                <button class="btn" data-help-open data-rank="31" type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                                         <circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>
                                     </svg>
@@ -560,7 +562,7 @@
         // (the list of groups, and one open group) and its toolbar buttons are
         // `hidden`, not removed - so a single card would list, on both screens,
         // controls that are only on one of them. render() calls
-        // NayiveUI.setIntro with the card for the screen you are looking at.
+        // Ayni.help with the card for the screen you are looking at.
         //
         // Rows that name a real button with `sel` take their glyph and their
         // name from it, so they always read like the screen. `#groupList
@@ -569,19 +571,18 @@
         // that button is really there. `:not([hidden])` does the same job for
         // the four buttons a group shared with us (read-only) takes away.
         // The guided tour ("Ver el tour" in the card) walks the rows of the card
-        // on screen ('buttons'): `tour` gives the rows with no button of their
+        // on screen ('rows'): `tour` gives the rows with no button of their
         // own something to light - a row, a block, the empty state as a ghost.
         var tab = function ( k ) { return function () { var b = document.querySelector( '#groupTabs [data-tab="' + k + '"]' ); if( b && ! b.classList.contains( 'is-active' ) ) b.click(); }; };
         var NO_GROUP = '#groupList > .card-row, #homeEmpty';
         var NO_ENTRY = '#entryList > *, #entriesEmpty';
 
         var home = {
-            app:   'split',
-            tour:  [ 'buttons' ],
+            tour:  [ 'rows' ],
             title: 'Split',
             lead:  T( 'split.introLead' ),
-            buttons: [
-                { sel: '#searchBtn', text: T( 'ui.tour.search' ) },
+            rows: [
+                { sel: '#searchBtn', text: T( 'ayni.tour.search' ) },
                 { sel: '#addBtn', text: T( 'split.introAddGroup' ) },
                 { icon: 'forward', name: T( 'split.introOpenName' ), text: T( 'split.introOpenGroup' ),
                   tour: { sel: '#groupList > .card-row', ghost: '#homeEmpty' } },
@@ -593,11 +594,10 @@
         };
 
         var group = {
-            app:   'split',
-            tour:  [ 'buttons' ],
+            tour:  [ 'rows' ],
             title: 'Split',
             lead:  T( 'split.introGroupLead' ),
-            buttons: [
+            rows: [
                 { sel: '#backBtn', text: T( 'split.introBack' ) },
                 { sel: '#addBtn:not([hidden])',  text: T( 'split.introAddEntry' ) },
                 { name: T( 'split.tabEntries' ) + ' \u00b7 ' + T( 'split.tabBalances' ), text: T( 'split.introTabs' ), tour: { sel: '#groupTabs' } },
@@ -617,11 +617,10 @@
             ]
         };
 
-        // render() picks between them; firstRun does the wiring (the "?" button,
-        // the launcher's tour hook and the once-in-a-lifetime coach marks) and
-        // opens on the list, which is where every visit starts.
+        // render() picks between them (Ayni.help); it starts on the list, which
+        // is where every visit starts.
         window.SPLIT_INTRO = { home: home, group: group };
-        NayiveUI.firstRun( home );
+        Ayni.help( home );
     } );
     </script>
     <!-- Offline-capable persistence: local last-known-good cache + write-behind sync. -->
@@ -1119,8 +1118,8 @@
             add.setAttribute( 'aria-label', add.dataset.tip );
 
             // The "?" answers about the screen you are on (see SPLIT_INTRO).
-            if( window.SPLIT_INTRO && NayiveUI.setIntro )
-                NayiveUI.setIntro( inGroup ? SPLIT_INTRO.group : SPLIT_INTRO.home );
+            if( window.SPLIT_INTRO )
+                Ayni.help( inGroup ? SPLIT_INTRO.group : SPLIT_INTRO.home );
 
             if( inGroup ) renderGroup(); else renderHome();
         }

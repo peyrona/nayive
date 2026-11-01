@@ -26,11 +26,10 @@ NayiveUI.wireRefresh( { store: store, read: loadData, guard: function()
     return !! document.querySelector( 'dialog.panel[open]' ) || !! Ayni.dragIds();
 } } );
 
-NayiveUI.firstRun( {
-    app:   'bookmarks',
+Ayni.help( {
     title: 'Bookmarks',
     lead:  T( 'bookmarks.introLead' ),
-    buttons: [
+    rows: [
         { icon: 'search', name: T( 'ui.search' ), text: T( 'bookmarks.introSearch' ), tour: { sel: '#searchBtn' } },
         { sel: '#addBtn',       text: T( 'bookmarks.introAdd' ) },
         { sel: '#newFolderBtn', text: T( 'bookmarks.introFolder' ) },
@@ -40,7 +39,7 @@ NayiveUI.firstRun( {
     ],
     // The guided tour ("Ver el tour" in the card): the folders, the card's
     // buttons, then picking bookmarks (the shared item list).
-    tour: [ { sel: '#treePane, #treeBtn', text: T( 'bookmarks.tourTree' ) }, 'buttons',
+    tour: [ { sel: '#treePane, #treeBtn', text: T( 'bookmarks.tourTree' ) }, 'rows',
             { use: 'pick', ghost: '#items, #emptyHint' }, { use: 'picked', ghost: '#items, #emptyHint' } ]
 } );
 
