@@ -87,6 +87,8 @@ let newTripClaim  = null;     // { draft, id, dirName, trip }: a new trip's fold
 // a brand-new trip needs a live connection.
 async function saveTrip()
 {
+    // A typed date that is not one is not saved: its field shows why
+    if( Ayni.focusFirstError( document.querySelector( 'dialog.panel[open]' ) || document ) ) return;
     if( ! tripDraft.destination.trim() || ! tripDraft.startDate || ! tripDraft.endDate )
         return;
 
@@ -348,6 +350,9 @@ async function saveStage()
 {
     if( stageSheetBusy )
         return;
+
+    // A typed date or time that is not one is not saved: its field shows why
+    if( Ayni.focusFirstError( document.querySelector( 'dialog.panel[open]' ) || document ) ) return;
 
     if( ! stageDraft.location.trim() || ! stageDraft.startDate || ! stageDraft.endDate )
         return;

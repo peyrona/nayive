@@ -22,6 +22,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -34,6 +35,7 @@
     <script src="../shared/ayni/ayni-search.js" defer></script>
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
+    <script src="../shared/ayni/ayni-fields.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Vendored libs (all pinned, no build step). Order matters: classic scripts run before the deferred module script below. -->
@@ -101,8 +103,8 @@
         <div class="topbar">
             <svg class="app-icon" width="20" height="20" viewBox="0 0 512 512" fill="currentColor"><g transform="translate(-213.2 -558.1) scale(1.8891 3.2191)"><g transform="translate(37.3 3.7)"><path d="m 159.5,210.8 v 7.2 h 25.2 v 16.5 H 159.5 V 300 h -21.5 v -65.6 h -19.9 v -16.5 h 19.9 v -5.7 q 0,-14.8 6.2,-20.5 6.2,-5.7 22.9,-5.7 h 17.7 v 16.5 h -16.8 q -4.8,0 -6.6,1.8 -1.7,1.8 -1.8,6.5 z"></path><g transform="translate(67.4 112.5) scale(.625)"><path d="m 243.4,186.2 q -9.7,17.5 -14.4,33.9 -4.7,16.4 -4.7,32.8 0,16.3 4.7,32.8 4.7,16.5 14.4,34.1 h -16.7 q -11.6,-16.9 -17.3,-33.3 -5.6,-16.5 -5.6,-33.5 0,-17 5.6,-33.5 5.7,-16.6 17.3,-33.3 z"></path><path d="M 329.9,218 302.2,257.2 332.3,300 H 307.2 L 291.1,272.4 275.1,300 h -25 l 30.3,-42.8 -27.9,-39.3 h 25 l 13.6,24.5 13.7,-24.5 z"></path><path d="m 338.9,186.2 h 16.7 q 11.6,16.7 17.2,33.3 5.7,16.5 5.7,33.5 0,17.1 -5.6,33.5 -5.6,16.4 -17.3,33.3 h -16.7 q 9.7,-17.6 14.4,-34.1 4.7,-16.6 4.7,-32.8 0,-16.4 -4.7,-32.8 -4.7,-16.4 -14.4,-33.9 z"></path></g></g></g></svg>
             <h1>Calc</h1>
-            <span id="fileLabel" class="file-label field-edit-text is-editable" data-i18n="ui.untitled" data-i18n-attr="title:text.clickRename"></span>
-            <input id="fileNameInput" class="file-label-input field-edit" type="text" style="display:none" autocomplete="off">
+            <span id="fileLabel" class="file-label inline-text is-editable" data-i18n="ui.untitled" data-i18n-attr="title:text.clickRename"></span>
+            <input id="fileNameInput" class="input inline file-label-input" type="text" style="display:none" autocomplete="off">
 
             <!-- Calc's two chromes, the way Calendar switches day / week / month:
                  two icon buttons in the header, the current one filled with the
@@ -331,11 +333,11 @@
         <!-- The formula row: where you are, and what the cell really holds. Its
              own row under the chrome, as in LibreOffice Calc and Excel - see THE
              FORMULA ROW in the CSS above and THE FORMULA BAR in the script. -->
-        <div id="formulaRow">
-            <input id="nameBox" class="tb-input" type="text" autocomplete="off" spellcheck="false"
+        <div id="formulaRow" role="toolbar" data-i18n-attr="aria-label:calc.formulaRow">
+            <input id="nameBox" class="input" type="text" autocomplete="off" spellcheck="false"
                    data-i18n-attr="title:calc.nameBoxHint, placeholder:calc.nameBoxPh">
             <div class="fmt-sep"></div>
-            <input id="formulaBar" class="tb-input" type="text" autocomplete="off" spellcheck="false"
+            <input id="formulaBar" class="input" type="text" autocomplete="off" spellcheck="false"
                    data-i18n-attr="title:calc.formulaBarTitle, placeholder:calc.formulaBarHint">
         </div>
 
@@ -444,7 +446,7 @@
         </div>
         <div class="fe-body">
             <div class="fe-row">
-                <div id="feResult" class="tb-input fe-result" role="status" aria-live="polite" data-i18n-attr="aria-label:calc.fe.result"></div>
+                <div id="feResult" class="input fe-result" role="status" aria-live="polite" data-i18n-attr="aria-label:calc.fe.result"></div>
                 <button id="feRangeBtn" type="button" class="pill" aria-pressed="false" data-i18n="calc.fe.range" data-i18n-attr="data-tip:calc.fe.rangeTip"></button>
             </div>
             <div id="feFnHelp" class="fe-help" hidden></div>
@@ -610,7 +612,7 @@
 
             <div class="field" data-nf="moneda">
                 <label for="nfCurrency" data-i18n="calc.currencySymbol"></label>
-                <input type="text" id="nfCurrency" value="€" autocomplete="off" maxlength="4">
+                <input class="input" type="text" id="nfCurrency" value="€" autocomplete="off" maxlength="4">
             </div>
 
             <div class="field" data-nf="moneda">

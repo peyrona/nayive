@@ -758,7 +758,7 @@
         var view = h( "div", { class: "view" } );
         view.appendChild( C.sideBar( T( "chat.newPerson" ) ) );
         var pane = h( "div", { class: "pane" } );
-        var input = h( "input", { attrs: { type: "text", id: "npName", maxlength: "60", autocomplete: "off" } } );
+        var input = h( "input", { class: "input", attrs: { type: "text", id: "npName", maxlength: "60", autocomplete: "off" } } );
         var create = h( "button", { class: "btn text primary wide", attrs: { type: "button" }, text: T( "chat.makeLink" ) } );
         var card = null;           // the address book's card picked, or null
         var pick = null, url = ""; // a picture chosen here (a Blob and its URL)
@@ -769,8 +769,7 @@
         var cards = h( "div", { class: "rows book-rows" } );
         var form = h( "div", {},
             h( "div", { class: "face-pick" }, h( "span", { class: "face-box" }, face, bin ) ),
-            h( "div", { class: "field" }, h( "label", { attrs: { for: "npName" }, text: T( "chat.name" ) } ), input ),
-            h( "p", { class: "hint", text: T( "chat.nameSeen" ) } ),
+            h( "div", { class: "field" }, h( "label", { attrs: { for: "npName" }, text: T( "chat.name" ) }, C.info( T( "chat.nameSeen" ) ) ), input ),
             create,
             h( "div", { class: "lbl book-lbl", text: T( "chat.fromContacts" ) } ),
             cards );
@@ -1054,7 +1053,7 @@
     C.profilePane = function ()
     {
         var pick = null, drop = false, url = "";
-        var input = h( "input", { attrs: { type: "text", id: "myName", maxlength: "60", autocomplete: "off" }, value: S.owner || "" } );
+        var input = h( "input", { class: "input", attrs: { type: "text", id: "myName", maxlength: "60", autocomplete: "off" }, value: S.owner || "" } );
         var face = h( "button", { class: "face", attrs: { type: "button", "data-tip": T( "chat.changePhoto" ), "aria-label": T( "chat.changePhoto" ) },
                                   on: { click: choose } } );
         var bin = h( "button", { class: "face-bin", attrs: { type: "button", "data-tip": T( "chat.removePhoto" ), "aria-label": T( "chat.removePhoto" ) },
@@ -1092,8 +1091,7 @@
         return {
             el: h( "div", {},
                    h( "div", { class: "face-pick" }, h( "span", { class: "face-box" }, face, bin ) ),
-                   h( "div", { class: "field" }, h( "label", { attrs: { for: "myName" }, text: T( "chat.name" ) } ), input ),
-                   h( "p", { class: "hint", text: T( "chat.myNameHint" ) } ) ),
+                   h( "div", { class: "field" }, h( "label", { attrs: { for: "myName" }, text: T( "chat.name" ) }, C.info( T( "chat.myNameHint" ) ) ), input ) ),
             input: input,
             focus: function () { input.focus(); input.select(); },
             dispose: function () { if( url ) URL.revokeObjectURL( url ); url = ""; },

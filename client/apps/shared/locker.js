@@ -231,6 +231,7 @@
         card.hidden = true;
 
         inp = document.createElement( "input" );
+        inp.className = "input";
         inp.type = "password";
         // Not "current-password": the browser must not fill it in for whoever
         // is at the keyboard.
@@ -238,11 +239,15 @@
         inp.spellcheck = false;
         inp.setAttribute( "autocapitalize", "none" );
 
-        // The eye, before the ✓: shows / hides what is typed.
+        // The eye inside the box, before the ✓: Ayni's [data-reveal] shows / hides what is typed.
+        var group = document.createElement( "div" );
+        group.className = "input-group";
         eye = document.createElement( "button" );
         eye.type = "button";
         eye.className = "btn";
-        if( window.NayiveUI && NayiveUI.pwEye ) NayiveUI.pwEye( eye, inp ); else eye.hidden = true;
+        eye.setAttribute( "data-reveal", "" );
+        group.appendChild( inp );
+        group.appendChild( eye );
 
         btn = document.createElement( "button" );
         btn.type = "button";
@@ -253,8 +258,7 @@
         msg.className = "lock-msg";
         msg.hidden = true;
 
-        card.appendChild( inp );
-        card.appendChild( eye );
+        card.appendChild( group );
         card.appendChild( btn );
         card.appendChild( msg );
         dlg.appendChild( host );
@@ -262,8 +266,10 @@
         document.body.appendChild( dlg );
         if( window.NayiveUI && NayiveUI.applySheetButtons ) NayiveUI.applySheetButtons( card );
         label();
-        // A page that opens locked builds this before its dictionary is in.
+        // A page that opens locked builds this before its dictionary is in;
+        // the eye is wired by Ayni once it has started.
         if( window.Ayni ) Ayni.i18n.ready.then( label, function () {} );
+        if( window.Ayni && Ayni.ready ) Ayni.ready.then( function () { if( card ) Ayni.init( card ); } );
 
         btn.addEventListener( "click", tryUnlock );
         inp.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); tryUnlock(); } } );
@@ -315,8 +321,9 @@
     function eyeShut()
     {
         inp.type = "password";
-        if( window.NayiveUI && Ayni.icon ) eye.innerHTML = Ayni.icon( "eye" );
-        eye.dataset.tip = t( "ui.showPassword" );   // not Ayni.setTip: this may run before Ayni loads
+        eye.setAttribute( "aria-pressed", "false" );
+        if( window.Ayni && Ayni.icon ) eye.innerHTML = Ayni.icon( "eye" );
+        eye.dataset.tip = t( "ayni.password.show" );   // not Ayni.setTip: this may run before Ayni loads
         eye.setAttribute( "aria-label", eye.dataset.tip );
     }
 

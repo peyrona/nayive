@@ -122,17 +122,19 @@ function field( label, input, help )
 {
     const f = el( 'div', 'field' );
     const l = el( 'label', null, label );
-    input.id = 'f' + Math.random().toString( 36 ).slice( 2 );
-    l.htmlFor = input.id;
+    // Help about the field: Ayni's info "i" next to its label, never a line under it
+    if( help ) { const i = el( 'button', 'info-tip' ); i.type = 'button'; i.dataset.help = help; l.append( ' ', i ); }
+    const ctl = input.matches( '.input-group' ) ? input.querySelector( 'input' ) : input;   // a number field's group
+    ctl.id = 'f' + Math.random().toString( 36 ).slice( 2 );
+    l.htmlFor = ctl.id;
     f.append( l, input );
-    if( help ) f.appendChild( el( 'small', 'hint', help ) );
     return f;
 }
 
 function engineDetails( li, e )
 {
     const more = el( 'div', 'cfg-more' );
-    const err = el( 'p', 'field-error' );
+    const err = el( 'p', 'form-error' );
     err.hidden = true;
     const save = ( patch ) =>
     {
@@ -141,19 +143,22 @@ function engineDetails( li, e )
     };
 
     const rowF = el( 'div', 'field-row' );
-    const score = el( 'input' );
+    // Number fields (Ayni's): a comma is a decimal mark too; a value that is not a number is not saved
+    const num = ( i ) => Number( String( i.value ).trim().replace( ',', '.' ) );
+    const spin = ( i ) => { const g = el( 'div', 'input-group spin' ); g.appendChild( i ); return g; };
+    const score = el( 'input', 'input' );
     Object.assign( score, { type: 'number', min: 0, max: 5, step: 0.5, value: e.score } );
-    score.addEventListener( 'change', () => save( { score: Number( score.value ) } ) );
-    const secs = el( 'input' );
+    score.addEventListener( 'change', () => { const v = num( score ); if( Number.isFinite( v ) && v >= 0 && v <= 5 ) save( { score: v } ); } );
+    const secs = el( 'input', 'input' );
     Object.assign( secs, { type: 'number', min: 1, max: 120, step: 1, value: Math.round( e.timeoutMs / 1000 ) } );
-    secs.addEventListener( 'change', () => save( { timeoutMs: Math.round( Number( secs.value ) * 1000 ) } ) );
-    rowF.append( field( T( 'language.score' ), score ), field( T( 'language.timeout' ), secs ) );
+    secs.addEventListener( 'change', () => { const v = num( secs ); if( Number.isFinite( v ) && v >= 1 && v <= 120 ) save( { timeoutMs: Math.round( v * 1000 ) } ); } );
+    rowF.append( field( T( 'language.score' ), spin( score ) ), field( T( 'language.timeout' ), spin( secs ) ) );
     more.appendChild( rowF );
 
     const schema = ( tr.getAdapters().find( ( a ) => a.id === e.adapter ) || {} ).optionsSchema || [];
     for( const o of schema )
     {
-        const input = el( 'input' );
+        const input = el( 'input', 'input' );
         input.type = o.type === 'url' ? 'url' : o.type === 'email' ? 'email' : 'text';
         input.value = e.options[ o.key ] || '';
         input.autocomplete = 'off';

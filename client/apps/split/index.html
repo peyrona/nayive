@@ -25,6 +25,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -37,6 +38,7 @@
     <script src="../shared/ayni/ayni-search.js" defer></script>
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
+    <script src="../shared/ayni/ayni-fields.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS (and localhost). -->
@@ -192,8 +194,7 @@
         .rate-row            { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         .rate-row input      { flex: 0 1 150px; min-width: 0; }
         .rate-row .preview   { font-size: 0.85rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
-        .hint                { margin: 6px 0 0; font-size: 0.78rem; color: var(--text-dim); min-height: 1.1em; }
-        .hint.warn           { color: var(--warn); }
+        #noMatch             { margin: 6px 0 0; }   /* Ayni's .hint look */
         .field-label-row     { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
         .field-label-row label { margin-bottom: 0; }
         .field .field-label-row { margin-bottom: 5px; }
@@ -207,25 +208,12 @@
         .part-row input      { width: 112px; text-align: right; font-variant-numeric: tabular-nums; }
         .part-row .unit      { width: 2.4em; font-size: 0.8rem; color: var(--text-dim); }
 
-        /* Native date inputs render in the browser's own locale (dd/mm/yyyy);
-           the Nayive rule is yyyy-mm-dd. Hide the native text and overlay the
-           ISO value; the input stays underneath so a tap still opens the picker.
-           (Same trick as Calendar.) */
         /* Date (1/3) then description on one row; a payment has no description. */
         .date-text-row               { display: flex; gap: 10px; }
         .date-text-row > .field      { min-width: 0; }
-        #dateField                   { flex: 0 0 calc( ( 100% - 10px ) / 3 ); }
+        #dateField                   { flex: 0 0 max( 156px, calc( ( 100% - 10px ) / 3 ) ); }   /* the whole date and its button */
         #textField                   { flex: 1 1 auto; }
         #textField[hidden]           { display: none; }
-        .date-wrap input[type=date]  { width: 100%; }
-        .date-text-row input         { box-sizing: border-box; height: calc( 1.25em + 16px ); }   /* the date's picker icon makes it taller */
-        .date-wrap                   { position: relative; }
-        .date-wrap input[type=date]  { color: transparent; }
-        .date-wrap .date-display
-        {
-            position: absolute; inset: 0; display: flex; align-items: center;
-            padding: 0 11px; font-size: 1rem; color: var(--text); pointer-events: none;
-        }
 
         /* PEOPLE SHEET */
         .member-row              { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
@@ -432,21 +420,21 @@
         <div class="body">
             <div class="field">
                 <label for="groupNameInput" data-i18n="split.groupName"></label>
-                <input id="groupNameInput" type="text" autocomplete="off" data-i18n-attr="placeholder:split.groupNamePh">
+                <input class="input" id="groupNameInput" type="text" autocomplete="off" data-i18n-attr="placeholder:split.groupNamePh">
             </div>
             <div class="field">
-                <label for="groupCurSel" data-i18n="split.groupCurrency"></label>
+                <label for="groupCurSel"><span data-i18n="split.groupCurrency"></span>
+                    <button id="groupCurHint" class="info-tip" type="button" hidden data-i18n-attr="data-help:split.currencyLocked"></button></label>
                 <select id="groupCurSel"></select>
-                <p id="groupCurHint" class="hint" hidden data-i18n="split.currencyLocked"></p>
             </div>
-            <div id="groupPeople">
+            <div class="fields" id="groupPeople">
                 <div class="field">
                     <label for="meNameInput" data-i18n="split.you"></label>
-                    <input id="meNameInput" type="text" autocomplete="off">
+                    <input class="input" id="meNameInput" type="text" autocomplete="off">
                 </div>
                 <div class="field">
                     <label for="othersInput" data-i18n="split.others"></label>
-                    <textarea id="othersInput" rows="3" data-i18n-attr="placeholder:split.othersPh"></textarea>
+                    <textarea class="input" id="othersInput" rows="3" data-i18n-attr="placeholder:split.othersPh"></textarea>
                 </div>
             </div>
         </div>
@@ -468,14 +456,14 @@
             </div>
 
             <div class="amount-row">
-                <input id="amountInput" class="amount-input" type="text" inputmode="decimal" placeholder="0,00" autocomplete="off" data-i18n-attr="aria-label:split.amount">
+                <input id="amountInput" class="input amount-input" type="text" inputmode="decimal" placeholder="0,00" autocomplete="off" data-i18n-attr="aria-label:split.amount">
                 <select id="currencySel" data-i18n-attr="aria-label:split.currency"></select>
             </div>
 
             <div class="field" id="rateField" hidden>
                 <label for="rateInput" id="rateLabel" data-i18n="split.fx"></label>
                 <div class="rate-row">
-                    <input id="rateInput" type="text" inputmode="decimal" placeholder="0,92" autocomplete="off">
+                    <input class="input" id="rateInput" type="text" inputmode="decimal" placeholder="0,92" autocomplete="off">
                     <span id="ratePreview" class="preview"></span>
                 </div>
             </div>
@@ -483,15 +471,12 @@
             <div class="date-text-row">
                 <div class="field" id="dateField">
                     <label for="dateInput" data-i18n="split.date"></label>
-                    <div class="date-wrap">
-                        <input id="dateInput" type="date">
-                        <span class="date-display" id="dateDisplay"></span>
-                    </div>
+                    <div class="input-group"><input class="input" id="dateInput"></div>
                 </div>
 
                 <div class="field" id="textField">
                     <label for="textInput" data-i18n="split.concept"></label>
-                    <input id="textInput" type="text" data-i18n-attr="placeholder:split.conceptPh" autocomplete="off">
+                    <input class="input" id="textInput" type="text" data-i18n-attr="placeholder:split.conceptPh" autocomplete="off">
                 </div>
             </div>
 
@@ -524,7 +509,7 @@
                 <div id="partsList" class="parts" hidden></div>
             </div>
 
-            <p id="entryHint" class="hint"></p>
+            <p id="entryHint" class="form-error" hidden></p>
         </div>
         <footer>
             <div class="extra"><button id="entryDelBtn" class="btn danger" type="button" hidden data-i18n-attr="data-tip:ui.delete"><span class="icon" data-icon="trash"></span></button></div>
@@ -875,8 +860,8 @@
         } );
         $( 'rateInput' ).addEventListener( 'input', function() { if( es ) { es.rateText = this.value; refreshEntryHints(); } } );
         $( 'textInput' ).addEventListener( 'input', function() { if( es ) es.text = this.value; } );
-        $( 'dateInput' ).addEventListener( 'input', function() { if( es ) es.date = this.value; $( 'dateDisplay' ).textContent = this.value; } );
-        $( 'dateInput' ).addEventListener( 'change', function() { if( es ) es.date = this.value; $( 'dateDisplay' ).textContent = this.value; } );
+        // Ayni's date field (YYYY-MM-DD): a pick, or a typed date taken, is the entry's date
+        Ayni.ready.then( function() { Ayni.dateField( $( 'dateInput' ), { onChange: function( d, v ) { if( es ) es.date = v; } } ); } );
         $( 'allBtn' ).addEventListener( 'click', function()
         {
             if( ! es ) return;
@@ -1628,7 +1613,6 @@
             $( 'amongField' ).hidden = pay || es.mode !== 'equal';
             $( 'modeField'  ).hidden = pay;
             $( 'payerLabel' ).textContent = pay ? T( 'split.fromLabel' ) : T( 'split.paidByLabel' );
-            $( 'dateDisplay' ).textContent = es.date || '';
 
             // exchange rate: only when the entry is not in the group currency
             const foreign = es.currency !== g.currency;
@@ -1680,7 +1664,7 @@
                     const row = el( 'div', 'part-row' );
                     row.appendChild( avatar( g, id, true ) );
                     row.appendChild( el( 'div', 'name', nameOf( g, id ) ) );
-                    const inp = el( 'input' );
+                    const inp = el( 'input', 'input' );
                     inp.type = 'text';
                     inp.inputMode = 'decimal';
                     inp.placeholder = es.mode === 'shares' ? '1' : '0';
@@ -1766,7 +1750,7 @@
             const v = validateEntry();
             const hint = $( 'entryHint' );
             hint.textContent = v.hint;
-            hint.classList.toggle( 'warn', !! v.hint );
+            hint.hidden = ! v.hint;
             $( 'entrySaveBtn' ).ariaDisabled = ! v.ok;
         }
 
@@ -1774,6 +1758,8 @@
         {
             const g = current;
             if( ! g || ! es ) return;
+            // A typed date that is not one is not saved: its field shows why
+            if( Ayni.focusFirstError( $( 'entrySheetBackdrop' ) ) ) return;
             const v = validateEntry();
             if( ! v.ok ) { refreshEntryHints(); return; }
 
@@ -1944,7 +1930,7 @@
                 const row = el( 'div', 'member-row' + ( m.hidden ? ' is-hidden' : '' ) );
                 row.appendChild( avatarFor( i, m.name, false ) );
 
-                const inp = el( 'input' );
+                const inp = el( 'input', 'input' );
                 inp.type = 'text';
                 inp.value = m.name || '';
                 inp.placeholder = T( 'split.nameWord' );

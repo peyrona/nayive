@@ -30,6 +30,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -42,6 +43,7 @@
     <script src="../shared/ayni/ayni-search.js" defer></script>
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
+    <script src="../shared/ayni/ayni-fields.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
@@ -250,11 +252,11 @@
                 <div id="sbRange" class="field-row sb-range" hidden>
                     <div class="field">
                         <label for="sbFrom" data-i18n="drive.sbFrom"></label>
-                        <div class="dt-field"><input type="date" id="sbFrom"><span class="dt-display"></span></div>
+                        <div class="input-group"><input class="input" id="sbFrom"></div>
                     </div>
                     <div class="field">
                         <label for="sbTo" data-i18n="drive.sbTo"></label>
-                        <div class="dt-field"><input type="date" id="sbTo"><span class="dt-display"></span></div>
+                        <div class="input-group"><input class="input" id="sbTo"></div>
                     </div>
                 </div>
             </div>
@@ -277,7 +279,7 @@
         </header>
         <div class="body">
             <div class="field">
-                <input type="text" id="newFolderName" autocomplete="off" data-i18n-attr="placeholder:drive.folderNamePh">
+                <input class="input" type="text" id="newFolderName" autocomplete="off" data-i18n-attr="placeholder:drive.folderNamePh">
             </div>
         </div>
         <footer>
@@ -293,9 +295,9 @@
         </header>
         <div class="body">
             <div class="field">
-                <input type="text" id="renameName" autocomplete="off" data-i18n-attr="aria-label:drive.newName">
+                <input class="input" type="text" id="renameName" autocomplete="off" data-i18n-attr="aria-label:drive.newName">
             </div>
-            <p id="renameError" class="field-error" data-i18n="drive.noSlash" hidden></p>
+            <p id="renameError" class="form-error" data-i18n="drive.noSlash" hidden></p>
         </div>
         <footer>
             <button class="btn" id="renameCancelBtn"  data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>

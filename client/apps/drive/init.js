@@ -116,8 +116,9 @@ function wireStaticUI()
     document.getElementById( 'sbSearchBtn' ).addEventListener( 'click', applySearchBuilder );
     document.getElementById( 'sbClearBtn'  ).addEventListener( 'click', clearSearchBuilder );
     document.getElementById( 'sbAddRule'   ).addEventListener( 'click', addBuilderRule );
-    document.getElementById( 'sbFrom'      ).addEventListener( 'input', onBuilderDate );
-    document.getElementById( 'sbTo'        ).addEventListener( 'input', onBuilderDate );
+    // Ayni's date fields: a pick, or a typed date taken, updates the draft
+    Ayni.dateField( document.getElementById( 'sbFrom' ), { onChange: onBuilderDate } );
+    Ayni.dateField( document.getElementById( 'sbTo' ),   { onChange: onBuilderDate } );
 
     PHONE.addEventListener( 'change', function() { render(); } );
 

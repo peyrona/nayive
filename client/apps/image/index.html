@@ -29,6 +29,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -41,6 +42,7 @@
     <script src="../shared/ayni/ayni-search.js" defer></script>
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
+    <script src="../shared/ayni/ayni-fields.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <script src="../shared/gum-api.js" defer></script>
@@ -115,7 +117,7 @@
         <div class="body">
             <div class="field">
                 <label for="saveCopyName" data-i18n="ui.fileName"></label>
-                <input type="text" id="saveCopyName" autocomplete="off" spellcheck="false">
+                <input class="input" type="text" id="saveCopyName" autocomplete="off" spellcheck="false">
             </div>
         </div>
         <footer>

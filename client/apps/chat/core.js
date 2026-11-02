@@ -183,6 +183,13 @@
     };
 
     // An element holding just the icon.
+    // An info "i" with a sentence or two of help (Ayni's, wired when it is on
+    // the page): next to a label, never a grey line under a field.
+    C.info = function ( text )
+    {
+        return h( "button", { class: "info-tip", attrs: { type: "button", "data-help": text } } );
+    };
+
     C.ic = function ( name, cls )
     {
         var t = document.createElement( "template" );

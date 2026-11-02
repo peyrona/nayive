@@ -162,34 +162,6 @@
         catch ( e ) { return "UTC"; }
     }
 
-    //------------------------------------------------------------------------//
-    // NATIVE DATE / TIME PICKERS - locale
-    //
-    // The browser's <input type=date|time> popup - its calendar grid's first day
-    // of the week, and 24-hour vs AM/PM on the clock - follows the element's
-    // `lang`. Left unset it inherits the page's hard-coded lang="es"; we stamp
-    // the viewer's own locale instead so pickers read the way they expect. (The
-    // OS/browser UI locale still wins in browsers that ignore `lang` on inputs.)
-
-    function pickerLocale()
-    {
-        try { return navigator.language || document.documentElement.lang || "es"; }
-        catch ( e ) { return "es"; }
-    }
-
-    function localizeDateTimeInput( el )
-    {
-        if( ! el || el._nayiveDTLocalized ) return;
-        el._nayiveDTLocalized = true;
-        el.setAttribute( "lang", pickerLocale() );
-    }
-
-    function localizeDateTimeInputs( root )
-    {
-        var scope = root && root.querySelectorAll ? root : document;
-        var list  = scope.querySelectorAll( 'input[type="date"], input[type="time"]' );
-        for( var i = 0; i < list.length; i++ ) localizeDateTimeInput( list[ i ] );
-    }
 
     //------------------------------------------------------------------------//
     // TEXTS - Ayni's language layer (shared/ayni/ayni-i18n.js, loaded first in
@@ -200,9 +172,9 @@
     var tf        = window.Ayni ? Ayni.tf : function ( k ) { return k; };
     var i18nReady = window.Ayni ? Ayni.i18n.ready : Promise.resolve( {} );
 
-    // Sheets are often built dynamically (trip, calendar recurrence row) - catch
-    // date/time inputs added to the DOM after this script runs. (Their
-    // data-i18n text is shared/i18n.js's own observer's job, not this one's.)
+    // Parts built after this script runs (a trip sheet, a dialog made in code):
+    // home links, sync dots, toast lifts, and Ayni's info "i"s, number fields and eyes.
+    // (Their data-i18n text is shared/i18n.js's own observer's job, not this one's.)
     if( window.MutationObserver )
     {
         var dtObserver = new MutationObserver( function ( muts )
@@ -214,9 +186,8 @@
                 {
                     var n = added[ j ];
                     if( ! n || n.nodeType !== 1 ) continue;
-                    if( n.matches && n.matches( 'input[type="date"], input[type="time"]' ) ) localizeDateTimeInput( n );
-                    localizeDateTimeInputs( n );
-                    if( n.matches( ".info-tip" ) || n.querySelector( ".info-tip" ) ) Ayni.init( n );
+                    // Info "i"s, number fields and password eyes built after the page loaded
+                    if( n.matches( ".info-tip, .spin, [data-reveal]" ) || n.querySelector( ".info-tip, .spin, [data-reveal]" ) ) Ayni.init( n );
                     applyHomeLinks( n );
                     applySyncDots( n );
                     watchToastLifts( n );
@@ -337,22 +308,6 @@
         b.innerHTML = Ayni.icon( "close" );
         if( onClick ) b.addEventListener( "click", onClick );
         return b;
-    }
-
-    // PASSWORD EYE - the button beside a password field shows / hides its
-    // text (the launcher's "Mi cuenta", the admin panel; login.html keeps its
-    // own copy, as it does not load this file).
-    function pwEye( btn, input )
-    {
-        btn.innerHTML = Ayni.icon( "eye" );
-        btn.addEventListener( "click", function ()
-        {
-            var show = input.type === "password";
-            input.type = show ? "text" : "password";
-            btn.innerHTML = Ayni.icon( show ? "eye-off" : "eye" );
-            btn.setAttribute( "aria-label", t( show ? "ui.hidePassword" : "ui.showPassword" ) );
-            input.focus();
-        } );
     }
 
     // A Mac (or an iPhone / iPad with a keyboard): its shortcuts take ⌘, not
@@ -694,20 +649,20 @@
                 box.className    = "field";
                 lab.textContent  = labelText;
                 lab.htmlFor      = id;
+                inp.className    = "input";
                 inp.type         = "password";
                 inp.id           = id;
                 // A new password (verify) or one that already exists: the
                 // browser's password manager offers to make one or to fill it.
                 inp.autocomplete = opts.verify ? "new-password" : "current-password";
 
-                // The eye inside the box's right end (app.css PASSWORD EYE).
+                // The eye inside the box's right end: Ayni's [data-reveal].
                 var wrap = document.createElement( "div" );
                 var eye  = document.createElement( "button" );
-                wrap.className = "pw-wrap";
+                wrap.className = "input-group";
                 eye.type       = "button";
-                eye.className  = "pw-eye";
-                eye.setAttribute( "aria-label", t( "ui.showPassword" ) );
-                pwEye( eye, inp );
+                eye.className  = "btn";
+                eye.setAttribute( "data-reveal", "" );
                 wrap.appendChild( inp );
                 wrap.appendChild( eye );
 
@@ -721,7 +676,7 @@
             var two = opts.verify ? field( t( "lock.repeat" ), "askPw2" ) : null;
 
             var warn = document.createElement( "p" );
-            warn.className = "field-error";
+            warn.className = "form-error";
             warn.hidden    = true;
             sheet.appendChild( warn );
 
@@ -1404,6 +1359,7 @@
                     fld.appendChild( lab );
 
                     input = document.createElement( "input" );
+                    input.className    = "input";
                     input.type         = "text";
                     input.autocomplete = "off";
                     input.value        = nameVal;
@@ -3819,7 +3775,6 @@
     {
         applyI18n();
         applySheetButtons();
-        localizeDateTimeInputs();
         applyHomeLinks();
         applySyncDots();
         startChatDot();
@@ -3848,7 +3803,6 @@
     window.NayiveUI = {
         paneResizer: paneResizer,   // a .pane-resizer handle sizes the pane next to it
         isMac:    IS_MAC,           // shortcuts take ⌘ (Drive, Write, Calc, Text)
-        pwEye:    pwEye,            // show / hide a password field's text
         sessionExpired: sessionExpired,   // the shared "your session expired" bar (gum-api / store call it)
         loginRedirect:  loginRedirect,    // to the sign-in page and back here (GumApi.loginRedirect too)
         signOut:        signOut,          // the launcher's and admin's sign-out ({ unlinkPhone, swScope })

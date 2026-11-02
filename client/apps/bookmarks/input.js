@@ -270,7 +270,7 @@ function wireSearch()
 function wireSheets()
 {
     const url = $( 'bmUrl' );
-    url.addEventListener( 'input', function() { $( 'bmUrlError' ).hidden = true; checkDupUrl(); } );
+    url.addEventListener( 'input', function() { $( 'bmUrlError' ).hidden = true; url.setAttribute( 'aria-invalid', 'false' ); checkDupUrl(); } );
     url.addEventListener( 'blur', function() { autofillTitle(); checkDupUrl(); } );
     url.addEventListener( 'paste', function() { setTimeout( function() { autofillTitle(); checkDupUrl(); }, 0 ); } );
     $( 'bmSaveBtn' ).addEventListener( 'click', saveBookmarkSheet );

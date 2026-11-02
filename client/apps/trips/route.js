@@ -187,6 +187,7 @@ function reminderSection()
     label.textContent = t( 'acct.remindTrip' ) + ' (' + t( 'acct.daysBefore' ) + ')';
 
     const input = document.createElement( 'input' );
+    input.className = 'input';
     input.id        = 'tripDaysSet';
     input.type      = 'number';
     input.min       = '0';
@@ -197,7 +198,10 @@ function reminderSection()
     msg.className = 'share-note';
     msg.hidden    = true;
 
-    field.append( label, input );
+    const spin = document.createElement( 'div' );
+    spin.className = 'input-group spin';
+    spin.appendChild( input );
+    field.append( label, spin );
     box.append( field, msg );
 
     let saved = null;

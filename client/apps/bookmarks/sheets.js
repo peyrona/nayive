@@ -55,6 +55,7 @@ function openBookmarkSheet( id, preset )
     fillFolderSelect( document.getElementById( 'bmFolder' ), b ? b.parentId : ( preset && preset.folder ) || targetFolder() );
     document.getElementById( 'bmDeleteBtn' ).hidden = ! b;
     document.getElementById( 'bmUrlError' ).hidden  = true;
+    document.getElementById( 'bmUrl' ).setAttribute( 'aria-invalid', 'false' );
     checkDupUrl();
 
     document.getElementById( 'bmBackdrop' ).showModal();
@@ -155,6 +156,7 @@ function saveBookmarkSheet()
     {
         err.textContent = T( raw.trim() ? 'bookmarks.badUrl' : 'bookmarks.needUrl' );
         err.hidden = false;
+        document.getElementById( 'bmUrl' ).setAttribute( 'aria-invalid', 'true' );   // Ayni's red "!"
         document.getElementById( 'bmUrl' ).focus();
         return;
     }

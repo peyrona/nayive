@@ -396,7 +396,7 @@ function open( kind )
         el( "span", null, t( "salon.placeCity" ), cityRow );
 
         var find = el( "div", "salon-row", null, p );
-        var q = el( "input", "grow", null, find );
+        var q = el( "input", "input grow", null, find );
         q.type = "text";
         q.placeholder = t( "salon.city" );
         q.setAttribute( "aria-label", t( "salon.city" ) );

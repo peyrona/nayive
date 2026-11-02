@@ -26,15 +26,16 @@ function fillFolderSelect( sel, chosen, skip )
 // or a filter is showing.
 function targetFolder() { return ! query && filter === 'all' ? curFolder : ROOT; }
 
-// Every secret box starts hidden again, its eye shut.
+// Every secret box starts hidden again, its eye (Ayni's [data-reveal]) shut.
 function hideSecrets( root )
 {
-    root.querySelectorAll( '[data-eye]' ).forEach( function( b )
+    root.querySelectorAll( '[data-reveal]' ).forEach( function( b )
     {
-        const input = $( b.dataset.eye );
+        const input = b.closest( '.input-group' ).querySelector( 'input' );
         if( input ) input.type = 'password';
-        b.innerHTML = Ayni.icon( 'eye' );
-        Ayni.setTip( b, T( 'ui.showPassword' ) );
+        b.setAttribute( 'aria-pressed', 'false' );
+        Ayni.setIcon( b, 'eye' );
+        Ayni.setTip( b, Ayni.t( 'ayni.password.show' ) );
         b.setAttribute( 'aria-label', b.dataset.tip );
     } );
 }
@@ -113,12 +114,12 @@ function addFieldRow( f )
     const row = document.createElement( 'div' );
     row.className = 'pw-xfield';
     row.innerHTML =
-        '<input class="pf-name" type="text" autocomplete="off" spellcheck="false" placeholder="' + esc( T( 'passwords.fieldName' ) ) + '" aria-label="' + esc( T( 'passwords.fieldName' ) ) + '">' +
-        '<div class="pw-line">' +
-            '<input class="pf-value pw-mono" type="text" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off" placeholder="' + esc( T( 'passwords.fieldValue' ) ) + '" aria-label="' + esc( T( 'passwords.fieldValue' ) ) + '">' +
-            '<button type="button" class="btn sm" data-f="secret"></button>' +
-            '<button type="button" class="btn sm" data-f="copy" data-tip="' + esc( T( 'ui.copy' ) ) + '" aria-label="' + esc( T( 'ui.copy' ) ) + '">' + Ayni.icon( 'copy' ) + '</button>' +
-            '<button type="button" class="btn sm" data-f="remove" data-tip="' + esc( T( 'ui.delete' ) ) + '" aria-label="' + esc( T( 'ui.delete' ) ) + '">' + Ayni.icon( 'trash' ) + '</button>' +
+        '<input class="input pf-name" type="text" autocomplete="off" spellcheck="false" placeholder="' + esc( T( 'passwords.fieldName' ) ) + '" aria-label="' + esc( T( 'passwords.fieldName' ) ) + '">' +
+        '<div class="input-group pw-line">' +
+            '<input class="input pf-value pw-mono" type="text" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off" placeholder="' + esc( T( 'passwords.fieldValue' ) ) + '" aria-label="' + esc( T( 'passwords.fieldValue' ) ) + '">' +
+            '<button type="button" class="btn" data-f="secret"></button>' +
+            '<button type="button" class="btn" data-f="copy" data-tip="' + esc( T( 'ui.copy' ) ) + '" aria-label="' + esc( T( 'ui.copy' ) ) + '">' + Ayni.icon( 'copy' ) + '</button>' +
+            '<button type="button" class="btn" data-f="remove" data-tip="' + esc( T( 'ui.delete' ) ) + '" aria-label="' + esc( T( 'ui.delete' ) ) + '">' + Ayni.icon( 'trash' ) + '</button>' +
         '</div>';
     row.querySelector( '.pf-name' ).value  = f.name;
     row.querySelector( '.pf-value' ).value = f.value;

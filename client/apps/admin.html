@@ -28,6 +28,7 @@
     <link rel="stylesheet" href="shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="shared/ayni/ayni-help.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-fields.css">
     <link rel="stylesheet" href="shared/theme.css">
     <link rel="stylesheet" href="shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -40,6 +41,7 @@
     <script src="shared/ayni/ayni-search.js" defer></script>
     <script src="shared/ayni/ayni-lists.js" defer></script>
     <script src="shared/ayni/ayni-help.js" defer></script>
+    <script src="shared/ayni/ayni-fields.js" defer></script>
     <script src="shared/locker.js"></script>
     <script src="shared/ui.js" defer></script>
     <!-- Only for signing a regular account out (the 403 below): its saves
@@ -110,22 +112,13 @@
         .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 0 auto; }   /* in the brand row, at the right */
 
         /* Action buttons use the shared .btn convention (round icon buttons,
-           filled in by shared/ui.js); .pw-eye keeps its own bare look. Anything
-           else falls back to this plain pill. */
+           filled in by shared/ui.js). Anything else falls back to this plain pill. */
         button
         {
             font: inherit; cursor: pointer; border: none; border-radius: var(--radius-s);
             padding: 9px 16px; color: var(--on-accent); background: var(--accent);
         }
 
-        /* password field with an inline show/hide eye: app.css PASSWORD EYE;
-           here only what differs */
-        .pw-wrap input { padding-right: 42px; }
-        .pw-eye { margin: 0; border-radius: 0; }
-        .pw-eye:hover { filter: none; }
-        .pw-eye svg { width: 17px; height: 17px; }
-        /* a user row's in-field trash: removes the password at once */
-        .pw-clear { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); }
 
         table { width: 100%; border-collapse: collapse; }
         th
@@ -137,10 +130,10 @@
         td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
         .col-user  { font-weight: 600; white-space: nowrap; }
         .col-user input { width: 100%; min-width: 96px; font-weight: 600; }
-        .col-quota { width: 92px; }
-        .col-quota input { width: 72px; text-align: right; }
-        .col-photo { width: 108px; }
-        .col-photo input { width: 88px; text-align: right; }
+        .col-quota { width: 124px; }
+        .col-quota .spin { width: 116px; }
+        .col-photo { width: 132px; }
+        .col-photo .spin { width: 124px; }
         .col-use   { width: 118px; color: var(--text-dim); font-size: 0.86rem; white-space: nowrap; }
         .col-use .pct { display: block; font-size: 0.78rem; }
         .col-use .over { color: var(--danger); }
@@ -157,7 +150,6 @@
         .msg.ok   { color: var(--ok, var(--accent) ); }
         .msg.err  { color: var(--danger); }
         .msg:empty { min-height: 0; margin: 0; }
-        .hint { font-size: 0.82rem; color: var(--text-dim); margin: 12px 2px 0; }
         .hint.lead { margin: 0 2px 14px; }   /* a description ABOVE the fields */
 
         a.link { color: var(--link, var(--accent) ); }
@@ -180,8 +172,8 @@
             #usersSec td { border: none; padding: 4px 0; }
             #usersSec td.col-user  { padding-right: 96px; }
             #usersSec td.col-act   { position: absolute; top: 10px; right: 0; padding: 0; }
-            #usersSec td.col-quota input,
-            #usersSec td.col-photo input { width: 100%; text-align: left; }
+            #usersSec td.col-quota .spin,
+            #usersSec td.col-photo .spin { width: 100%; }
             #usersSec td.col-quota::before,
             #usersSec td.col-photo::before,
             #usersSec td.col-use::before,
@@ -227,27 +219,27 @@
             First run: create the admin account. It is saved as soon as both
             fields are filled; then you'll be asked to sign in with it.
         </p>
-        <div class="row2">
-            <div class="field">
-                <label for="adminName">Username</label>
-                <input id="adminName" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
-            </div>
-            <div class="field">
-                <label for="adminPass">Password</label>
-                <div class="pw-wrap">
-                    <input id="adminPass" type="password" autocomplete="new-password"
-                           placeholder="leave blank = don't change">
-                    <button type="button" class="pw-eye" id="adminPwEye" aria-label="Show password"></button>
-                </div>
-            </div>
-        </div>
-        <p class="hint"><strong>Forgot this password?</strong> An empty admin password does not
+        <p class="hint lead"><strong>Forgot this password?</strong> An empty admin password does not
            ask for a new one, as it does for a user: it locks the admin out. To reset it, on the
            server edit <code>store/config/server.json</code> and, inside the <code>"admin"</code>
            block, set a temporary password in plain text (<code>"password": "temp123"</code>).
            Restart Nayive at once - it reads that file only when it starts, and may write the old
            one back before. Sign in with it (it is stored hashed from then on) and pick a real
            password here.</p>
+        <div class="row2">
+            <div class="field">
+                <label for="adminName">Username</label>
+                <input class="input" id="adminName" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
+            </div>
+            <div class="field">
+                <label for="adminPass">Password</label>
+                <div class="input-group">
+                    <input class="input" id="adminPass" type="password" autocomplete="new-password"
+                           placeholder="leave blank = don't change">
+                    <button type="button" class="btn" id="adminPwEye" data-reveal></button>
+                </div>
+            </div>
+        </div>
     </section>
 
     <!-- WEB SITES ---------------------------------------------------------- -->
@@ -262,16 +254,25 @@
         </p>
         <div class="field">
             <label for="sitesDir">Base folder</label>
-            <div class="pw-wrap">
-                <input id="sitesDir" type="text" placeholder="~/web_sites"
+            <div class="input-group">
+                <input class="input" id="sitesDir" type="text" placeholder="~/web_sites"
                        autocapitalize="none" autocorrect="off" spellcheck="false">
-                <button type="button" class="pw-eye" id="sitesPick" data-tip="Choose the folder" aria-label="Choose the folder"></button>
+                <button type="button" class="btn" id="sitesPick" data-tip="Choose the folder" aria-label="Choose the folder"></button>
             </div>
         </div>
     </section>
 
     <!-- USERS ------------------------------------------------------------- -->
     <section id="usersSec" class="hide" role="tabpanel">
+        <p class="hint lead">The <strong>+</strong> button above the trash icons adds an empty row for a new user;
+           its (&times;) drops the row again.
+           Every change is saved on its own when you leave the field (or press Enter);
+           a new user is created once it has a name.
+           Changing a username renames the account: everything the person owns travels with it, but
+           they are signed out and must sign in again with the new name.
+           The trash icon deletes a user (after a confirmation) along with all their data.
+           The small trash inside a password field removes that password at once: the user
+           signs in with a blank one and must pick a new password.</p>
         <table>
             <thead>
                 <tr>
@@ -288,15 +289,6 @@
                  their own tbody so re-rendering the saved users never wipes them -->
             <tbody id="newRows"></tbody>
         </table>
-        <p class="hint">The <strong>+</strong> button above the trash icons adds an empty row for a new user;
-           its (&times;) drops the row again.
-           Every change is saved on its own when you leave the field (or press Enter);
-           a new user is created once it has a name.
-           Changing a username renames the account: everything the person owns travels with it, but
-           they are signed out and must sign in again with the new name.
-           The trash icon deletes a user (after a confirmation) along with all their data.
-           The small trash inside a password field removes that password at once: the user
-           signs in with a blank one and must pick a new password.</p>
     </section>
 
     <!-- LANGUAGE (language/admin.js) ------------------------------------- -->
@@ -337,13 +329,13 @@
         </div>
         <div class="field">
             <label for="addName" data-i18n="language.engineName"></label>
-            <input id="addName" type="text" autocomplete="off" maxlength="60">
+            <input class="input" id="addName" type="text" autocomplete="off" maxlength="60">
         </div>
         <div class="field">
             <label for="addUrl" data-i18n="language.optUrl"></label>
-            <input id="addUrl" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://">
+            <input class="input" id="addUrl" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://">
         </div>
-        <p id="addError" class="field-error" hidden></p>
+        <p id="addError" class="form-error" hidden></p>
     </div>
     <footer>
         <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
@@ -515,7 +507,6 @@
     // -- admin account ----------------------------------------------------
     // Inline show / hide eye on the password field (shared/ui.js, deferred:
     // at DOMContentLoaded it is there).
-    document.addEventListener( 'DOMContentLoaded', function () { NayiveUI.pwEye( $( 'adminPwEye' ), $( 'adminPass' ) ); } );
 
     // -- web sites folder picker -------------------------------------
     // The folder button inside the field: browse the SERVER's folders (one at
@@ -769,7 +760,7 @@
                     c.nameIn.value = c.name;
                 }
 
-                var ub = { action: 'update-user', name: c.name, quota: c.quota.value,
+                var ub = { action: 'update-user', name: c.name, quota: c.quota.value.trim().replace( ',', '.' ),
                            photo_max: c.photo.value };
                 if ( c.pass.value )     ub.password = c.pass.value;
                 else if ( c.clearPass ) ub.password = null;   // null = remove it
@@ -800,7 +791,7 @@
                 // A blank password is fine: the user picks one on first sign-in.
                 var rn = await api( {
                     action: 'create-user', name: nName, password: nPass,
-                    quota:     nc.quota.value,
+                    quota:     nc.quota.value.trim().replace( ',', '.' ),
                     photo_max: nc.photo.value
                 } );
                 if ( !rn.ok ) errs.push( 'new user "' + nName + '": ' + await errText( rn ) );
@@ -851,7 +842,7 @@
             tr.appendChild( td );
             return td;
         }
-        function input( type ) { var i = document.createElement( 'input' ); i.type = type; return i; }
+        function input( type ) { var i = document.createElement( 'input' ); i.className = 'input'; i.type = type; return i; }
 
         var tr = document.createElement( 'tr' );
 
@@ -860,14 +851,16 @@
         n.setAttribute( 'autocorrect', 'off' );   // not a real IDL property
         cell( 'col-user', n );
 
+        // Ayni number fields: empty is a value (no limit / keep the originals)
+        function spin( i ) { var g = document.createElement( 'span' ); g.className = 'input-group spin'; i.dataset.optional = ''; g.appendChild( i ); return g; }
         var q = input( 'number' );
         q.min = '0'; q.step = '0.5'; q.placeholder = '—';
-        cell( 'col-quota', q );
+        cell( 'col-quota', spin( q ) );
 
         var m = input( 'number' );
         m.min = '200'; m.max = '20000'; m.step = '1';
         m.title = 'Longest side, in pixels. Empty = keep the originals.';
-        cell( 'col-photo', m );
+        cell( 'col-photo', spin( m ) );
 
         var tdU = cell( 'col-use' );
 
@@ -931,12 +924,12 @@
             if ( u.has_password && window.NayiveUI )
             {
                 var pw = document.createElement( 'div' );
-                pw.className = 'pw-wrap';        // room on the right for the trash
+                pw.className = 'input-group';    // Ayni's field, the trash inside it
                 tdP.appendChild( pw );
                 pw.appendChild( p );
                 clr = document.createElement( 'button' );
                 clr.type = 'button';
-                clr.className = 'btn sm danger pw-clear';
+                clr.className = 'btn danger pw-clear';
                 Ayni.setTip( clr, 'Remove password' );
                 clr.setAttribute( 'aria-label', clr.dataset.tip );
                 clr.innerHTML = Ayni.icon( 'trash' );

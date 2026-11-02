@@ -78,6 +78,7 @@ function renderTrashBar()
         dwrap.textContent = T( 'drive.deleteAfter' ) + ' ';
 
         const dinput = document.createElement( 'input' );
+        dinput.className = 'input';
         dinput.type  = 'number';
         dinput.min   = '1';
         dinput.max   = '90';
@@ -96,7 +97,10 @@ function renderTrashBar()
             }
             catch( _ ) { dinput.value = trashDays; setStatus( T( 'drive.saveFailedShort' ) ); }
         } );
-        dwrap.appendChild( dinput );
+        const dspin = document.createElement( 'span' );
+        dspin.className = 'input-group spin';
+        dspin.appendChild( dinput );
+        dwrap.appendChild( dspin );
         dwrap.appendChild( document.createTextNode( ' ' + T( 'acct.days' ) ) );
 
         const dinfo = document.createElement( 'button' );

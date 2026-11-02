@@ -151,16 +151,6 @@
     var FIELDS = [ "from", "to", "subject", "since", "until", "seen", "label" ];
     function el( f ) { return E.$( "adv" + f.charAt( 0 ).toUpperCase() + f.slice( 1 ) ); }
 
-    // The native date text is hidden (.dt-field): the overlay shows yyyy-mm-dd.
-    function showDates()
-    {
-        [ "since", "until" ].forEach( function ( f )
-        {
-            var inp = el( f );
-            inp.parentNode.querySelector( ".dt-display" ).textContent = inp.value;
-        } );
-    }
-
     function fill( a )
     {
         a = a || {};
@@ -173,7 +163,6 @@
         if( a.label && ! S.labels.some( function ( l ) { return l.id === a.label; } ) ) sel.value = "";
         E.$( "advAttach" ).checked = !! a.attach;
         E.$( "advStarred" ).checked = !! a.starred;
-        showDates();
     }
 
     E.openAdvSearch = function ()
@@ -186,6 +175,8 @@
 
     function apply()
     {
+        // A typed date that is not one is not searched for: its field shows why
+        if( Ayni.focusFirstError( document.getElementById( "advSheet" ) ) ) return;
         var a = {}, any = false;
         FIELDS.forEach( function ( f )
         {
@@ -205,7 +196,8 @@
 
     E.$( "advGoBtn" ).addEventListener( "click", apply );
     E.$( "advClearBtn" ).addEventListener( "click", function () { fill( null ); E.$( "advWords" ).value = ""; } );
-    [ "since", "until" ].forEach( function ( f ) { el( f ).addEventListener( "input", showDates ); } );
+    // Since / Until are Ayni's date fields (YYYY-MM-DD, typed or picked)
+    Ayni.ready.then( function () { [ "since", "until" ].forEach( function ( f ) { Ayni.dateField( el( f ) ); } ); } );
     E.$( "advSheet" ).addEventListener( "keydown", function ( e )
     {
         if( e.key === "Enter" && e.target.tagName === "INPUT" && e.target.type !== "checkbox" ) { e.preventDefault(); apply(); }

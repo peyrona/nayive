@@ -24,6 +24,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -36,6 +37,7 @@
     <script src="../shared/ayni/ayni-search.js" defer></script>
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
+    <script src="../shared/ayni/ayni-fields.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <link rel="manifest" href="manifest.json">
@@ -202,20 +204,20 @@
                     </div>
                     <div class="mail-cfield">
                         <label for="cTo" data-i18n="mail.to"></label>
-                        <input id="cTo" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-addr data-i18n-attr="placeholder:mail.toPh">
+                        <input class="input" id="cTo" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-addr data-i18n-attr="placeholder:mail.toPh">
                         <button id="cCcBtn" class="btn text bordered" type="button" data-i18n="mail.ccBtn"></button>
                     </div>
                     <div id="cCcRow" class="mail-cfield" hidden>
                         <label for="cCc" data-i18n="mail.cc"></label>
-                        <input id="cCc" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-addr>
+                        <input class="input" id="cCc" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-addr>
                     </div>
                     <div id="cBccRow" class="mail-cfield" hidden>
                         <label for="cBcc" data-i18n="mail.bcc"></label>
-                        <input id="cBcc" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-addr>
+                        <input class="input" id="cBcc" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-addr>
                     </div>
                     <div class="mail-cfield">
                         <label for="cSubject" data-i18n="mail.subject"></label>
-                        <input id="cSubject" type="text" autocomplete="off">
+                        <input class="input" id="cSubject" type="text" autocomplete="off">
                     </div>
                     <div id="cFiles" class="mail-parts" hidden></div>
                     <!-- The text, formatted: Squire (lib/) in the box, its buttons on top.
@@ -259,7 +261,7 @@
         <div class="body">
             <div class="field">
                 <label for="linkHref" data-i18n="write.linkAddress"></label>
-                <input id="linkHref" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://">
+                <input class="input" id="linkHref" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://">
             </div>
         </div>
         <footer>
@@ -280,7 +282,7 @@
             <div id="labelPick" class="mail-label-pick"></div>
             <p id="labelPickEmpty" class="hint" data-i18n="mail.noLabels" hidden></p>
             <div class="mail-new-label">
-                <input id="labelNew" type="text" maxlength="40" autocomplete="off" data-i18n-attr="placeholder:mail.newLabelPh, aria-label:mail.newLabel">
+                <input class="input" id="labelNew" type="text" maxlength="40" autocomplete="off" data-i18n-attr="placeholder:mail.newLabelPh, aria-label:mail.newLabel">
                 <button id="labelNewBtn" class="btn" type="button" data-icon="plus" data-i18n-attr="data-tip:mail.newLabel, aria-label:mail.newLabel"></button>
             </div>
         </div>
@@ -317,11 +319,11 @@
             </div>
             <div class="field">
                 <label for="pickFrom" data-i18n="mail.pickFrom"></label>
-                <input id="pickFrom" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:mail.pickFromPh">
+                <input class="input" id="pickFrom" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:mail.pickFromPh">
             </div>
             <div class="field">
                 <label for="pickSubject" data-i18n="mail.pickSubject"></label>
-                <input id="pickSubject" type="text" autocomplete="off">
+                <input class="input" id="pickSubject" type="text" autocomplete="off">
             </div>
             <div class="field">
                 <label for="pickLabel" data-i18n="mail.pickLabel"></label>
@@ -355,28 +357,28 @@
             <p class="hint" data-i18n="mail.advNote"></p>
             <div class="field">
                 <label for="advFrom" data-i18n="mail.pickFrom"></label>
-                <input id="advFrom" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:mail.pickFromPh">
+                <input class="input" id="advFrom" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:mail.pickFromPh">
             </div>
             <div class="field">
                 <label for="advTo" data-i18n="mail.advTo"></label>
-                <input id="advTo" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:mail.pickFromPh">
+                <input class="input" id="advTo" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:mail.pickFromPh">
             </div>
             <div class="field">
                 <label for="advSubject" data-i18n="mail.pickSubject"></label>
-                <input id="advSubject" type="text" autocomplete="off">
+                <input class="input" id="advSubject" type="text" autocomplete="off">
             </div>
             <div class="field">
                 <label for="advWords" data-i18n="mail.advWords"></label>
-                <input id="advWords" type="text" autocomplete="off">
+                <input class="input" id="advWords" type="text" autocomplete="off">
             </div>
             <div class="field-row">
                 <div class="field">
                     <label for="advSince" data-i18n="mail.advSince"></label>
-                    <div class="dt-field"><input type="date" id="advSince"><span class="dt-display"></span></div>
+                    <div class="input-group"><input class="input" id="advSince"></div>
                 </div>
                 <div class="field">
                     <label for="advUntil" data-i18n="mail.advUntil"></label>
-                    <div class="dt-field"><input type="date" id="advUntil"><span class="dt-display"></span></div>
+                    <div class="input-group"><input class="input" id="advUntil"></div>
                 </div>
             </div>
             <div class="field-row">
@@ -438,7 +440,7 @@
                     </div>
                     <div class="field">
                         <label for="addEmail" data-i18n="mail.email"></label>
-                        <input id="addEmail" type="email" autocomplete="email" spellcheck="false" autocapitalize="none">
+                        <input class="input" id="addEmail" type="email" autocomplete="email" spellcheck="false" autocapitalize="none">
                     </div>
                 </div>
 
@@ -452,55 +454,55 @@
                     </a>
                 </div>
 
-                <div id="addFields">
+                <div class="fields" id="addFields">
                     <div class="field">
                         <label for="addPass" id="addPassLabel"></label>
-                        <div class="mail-pass">
-                            <input id="addPass" type="password" autocomplete="new-password" spellcheck="false" autocapitalize="none">
-                            <button id="passEye" class="btn sm" type="button" data-i18n-attr="data-tip:ui.showPassword, aria-label:ui.showPassword"></button>
+                        <div class="input-group mail-pass">
+                            <input class="input" id="addPass" type="password" autocomplete="new-password" spellcheck="false" autocapitalize="none">
+                            <button id="passEye" class="btn" type="button" data-reveal></button>
                         </div>
                     </div>
 
                     <!-- "JMAP" (a server of one's own choosing) only: its address. -->
                 <div id="jmapField" class="field" hidden>
-                    <label for="jmapUrl" data-i18n="mail.jmapUrl"></label>
-                    <input id="jmapUrl" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="mail.example.com">
-                    <p class="hint" data-i18n="mail.jmapUrlHint"></p>
+                    <label for="jmapUrl"><span data-i18n="mail.jmapUrl"></span>
+                        <button class="info-tip" type="button" data-i18n-attr="data-help:mail.jmapUrlHint"></button></label>
+                    <input class="input" id="jmapUrl" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="mail.example.com">
                 </div>
 
                 <!-- "Other" only: the provider's two servers. -->
-                    <div id="hostFields" hidden>
+                    <div class="fields" id="hostFields" hidden>
                         <div class="field-row">
                             <div class="field">
                                 <label for="imapHost" data-i18n="mail.imapHost"></label>
-                                <input id="imapHost" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="imap.example.com">
+                                <input class="input" id="imapHost" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="imap.example.com">
                             </div>
                             <div class="field mail-port">
                                 <label for="imapPort" data-i18n="mail.port"></label>
-                                <input id="imapPort" type="number" min="1" max="65535" value="993">
+                                <div class="input-group spin" id="imapPortSpin"><input class="input" id="imapPort" type="number" min="1" max="65535" value="993"></div>
                             </div>
                         </div>
                         <div class="field-row">
                             <div class="field">
                                 <label for="smtpHost" data-i18n="mail.smtpHost"></label>
-                                <input id="smtpHost" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="smtp.example.com">
+                                <input class="input" id="smtpHost" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="smtp.example.com">
                             </div>
                             <div class="field mail-port">
                                 <label for="smtpPort" data-i18n="mail.port"></label>
-                                <input id="smtpPort" type="number" min="1" max="65535" value="465">
+                                <div class="input-group spin" id="smtpPortSpin"><input class="input" id="smtpPort" type="number" min="1" max="65535" value="465"></div>
                             </div>
                         </div>
                     </div>
 
                     <div class="field">
-                        <label for="addName" data-i18n="mail.nameOpt"></label>
-                        <input id="addName" type="text" autocomplete="name">
-                        <p class="hint" data-i18n="mail.nameHint"></p>
+                        <label for="addName"><span data-i18n="mail.nameOpt"></span>
+                            <button class="info-tip" type="button" data-i18n-attr="data-help:mail.nameHint"></button></label>
+                        <input class="input" id="addName" type="text" autocomplete="name">
                     </div>
                 </div>
 
                 <p id="addStatus" class="mail-add-status" hidden></p>
-                <p id="addError" class="field-error" hidden></p>
+                <p id="addError" class="form-error" hidden></p>
                 <button id="addBtn" class="btn text primary" type="button" data-i18n="mail.addAccount"></button>
 
             </div>
@@ -508,14 +510,14 @@
             <div data-pane="general" hidden>
                 <div class="section-label" data-i18n="mail.tray.trash"></div>
                 <div class="field">
-                    <label for="trashDays" data-i18n="mail.trashDays"></label>
-                    <input id="trashDays" type="number" min="1" max="365" inputmode="numeric">
-                    <p id="trashDaysHint" class="hint" data-i18n="mail.trashDaysHint" hidden></p>
+                    <label for="trashDays"><span data-i18n="mail.trashDays"></span>
+                        <button id="trashDaysHint" class="info-tip" type="button" data-i18n-attr="data-help:mail.trashDaysHint" hidden></button></label>
+                    <div class="input-group spin" id="trashDaysSpin"><input class="input" id="trashDays" type="number" min="1" max="365" inputmode="numeric"></div>
                 </div>
-                <div class="section-label" data-i18n="mail.signature"></div>
+                <div class="section-label"><span data-i18n="mail.signature"></span>
+                    <button class="info-tip" type="button" data-i18n-attr="data-help:mail.signatureHint"></button></div>
                 <div class="field">
-                    <textarea id="signature" class="mail-signature" rows="4" maxlength="2000" data-i18n-attr="placeholder:mail.signaturePh, aria-label:mail.signature"></textarea>
-                    <p class="hint" data-i18n="mail.signatureHint"></p>
+                    <textarea id="signature" class="input mail-signature" rows="4" maxlength="2000" data-i18n-attr="placeholder:mail.signaturePh, aria-label:mail.signature"></textarea>
                 </div>
             </div>
         </div>
@@ -531,13 +533,13 @@
         <div class="body">
             <div class="field">
                 <label for="labelName" data-i18n="mail.labelName"></label>
-                <input id="labelName" type="text" maxlength="40" autocomplete="off" data-i18n-attr="placeholder:mail.newLabelPh">
+                <input class="input" id="labelName" type="text" maxlength="40" autocomplete="off" data-i18n-attr="placeholder:mail.newLabelPh">
             </div>
             <div class="field">
                 <label data-i18n="mail.labelColor"></label>
                 <div id="labelColors" class="mail-swatches" role="radiogroup" data-i18n-attr="aria-label:mail.labelColor"></div>
             </div>
-            <p id="labelDlgError" class="field-error" hidden></p>
+            <p id="labelDlgError" class="form-error" hidden></p>
         </div>
         <footer>
             <div class="extra"><button id="labelDelBtn" class="btn danger" type="button" data-i18n-attr="data-tip:mail.removeLabel" hidden><span class="icon" data-icon="trash"></span></button></div>

@@ -37,7 +37,7 @@ const LOCALE = window.Ayni?.i18n?.lang() || 'en';
        render: (name) => html }           instead of a sprite: any markup, e.g. an icon font's <i class="…">
    Ayni.icons.use(null) goes back to the built-in set. Ayni.icons.add(set) adds the app's own icons (below).
    No SVG is pasted into a page. */
-const ICONS = Object.freeze(['arrow-down', 'arrow-up', 'calendar', 'case', 'check', 'check-all', 'chev-down', 'chev-right', 'chev-up', 'close', 'copy', 'cut',
+const ICONS = Object.freeze(['arrow-down', 'arrow-up', 'calendar', 'case', 'check', 'clock', 'check-all', 'chev-down', 'chev-right', 'chev-up', 'close', 'copy', 'cut',
   'apps', 'edit', 'error', 'eye', 'eye-off', 'file', 'filter', 'folder', 'help', 'info', 'maximise', 'minimise', 'minus', 'more', 'ok',
   'moon', 'paste', 'play', 'plus', 'restore', 'search', 'sun', 'today', 'trash', 'undo', 'warn']);
 let iconSet = null;
@@ -376,6 +376,12 @@ const setupTips = () => {
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideTip(); });
 };
 
+/* ---------- Labels: clicking a label focuses its control; a list is focused through its current item ---------- */
+const focusCtl = (c) => (c.matches('[tabindex], input, select, textarea, button') ? c : $('[tabindex="0"]', c) || c).focus();
+const setupLabels = () => addEventListener('click', (e) => {
+  const l = e.target.closest('label[for]'); if (l && !l.control) { const c = document.getElementById(l.htmlFor); if (c) focusCtl(c); }
+});
+
 /* ---------- Start-up ----------
    The families register here; Ayni starts once the page is parsed and its texts are in, runs every family's setup,
    then wires the page. Ayni.ready resolves then: code that builds controls, or calls Ayni, waits for it
@@ -398,7 +404,7 @@ Object.assign(window.Ayni ??= {}, {
 window.Ayni.ready = new Promise((go) => {
   const start = async () => {
     await window.Ayni.i18n?.ready;
-    initTheme(); setupTips(); applyTouch(); coarse.addEventListener('change', applyTouch);
+    initTheme(); setupTips(); setupLabels(); applyTouch(); coarse.addEventListener('change', applyTouch);
     families.forEach((f) => f.setup?.());
     started = true; init(document); go();
   };

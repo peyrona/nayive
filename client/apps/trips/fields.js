@@ -31,6 +31,7 @@ function fillOptions( select, aOptions, sValue )
 function textField( sLabel, sPlaceholder, sValue, fnOnChange )
 {
     const input = document.createElement( 'input' );
+    input.className = 'input';
     input.type = 'text';
     input.placeholder = sPlaceholder;
     input.value = sValue;
@@ -41,6 +42,7 @@ function textField( sLabel, sPlaceholder, sValue, fnOnChange )
 function textAreaField( sLabel, sPlaceholder, sValue, fnOnChange, nRows )
 {
     const ta = document.createElement( 'textarea' );
+    ta.className = 'input';
     ta.placeholder = sPlaceholder;
     ta.value = sValue;
     if( nRows ) ta.rows = nRows;
@@ -60,6 +62,7 @@ function locationField( sLabel, sPlaceholder, sValue, fnOnChange )
     inputWrap.className = 'loc-input-wrap';
 
     const input = document.createElement( 'input' );
+    input.className = 'input';
     input.type = 'text';
     input.placeholder = sPlaceholder;
     input.value = sValue;
@@ -86,30 +89,24 @@ function locationField( sLabel, sPlaceholder, sValue, fnOnChange )
     return fieldShell( sLabel, row );
 }
 
-// A date or time input under a span that shows the value, or sEmpty when blank.
-function dtField( sType, sEmpty, sLabel, sValue, fnOnChange )
+// Ayni's date (YYYY-MM-DD) or time (HH:MM) field: typed or picked; fnOnChange
+// gets the value on a pick, or once a typed value is taken.
+function dtField( sKind, sLabel, sValue, fnOnChange )
 {
-    const dt = document.createElement( 'div' );
-    dt.className = 'dt-field';
+    const group = document.createElement( 'div' );
+    group.className = 'input-group';
     const input = document.createElement( 'input' );
-    input.type = sType;
-    input.value = sValue;
-    const display = document.createElement( 'span' );
-    display.className = 'dt-display' + (sValue ? '' : ' placeholder');
-    display.textContent = sValue || sEmpty;
-    input.addEventListener( 'input', function()
-    {
-        fnOnChange( input.value );
-        display.textContent = input.value || sEmpty;
-        display.classList.toggle( 'placeholder', ! input.value );
-    });
-    dt.appendChild( input );
-    dt.appendChild( display );
-    return fieldShell( sLabel, dt );
+    input.className = 'input';
+    input.value = sValue || '';
+    group.appendChild( input );
+    const shell = fieldShell( sLabel, group );      // the field's parts go beside it
+    if( sKind === 'date' ) Ayni.dateField( input, { onChange: function( d, v ) { fnOnChange( v ); } } );
+    else                   Ayni.timeField( input, { onChange: fnOnChange } );
+    return shell;
 }
 
-function dateField( sLabel, sValue, fnOnChange ) { return dtField( 'date', T( 'ui.dateHint' ), sLabel, sValue, fnOnChange ); }
-function timeField( sLabel, sValue, fnOnChange ) { return dtField( 'time', 'hh:mm', sLabel, sValue, fnOnChange ); }
+function dateField( sLabel, sValue, fnOnChange ) { return dtField( 'date', sLabel, sValue, fnOnChange ); }
+function timeField( sLabel, sValue, fnOnChange ) { return dtField( 'time', sLabel, sValue, fnOnChange ); }
 
 function selectField( sLabel, sValue, aOptions, fnOnChange )
 {

@@ -252,7 +252,7 @@ function wireStaticUI()
         // typed into, where they belong to the text.
         //
         // "Is a text field focused?" is the wrong test here: Handsontable
-        // keeps focus in a hidden <textarea> whenever the grid is active, so
+        // keeps focus in a hidden <textarea class="input"> whenever the grid is active, so
         // a plain input/textarea check never lets these through at all. What
         // actually matters is whether the CELL EDITOR is open, plus every
         // field of ours outside the grid: the formula row's two boxes and a

@@ -1,0 +1,144 @@
+/* Ayni library 0.1.0, fields family: labels and forms, text areas, editing in place, fields in toolbars, field
+   errors, the number field (spin button), sliders, the date and time fields and the calendar. Needs ayni-base.css (the
+   field box itself: .input, .input-group) and ayni-buttons.css (the buttons inside fields). The rules are chapters 4.1-4.4,
+   4.7, 4.8, 5.4 and 6 of the guidelines; the behaviour is in ayni-fields.js. */
+
+/* ---------- Labels, forms and text areas ---------- */
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field > label, .label-row > label { font-size: .8rem; font-weight: 500; color: var(--text-dim); }
+.req { color: var(--danger); }
+.hint { font-size: .8rem; color: var(--text-dim); }
+.error { font-size: .8rem; color: var(--danger); }
+textarea.input { resize: vertical; min-height: 80px; }
+textarea.input[data-autogrow] { resize: none; overflow-y: auto; max-height: var(--autogrow-max, 240px); }
+/* Text area count: a small rounded tag on the bottom border, on a fully opaque background so neither the border
+   nor the text shows through it. Its border follows the field's (accent on focus, Danger on error). Kept clear of the resize grip at the bottom-right corner. */
+.ta-wrap { position: relative; }
+.ta-wrap textarea { display: block; }
+.ta-count { position: absolute; right: 22px; bottom: 0; transform: translateY(50%); padding: 2px 7px; font: .72rem/1 var(--font-mono);
+  color: var(--text-dim); background: var(--panel-bg); border: 1px solid var(--field-line); border-radius: 999px; pointer-events: none; }
+.ta-wrap:has(textarea:focus-visible) .ta-count { border-color: var(--accent); }
+.ta-wrap:has(textarea[aria-invalid="true"]) .ta-count { border-color: var(--danger); }
+.label-row { display: flex; align-items: center; gap: 6px; }
+/* RULE: field errors (Frasquito, 2026-10-22). Space is precious, so nothing is added below the field: the border takes the
+   Danger colour and a small red "!" (the size of the info "i") sits inside the field at its end, before any end buttons,
+   taking no layout space. For groups (radios, check boxes, lists) the "!" sits next to the group label; a list with no visible label shows it inside its top-right corner. The message floats
+   in a small popup: by itself while the field has focus, otherwise on hovering or clicking the "!". Fixed = all of it goes. */
+.error[data-err-src] { display: none !important; }
+.err-mark { position: relative; flex: none; width: 12px; height: 12px; padding: 0; border: 0; border-radius: 50%; background: var(--danger);
+  color: var(--panel-bg); font: 700 9px/1 var(--font-sans); display: inline-grid; place-items: center; cursor: pointer; }
+.err-mark::after { content: ""; position: absolute; inset: -8px; }
+.err-mark[hidden] { display: none; }
+.err-wrap { position: relative; display: block; }
+.err-wrap > .err-mark { position: absolute; right: 9px; top: 50%; translate: 0 -50%; }
+.err-wrap > .input[aria-invalid="true"] { padding-right: 30px; }
+.err-wrap.err-corner > .err-mark { top: 9px; right: 9px; translate: none; }
+.input-group > .err-mark { margin-inline: 4px; }
+legend > .err-mark, .static-label > .err-mark { margin-left: 6px; vertical-align: -1px; }
+.panel.popup.err-pop { position: fixed; inset: auto; margin: 0; padding: 6px 10px; max-width: min(280px, calc(100vw - 16px));
+  font-size: .8rem; color: var(--text); border-color: var(--danger); }
+.spin { width: 150px; }
+.spin .input { text-align: center; font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+.spin .input::-webkit-inner-spin-button { -webkit-appearance: none; }
+/* Fields stack 12 px apart by the gap of the Panel body they sit in; fields that belong together share a row,
+   wrapping on a narrow screen, none narrower than 120 px */
+.field-row { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+/* Fields stacked outside a Panel body (a part of a form, a page's own form) take the same 12 px */
+.fields { display: flex; flex-direction: column; gap: var(--space-3); }
+.field-row > .field { flex: 1 1 120px; min-width: 0; }
+/* A dialog's lead paragraph sits above its fields; a message about no single field sits at the bottom, above the buttons */
+.body > .hint:first-child { margin: 0 0 var(--space-3); }
+.form-error { margin: var(--space-3) 0 0; font-size: .8rem; line-height: 1.35; color: var(--danger); }
+
+/* ---------- Editing in place ----------
+   RULE: the text at rest (.inline-text) and the field that replaces it (.input.inline) share one box (padding,
+   border, corner, type size), so swapping them moves nothing. The Accent border says "editing now". */
+.inline-text, .input.inline { padding: 3px 7px; font-size: var(--field-fs); line-height: 1.4; border: 1px solid transparent; border-radius: var(--radius-s); }
+.inline-text { display: inline-block; cursor: default; }
+.inline-text.is-editable { cursor: text; }
+.inline-text.is-editable:hover { background: color-mix(in srgb, var(--text) 9%, transparent); }
+.input.inline { min-height: 0; width: auto; border-color: var(--accent); }
+.input.inline:focus-visible { outline: none; }
+
+/* ---------- Fields in a toolbar: the toolbar's 30 px, no label (the tooltip names them) ---------- */
+[role="toolbar"] .input, [role="toolbar"] .input-group { min-height: 30px; }
+[role="toolbar"] .input-group > .input { min-height: 28px; }
+[role="toolbar"] .input-group > .btn:not(.sm) { --btn: 26px; }   /* buttons inside a field keep their size in a toolbar */
+[role="toolbar"] .input:not(.input-group > .input) { padding-block: 0; }
+
+/* ---------- Errors in fields and groups ---------- */
+fieldset[aria-invalid="true"] { border: 1px solid var(--danger); border-radius: var(--ctl-radius); }
+
+/* ---------- Slider: a thin line in the Track colour with an Accent dot; the browser's own drawing is never used ---------- */
+input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 16px; margin: 0; background: transparent; cursor: pointer; }
+input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--track); }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; margin-top: -4px; border: 0; border-radius: 50%; background: var(--accent); }
+input[type="range"]::-moz-range-track { height: 4px; border-radius: 2px; background: var(--track); }
+input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 50%; background: var(--accent); }
+/* The focus ring goes round the dot, not round the whole line */
+input[type="range"]:focus-visible { outline: none; }
+input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--accent); }
+input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--accent); }
+.slider-row { display: flex; align-items: center; gap: 12px; }
+.slider-row output { font: 500 .85rem var(--font-mono); min-width: 4ch; text-align: right; white-space: nowrap; }
+.slider-row input { min-width: 0; }
+.ticks { display: flex; justify-content: space-between; font: .72rem var(--font-mono); color: var(--text-dim); padding: 0 2px; }
+.date-field .input, .time-field .input { font-variant-numeric: tabular-nums; }
+/* A time popup without a calendar: no line above its spinners. A birthday's "No year" switch sits under the calendar */
+.panel.popup > .time-row:first-child { border-top: 0; }
+.panel.popup > .switch.no-year { padding: 8px 8px 4px; border-top: var(--panel-border); font-size: .85rem; }
+.time-row { display: flex; align-items: center; gap: 6px; padding: 10px 8px; border-top: var(--panel-border); }
+.time-row label { font-size: .8rem; font-weight: 500; color: var(--text-dim); margin-right: auto; }
+.time-row .input-group { width: 100px; }
+.time-row .input { text-align: center; font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+.time-row .input::-webkit-inner-spin-button { -webkit-appearance: none; }
+.cal { display: inline-flex; flex-direction: column; gap: 6px; padding: 8px; }
+.cal.inline { border: var(--panel-border); border-radius: var(--ctl-radius); align-self: flex-start; }
+.cal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 600; }
+.cal table { border-collapse: collapse; }
+.cal th { font-size: .72rem; font-weight: 500; color: var(--text-dim); width: 34px; height: 22px; }
+.cal td { padding: 1px; }
+.cal td button { width: 32px; height: 32px; border: 0; border-radius: 4px; background: none; color: var(--text); font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; }
+.cal td button:hover { background: var(--card-head); }
+.cal td button.out { color: var(--text-dim); opacity: .55; }
+.cal td button.today { box-shadow: inset 0 0 0 1px var(--accent); }
+.cal td button[aria-selected="true"] { background: var(--accent); color: var(--on-accent); opacity: 1; }
+.cal-title { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; color: var(--text); font: inherit; font-weight: 600; padding: 4px 8px; border-radius: 4px; }
+button.cal-title { cursor: pointer; } button.cal-title:hover { background: var(--card-head); } .cal-title .icon { --icon: 14px; }
+.cal-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, 1fr); gap: 2px; width: calc(7 * 34px); height: 226px; }
+.cal-grid button { border: 0; border-radius: 4px; background: none; color: var(--text); font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; }
+.cal-grid button:hover { background: var(--card-head); }
+.cal-grid button.today { box-shadow: inset 0 0 0 1px var(--accent); }
+.cal-grid button[aria-selected="true"] { background: var(--accent); color: var(--on-accent); }
+.cal td button[aria-disabled="true"], .cal-grid button[aria-disabled="true"] { opacity: .45; cursor: default; background: none; color: var(--text); }
+.cal-foot { display: flex; }
+
+/* ---------- States ---------- */
+.input:disabled, .input-group:has(.input:disabled), input[type="range"]:disabled { opacity: .45; cursor: default; }
+.input-group .input:disabled { opacity: 1; }
+.input-group[aria-readonly="true"], .input-group:has(> .input[readonly]) { border-color: transparent; background: var(--readonly-bg); }
+.input-group:has(> .input[readonly]) > .input { background: transparent; }
+.slider-row:has(input[aria-readonly="true"]) { background: var(--readonly-bg); border-radius: var(--ctl-radius); padding: 4px 8px; }
+.date-field:has(> .input[readonly]) > .btn, .time-field:has(> .input[readonly]) > .btn { display: none; }
+
+/* ---------- Touch: 44 px targets (2.3) ---------- */
+html.touch .input-group, html.touch .cal-head, html.touch .time-row { gap: 8px; }
+html.touch .input-group > .input { min-width: var(--touch); }
+html.touch .err-mark::after { inset: -16px; }
+html.touch input[type="range"] { height: var(--touch); }
+html.touch input[type="range"]::-webkit-slider-thumb { width: 20px; height: 20px; margin-top: -8px; }
+html.touch input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; }
+html.touch .cal { padding: 4px; } html.touch .cal td { padding: 0; }
+html.touch .cal th, html.touch .cal td button { width: var(--touch); }
+html.touch .cal td button { height: var(--touch); }
+html.touch .cal-grid { width: calc(7 * var(--touch)); height: calc(6 * var(--touch) + 22px); }
+html.touch .cal-title { min-height: var(--touch); }
+/* Very narrow phones: each day is drawn 6 px smaller inside its full 44 px touch cell */
+@media (max-width: 359px) {
+  html.touch .cal { padding: 4px 0; }
+  html.touch .cal td button { padding: 3px; background-clip: content-box; border-radius: 7px; }
+  html.touch .cal td button.today { box-shadow: inset 0 0 0 3px var(--card), inset 0 0 0 4px var(--accent); }
+  html.touch .cal td button:focus-visible { outline-offset: -3px; }
+}
+html.touch .time-row { flex-wrap: wrap; justify-content: space-between; padding: 10px 4px; gap: 6px 4px; } html.touch .time-row label { flex-basis: 100%; }
+html.touch .time-row .input-group { width: auto; } html.touch .time-row .input { width: 44px; flex: none; }

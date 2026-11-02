@@ -200,7 +200,6 @@ dialog.panel.map-dialog { width: 100vw; height: 100vh; height: 100dvh; max-width
    just need width. */
 .doc-row input, .loc-input-wrap input { width: 100%; }
 
-/* .dt-field is the shared DATE / TIME FIELD block (shared/app.css). */
 
 .doc-row { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
 .doc-row select { flex: 0 0 auto; width: auto; min-width: 112px; }
@@ -379,4 +378,4 @@ input:disabled { opacity: 0.5; cursor: not-allowed; }
               color: var(--text); }
 .loc-master.on { border-color: var(--accent); }
 .loc-master + .loc-app { margin-top: 16px; }
-#tripDaysSet { width: 6em; }
+.field:has( > .spin #tripDaysSet ) > .spin { width: 120px; }

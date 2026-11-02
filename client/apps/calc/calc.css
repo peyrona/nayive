@@ -192,15 +192,15 @@ html, body { height: 100%; overflow: hidden; }
    phone and collapses to nothing in menu mode, and where you are - plus
    what is in the cell - has to stay on screen in both.
 
-   Both boxes are .tb-input (TOOLBAR INPUT in app.css); only their widths
+   The row is a toolbar of Ayni fields (they take its 30 px); only their widths
    belong to Calc. */
 #formulaRow
 {
-    display: flex; align-items: center; gap: 2px;
+    display: flex; align-items: center; gap: 2px; flex-wrap: nowrap;
     padding: 4px 10px; background: var(--calc-chrome);
-    border-bottom: 1px solid var(--line); flex: 0 0 auto;
+    border: 0; border-bottom: 1px solid var(--line); border-radius: 0; flex: 0 0 auto;
 }
-#nameBox    { width: 88px; text-align: center; }
+#nameBox    { width: 88px; flex: 0 0 auto; text-align: center; }
 #formulaBar { flex: 1 1 auto; min-width: 0; font-family: var(--font-mono); }
 
 /* On every screen. Wider than a phone the formula editor (FORMULA EDITOR in
@@ -421,7 +421,7 @@ body.calc-painting #gridHost .htCore td { cursor: copy; }
 #fePanel.is-folded .fe-chev svg { transform: rotate(-90deg); }
 .fe-body               { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow-y: auto; padding: 8px 10px 10px; border-top: 1px solid var(--line); }
 #fePanel.is-folded .fe-body { display: none; }
-/* The result, beside Range: a .tb-input box that may grow to a second
+/* The result, beside Range: an .input box that may grow to a second
    line for an error said in words. Its placeholder is data-placeholder. */
 .fe-result             { flex: 1 1 0; min-width: 0; height: auto; min-height: 30px; padding: 5px 8px; line-height: 1.3; overflow-wrap: anywhere; }
 .fe-result:empty::before { content: attr(data-placeholder); color: var(--text-dim); }

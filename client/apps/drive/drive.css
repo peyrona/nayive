@@ -44,7 +44,7 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
    Accent while an advanced search is in force (advsearch.js). */
 
 /* Advanced search dialog. Layout only: every control in it is a shared one
-   (.field, .pill, .btn.text, .btn, .dt-field). */
+   (.field, .pill, .btn.text, .btn). */
 .sb-rules    { display: flex; flex-direction: column; gap: 8px; }
 .sb-rule     { display: flex; align-items: center; gap: 8px; }
 .sb-rule select { flex: 0 0 auto; width: 150px; }
@@ -363,7 +363,7 @@ body.trash-mode .tb-modes { display: none; }
 .trash-bar .trash-days { display: flex; align-items: center; gap: 6px; color: var(--muted, var(--text)); font-size: .9em; }
 /* 5em, not 3.5em: the shared 10px side padding plus the spinner arrows ate
    all but one digit, so "30" read as "3" */
-.trash-bar .trash-days input { width: 5em; padding-inline: 8px 4px; text-align: center; }
+.trash-bar .trash-days .spin { width: 112px; }
 /* Every button in the bar is a shared one: "←" an .btn, "Vaciar
    papelera" a .btn.text.bordered.danger, the days hint an .info-tip (its size
    lives in app.css, so every (i) looks like this one). */

@@ -17,7 +17,7 @@
 .pane-box           { position: relative; display: flex; flex-direction: column; border: 1px solid var(--line);
                       border-radius: var(--radius-m, 10px); background: var(--card); }
 .pane-box:focus-within { border-color: color-mix(in srgb, var(--text) 30%, transparent); }
-.pane-box textarea  { border: 0; background: transparent; min-height: 170px; font-size: 1.08rem; line-height: 1.45;
+.pane-box textarea  { border: 0; background: transparent; min-height: 170px; font-family: inherit; color: var(--text); font-size: 1.08rem; line-height: 1.45;
                       padding: 12px 14px 4px; resize: vertical; }
 .pane-box textarea:focus { outline: none; }
 .result-box         { background: color-mix(in srgb, var(--accent) 7%, var(--card)); }

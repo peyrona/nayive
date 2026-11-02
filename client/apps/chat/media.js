@@ -440,7 +440,7 @@
             urls.forEach( function ( u ) { grid.appendChild( h( "img", { attrs: { src: u, alt: "" } } ) ); } );
             body.appendChild( grid );
         }
-        var cap = h( "input", { attrs: { type: "text", placeholder: T( "chat.addCaption" ), "aria-label": T( "chat.addCaption" ) } } );
+        var cap = h( "input", { class: "input", attrs: { type: "text", placeholder: T( "chat.addCaption" ), "aria-label": T( "chat.addCaption" ) } } );
         body.appendChild( h( "div", { class: "field" }, cap ) );
         var go = Ayni.dialogButton( "primary", T( "chat.sendMsg" ), "send" );
         var sh = C.sheet( files.length === 1 ? T( "chat.photo" ) : C.TF( "chat.nPhotos", { n: files.length } ), body, go );
@@ -1269,8 +1269,8 @@
     C.openCardSheet = function ()
     {
         var conv = S.open;
-        var name = h( "input", { attrs: { type: "text", id: "ccName", maxlength: "60" } } );
-        var tel  = h( "input", { attrs: { type: "tel", id: "ccTel", maxlength: "40" } } );
+        var name = h( "input", { class: "input", attrs: { type: "text", id: "ccName", maxlength: "60" } } );
+        var tel  = h( "input", { class: "input", attrs: { type: "tel", id: "ccTel", maxlength: "40" } } );
         var body = h( "div", {},
             h( "div", { class: "field" }, h( "label", { attrs: { for: "ccName" }, text: T( "chat.name" ) } ), name ),
             h( "div", { class: "field" }, h( "label", { attrs: { for: "ccTel" }, text: T( "chat.phone" ) } ), tel ) );
@@ -1343,14 +1343,14 @@
     C.openPollSheet = function ()
     {
         var conv = S.open;
-        var q = h( "input", { attrs: { type: "text", id: "pollQ", maxlength: "300" } } );
+        var q = h( "input", { class: "input", attrs: { type: "text", id: "pollQ", maxlength: "300" } } );
         var opts = h( "div" );
         var multi = h( "input", { attrs: { type: "checkbox", role: "switch", id: "pollMulti" } } );
         multi.checked = true;
         function addOpt( focus )
         {
             if( opts.children.length >= 12 ) return;
-            var inp = h( "input", { attrs: { type: "text", maxlength: "100", placeholder: C.TF( "chat.optionN", { n: opts.children.length + 1 } ) } } );
+            var inp = h( "input", { class: "input", attrs: { type: "text", maxlength: "100", placeholder: C.TF( "chat.optionN", { n: opts.children.length + 1 } ) } } );
             var rm = C.btn( "x", "chat.remove", function () { if( opts.children.length > 2 ) row.remove(); }, "sm" );
             var row = h( "div", { class: "opt-row" }, inp, rm );
             opts.appendChild( row );

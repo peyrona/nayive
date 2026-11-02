@@ -630,104 +630,37 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
 
 
 /* -----------------------------------------------------------------------------
- * FORM FIELD  (.field)
+ * FORM FIELD  -  Ayni's fields family (shared/ayni/ayni-fields.css + .js)
  *
  *     <div class="field">
- *       <label for="x">Etiqueta</label>
- *       <input id="x" type="text">
+ *       <label for="x">Label</label>
+ *       <input class="input" id="x">
  *     </div>
  *
- * - Label: 0.8rem, --text-dim, sentence case (NOT uppercase - that style is
- *   reserved for .section-label).
- * - Inputs, selects and textareas share one look: --card2 fill, --line border,
- *   --radius-s, 7px 10px padding, the page font at --field-fs (theme.css), no
- *   default outline. That is EVERY text field in EVERY app - see SPECIFICITY
- *   below.
- * - Focus shows a slightly stronger border (--text 30%). No glow, no colour
- *   change - the same treatment on every field in every app.
- * - Put two fields side by side by wrapping them in .field-row.
+ * Every text, password, number, date and time field is Ayni's `.input`: the
+ * class gives the look, never the tag (an editor's own box, a Calc cell, the
+ * Chat composer keep theirs). A dialog's body spaces its .field / .field-row
+ * 12 px apart (its gap); elsewhere wrap stacked fields in `.fields`.
+ *   side by side       .field-row
+ *   wrong value        aria-invalid + aria-describedby -> .error: the red "!"
+ *   about no one field p.form-error at the bottom of the dialog
+ *   lead paragraph     p.hint at the top of the dialog's body
+ *   password           .input-group + .btn[data-reveal]
+ *   number             .input-group.spin around <input type="number" min max>
+ *   date / time        .input-group + Ayni.dateField / Ayni.timeField
+ *   edit in place      span.inline-text <-> input.input.inline
+ *   in a toolbar       inside [role="toolbar"]: its 30 px, no label
+ * Before saving a form with typed dates, times or numbers:
+ *   if( Ayni.focusFirstError( dialog ) ) return;
  *
- * SPECIFICITY: the input rules below are deliberately kept at their weakest
- * (`input, select, textarea`), so ANY rule an app already has - a
- * `.loc-input-wrap input`, a `.topbar-search` - still wins. That weakness is
- * for LAYOUT (width, flex, a padding-right that clears an inline button), NOT
- * for a second look: there is ONE text-field look in Nayive and it is the one
- * below. A toolbar search, a header compose field, a dialog field and a table
- * cell field are all the same --field-fs / 7px 10px box. If you find an app
- * setting its own padding, font-size or height on a field, delete it.
- *
- * There are exactly THREE exceptions, and all three are shared classes below -
- * an app still never rolls its own:
- *   .field-edit  (EDIT IN PLACE)   a click-to-rename box that has to sit exactly
- *                                  where a line of text was, so it runs a
- *                                  tighter 3px 7px.
- *   .tb-select   (TOOLBAR SELECT)  a drop-down that lives in a toolbar row, so
- *                                  it is button-height and transparent, not a
- *                                  filled field.
- *   .tb-input    (TOOLBAR INPUT)   the same, for a text box that lives in a
- *                                  toolbar row (Calc's name box and formula bar).
+ * Still Nayive's below: the drop-down <select> (until Ayni's list picker moves
+ * in) and the browser's own check / radio / colour / file boxes.
  * ---------------------------------------------------------------------------*/
-.field             { margin-bottom: 14px; }
+.field select      { width: 100%; }
 
-.field label
+select
 {
-    display: block;
-    margin-bottom: 5px;
-    font-size: 0.8rem;
-    color: var(--text-dim);
-}
-
-/* An on / off row: the text, then the shared .switch at the end (Calc, Write). */
-.field label.check
-{
-    display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 0;
-    font-size: 0.9rem; color: var(--text); cursor: pointer;
-}
-
-.field-row
-{
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-}
-.field-row .field  { flex: 1 1 120px; min-width: 0; }
-
-/* What a field got wrong, right under it: "the two passwords do not match".
- * Hidden until there is something to say ([hidden] wins over the display). */
-.field-error
-{
-    margin: -8px 0 12px;
-    color: var(--danger);
-    font-size: 0.8rem;
-    line-height: 1.35;
-}
-
-/* PASSWORD EYE: a password box with a show / hide eye inside its right end
- * (login.html, admin.html, the launcher's My account). Each page adds only
- * what differs: the eye's width, the icon size, the field's room and margins. */
-.pw-wrap           { position: relative; }
-.pw-eye
-{
-    position: absolute; top: 0; right: 0; height: 100%;
-    width: 38px; display: flex; align-items: center; justify-content: center;
-    border: none; background: none; padding: 0; cursor: pointer;
-    color: var(--text-dim);
-}
-.pw-eye:hover      { color: var(--text); }
-.pw-eye svg        { width: 18px; height: 18px; }
-.field .pw-wrap input { padding-right: 40px; }   /* NayiveUI.askPassword: room for the eye */
-
-/* A field's control fills the row. Scoped to .field so it never stretches a
- * toolbar / search input that lives outside a form. */
-.field input:not([role="switch"]),
-.field select,
-.field textarea    { width: 100%; }
-
-input,
-select,
-textarea
-{
-    padding: 7px 10px;
+    padding: 6px 10px;
     font: inherit;
     font-size: var(--field-fs);
     color: var(--text);
@@ -736,110 +669,20 @@ textarea
     border-radius: var(--radius-s);
     outline: none;
 }
-textarea           { resize: vertical; min-height: 54px; }
-
-/* A <select> is given ~2px more inner box than an <input> of the same font, so
- * the identical 7px above would leave it standing 2px taller than the field
- * next to it in a .field-row. One pixel off the top and bottom lines the two up
- * exactly - measured in Chromium at the field size and at the phone's 16px,
- * gap is the same 2px both times, so this is a constant and not a magic number
- * tuned to one size. */
-select             { padding-block: 6px; }
-
-input:focus,
-select:focus,
-textarea:focus     { border-color: color-mix(in srgb, var(--text) 30%, transparent); }
-
-::placeholder      { color: var(--text-faint); }
+select:focus       { border-color: color-mix(in srgb, var(--text) 30%, transparent); }
 
 /* The drop-down list a <select> opens is painted by the OS, and left alone it
- * comes back white-on-white in the dark theme. Tokenised here so a dialog select
- * in Calendar / Split / Write opens the same list as a toolbar one. The closed
- * box keeps the platform chevron - that is the same on every select, so it stays
- * native rather than being redrawn per app. */
+ * comes back white-on-white in the dark theme. */
 select option      { color: var(--text); background: var(--card2); }
 
-/* Browser autofill paints its own pale background + a hard border. Force the
- * themed look back. Chrome/Edge: the inset box-shadow is the only way to cover
- * the autofill background. Firefox: honours background-color on :autofill. */
-input:-webkit-autofill,
-input:-webkit-autofill:hover,
-input:-webkit-autofill:focus
-{
-    -webkit-text-fill-color: var(--text);
-    -webkit-box-shadow: 0 0 0 100px var(--card2) inset;
-    caret-color: var(--text);
-    border: 1px solid var(--line);
-}
-input:autofill { background-color: var(--card2); color: var(--text); }
-
-/* Checkbox / radio / colour / file / range keep the browser's box - the field
- * look above is for text-like inputs only. A switch is Ayni's drawing. */
+/* Check / radio / colour / file keep the browser's box, in the accent. A
+ * switch is Ayni's drawing. */
 input[type="checkbox"]:not([role="switch"]),
 input[type="radio"],
 input[type="color"],
-input[type="file"],
-input[type="range"]
-{
-    width: auto;
-    padding: 0;
-    background: none;
-    border: none;
-    border-radius: 0;
-    accent-color: var(--accent);
-}
+input[type="file"] { accent-color: var(--accent); }
 
 
-/* -----------------------------------------------------------------------------
- * EDIT IN PLACE  (.field-edit-text / .field-edit)
- *
- *     <span  class="field-edit-text is-editable">Comprar pan</span>   <!-- rest -->
- *     <input class="field-edit" type="text" value="Comprar pan">   <!-- editing -->
- *
- * The ONE sanctioned second field look, and the only exception to "one text
- * field look" above. It is not a size variant - it is a MODE: a line of text
- * you click to rename in place. Used by the document name in Calc / Text /
- * Write and by the task and sub-task rows in Tasks.
- *
- * The two rules share the same box - same padding, same 1px border (transparent
- * at rest), same radius, same --field-fs - so swapping span for input does
- * not move a pixel and the row never jumps. That is the whole point; if you
- * change the padding, change it in BOTH.
- *
- * The accent border is the only difference, and it is the "you are editing now"
- * signal. Everything else - fill, radius, no outline - is the standard field.
- *
- * Add .is-editable for the click affordance (text cursor + hover fill). It is a
- * separate class because a row can be shown but not renameable - a finished task
- * keeps the box, and loses the invitation to click it.
- *
- * Apps set flex / min-width / margin / colour on top. They do NOT set
- * font-size, padding or height: an edit box is the same size in every app.
- * ---------------------------------------------------------------------------*/
-.field-edit-text
-{
-    padding: 3px 7px;
-    font-size: var(--field-fs);
-    line-height: 1.4;
-    border: 1px solid transparent;
-    border-radius: var(--radius-s);
-    cursor: default;
-}
-.field-edit-text.is-editable        { cursor: text; }
-.field-edit-text.is-editable:hover  { background: color-mix(in srgb, var(--text) 9%, transparent); }
-
-.field-edit
-{
-    padding: 3px 7px;
-    font: inherit;
-    font-size: var(--field-fs);
-    line-height: 1.4;
-    color: var(--text);
-    background: var(--card2);
-    border: 1px solid var(--accent);
-    border-radius: var(--radius-s);
-    outline: none;
-}
 
 
 /* -----------------------------------------------------------------------------
@@ -847,7 +690,7 @@ input[type="range"]
  *
  *     <select class="tb-select">…</select>
  *
- * The second and last exception to the one field look. A drop-down that sits in
+ * Nayive's until Ayni's list picker moves in. A drop-down that sits in
  * a toolbar row, not in a form: it takes the row's 30px button height and stays
  * transparent, so it reads as one of the toolbar's controls instead of a filled
  * field parked in the chrome. 0.82rem is the toolbar's own type size.
@@ -875,57 +718,8 @@ input[type="range"]
 }
 .tb-select:hover   { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 
-/* The same control as a number box (Text's right-margin spinner): every
- * property restated, to beat the filled FORM FIELD look every <input> gets.
- * It keeps the browser's own up / down arrows - that is what makes it a
- * spinner. */
-.tb-num
-{
-    width: 4.6em;
-    height: 30px;
-    flex: 0 0 auto;
-    padding: 0 0 0 6px;
-    font: inherit;
-    font-size: 0.82rem;
-    color: var(--text);
-    background: transparent;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-s);
-    outline: none;
-}
-.tb-num:hover      { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 
 
-/* -----------------------------------------------------------------------------
- * TOOLBAR INPUT  (.tb-input)  -  Calc's name box and formula bar
- *
- *     <input class="tb-input" type="text">
- *
- * The third exception to the one field look, and the twin of .tb-select: a text
- * box that sits in a toolbar row instead of in a form. Same 30px button height,
- * same 1px --line outline, same 0.82rem type.
- *
- * Unlike the drop-down it stays a FILLED box - it is written into, and a
- * transparent one reads as a label rather than something you can type in - and
- * its focus shows in the accent, as every field in Nayive does.
- *
- * Give it a width from the app (Calc's name box is 88px, its formula bar takes
- * the rest of the row): how wide the box has to be is the app's business.
- * ---------------------------------------------------------------------------*/
-.tb-input
-{
-    height: 30px;
-    flex: 0 0 auto;
-    padding: 0 8px;
-    font: inherit;
-    font-size: 0.82rem;
-    color: var(--text);
-    background: var(--card2);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-s);
-    outline: none;
-}
-.tb-input:focus    { border-color: var(--accent); }
 
 
 /* -----------------------------------------------------------------------------
@@ -1273,7 +1067,7 @@ button,
     color: var(--text-dim);
     cursor: pointer;
 }
-.share-add input { flex: 0 0 auto; width: auto; margin: 0; }
+.share-add input:not([role="switch"]) { flex: 0 0 auto; width: auto; margin: 0; }
 .share-add > .switch { margin-left: auto; }   /* an on / off row: the text, then the switch */
 /* "Everybody": the on / off row above the names (it greys them out). */
 .share-all { margin: 12px 2px 0; }
@@ -1492,34 +1286,6 @@ button,
 .menu .mi-char                  { display: inline-grid; place-items: center; width: 18px; font-size: 0.95rem; line-height: 1; }
 
 
-/* -----------------------------------------------------------------------------
- * DATE / TIME FIELD  (.dt-field)
- *
- * A native <input type=date|time> shows its value in the browser's own locale
- * (mm/dd/yyyy). The Nayive rule is yyyy-mm-dd and 24 h, so the native text is
- * hidden (color: transparent) and a .dt-display overlay shows the ISO value;
- * the input stays underneath, so a tap still opens the native picker. The app
- * keeps the overlay's text in step on `input` (Calendar, Contacts, Split, Trips).
- * `.placeholder` on the overlay draws it dim while the field is empty.
- *
- *     <div class="dt-field"><input type="date" id="x"><span class="dt-display"></span></div>
- * ---------------------------------------------------------------------------*/
-.dt-field                { position: relative; }
-.dt-field input[type=date],
-.dt-field input[type=time] { color: transparent; }
-.dt-field .dt-display
-{
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    padding: 0 10px;
-    font-size: var(--field-fs);
-    color: var(--text);
-    pointer-events: none;
-    white-space: nowrap;
-}
-.dt-field .dt-display.placeholder { color: var(--text-dim); }
 
 
 /* -----------------------------------------------------------------------------
@@ -1576,8 +1342,8 @@ button,
  * control that opens NayiveUI.pickFolder. shared/office.js builds all three.
  * ---------------------------------------------------------------------------*/
 /* The document name is an EDIT IN PLACE pair: .file-label (span, at rest) swaps
- * for .file-label-input (the box). Both carry the shared .field-edit-text /
- * .field-edit look - only the header layout is set here. A name too long to fit
+ * for .file-label-input (the box). Both carry Ayni's .inline-text /
+ * .input.inline look - only the header layout is set here. A name too long to fit
  * loses its START ("...informe 2026.docx"): the end, with the extension, is what
  * tells documents apart. rtl puts the ellipsis on the left; the name itself sits
  * in a <bdi> so it still reads left to right. */
@@ -1655,7 +1421,7 @@ button,
 .open-list li.is-folder::after   { content: "\203A"; color: var(--text-dim); flex: 0 0 auto; padding-right: 2px; }
 
 /* The folder row of a save-as dialog. It sits inside a .field, so it has to
- * look exactly like the <input> above it - only the folder icon and the
+ * look exactly like Ayni's .input above it - only the folder icon and the
  * pointer say it opens something. */
 .folder-pick
 {
@@ -1663,18 +1429,19 @@ button,
     align-items: center;
     gap: 8px;
     width: 100%;
-    padding: 7px 10px;
+    min-height: var(--ctl-h);
+    padding: 5px 8px;
     font: inherit;
     font-size: var(--field-fs);
     text-align: left;
     color: var(--text);
     background: var(--card2);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-s);
+    border: 1px solid var(--field-line);
+    border-radius: var(--ctl-radius);
     cursor: pointer;
 }
-.folder-pick:hover,
-.folder-pick:focus-visible { border-color: color-mix(in srgb, var(--text) 30%, transparent); outline: none; }
+.folder-pick:hover         { border-color: var(--text-dim); }
+.folder-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
 .folder-pick .fp-btn-ic     { flex: 0 0 auto; display: flex; color: var(--text-dim); }
 .folder-pick .fp-btn-ic svg { width: 16px; height: 16px; }
 .folder-pick .fp-btn-nm     { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1850,30 +1617,7 @@ button,
 .volume-block               { display: flex; align-items: center; gap: var(--space-2); flex: 0 0 auto; width: 130px; }
 .volume-block svg           { width: 17px; height: 17px; flex: 0 0 auto; color: var(--text-dim); }
 
-/* The seek + volume sliders. The browser's own range input, tokenised. */
-input[type=range]
-{
-    -webkit-appearance: none;
-    appearance: none;
-    width: 100%;
-    height: 4px;
-    border-radius: 2px;
-    background: var(--track);
-    outline: none;
-}
-input[type=range]::-webkit-slider-thumb
-{
-    -webkit-appearance: none;
-    width: 12px; height: 12px; margin-top: -4px;
-    border-radius: 50%;
-    background: var(--accent);
-    cursor: pointer;
-}
-input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--track); }
-input[type=range]::-moz-range-thumb  { width: 12px; height: 12px; border: none; border-radius: 50%;
-                                       background: var(--accent); cursor: pointer; }
-input[type=range]::-moz-range-track  { height: 4px; border-radius: 2px; background: var(--track); }
-input[type=range]:disabled           { opacity: 0.5; }
+/* The seek + volume sliders are Ayni's (shared/ayni/ayni-fields.css). */
 
 /* On a narrow window the bar goes to two rows with the seek bar full width
    underneath. That lives in each media app's own narrow block, not here: the two
@@ -2035,8 +1779,8 @@ input[type=range]:disabled           { opacity: 0.5; }
 .ie-val              { flex: 0 0 auto; min-width: 34px; text-align: right; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
 /* Resize: width × height px and %, the standard inputs, sized to their digits. */
 .ie-size             { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--text-dim); }
-.ie-size input       { width: 6.5em; font-variant-numeric: tabular-nums; }
-.ie-size input[data-ie=size-pct] { width: 5.5em; margin-left: 8px; }
+.ie-size .spin      { width: 128px; flex: 0 0 auto; }
+.ie-size .spin:has( [data-ie=size-pct] ) { width: 112px; margin-left: 8px; }
 
 /* The crop box: a corner sizes it, an edge too (only free), inside moves it;
    the picture outside it goes dark. Chat's own crop (before a photo goes) is
@@ -2105,21 +1849,14 @@ input[type=range]:disabled           { opacity: 0.5; }
     /* Fingers, not pointers: the dense 30px toolbar button grows to 36px, and
        the toolbar select grows with it so the row stays one height. */
     .btn.sm            { --btn: 36px; }
-    .tb-select,
-    .tb-num            { height: 36px; }
+    .tb-select         { height: 36px; }
 }
-/* A text field under 16px makes iOS Safari zoom the whole page in when it gets
-   focus - and it never zooms back out. So on a touch phone every field is at
-   least 16px. Touch only: a narrow pane on a PC (Tasks inside Planner, a small
-   desktop window) is not a phone, and a 16px field there stood taller than
-   every other control around it. Attribute selectors: this must beat an app's
-   single-class rule (a .search-input, a .scm-num ...). */
+/* A field under 16px makes iOS Safari zoom the whole page in when it gets
+   focus - and it never zooms back out. Ayni's fields take 16px on a touch
+   phone by themselves (--field-fs); the drop-down still is Nayive's. */
 @media (max-width: 640px) and (pointer: coarse)
 {
-    input[type]:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
-    input:not([type]),
-    select,
-    textarea           { font-size: 16px; }
+    select             { font-size: 16px; }
 }
 
 /* THE CLIP'S PANEL (NayiveUI.attachPanel): round coloured buttons, three to a
@@ -2221,7 +1958,7 @@ html.nv-locked body { visibility: hidden; }
     box-shadow: var(--elev-dialog);
 }
 .lock-card[hidden] { display: none; }
-.lock-card input { flex: 1 1 0; min-width: 0; }
+.lock-card .input-group { flex: 1 1 0; min-width: 0; width: auto; }
 .lock-msg { flex-basis: 100%; margin: 0; font-size: 0.85rem; color: var(--danger); }
 
 
@@ -2325,7 +2062,4 @@ html.nv-locked body { visibility: hidden; }
 
     /* The seek / volume sliders: the bar stays 4 px, the box a thumb can grab
        grows - and an equal negative margin keeps the layout where it was. */
-    input[type=range]                         { height: 40px; margin-block: -18px; background: transparent; }
-    input[type=range]::-webkit-slider-thumb   { width: 20px; height: 20px; margin-top: -8px; }
-    input[type=range]::-moz-range-thumb       { width: 20px; height: 20px; }
 }

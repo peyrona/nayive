@@ -28,6 +28,7 @@
     <script src="../shared/ayni/ayni-search.js" defer></script>
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
+    <script src="../shared/ayni/ayni-fields.js" defer></script>
     <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
     <script src="../shared/gum-api.js" defer></script>
     <!-- Small shared UI helpers: backdrop open/close, toast. -->
@@ -95,6 +96,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -439,8 +441,8 @@
         <div class="topbar">
             <svg class="app-icon" width="20" height="20" viewBox="0 0 512 512" fill="currentColor"><g transform="translate(45 465) rotate(-48)"><path d="M0 0 28 -14 82 -36C96 -36 110 -27 122 -19L122 19C110 27 96 36 82 36L28 14Z"></path><rect x="132" y="-26" width="350" height="52"></rect><path d="M494 -26 522 -26C542 -26 550 -14 550 0 550 14 542 26 522 26L494 26Z"></path></g><rect x="262" y="220" width="176" height="50" rx="12"></rect><path fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" d="M294 270 294 300C294 314 228 312 228 332L228 445C228 460 240 472 255 472L445 472C460 472 472 460 472 445L472 332C472 312 406 314 406 300L406 270"></path><path d="M228 355 472 355 472 445C472 460 460 472 445 472L255 472C240 472 228 460 228 445Z"></path></svg>
             <h1>Write</h1>
-            <span id="fileLabel" class="file-label field-edit-text is-editable" data-i18n="ui.untitled" data-i18n-attr="title:text.clickRename"></span>
-            <input id="fileNameInput" class="file-label-input field-edit" type="text" style="display:none" autocomplete="off">
+            <span id="fileLabel" class="file-label inline-text is-editable" data-i18n="ui.untitled" data-i18n-attr="title:text.clickRename"></span>
+            <input id="fileNameInput" class="input inline file-label-input" type="text" style="display:none" autocomplete="off">
 
             <!-- Write's two menu chromes, the way Calendar switches day / week /
                  month: two icon buttons in the header, the current one filled
@@ -673,8 +675,8 @@
                 </select>
             </div>
             <div class="field-row" id="psCustomRow" hidden>
-                <div class="field"><label for="psWidth" data-i18n="write.paperWidth"></label><input type="text" id="psWidth" inputmode="decimal"></div>
-                <div class="field"><label for="psHeight" data-i18n="write.paperHeight"></label><input type="text" id="psHeight" inputmode="decimal"></div>
+                <div class="field"><label for="psWidth" data-i18n="write.paperWidth"></label><input class="input" type="text" id="psWidth" inputmode="decimal"></div>
+                <div class="field"><label for="psHeight" data-i18n="write.paperHeight"></label><input class="input" type="text" id="psHeight" inputmode="decimal"></div>
             </div>
             <div class="field">
                 <label for="psOrient" data-i18n="write.orientation"></label>
@@ -684,12 +686,12 @@
                 </select>
             </div>
             <div class="field-row">
-                <div class="field"><label for="psTop" data-i18n="write.marginTop"></label><input type="text" id="psTop" inputmode="decimal"></div>
-                <div class="field"><label for="psBottom" data-i18n="write.marginBottom"></label><input type="text" id="psBottom" inputmode="decimal"></div>
+                <div class="field"><label for="psTop" data-i18n="write.marginTop"></label><input class="input" type="text" id="psTop" inputmode="decimal"></div>
+                <div class="field"><label for="psBottom" data-i18n="write.marginBottom"></label><input class="input" type="text" id="psBottom" inputmode="decimal"></div>
             </div>
             <div class="field-row">
-                <div class="field"><label for="psLeft" data-i18n="write.marginLeft"></label><input type="text" id="psLeft" inputmode="decimal"></div>
-                <div class="field"><label for="psRight" data-i18n="write.marginRight"></label><input type="text" id="psRight" inputmode="decimal"></div>
+                <div class="field"><label for="psLeft" data-i18n="write.marginLeft"></label><input class="input" type="text" id="psLeft" inputmode="decimal"></div>
+                <div class="field"><label for="psRight" data-i18n="write.marginRight"></label><input class="input" type="text" id="psRight" inputmode="decimal"></div>
             </div>
         </div>
         <footer>
@@ -708,8 +710,8 @@
         <div class="body">
             <div class="section-label" data-i18n="write.paSpacingLabel"></div>
             <div class="field-row">
-                <div class="field"><label for="paBefore" data-i18n="write.paBefore"></label><input type="text" id="paBefore" inputmode="decimal" value="0"></div>
-                <div class="field"><label for="paAfter" data-i18n="write.paAfter"></label><input type="text" id="paAfter" inputmode="decimal" value="0"></div>
+                <div class="field"><label for="paBefore" data-i18n="write.paBefore"></label><input class="input" type="text" id="paBefore" inputmode="decimal" value="0"></div>
+                <div class="field"><label for="paAfter" data-i18n="write.paAfter"></label><input class="input" type="text" id="paAfter" inputmode="decimal" value="0"></div>
                 <div class="field"><label for="paLine" data-i18n="write.paLine"></label>
                     <select id="paLine">
                         <option value="1">1</option>
@@ -722,8 +724,8 @@
 
             <div class="section-label" data-i18n="write.paIndentLabel"></div>
             <div class="field-row">
-                <div class="field"><label for="paLeft" data-i18n="write.paLeft"></label><input type="text" id="paLeft" inputmode="decimal" value="0"></div>
-                <div class="field"><label for="paRight" data-i18n="write.paRight"></label><input type="text" id="paRight" inputmode="decimal" value="0"></div>
+                <div class="field"><label for="paLeft" data-i18n="write.paLeft"></label><input class="input" type="text" id="paLeft" inputmode="decimal" value="0"></div>
+                <div class="field"><label for="paRight" data-i18n="write.paRight"></label><input class="input" type="text" id="paRight" inputmode="decimal" value="0"></div>
                 <div class="field"><label for="paSpecial" data-i18n="write.paSpecial"></label>
                     <select id="paSpecial">
                         <option value="none" data-i18n="write.paSpecialNone"></option>
@@ -731,7 +733,7 @@
                         <option value="hanging" data-i18n="write.paSpecialHanging"></option>
                     </select>
                 </div>
-                <div class="field" id="paSpecialByField" hidden><label for="paSpecialBy" data-i18n="write.paSpecialBy"></label><input type="text" id="paSpecialBy" inputmode="decimal" value="1,25"></div>
+                <div class="field" id="paSpecialByField" hidden><label for="paSpecialBy" data-i18n="write.paSpecialBy"></label><input class="input" type="text" id="paSpecialBy" inputmode="decimal" value="1,25"></div>
             </div>
 
             <div class="section-label" data-i18n="write.paFlowLabel"></div>
@@ -757,7 +759,7 @@
 
             <div class="section-label" data-i18n="write.paTabsLabel"></div>
             <div class="field-row">
-                <div class="field"><label for="paTabPos" data-i18n="write.paTabPos"></label><input type="text" id="paTabPos" inputmode="decimal" value="0"></div>
+                <div class="field"><label for="paTabPos" data-i18n="write.paTabPos"></label><input class="input" type="text" id="paTabPos" inputmode="decimal" value="0"></div>
                 <div class="field"><label for="paTabAlign" data-i18n="write.paTabAlign"></label>
                     <select id="paTabAlign">
                         <option value="left" data-i18n="write.sc.alignLeft"></option>
@@ -800,8 +802,8 @@
 
             <div class="section-label" data-i18n="write.paSpacingLabel"></div>
             <div class="field-row">
-                <div class="field"><label for="stBefore" data-i18n="write.paBefore"></label><input type="text" id="stBefore" inputmode="decimal" value="0"></div>
-                <div class="field"><label for="stAfter" data-i18n="write.paAfter"></label><input type="text" id="stAfter" inputmode="decimal" value="0"></div>
+                <div class="field"><label for="stBefore" data-i18n="write.paBefore"></label><input class="input" type="text" id="stBefore" inputmode="decimal" value="0"></div>
+                <div class="field"><label for="stAfter" data-i18n="write.paAfter"></label><input class="input" type="text" id="stAfter" inputmode="decimal" value="0"></div>
             </div>
 
             <div class="field"><label class="check switch end"><span data-i18n="write.stDefault"></span><input role="switch" type="checkbox" id="stDefault"></label></div>
@@ -855,7 +857,7 @@
         <div class="body">
             <div class="field">
                 <label for="linkHref" data-i18n="write.linkAddress"></label>
-                <input id="linkHref" type="url" inputmode="url" autocomplete="off" placeholder="https://">
+                <input class="input" id="linkHref" type="url" inputmode="url" autocomplete="off" placeholder="https://">
             </div>
         </div>
         <footer>

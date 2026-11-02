@@ -477,9 +477,10 @@
         function resizeOpts()
         {
             var row = el( "div", "ie-size", optsBar );
+            // Ayni number fields (− field +); a comma is a decimal mark too
             function box( key, act )
             {
-                var i = el( "input", "", row );
+                var i = el( "input", "input", el( "span", "input-group spin", row ) );
                 i.type = "number";
                 i.min = "1";
                 i.step = act === "pct" ? "any" : "1";
@@ -501,7 +502,7 @@
             // The factor a box asks for, or 0 when it asks for nothing valid.
             function factor( i )
             {
-                var v = Number( i.value ), t = turned( state.m, state.crop.w, state.crop.h );
+                var v = Number( String( i.value ).trim().replace( ",", "." ) ), t = turned( state.m, state.crop.w, state.crop.h );
                 if( ! ( v > 0 ) || ! isFinite( v ) ) return 0;
                 var k = i === iw ? v / t.w : i === ih ? v / t.h : v / 100;
                 return k > 0 && k <= MAXK + 1e-9 ? k : 0;

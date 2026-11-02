@@ -26,6 +26,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -38,6 +39,7 @@
     <script src="../shared/ayni/ayni-search.js" defer></script>
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
+    <script src="../shared/ayni/ayni-fields.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
@@ -264,11 +266,6 @@
         .empty .empty-title { margin: 10px 0 0; font-size: 0.95rem; font-weight: 600; color: var(--text-dim); }
 
 
-        /* Native date inputs render in the browser's own locale (e.g. mm/dd/yyyy). Hide the
-           native text and overlay our own yyyy-mm-dd label; the input stays tappable
-           underneath so the picker still opens. Same technique as Calendar / Trip. */
-        /* .dt-field is the shared DATE / TIME FIELD block (shared/app.css). */
-
         /* Repeatable multi-value rows (phones, emails, addresses) */
         .multi-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-start; }
         .multi-row select { flex: 0 0 96px; }
@@ -471,22 +468,22 @@
             <div class="field-row">
                 <div class="field">
                     <label for="fGiven" data-i18n="contact.firstName"></label>
-                    <input type="text" id="fGiven" autocomplete="off">
+                    <input class="input" type="text" id="fGiven" autocomplete="off">
                 </div>
                 <div class="field">
                     <label for="fFamily" data-i18n="contact.lastName"></label>
-                    <input type="text" id="fFamily" autocomplete="off">
+                    <input class="input" type="text" id="fFamily" autocomplete="off">
                 </div>
             </div>
 
             <div class="field-row">
                 <div class="field">
                     <label for="fOrg" data-i18n="contact.org"></label>
-                    <input type="text" id="fOrg" autocomplete="off">
+                    <input class="input" type="text" id="fOrg" autocomplete="off">
                 </div>
                 <div class="field">
                     <label for="fJobTitle" data-i18n="contact.jobTitle"></label>
-                    <input type="text" id="fJobTitle" autocomplete="off">
+                    <input class="input" type="text" id="fJobTitle" autocomplete="off">
                 </div>
             </div>
 
@@ -516,7 +513,7 @@
                 <span class="more-line"></span>
             </button>
 
-            <div id="moreSection" style="display:none;">
+            <div class="fields" id="moreSection" style="display:none;">
                 <div class="section-head">
                     <span data-i18n="contact.addresses"></span>
                     <button type="button" class="btn sm" data-add="adr" data-i18n-attr="data-tip:contact.addAddress">
@@ -537,15 +534,12 @@
 
                 <div class="field">
                     <label for="fBday" data-i18n="contact.birthday"></label>
-                    <div class="dt-field">
-                        <input type="date" id="fBday">
-                        <span class="dt-display placeholder" id="fBdayDisplay" data-i18n="ui.dateHint"></span>
-                    </div>
+                    <div class="input-group"><input class="input" id="fBday"></div>
                 </div>
 
                 <div class="field">
                     <label for="fNote" data-i18n="ui.notes"></label>
-                    <textarea id="fNote"></textarea>
+                    <textarea class="input" id="fNote"></textarea>
                 </div>
             </div>
         </div>
@@ -618,6 +612,7 @@
         let contacts   = [];      // source of truth: array of contact objects (see makeContact)
         let unparsedCards = [];   // [{ pos, text }] cards of the file the parser could not read: written back untouched
         let nextPos    = 0;       // the place in the file of the next card added (see contactsToVcf)
+        let bdayField  = null;    // Ayni's date field for the birthday: YYYY-MM-DD, or --MM-DD without a year
         let bookRead   = false;   // the address book has been read once (or is not there yet): edits may be saved
         let loadFailSaid = false; // the "could not be read" toast has been shown
         let query      = '';
@@ -2725,15 +2720,13 @@
         function formState()
         {
             const v    = id => document.getElementById( id ).value;
-            const bday = document.getElementById( 'fBday' );
-
             return {
                 given : v( 'fGiven' ), family: v( 'fFamily' ), org: v( 'fOrg' ), title: v( 'fJobTitle' ),
                 tels  : JSON.stringify( readMultiRows( 'telRows',   'tel' ) ),
                 emails: JSON.stringify( readMultiRows( 'emailRows', 'email' ) ),
                 adrs  : JSON.stringify( readMultiRows( 'adrRows',   'adr' ) ),
                 urls  : JSON.stringify( readMultiRows( 'urlRows',   'url' ) ),
-                bday  : bday.value + '|' + ( bday.dataset.noYear || '' ),
+                bday  : bdayField.value,
                 note  : v( 'fNote' ),
                 photo : formPhoto
             };
@@ -2750,28 +2743,13 @@
             formPhoto = c.photo || '';
             showFormPhoto();
 
-            // <input type=date> cannot hold a birthday without a year ('--MM-DD'):
-            // it waits here, shown by the overlay, until a date is picked.
-            const bday = document.getElementById( 'fBday' );
-            bday.value          = /^--/.test( c.bday ) ? '' : c.bday;
-            bday.dataset.noYear = /^--/.test( c.bday ) ? c.bday : '';
-            refreshBdayDisplay();
+            // A birthday may have no year ('--MM-DD'): Ayni's date field takes both.
+            bdayField.set( c.bday || '' );
 
             [ 'telRows', 'emailRows', 'adrRows', 'urlRows' ].forEach( id =>
             {
                 document.getElementById( id ).innerHTML = '';
             });
-        }
-
-        // The native date input's .value is always yyyy-mm-dd whatever the browser
-        // locale shows, so this overlay renders the date in ANSI format directly.
-        function refreshBdayDisplay()
-        {
-            const el   = document.getElementById( 'fBday' );
-            const disp = document.getElementById( 'fBdayDisplay' );
-            const v    = el.value || el.dataset.noYear || '';
-            disp.textContent = v || T( 'ui.dateHint' );
-            disp.classList.toggle( 'placeholder', ! v );
         }
 
         function addMultiRow( kind, data )
@@ -2866,6 +2844,7 @@
         function makeInput( type, placeholder, value )
         {
             const inp = document.createElement( 'input' );
+            inp.className = 'input';
             inp.type = type;
             inp.placeholder = placeholder;
             inp.value = value;
@@ -2913,6 +2892,8 @@
 
         function commitEdit()
         {
+            // A typed birthday that is not a date is not saved: its field shows why
+            if( Ayni.focusFirstError( document.getElementById( 'editBackdrop' ) ) ) return;
             if( ! canSave() ) return;     // the form stays open: nothing typed is lost
 
             const given  = document.getElementById( 'fGiven'  ).value.trim();
@@ -2955,7 +2936,7 @@
             if( touched( 'emails' ) ) c.emails = emails;
             if( touched( 'adrs' ) )   c.adrs   = readMultiRows( 'adrRows', 'adr' );
             if( touched( 'urls' ) )   c.urls   = readMultiRows( 'urlRows', 'url' );
-            if( touched( 'bday' ) )   c.bday   = document.getElementById( 'fBday' ).value || document.getElementById( 'fBday' ).dataset.noYear || '';
+            if( touched( 'bday' ) )   c.bday   = bdayField.value;
             if( touched( 'note' ) )   c.note   = document.getElementById( 'fNote' ).value.trim();
             if( touched( 'photo' ) )  c.photo  = formPhoto;
 
@@ -3698,11 +3679,7 @@
 
             document.getElementById( 'editCloseBtn' ).addEventListener( 'click', () => closeBackdrop( 'editBackdrop' ) );
             document.getElementById( 'editSaveBtn'   ).addEventListener( 'click', commitEdit );
-            document.getElementById( 'fBday'         ).addEventListener( 'input', function()
-            {
-                this.dataset.noYear = '';     // a date picked (or cleared) replaces a birthday without a year
-                refreshBdayDisplay();
-            });
+            bdayField = Ayni.dateField( document.getElementById( 'fBday' ), { noYear: true } );
 
             document.getElementById( 'dedupBtn'        ).addEventListener( 'click', openDedupSheet );
             document.getElementById( 'dedupCloseBtn'   ).addEventListener( 'click', () => closeBackdrop( 'dedupBackdrop' ) );

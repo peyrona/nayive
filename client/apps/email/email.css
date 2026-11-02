@@ -30,11 +30,12 @@ body.composing #listTools { display: none; }
 .mail-cfield select  { flex: 1 1 auto; min-width: 0; }
 .mail-cfield .btn.text { flex: 0 0 auto; }
 /* The text box: the format bar on top, then Squire's editable area. The box
-   wears the shared field look (app.css: input, textarea) - the area inside is
-   a div, which that rule does not reach. */
+   wears Ayni's field look (.input: Field line border, Text dim on hover, Accent
+   ring on focus) - the area inside is a div, not an .input. */
 .mail-cbox           { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 300px;
-                       background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-s); }
-.mail-cbox:focus-within { border-color: color-mix(in srgb, var(--text) 30%, transparent); }
+                       background: var(--card2); border: 1px solid var(--field-line); border-radius: var(--ctl-radius); }
+.mail-cbox:hover     { border-color: var(--text-dim); }
+.mail-cbox:focus-within { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
 .mail-cformat        { display: flex; flex-wrap: wrap; gap: 2px; padding: 3px 4px; border-bottom: 1px solid var(--line); }
 .mail-ctext          { flex: 1 1 auto; min-height: 240px; padding: 7px 10px; outline: none; overflow-wrap: anywhere;
                        font-size: var(--field-fs); line-height: 1.5; color: var(--text); cursor: text; }
@@ -289,8 +290,6 @@ body.composing #readRz         { display: none; }
 .mail-acct-list .card-row small { font-size: 0.76rem; color: var(--text-dim); }
 .mail-acct-list .card-row small.bad { color: var(--danger); }
 .field .hint,
-dialog.panel .body > .hint { margin: 6px 0 0; font-size: 0.78rem; line-height: 1.4; color: var(--text-dim); }
-dialog.panel .body > .hint { margin: 0 0 12px; }
 .field.mail-port { flex: 0 0 90px; }
 .field.mail-prov { flex: 0 1 230px; }
 
@@ -314,9 +313,6 @@ dialog.panel .body > .hint { margin: 0 0 12px; }
 .mail-prov-help .btn.text { margin-top: 10px; }
 
 /* The password with its eye (show / hide), as the search field's cross. */
-.mail-pass { position: relative; }
-.mail-pass input { padding-right: 38px; }
-.mail-pass .btn { position: absolute; right: 3px; top: 0; bottom: 0; margin: auto 0; }
 
 .mail-add-status { margin: -4px 0 12px; font-size: 0.82rem; color: var(--text-dim); }
 
@@ -356,6 +352,6 @@ button.mail-part:disabled { opacity: 0.6; cursor: progress; }
 .mail-newpass { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: -2px 0 10px; }
 .mail-newpass .mail-pass { flex: 1 1 200px; }
 .mail-newpass .mail-add-status,
-.mail-newpass .field-error { flex: 1 1 100%; margin: 0; }
+.mail-newpass .form-error { flex: 1 1 100%; margin: 0; }
 .mail-signature { min-height: 90px; resize: vertical; }
 

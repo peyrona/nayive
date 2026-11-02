@@ -23,6 +23,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -35,6 +36,7 @@
     <script src="../shared/ayni/ayni-search.js" defer></script>
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
+    <script src="../shared/ayni/ayni-fields.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Vendored libs (all pinned, no build step). Order matters: CodeMirror core first,
@@ -141,8 +143,9 @@
         #toolbar .tb-sep { width: 1px; align-self: stretch; margin: 4px 6px; background: var(--line); flex: 0 0 auto; }
         /* Toolbar buttons: Ayni's .btn at 30 px; a toggle is aria-pressed. */
         .btn.tb-btn { --btn: 30px; }
-        /* .tb-select and the right-margin spinner .tb-num are shared - see TOOLBAR
-           SELECT in app.css. Nothing local. */
+        /* .tb-select is shared - see TOOLBAR SELECT in app.css. The right margin
+           is Ayni's number field; only its width is local. */
+        #marginInputSpin { width: 112px; flex: 0 0 auto; }
 
         /* Editor host. The sheet is Write's paper in both themes (dimmed ivory on
            the dark chrome, warm off-white on the light one), so the caret, the
@@ -294,8 +297,8 @@
         <div class="topbar">
             <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline><line x1="14" y1="4" x2="10" y2="20"></line></svg>
             <h1>Text</h1>
-            <span id="fileLabel" class="file-label field-edit-text is-editable" data-i18n="ui.untitled" data-i18n-attr="title:text.clickRename"></span>
-            <input id="fileNameInput" class="file-label-input field-edit" type="text" style="display:none" autocomplete="off">
+            <span id="fileLabel" class="file-label inline-text is-editable" data-i18n="ui.untitled" data-i18n-attr="title:text.clickRename"></span>
+            <input id="fileNameInput" class="input inline file-label-input" type="text" style="display:none" autocomplete="off">
 
             <!-- "Guardado 12:04" (shared/office.js, AUTOSAVE). -->
             <span id="savedAt" class="saved-at"></span>
@@ -354,8 +357,8 @@
                 <option value="2" data-i18n="text.indent2"></option>
                 <option value="tab" data-i18n="text.indentTab"></option>
             </select>
-            <input id="marginInput" class="tb-num" type="number" min="20" max="500" step="1" inputmode="numeric"
-                   autocomplete="off" data-i18n-attr="title:text.margin">
+            <div class="input-group spin" id="marginInputSpin"><input id="marginInput" class="input" type="number" min="20" max="500" step="1" inputmode="numeric"
+                   autocomplete="off" data-i18n-attr="title:text.margin"></div>
 
             <div class="tb-sep"></div>
 

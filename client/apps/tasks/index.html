@@ -23,6 +23,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -35,6 +36,7 @@
     <script src="../shared/ayni/ayni-search.js" defer></script>
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
+    <script src="../shared/ayni/ayni-fields.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
@@ -87,7 +89,7 @@
         .task-row.is-open { padding-bottom: 2px; }
 
         /* Task text and its rename box are an EDIT IN PLACE pair (app.css):
-           .field-edit-text at rest, .field-edit while editing. Same box, so
+           .inline-text at rest, .input.inline while editing (Ayni's). Same box, so
            clicking to rename never moves the row. Only layout / colour here. */
         .task-text
         {
@@ -154,8 +156,8 @@
         /* Same EDIT IN PLACE box as everywhere else, 1px tighter top and bottom so
            the text fits the 24px row. app.css's rule holds: the span and the input
            change together, so clicking to rename still does not move the row. */
-        .subtask-row .field-edit-text,
-        .subtask-row .field-edit { padding: 2px 7px; }
+        .subtask-row .inline-text,
+        .subtask-row .input.inline { padding: 2px 7px; }
 
         /* The one new per-row control: it opens the plan sheet (duration + "after").
            Full row height so it lines up with the check, but 16px wide (18 on a
@@ -313,7 +315,7 @@
 
                         <!-- Compose field: sits in the header, hidden until [+] is pressed. While it
                              is open the title and the other header controls step aside. -->
-                        <input id="newTaskInput" class="todo-input" type="text"
+                        <input id="newTaskInput" class="input todo-input" type="text"
                                autocomplete="off" hidden data-i18n-attr="placeholder:tasks.addPh">
 
                         <div class="header-actions tall" role="toolbar" data-i18n-attr="aria-label:ui.actions">
@@ -387,13 +389,13 @@
                  again to fix a typo in the name. -->
             <div class="field" style="margin-top: 14px;">
                 <label for="planTextInput" data-i18n="tasks.planText"></label>
-                <input id="planTextInput" type="text" autocomplete="off" data-i18n-attr="placeholder:tasks.describeTask">
+                <input class="input" id="planTextInput" type="text" autocomplete="off" data-i18n-attr="placeholder:tasks.describeTask">
             </div>
 
             <div class="field" style="margin-top: 16px;">
                 <label for="planDaysInput" data-i18n="tasks.planDaysLabel"></label>
                 <div class="step">
-                    <input id="planDaysInput" type="number" min="1" max="999" step="1" inputmode="numeric" autocomplete="off">
+                    <div class="input-group spin" id="planDaysInputSpin"><input class="input" id="planDaysInput" data-optional type="number" min="1" max="999" step="1" inputmode="numeric" autocomplete="off"></div>
                     <span class="step-unit" data-i18n="tasks.planDaysUnit"></span>
                 </div>
             </div>
@@ -2029,7 +2031,7 @@
             {
                 const input = document.createElement( 'input' );
                 input.type = 'text';
-                input.className = 'task-edit-input field-edit';
+                input.className = 'input inline task-edit-input';
                 input.value = t.text;
                 input.autofocus = true;
 
@@ -2049,7 +2051,7 @@
                 const editable = ! t.done;
 
                 const span = document.createElement( 'span' );
-                span.className = 'task-text field-edit-text' + (t.done ? ' done' : editable ? ' is-editable' : '');
+                span.className = 'task-text inline-text' + (t.done ? ' done' : editable ? ' is-editable' : '');
                 span.textContent = t.text;
 
                 if( editable )
@@ -2156,7 +2158,7 @@
             {
                 const input = document.createElement( 'input' );
                 input.type = 'text';
-                input.className = 'subtask-edit-input field-edit';
+                input.className = 'input inline subtask-edit-input';
                 input.value = s.text;
                 input.placeholder = T( 'tasks.describeTask' );
 
@@ -2176,7 +2178,7 @@
                 const editable = ! s.done;
 
                 const span = document.createElement( 'span' );
-                span.className = 'subtask-text field-edit-text' + (s.done ? ' done' : editable ? ' is-editable' : '');
+                span.className = 'subtask-text inline-text' + (s.done ? ' done' : editable ? ' is-editable' : '');
                 span.textContent = s.text;
 
                 if( editable )

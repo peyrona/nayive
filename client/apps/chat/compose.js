@@ -540,13 +540,6 @@
         ], { anchor: sendBtn, keyboard: true } );
     }
 
-    // A date input's value ("2026-09-19T21:30") for a moment, in local time.
-    function localValue( d )
-    {
-        function p( n ) { return ( n < 10 ? "0" : "" ) + n; }
-        return d.getFullYear() + "-" + p( d.getMonth() + 1 ) + "-" + p( d.getDate() ) + "T" + p( d.getHours() ) + ":" + p( d.getMinutes() );
-    }
-
     function whenLabel( ms ) { return C.dayLabel( ms ) + " " + C.time( ms ); }
 
     // "Schedule message": the day and time, then the server keeps it and
@@ -559,15 +552,17 @@
         var reply = S.replyTo ? S.replyTo.id : 0;
         var cid = C.rid();                         // one scheduled text, however many taps
         var start = new Date( Date.now() + 60 * 60 * 1000 );
-        var input = h( "input", { attrs: { type: "datetime-local", id: "laterAt", step: "60", min: localValue( new Date() ) },
-                                  value: localValue( start ) } );
+        // Ayni's date-and-time field: YYYY-MM-DD HH:MM (local time), typed or picked
+        var input = h( "input", { class: "input", attrs: { id: "laterAt" } } );
         var ok = Ayni.dialogButton( "primary", T( "chat.schedule" ) );
         var sh = C.sheet( T( "chat.schedule" ), h( "div", {},
-            h( "div", { class: "field" }, h( "label", { attrs: { for: "laterAt" }, text: T( "chat.scheduleWhen" ) } ), input ),
-            h( "p", { class: "hint", text: T( "chat.scheduleHint" ) } ) ), ok, null, "later-sheet" );
+            h( "div", { class: "field" }, h( "label", { attrs: { for: "laterAt" }, text: T( "chat.scheduleWhen" ) }, C.info( T( "chat.scheduleHint" ) ) ),
+               h( "div", { class: "input-group" }, input ) ) ), ok, null, "later-sheet" );
+        var when = Ayni.dateTimeField( input, { value: start } );
         ok.addEventListener( "click", async function ()
         {
-            var at = input.value ? new Date( input.value ).getTime() : NaN;   // no zone: local time
+            if( Ayni.focusFirstError( input.closest( "dialog" ) || document ) ) return;   // a typed time that is not one
+            var at = input.value.trim() ? when.get().getTime() : NaN;
             if( ! ( at > Date.now() ) ) { C.toast( "warn", "chat.whenPast" ); input.focus(); return; }
             Ayni.setBusy( ok, T( "ui.wait" ) );
             try

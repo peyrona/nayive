@@ -74,7 +74,7 @@
   --ctl-h: 32px; --ctl-radius: var(--radius-s); --icon: 20px;
 }
 /* Touch (html.touch, set by ayni-base.js): every target takes at least --touch, as an invisible hit area */
-html.touch { --touch: 44px; }
+html.touch { --touch: 44px; --ctl-h: 44px; }
 /* RULE: hidden means gone, whatever display a control sets for itself (a .btn is inline-grid) */
 [hidden] { display: none !important; }
 /* On a phone, Safari zooms the page in on a field whose text is under 16px and never zooms back out */
@@ -106,7 +106,7 @@ html.touch { --touch: 44px; }
 .panel footer > .extra, .panel > form > footer > .extra { display: flex; gap: 8px; margin-right: auto; }
 
 /* ---------- Text field: the one field look, shared by the families (search, dialogs, pickers) ---------- */
-.input { font: inherit; font-size: var(--field-fs); color: var(--text); background: var(--card2); border: 1px solid var(--field-line); border-radius: var(--ctl-radius); min-height: var(--ctl-h); padding: 5px 8px; width: 100%; }
+.input { box-sizing: border-box; font: inherit; font-size: var(--field-fs); color: var(--text); background: var(--card2); border: 1px solid var(--field-line); border-radius: var(--ctl-radius); min-height: var(--ctl-h); padding: 5px 8px; width: 100%; }
 .input:hover { border-color: var(--text-dim); }
 .input:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
 .input[aria-invalid="true"] { border-color: var(--danger); }
@@ -115,7 +115,7 @@ html.touch { --touch: 44px; }
    Disabled is different: faded and not focusable. */
 .input[readonly], .input[aria-readonly="true"] { border-color: transparent; background: var(--readonly-bg); color: var(--text); cursor: text; user-select: text; }
 /* Text field with buttons inside its border, at the start and/or the end */
-.input-group { display: flex; align-items: center; gap: 2px; min-height: var(--ctl-h); padding: 0 3px; width: 100%;
+.input-group { box-sizing: border-box; display: flex; align-items: center; gap: 2px; min-height: var(--ctl-h); padding: 0 3px; width: 100%;
   border: 1px solid var(--field-line); border-radius: var(--ctl-radius); background: var(--card2); }
 .input-group:hover { border-color: var(--text-dim); }
 .input-group:focus-within { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
@@ -125,6 +125,11 @@ html.touch { --touch: 44px; }
 .input-group > .btn { --btn: 26px; }
 .input-group > .btn .icon { --icon: 15px; }
 .input::placeholder { color: var(--text-dim); opacity: 1; }
+/* Browser autofill keeps the field's own colours (Chrome paints a pale box, white in the dark scheme) */
+.input:-webkit-autofill, .input:-webkit-autofill:hover, .input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text); -webkit-box-shadow: 0 0 0 100px var(--card2) inset; caret-color: var(--text); }
+.input-group > .input:-webkit-autofill { -webkit-box-shadow: 0 0 0 100px var(--card2) inset; }
+.input:autofill { background-color: var(--card2); color: var(--text); }
 
 /* ---------- Motion shared by the families ---------- */
 @keyframes spin { to { transform: rotate(360deg); } }

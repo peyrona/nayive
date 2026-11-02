@@ -411,7 +411,7 @@ function editSheetName( i )
     const old   = doc.sheets[ i ].name;
     const input = document.createElement( 'input' );
     input.type        = 'text';
-    input.className   = 'tb-input sheet-tab-edit';
+    input.className   = 'input inline sheet-tab-edit';
     input.value       = old;
     input.maxLength   = 31;
     input.spellcheck  = false;

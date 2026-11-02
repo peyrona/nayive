@@ -217,13 +217,12 @@ function enterSubmits( backId, fn )
 }
 
 //------------------------------------------------------------------------//
-// SECRET BOXES  -  every [data-eye] shows / hides its box; every
+// SECRET BOXES  -  every [data-reveal] (Ayni's) shows / hides its box; every
 // [data-copy-field] copies its box (a password box through copySecret,
 // which wipes the clipboard later).
 
 function wireSecrets()
 {
-    document.querySelectorAll( '[data-eye]' ).forEach( function( b ) { NayiveUI.pwEye( b, $( b.dataset.eye ) ); } );
     document.querySelectorAll( '[data-copy-field]' ).forEach( function( b )
     {
         b.innerHTML = Ayni.icon( 'copy' );

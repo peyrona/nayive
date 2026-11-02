@@ -419,8 +419,8 @@ try
     await waitFor( c, "document.getElementById('setSheet').open" );
     ok( await c.evaluate( "document.querySelectorAll('#acctList .card-row .btn').length === 2" ), "each account: a key and a bin" );
     await c.evaluate( "document.querySelector('#acctList .card-row .btn').click(); document.querySelector('.mail-newpass input').value = 'wrong'; document.querySelector('.mail-newpass .btn.text').click(); true" );
-    ok( await waitFor( c, "!document.querySelector('.mail-newpass .field-error').hidden", 8000 ), "a wrong new password is refused",
-        await c.evaluate( "document.querySelector('.mail-newpass .field-error').textContent" ) );
+    ok( await waitFor( c, "!document.querySelector('.mail-newpass .form-error').hidden", 8000 ), "a wrong new password is refused",
+        await c.evaluate( "document.querySelector('.mail-newpass .form-error').textContent" ) );
     await c.evaluate( "document.querySelector('.mail-newpass input').value = 'abcdefghijklmnop'; document.querySelector('.mail-newpass .btn.text').click(); true" );
     ok( await waitFor( c, "window.__toasts.some( t => /Contraseña cambiada/.test( t ) )", 8000 ), "the right one is kept", await lastToast( c ) );
     await shot( c, "05-settings" );
@@ -479,7 +479,7 @@ try
     await sleep( 300 ); await idle();
     const since = await c.evaluate( SUBJS );
     ok( since.includes( "With a file" ) && since.includes( "Pictures" ) && ! since.some( s => /^Hello/.test( s ) ), "Since 2026-09-02: only the newer mails", since );
-    ok( await c.evaluate( "document.querySelector('#advSince + .dt-display').textContent === '2026-09-02'" ), "the date shows as yyyy-mm-dd" );
+    ok( await c.evaluate( "document.getElementById('advSince').value === '2026-09-02' && document.getElementById('advSince').closest('.input-group').classList.contains('date-field')" ), "the date shows as yyyy-mm-dd, in Ayni's date field" );
     await c.evaluate( "NayiveMail.openAdvSearch(); document.getElementById('advClearBtn').click(); document.getElementById('advFrom').value = 'eve'; document.getElementById('advWords').value = 'file'; document.getElementById('advGoBtn').click(); true" );
     await sleep( 300 ); await idle();
     ok( await c.evaluate( ROWS ) === 0 && await c.evaluate( "!document.getElementById('listEmpty').hidden && document.getElementById('searchInput').value === 'file'" ),

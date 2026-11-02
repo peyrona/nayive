@@ -21,6 +21,7 @@
     <link rel="stylesheet" href="shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="shared/ayni/ayni-help.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-fields.css">
     <link rel="stylesheet" href="shared/theme.css">
     <link rel="stylesheet" href="shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -33,6 +34,7 @@
     <script src="shared/ayni/ayni-search.js" defer></script>
     <script src="shared/ayni/ayni-lists.js" defer></script>
     <script src="shared/ayni/ayni-help.js" defer></script>
+    <script src="shared/ayni/ayni-fields.js" defer></script>
 
     <style>
         /* Base reset + fonts from ../shared/app.css. This is the standalone
@@ -61,17 +63,10 @@
             display: block; font-size: 0.78rem; color: var(--text-dim);
             margin: 0 0 5px 2px; text-transform: uppercase; letter-spacing: 0.04em;
         }
-        /* Inputs take their look AND their focus border from app.css (FORM FIELD)
-           - the same text field as every other app. Entry-screen tweaks only:
-           full width and a comfortable gap under each. */
-        input          { width: 100%; margin-bottom: 16px; }
-
-        /* The eye: app.css PASSWORD EYE; here only what differs. */
-        .pw-wrap { margin-bottom: 16px; }
-        .pw-wrap input { margin-bottom: 0; padding-right: 44px; }
-        .pw-eye { width: 40px; margin: 0; border-radius: 0; }
-        .pw-eye:hover, .pw-eye:active { filter: none; }
-        .pw-eye svg { margin: 0; }
+        /* The fields are Ayni's (.input, the password with its eye in an
+           .input-group): the same as in every other app. Entry-screen tweak only:
+           a comfortable gap under each. */
+        .card > .input, .card > .input-group { margin-bottom: 16px; }
         .remember
         {
             display: flex; align-items: center; justify-content: flex-start; gap: 10px;
@@ -108,12 +103,12 @@
         <p class="warn-box" id="notMine" role="alert" data-i18n="login.notMine" hidden></p>
 
         <label for="user" data-i18n="login.user"></label>
-        <input id="user" name="user" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+        <input class="input" id="user" name="user" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
 
         <label for="password" data-i18n="login.password"></label>
-        <div class="pw-wrap">
-            <input id="password" name="password" type="password" autocomplete="current-password" data-i18n-attr="placeholder:login.blankIfNew">
-            <button type="button" class="pw-eye" id="pwEye" data-i18n-attr="aria-label:ui.showPassword"></button>
+        <div class="input-group">
+            <input class="input" id="password" name="password" type="password" autocomplete="current-password" data-i18n-attr="placeholder:login.blankIfNew">
+            <button type="button" class="btn" id="pwEye" data-reveal></button>
         </div>
 
         <label class="remember switch" for="remember">
@@ -175,23 +170,7 @@
             var focusUser = function () { document.getElementById( 'user' ).focus(); };
             Ayni.i18n.ready.then( focusUser, focusUser );
 
-            // Eye toggle: show / hide the password text.
-            ( function ()
-            {
-                var EYE     = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
-                var EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path></svg>';
-                var eye = document.getElementById( 'pwEye' );
-                var pw  = document.getElementById( 'password' );
-                eye.innerHTML = EYE;
-                eye.addEventListener( 'click', function ()
-                {
-                    var show = pw.type === 'password';
-                    pw.type = show ? 'text' : 'password';
-                    eye.innerHTML = show ? EYE_OFF : EYE;
-                    eye.setAttribute( 'aria-label', show ? Ayni.t( 'ui.hidePassword' ) : Ayni.t( 'ui.showPassword' ) );
-                    pw.focus();
-                } );
-            } )();
+            // The eye that shows / hides the password is Ayni's [data-reveal].
 
             // The admin account manages users, so it goes straight to the
             // admin panel. Everyone else lands on the app launcher - ?return= is

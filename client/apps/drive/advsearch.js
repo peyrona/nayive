@@ -176,6 +176,7 @@ function sbRuleRow( rule, i )
     sel.value = rule.op;
 
     const inp = document.createElement( 'input' );
+    inp.className    = 'input';
     inp.type         = 'text';
     inp.autocomplete = 'off';
     inp.spellcheck   = false;
@@ -206,14 +207,12 @@ function sbRuleRow( rule, i )
     return row;
 }
 
-// The native date text is hidden (.dt-field): the overlay shows yyyy-mm-dd.
+// The draft's dates into Ayni's date fields (YYYY-MM-DD).
 function sbShowDates()
 {
     [ [ 'sbFrom', sbDraft.from ], [ 'sbTo', sbDraft.to ] ].forEach( function( p )
     {
-        const inp = document.getElementById( p[0] );
-        inp.value = p[1];
-        inp.parentNode.querySelector( '.dt-display' ).textContent = p[1];
+        document.getElementById( p[0] ).value = p[1];
     });
 }
 
@@ -344,6 +343,8 @@ function onBuilderDate()
 // Search: nothing asked = back to the plain folder view.
 function applySearchBuilder()
 {
+    // A typed date that is not one is not searched for: its field shows why
+    if( Ayni.focusFirstError( document.getElementById( 'sbRange' ) ) ) return;
     const d    = sbDraft;
     const spec = sbSpec( d );
     if( sbTimer ) { clearTimeout( sbTimer ); sbTimer = null; }

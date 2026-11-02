@@ -1637,7 +1637,7 @@
             '<dialog id="saveAsBackdrop" class="panel">',
                 head( "ui.saveAs" ),
                 '<div class="body">',
-                    field( "saveName", "ui.fileName", '<input type="text" id="saveName" data-i18n-attr="placeholder:' + o.nameKey + '" autocomplete="off">' ),
+                    field( "saveName", "ui.fileName", '<input class="input" type="text" id="saveName" data-i18n-attr="placeholder:' + o.nameKey + '" autocomplete="off">' ),
                     o.formats ? field( "saveFormat", o.formatKey, '<select id="saveFormat"></select>' ) : "",
                     field( "saveDirBtn", "ui.folder", '<button type="button" id="saveDirBtn" class="folder-pick" data-i18n-attr="data-tip:ui.fp.pickFolder">\n' +
                                                       '<span class="fp-btn-ic"></span><span id="saveDirName" class="fp-btn-nm"></span>\n</button>' ),

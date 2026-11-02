@@ -287,15 +287,15 @@
     // would delete now, and save() for when the dialog closes.
     C.autoDeletePane = function ()
     {
-        var input = h( "input", { attrs: { type: "number", id: "autoDelDays", min: "0", max: "3650", step: "1", inputmode: "numeric" },
+        var input = h( "input", { class: "input", attrs: { type: "number", id: "autoDelDays", min: "0", max: "3650", step: "1", inputmode: "numeric" },
                                   value: String( S.deleteAfter || 0 ) } );
         var countEl = h( "p", { class: "days-count", attrs: { "aria-live": "polite" } } );
         var el = h( "div", {},
             h( "p", { class: "text", text: T( "chat.autoDeleteLead" ) } ),
             // the number, then what it counts - one row
-            h( "label", { class: "days-field", attrs: { for: "autoDelDays" } }, input, h( "span", { text: T( "chat.autoDeleteDays" ) } ) ),
-            countEl,
-            h( "p", { class: "hint", text: T( "chat.autoDeleteHint" ) } ) );
+            h( "label", { class: "days-field", attrs: { for: "autoDelDays" } }, h( "span", { class: "input-group spin" }, input ), h( "span", { text: T( "chat.autoDeleteDays" ) } ),
+               C.info( T( "chat.autoDeleteHint" ) ) ),
+            countEl );
 
         // How many messages the number typed would delete NOW, in every chat,
         // asked as it is typed (J7): a typo - 1 for 10 - reads "deletes

@@ -65,6 +65,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -77,6 +78,7 @@
     <script src="../shared/ayni/ayni-search.js" defer></script>
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
+    <script src="../shared/ayni/ayni-fields.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/ui.js" defer></script>
     <script src="../shared/store.js" defer></script>
@@ -332,12 +334,12 @@
         #moreMenu .menu-item > .switch,
         #moreMenu .menu-item > select { margin-left: auto; }
         #moreMenu .menu-item > select { width: auto; min-width: 0; padding: 4px 8px; }
-        #moreMenu .set-range          { margin-left: auto; width: 150px; }
+        #moreMenu .slider-row         { margin-left: auto; width: 150px; }
         /* The screen locker: its <select> first, the minutes at the end; the
            clock's text row hides unless the clock is picked. */
         #moreMenu .lock-row > select  { margin-left: 0; }
         #moreMenu .lock-min           { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); }
-        #moreMenu #lockMin            { width: calc(4.5em + 10px); text-align: center; }
+        #moreMenu #lockMinSpin        { display: inline-flex; width: 116px; vertical-align: middle; }
         #moreMenu #lockText           { margin-left: auto; width: 150px; }
         #moreMenu .menu-item[hidden]  { display: none; }
         /* The (i) of the menu: its popup must sit above it. */
@@ -458,9 +460,9 @@
         /* THE COUNTDOWN DIALOG - hours / minutes / seconds side by side, the text below.
            Not centred: it opens by the clock (or its chip), like the month (cdOpen). */
         #cdBackdrop:modal { position: fixed; inset: auto; margin: 0; }
-        .cd-nums      { flex-wrap: nowrap; contain: inline-size; }   /* the number boxes never widen the dialog: it packs to its 300px minimum */
-        .cd-nums .field { flex: 1 1 0; min-width: 76px; }
-        .cd-nums .field input { width: 100%; text-align: center; font-variant-numeric: tabular-nums; }
+        .cd-nums      { flex-wrap: nowrap; }   /* three of Ayni's number fields (− 12 +) side by side: the dialog takes their room */
+        .cd-nums .field { flex: 1 1 0; min-width: 112px; }
+        .cd-nums .spin  { width: 100%; }
 
         /* THE MENU - the real launcher in a frame, popped up over the bar's left end. */
         .menu
@@ -541,9 +543,6 @@
         .sw-item:focus-visible { outline: none; }      /* .sel already shows it */
 
         /* The bar-height slider (the "⋮" menu). */
-        .set-range  { display: flex; align-items: center; gap: 10px; }
-        .set-range input { flex: 1 1 auto; }
-        .set-range output { flex: 0 0 auto; min-width: 4em; text-align: right; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 
     </style>
 </head>
@@ -626,7 +625,7 @@
                     <option value="right"  data-i18n="desktop.barRight"></option>
                 </select></label>
             <label class="menu-item"><span data-i18n="desktop.barHeight"></span>
-                <span class="set-range"><input type="range" id="setBarH" min="36" max="72" step="2"><output id="setBarHOut" for="setBarH"></output></span></label>
+                <span class="slider-row"><input type="range" id="setBarH" min="36" max="72" step="2"><output id="setBarHOut" for="setBarH"></output></span></label>
             <!-- SCREEN LOCKER (shared/locker.js): which one + after how many idle
                  minutes (ONE value for every locker, his rule 2026-09-30); the clock's own line of text only shows with the clock.
                  DEVICE state (localStorage "nayive-locker"); moved here from My account 2026-09-28. -->
@@ -634,10 +633,10 @@
             <div class="menu-label" data-i18n="acct.locker"></div>
             <div class="menu-item lock-row">
                 <select id="lockSel" data-i18n-attr="aria-label:acct.locker"></select>
-                <span class="lock-min"><input id="lockMin" type="number" min="0" max="999" step="1" inputmode="numeric"
-                       data-i18n-attr="title:acct.lockerMin, aria-label:acct.lockerMin"> <span data-i18n="acct.lockerUnit"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:acct.lockerOff"></span></span></div>
+                <span class="lock-min"><span class="input-group spin" id="lockMinSpin"><input class="input" id="lockMin" type="number" min="0" max="999" step="1" inputmode="numeric"
+                       data-i18n-attr="title:acct.lockerMin, aria-label:acct.lockerMin"></span> <span data-i18n="acct.lockerUnit"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:acct.lockerOff"></span></span></div>
             <label class="menu-item" id="lockTextWrap" hidden><span data-i18n="acct.lockerText"></span>
-                <input id="lockText" type="text" maxlength="60" spellcheck="false"></label>
+                <input class="input" id="lockText" type="text" maxlength="60" spellcheck="false"></label>
             <!-- Bellas artes' or Science's own settings (shared/lockers/culture-settings.js): per USER. -->
             <button class="menu-item" id="salonBtn" type="button" role="menuitem" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg><span data-i18n="salon.settings"></span></button>
             <button class="menu-item" id="lockNowBtn" type="button" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><span data-i18n="desktop.lockNow"></span></button>
@@ -652,7 +651,7 @@
         <div class="top-menu" id="calPop" role="dialog" hidden data-i18n-attr="aria-label:desktop.calendar">
             <div class="cal-head">
                 <button class="btn" id="calPrev" type="button" data-i18n-attr="data-tip:desktop.prevMonth, aria-label:desktop.prevMonth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg></button>
-                <span class="cal-title"><b id="calMonth"></b><input id="calYear" type="number" min="1" max="9999" step="1" inputmode="numeric" data-i18n-attr="title:calendar.year, aria-label:calendar.year"></span>
+                <span class="cal-title"><b id="calMonth"></b><input id="calYear" class="input" type="number" min="1" max="9999" step="1" inputmode="numeric" data-i18n-attr="title:calendar.year, aria-label:calendar.year"></span>
                 <button class="btn" id="calNext" type="button" data-i18n-attr="data-tip:desktop.nextMonth, aria-label:desktop.nextMonth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></button>
             </div>
             <div class="cal-grid" id="calGrid"></div>
@@ -671,13 +670,13 @@
         </header>
         <div class="body">
             <div class="field-row cd-nums">
-                <div class="field"><label for="cdH" data-i18n="desktop.cdHours"></label><input id="cdH" type="number" min="0" max="99" step="1" inputmode="numeric"></div>
-                <div class="field"><label for="cdM" data-i18n="desktop.cdMins"></label><input id="cdM" type="number" min="0" max="59" step="1" inputmode="numeric"></div>
-                <div class="field"><label for="cdS" data-i18n="desktop.cdSecs"></label><input id="cdS" type="number" min="0" max="59" step="1" inputmode="numeric"></div>
+                <div class="field"><label for="cdH" data-i18n="desktop.cdHours"></label><div class="input-group spin" id="cdHSpin"><input class="input" id="cdH" data-optional type="number" min="0" max="99" step="1" inputmode="numeric"></div></div>
+                <div class="field"><label for="cdM" data-i18n="desktop.cdMins"></label><div class="input-group spin" id="cdMSpin"><input class="input" id="cdM" data-optional type="number" min="0" max="59" step="1" inputmode="numeric"></div></div>
+                <div class="field"><label for="cdS" data-i18n="desktop.cdSecs"></label><div class="input-group spin" id="cdSSpin"><input class="input" id="cdS" data-optional type="number" min="0" max="59" step="1" inputmode="numeric"></div></div>
             </div>
             <div class="field">
                 <label for="cdText" data-i18n="desktop.cdText"></label>
-                <input id="cdText" type="text" maxlength="120" autocomplete="off" spellcheck="false">
+                <input class="input" id="cdText" type="text" maxlength="120" autocomplete="off" spellcheck="false">
             </div>
         </div>
         <footer>

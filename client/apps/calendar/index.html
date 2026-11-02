@@ -23,6 +23,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -35,6 +36,7 @@
     <script src="../shared/ayni/ayni-search.js" defer></script>
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
+    <script src="../shared/ayni/ayni-fields.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
@@ -129,10 +131,11 @@
         /* "Ir a..." dialog: narrower box; fields in ANSI order (Año / Mes / Día),
            Año and Día kept narrow, Mes takes the slack. Widths key off the input ids,
            not the position, so reordering the row cannot swap them again. */
-        #goToBackdrop { max-width: min(360px, calc(100vw - 32px)); }
-        #goToRow .field:has( #gYear )  { flex: 0 1 88px; }
+        #goToBackdrop { max-width: min(420px, calc(100vw - 32px)); }
+        #goToRow .field:has( #gYear )  { flex: 0 1 132px; }
         #goToRow .field:has( #gMonth ) { flex: 1 1 130px; }
-        #goToRow .field:has( #gDay )   { flex: 0 1 68px; }
+        #goToRow .field:has( #gDay )   { flex: 0 1 112px; }
+        #goToRow .spin                 { width: 100%; }
 
         /* "Hoy" in that dialog is the shared .btn.text (shared/app.css): the one
            deliberate exception to the round icon-only action row (shared/theme.css) -
@@ -159,19 +162,11 @@
 
         .radio-row { display: flex; flex-direction: column; gap: 8px; }
         .radio-opt { font-size: 0.94rem; }   /* the row is Ayni's .choice */
-        .radio-opt .inline-input { max-width: 90px; }
-        .radio-opt .dt-field-inline { width: 90px; margin-left: 4px; }
+        .radio-opt .spin { display: inline-flex; width: 112px; vertical-align: middle; }
+        .radio-opt .until-field { display: inline-flex; width: 130px; margin-left: 4px; vertical-align: middle; }
 
         .tz-hint { font-size: 0.78rem; color: var(--text-dim); margin-top: 4px; }
 
-        /* Native date/time inputs render in the browser's own UI locale (e.g. mm/dd/yyyy),
-           ignoring this page's language. Force ISO 8601 (yyyy-mm-dd) + 24h time by hiding
-           the native text (color: transparent) and overlaying our own label; the input
-           itself stays put underneath so tapping it still opens the native picker. */
-        /* .dt-field is the shared DATE / TIME FIELD (shared/app.css); only this
-           narrow inline variant, used inside the repeat sentence, is local. */
-        .dt-field-inline { position: relative; display: inline-block; vertical-align: middle; }
-        .dt-field-inline .dt-display { padding: 0 8px; font-size: 0.94rem; }
 
         /* A dialog's buttons are Ayni's (this app is the reference for that
            style — see Calendar -> "Ir a fecha"). */
@@ -422,12 +417,12 @@
         <div class="body">
             <div class="field">
                 <label for="fTitle" data-i18n="calendar.title"></label>
-                <input type="text" id="fTitle" autocomplete="off" data-i18n-attr="placeholder:calendar.titlePh">
+                <input class="input" type="text" id="fTitle" autocomplete="off" data-i18n-attr="placeholder:calendar.titlePh">
             </div>
 
             <div class="field">
                 <label for="fNotes" data-i18n="ui.notes"></label>
-                <textarea id="fNotes" data-i18n-attr="placeholder:calendar.optional"></textarea>
+                <textarea class="input" id="fNotes" data-i18n-attr="placeholder:calendar.optional"></textarea>
             </div>
 
             <!-- Editing a series edits all of it: said here too, where it shows with "More" shut. -->
@@ -441,27 +436,27 @@
                 <span class="more-line"></span>
             </button>
 
-            <div id="moreSection" style="display:none;">
+            <div class="fields" id="moreSection" style="display:none;">
 
                 <div class="field-row">
                     <div class="field">
                         <label for="fStartDate" data-i18n="calendar.starts"></label>
-                        <div class="dt-field"><input type="date" id="fStartDate"><span class="dt-display"></span></div>
+                        <div class="input-group"><input class="input" id="fStartDate"></div>
                     </div>
                     <div class="field" id="fStartTimeWrap">
                         <label for="fStartTime">&nbsp;</label>
-                        <div class="dt-field"><input type="time" id="fStartTime"><span class="dt-display"></span></div>
+                        <div class="input-group"><input class="input" id="fStartTime"></div>
                     </div>
                 </div>
 
                 <div class="field-row">
                     <div class="field">
                         <label for="fEndDate" data-i18n="calendar.ends"></label>
-                        <div class="dt-field"><input type="date" id="fEndDate"><span class="dt-display"></span></div>
+                        <div class="input-group"><input class="input" id="fEndDate"></div>
                     </div>
                     <div class="field" id="fEndTimeWrap">
                         <label for="fEndTime">&nbsp;</label>
-                        <div class="dt-field"><input type="time" id="fEndTime"><span class="dt-display"></span></div>
+                        <div class="input-group"><input class="input" id="fEndTime"></div>
                     </div>
                 </div>
 
@@ -472,7 +467,7 @@
                         <option value="1" data-i18n="calendar.tzFloating"></option>
                     </select>
                     <div id="fTzPickerWrap" style="margin-top:8px;">
-                        <input type="text" id="fTzid" list="tzList" autocomplete="off" data-i18n-attr="placeholder:calendar.tzPh">
+                        <input class="input" type="text" id="fTzid" list="tzList" autocomplete="off" data-i18n-attr="placeholder:calendar.tzPh">
                         <datalist id="tzList"></datalist>
                     </div>
                     <div class="tz-hint" id="fTzHint"></div>
@@ -491,15 +486,15 @@
                     </select>
                 </div>
 
-                <div id="repeatDetails" style="display:none;">
+                <div class="fields" id="repeatDetails" style="display:none;">
                     <div class="field-row">
                         <div class="field">
                             <label for="fInterval" data-i18n="calendar.every"></label>
-                            <input type="number" id="fInterval" min="1" value="1">
+                            <div class="input-group spin" id="fIntervalSpin"><input class="input" type="number" id="fInterval" min="1" value="1"></div>
                         </div>
                         <div class="field">
                             <label id="fIntervalUnitLabel">&nbsp;</label>
-                            <input type="text" id="fIntervalUnitDisp" disabled>
+                            <input class="input" type="text" id="fIntervalUnitDisp" disabled>
                         </div>
                     </div>
 
@@ -513,8 +508,8 @@
                         <label data-i18n="calendar.ends"></label>
                         <div class="radio-row">
                             <label class="choice radio-opt"><input type="radio" name="endMode" value="never" checked> <span data-i18n="calendar.never"></span></label>
-                            <label class="choice radio-opt"><input type="radio" name="endMode" value="on"> <span data-i18n="calendar.onDate"></span> <span class="dt-field dt-field-inline"><input type="date" id="fUntil" class="inline-input"><span class="dt-display"></span></span></label>
-                            <label class="choice radio-opt"><input type="radio" name="endMode" value="after"> <span data-i18n="calendar.after"></span> <input type="number" id="fCount" class="inline-input" min="1" value="10"> <span data-i18n="calendar.repeats"></span></label>
+                            <label class="choice radio-opt"><input type="radio" name="endMode" value="on"> <span data-i18n="calendar.onDate"></span> <span class="input-group until-field"><input class="input" id="fUntil"></span></label>
+                            <label class="choice radio-opt"><input type="radio" name="endMode" value="after"> <span data-i18n="calendar.after"></span> <span class="input-group spin" id="fCountSpin"><input type="number" id="fCount" class="input" min="1" value="10"></span> <span data-i18n="calendar.repeats"></span></label>
                         </div>
                     </div>
                     <div class="tz-hint" data-i18n="calendar.editsSeries"></div>
@@ -524,7 +519,7 @@
 
                 <div class="field">
                     <label for="fLocation" data-i18n="calendar.location"></label>
-                    <input type="text" id="fLocation" autocomplete="off" data-i18n-attr="placeholder:calendar.optional">
+                    <input class="input" type="text" id="fLocation" autocomplete="off" data-i18n-attr="placeholder:calendar.optional">
                 </div>
 
             </div>
@@ -571,7 +566,7 @@
             <div class="field-row" id="goToRow">
                 <div class="field">
                     <label for="gYear" data-i18n="calendar.year"></label>
-                    <input type="number" id="gYear" step="1">
+                    <div class="input-group spin" id="gYearSpin"><input class="input" type="number" id="gYear" step="1"></div>
                 </div>
                 <div class="field">
                     <label for="gMonth" data-i18n="calendar.month"></label>
@@ -580,7 +575,7 @@
                 </div>
                 <div class="field">
                     <label for="gDay" data-i18n="calendar.day"></label>
-                    <input type="number" id="gDay" min="1" max="31" step="1">
+                    <div class="input-group spin" id="gDaySpin"><input class="input" type="number" id="gDay" min="1" max="31" step="1"></div>
                 </div>
             </div>
 
@@ -610,7 +605,7 @@
             <div id="setRemind" class="share-sect" hidden>
                 <p class="share-head" data-i18n="calendar.set.remindHead"></p>
                 <div class="field remind-row">
-                    <input type="number" id="setRemindMin" min="1" max="1440" inputmode="numeric">
+                    <div class="input-group spin" id="setRemindMinSpin"><input class="input" type="number" id="setRemindMin" min="1" max="1440" inputmode="numeric"></div>
                     <label for="setRemindMin" data-i18n="calendar.set.remindMin"></label>
                 </div>
                 <p class="share-note" data-i18n="calendar.set.remindNote"></p>
@@ -625,11 +620,11 @@
                 <div id="setExportRow">
                     <div class="field">
                         <label for="xFrom" data-i18n="calendar.exportFrom"></label>
-                        <div class="dt-field"><input type="date" id="xFrom"><span class="dt-display"></span></div>
+                        <div class="input-group"><input class="input" id="xFrom"></div>
                     </div>
                     <div class="field">
                         <label for="xTo" data-i18n="calendar.exportTo"></label>
-                        <div class="dt-field"><input type="date" id="xTo"><span class="dt-display"></span></div>
+                        <div class="input-group"><input class="input" id="xTo"></div>
                     </div>
                     <div class="field field-format">
                         <label for="xFormat" data-i18n="calendar.exportFormat"></label>
@@ -1593,30 +1588,18 @@
         //------------------------------------------------------------------------//
         // ADD / EDIT SHEET
 
-        // Native date/time inputs display in the browser's own UI locale, not this page's —
-        // these fields are overlaid with a Spain-formatted label (see .dt-display CSS).
-        const DT_FIELD_IDS = [ 'fStartDate', 'fEndDate', 'fStartTime', 'fEndTime', 'fUntil', 'xFrom', 'xTo' ];
-
-        function refreshDtDisplay( el )
-        {
-            const disp = el.nextElementSibling;
-            if( ! disp || ! disp.classList.contains( 'dt-display' ) ) return;
-
-            disp.textContent = ! el.value ? ''
-                              : el.type === 'date' ? DateTime.fromISO( el.value ).toFormat( 'yyyy-MM-dd' )
-                                                    : el.value;   // native time value is already 24h "HH:mm"
-        }
-
-        function refreshAllDtDisplays()
-        {
-            DT_FIELD_IDS.forEach( id => refreshDtDisplay( document.getElementById( id ) ) );
-        }
-
+        // The date and time fields are Ayni's (YYYY-MM-DD, 24 h HH:MM, typed or
+        // picked): Ayni makes their buttons, popups and messages. Moving the
+        // start (a pick, or a typed value taken) moves the end along.
         function wireSheetUI()
         {
-            DT_FIELD_IDS.forEach( function( id )
+            [ 'fStartDate', 'fEndDate', 'fUntil', 'xFrom', 'xTo' ].forEach( function( id )
             {
-                document.getElementById( id ).addEventListener( 'input', function() { refreshDtDisplay( this ); } );
+                Ayni.dateField( document.getElementById( id ), { onChange: id === 'fStartDate' ? startMoved : null } );
+            });
+            [ 'fStartTime', 'fEndTime' ].forEach( function( id )
+            {
+                Ayni.timeField( document.getElementById( id ), { onChange: id === 'fStartTime' ? startMoved : null } );
             });
 
             document.getElementById( 'fAllDay' ).addEventListener( 'change', updateSheetVisibility );
@@ -1647,9 +1630,8 @@
             // A handler of our own here closed the event sheet UNDER the help sheet too,
             // losing the unsaved event.
 
-            // Moving the start moves the end along, so the event keeps its length.
-            document.getElementById( 'fStartDate' ).addEventListener( 'input', startMoved );
-            document.getElementById( 'fStartTime' ).addEventListener( 'input', startMoved );
+            // Moving the start moves the end along, so the event keeps its length
+            // (the fields' onChange, in wireSheetUI).
 
             document.getElementById( 'helpBtn' ).addEventListener( 'click', function()
             {
@@ -1877,7 +1859,6 @@
 
             document.getElementById( 'xFrom' ).value = from.toISODate();
             document.getElementById( 'xTo'   ).value = to.toISODate();
-            refreshAllDtDisplays();
         }
 
         function closeSettings() { document.getElementById( 'settingsBackdrop' ).close(); }
@@ -1927,6 +1908,7 @@
 
         function commitExport()
         {
+            if( Ayni.focusFirstError( document.getElementById( 'setExportRow' ) ) ) return;
             const from   = document.getElementById( 'xFrom' ).value;
             const to     = document.getElementById( 'xTo'   ).value;
             const format = document.getElementById( 'xFormat' ).value;
@@ -2162,7 +2144,6 @@
             document.getElementById( 'fTzid' ).value = VIEWER_TZ;
 
             updateSheetVisibility();
-            refreshAllDtDisplays();
             sheetStart  = sheetStartDt();
             sheetRepeat = repeatSignature();
             sheetDates  = datesSignature();
@@ -2222,7 +2203,6 @@
 
             updateSheetVisibility();
             updateRepeatDetails();
-            refreshAllDtDisplays();
             sheetStart  = sheetStartDt();
             sheetRepeat = repeatSignature();
             sheetDates  = datesSignature();
@@ -2305,8 +2285,6 @@
                 const moved = end.plus( now.diff( sheetStart ) );
                 endDate.value = moved.toISODate();
                 endTime.value = moved.toFormat( 'HH:mm' );
-                refreshDtDisplay( endDate );
-                refreshDtDisplay( endTime );
             }
 
             sheetStart = now;
@@ -2374,6 +2352,10 @@
         function commitSheet()
         {
             if( refuseEdit() ) return;
+
+            // A typed date or time that is not one (sent with Enter, it never
+            // left its field) is not saved: its field shows why.
+            if( Ayni.focusFirstError( document.getElementById( 'sheetBackdrop' ) ) ) return;
 
             const title = document.getElementById( 'fTitle' ).value.trim();
             if( ! title ) { Ayni.toast( 'warn', T( 'calendar.needTitle' ) ); return; }

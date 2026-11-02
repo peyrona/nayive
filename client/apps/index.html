@@ -60,6 +60,7 @@
     <link rel="stylesheet" href="shared/ayni/ayni-search.css">
     <link rel="stylesheet" href="shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="shared/ayni/ayni-help.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-fields.css">
     <link rel="stylesheet" href="shared/theme.css">
     <link rel="stylesheet" href="shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -72,6 +73,7 @@
     <script src="shared/ayni/ayni-search.js" defer></script>
     <script src="shared/ayni/ayni-lists.js" defer></script>
     <script src="shared/ayni/ayni-help.js" defer></script>
+    <script src="shared/ayni/ayni-fields.js" defer></script>
     <script src="shared/ui.js" defer></script>
     <script src="shared/store.js" defer></script>
     <script>
@@ -419,10 +421,6 @@
             :root:not(.in-desktop) .tile.has-popup { --pad-top: 12px; }
         }
 
-        /* ---- eye toggle inside a password field (Mi cuenta dialog; the eye:
-           app.css PASSWORD EYE) ---- */
-        .pw-wrap { margin: 10px 0; }
-        .pw-wrap .scm-input { margin: 0; padding-right: 42px; }
         /* An on / off row: text · (i) · the shared .switch at the end. */
         .scm-check-row { display: flex; align-items: center; gap: 6px; margin: 10px 0; }
         .scm-check-row[hidden] { display: none; }
@@ -766,15 +764,15 @@
             <h2 id="pwChangeTitle" data-i18n="acct.changePw"></h2>
         </header>
         <div class="body">
-            <div class="pw-wrap">
-                <input class="scm-input" id="pwCurrent" type="password"
-                       autocomplete="current-password" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:acct.currentPassword">
-                <button type="button" class="pw-eye" data-eye="pwCurrent" data-i18n-attr="aria-label:ui.showPassword"></button>
+            <div class="input-group">
+                <input class="input" id="pwCurrent" type="password"
+                       autocomplete="current-password" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:acct.currentPassword, aria-label:acct.currentPassword">
+                <button type="button" class="btn" data-reveal></button>
             </div>
-            <div class="pw-wrap">
-                <input class="scm-input" id="pwNew" type="password"
-                       autocomplete="new-password" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:acct.newPassword">
-                <button type="button" class="pw-eye" data-eye="pwNew" data-i18n-attr="aria-label:ui.showPassword"></button>
+            <div class="input-group">
+                <input class="input" id="pwNew" type="password"
+                       autocomplete="new-password" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:acct.newPassword, aria-label:acct.newPassword">
+                <button type="button" class="btn" data-reveal></button>
             </div>
 
             <p class="scm-msg" id="pwMsg" hidden></p>
@@ -797,18 +795,18 @@
 
             <p class="scm-h" id="scmEditTitle"><span data-i18n="scm.edit"></span><button class="info-tip" data-i18n-attr="data-help:scm.info"></button></p>
             <div class="scm-name-row">
-                <input class="scm-input" id="scmName" spellcheck="false" autocomplete="off" data-i18n-attr="placeholder:scm.namePh">
+                <input class="input scm-input" id="scmName" spellcheck="false" autocomplete="off" data-i18n-attr="placeholder:scm.namePh">
                 <div class="scm-seg" role="group" data-i18n-attr="aria-label:scm.kind">
                     <button type="button" class="pill" data-kind="dark" id="scmKindDark" data-i18n="scm.dark"></button>
                     <button type="button" class="pill" data-kind="light" id="scmKindLight" data-i18n="scm.light"></button>
                 </div>
             </div>
             <div id="scmTokens">
-                <label class="scm-tok"><input type="color" data-k="--bg" aria-label="--bg"><code>--bg</code><input type="text" data-k="--bg" maxlength="7" spellcheck="false" aria-label="--bg hex"></label>
-                <label class="scm-tok"><input type="color" data-k="--card" aria-label="--card"><code>--card</code><input type="text" data-k="--card" maxlength="7" spellcheck="false" aria-label="--card hex"></label>
-                <label class="scm-tok"><input type="color" data-k="--card2" aria-label="--card2"><code>--card2</code><input type="text" data-k="--card2" maxlength="7" spellcheck="false" aria-label="--card2 hex"></label>
-                <label class="scm-tok"><input type="color" data-k="--line" aria-label="--line"><code>--line</code><input type="text" data-k="--line" maxlength="7" spellcheck="false" aria-label="--line hex"></label>
-                <label class="scm-tok"><input type="color" data-k="--accent" aria-label="--accent"><code>--accent</code><input type="text" data-k="--accent" maxlength="7" spellcheck="false" aria-label="--accent hex"></label>
+                <label class="scm-tok"><input type="color" data-k="--bg" aria-label="--bg"><code>--bg</code><input class="input" type="text" data-k="--bg" maxlength="7" spellcheck="false" aria-label="--bg hex"></label>
+                <label class="scm-tok"><input type="color" data-k="--card" aria-label="--card"><code>--card</code><input class="input" type="text" data-k="--card" maxlength="7" spellcheck="false" aria-label="--card hex"></label>
+                <label class="scm-tok"><input type="color" data-k="--card2" aria-label="--card2"><code>--card2</code><input class="input" type="text" data-k="--card2" maxlength="7" spellcheck="false" aria-label="--card2 hex"></label>
+                <label class="scm-tok"><input type="color" data-k="--line" aria-label="--line"><code>--line</code><input class="input" type="text" data-k="--line" maxlength="7" spellcheck="false" aria-label="--line hex"></label>
+                <label class="scm-tok"><input type="color" data-k="--accent" aria-label="--accent"><code>--accent</code><input class="input" type="text" data-k="--accent" maxlength="7" spellcheck="false" aria-label="--accent hex"></label>
             </div>
             <p class="scm-msg" id="scmAccentMsg" hidden></p>
             <div class="actions-row">
@@ -1372,7 +1370,7 @@
             var tzMsg   = document.getElementById( 'tzMsg' );
             var autoChk = document.getElementById( 'autoThemeChk' );
             var autoMsg = document.getElementById( 'autoThemeMsg' );
-            var curWrap = curEl.closest( '.pw-wrap' );
+            var curWrap = curEl.closest( '.input-group' );
             if( ! openBtn || ! back ) return;
 
             // "mandatory" = a brand-new user who signed in with a blank password.
@@ -1425,16 +1423,9 @@
                     try { sessionStorage.removeItem( REOPEN_KEY ); } catch ( e ) {}
             }
 
-            // The eyes on the two password fields (shared/ui.js, deferred: at
-            // DOMContentLoaded it is there).
+            // (The eyes on the two password fields are Ayni's [data-reveal].)
             document.addEventListener( 'DOMContentLoaded', function ()
             {
-                pwBack.querySelectorAll( '.pw-eye' ).forEach( function ( btn )
-                {
-                    var input = document.getElementById( btn.dataset.eye );
-                    if( input ) NayiveUI.pwEye( btn, input );
-                } );
-
                 // Language and time zone save themselves (shared/ui.js is
                 // deferred: here it is there).
                 if( langSel && window.Ayni )

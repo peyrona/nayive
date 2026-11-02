@@ -30,8 +30,6 @@
     var providers = [];      // from the server, once
     var picked    = false;   // the user chose the provider by hand
 
-    var EYE     = Ayni.icon( "eye" );
-    var EYE_OFF = Ayni.icon( "eye-off" );
 
     function prov() { return providers.filter( function ( p ) { return p.id === E.$( "addProv" ).value; } )[ 0 ] || null; }
 
@@ -167,14 +165,16 @@
         E.$( "addError" ).hidden = true;
     }
 
+    // The password hidden again (its eye is Ayni's [data-reveal]; a press shows it)
     function showPass( on )
     {
         var pw = E.$( "addPass" ), eye = E.$( "passEye" );
-        pw.type = on ? "text" : "password";
-        eye.innerHTML = on ? EYE_OFF : EYE;
-        var tip = E.T( on ? "ui.hidePassword" : "ui.showPassword" );
-        Ayni.setTip( eye, tip );
-        eye.setAttribute( "aria-label", tip );
+        if( on || pw.type === "password" ) return;
+        pw.type = "password";
+        eye.setAttribute( "aria-pressed", "false" );
+        Ayni.setIcon( eye, "eye" );
+        Ayni.setTip( eye, Ayni.t( "ayni.password.show" ) );
+        eye.setAttribute( "aria-label", eye.dataset.tip );
     }
 
     function hostOf( u ) { try { return new URL( u ).host; } catch( e ) { return u; } }
@@ -214,11 +214,11 @@
     // An account's new password: typed, tried on its server, kept.
     function newPassForm( a )
     {
-        var input = h( "input", { attrs: { type: "password", autocomplete: "new-password", spellcheck: "false", autocapitalize: "none",
+        var input = h( "input", { class: "input", attrs: { type: "password", autocomplete: "new-password", spellcheck: "false", autocapitalize: "none",
                                            "aria-label": E.T( "mail.newPass" ), placeholder: E.T( "mail.newPass" ) } } );
         var status = h( "p", { class: "mail-add-status" } );
         status.hidden = true;
-        var errBox = h( "p", { class: "field-error" } );
+        var errBox = h( "p", { class: "form-error" } );
         errBox.hidden = true;
         var save = h( "button", { class: "btn text primary", text: E.T( "ui.save" ), attrs: { type: "button" } } );
         async function go()
@@ -247,10 +247,8 @@
         save.addEventListener( "click", go );
         input.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); go(); } } );
         input.addEventListener( "input", function () { errBox.hidden = true; } );
-        var eye = h( "button", { class: "btn sm", attrs: { type: "button", "data-tip": E.T( "ui.showPassword" ), "aria-label": E.T( "ui.showPassword" ) } } );
-        NayiveUI.pwEye( eye, input );
-        eye.addEventListener( "click", function () { Ayni.setTip( eye, E.T( input.type === "password" ? "ui.showPassword" : "ui.hidePassword" ) ); } );
-        var box = h( "div", { class: "mail-newpass" }, h( "div", { class: "mail-pass" }, input, eye ), save, status, errBox );
+        var eye = h( "button", { class: "btn", attrs: { type: "button", "data-reveal": "" } } );   // Ayni's show / hide
+        var box = h( "div", { class: "mail-newpass" }, h( "div", { class: "input-group mail-pass" }, input, eye ), save, status, errBox );
         box.hidden = true;
         return box;
     }
@@ -356,11 +354,6 @@
             E.$( id ).addEventListener( "input", function () { E.$( "addError" ).hidden = true; } );   // fixed: the old complaint goes
         } );
         E.$( "addProv" ).addEventListener( "change", function () { picked = true; renderProvider(); } );
-        E.$( "passEye" ).addEventListener( "click", function ()
-        {
-            showPass( E.$( "addPass" ).type === "password" );
-            E.$( "addPass" ).focus();
-        } );
         E.$( "addPass" ).addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); E.addAccount(); } } );
         E.$( "trashDays" ).addEventListener( "input", saveDays );
         E.$( "signature" ).addEventListener( "input", saveSignature );
