@@ -1350,6 +1350,175 @@ const init = (root = document) => {
 };
 
 Ayni.core.lists = { makeTypeAhead };
-Object.assign(Ayni, { list, tree, pickNode, dropZone, makeTypeAhead, keyMatches, dragIds: () => drag.ids, pickTick: tickHtml });
+/* ---------- Choose a folder: Ayni.pickFolder(o) -> the folder's id, or null ----------
+   A dialog with the folders in a tree: the arrow opens and closes, a click lights a folder, a double click or Enter
+   chooses it. In its corner three buttons delete, rename and create folders, so nobody has to leave for that; while a
+   name is typed the same dialog is the name form (× drops the name, no second dialog). The app owns the data:
+     load() -> [{ id, name, children }]      read again after every change: the app's data is the truth
+     create(parent, name) -> the new id      rename(id, name) -> the id it has now      remove(id)
+   all may be promises; failed(err) says what went wrong (a toast by default). root: the id new folders go in with nothing
+   lit; rootName shows it as a row. note: a line on top; noFolders: what to say with none. onOpen(ctl) gets { task(promise),
+   rekey(from, to), isOpen() } for what comes later (an Undo: task(p) shows the tree busy, then reads it again; rekey keeps
+   what was open under a folder that moved) */
+const pickFolder = (o = {}) => new Promise((resolve) => {
+  let done = false, nodes = null, failed = false, open = {}, selected = null;
+  let nameMode = null, nameTarget = null, nameVal = '', namePicked = false, busy = false;
+  const d = Ayni.dialog({ title: o.title || tx('fp.pickFolder') }), sheet = d.body;
+  const fail = o.failed || ((err) => Ayni.toast('warn', String(err?.message || err)));
+  const finish = (val) => { if (!d.close()) return; done = true; resolve(val || null); };
+  d.dialog.addEventListener('close', () => finish(null));
+  const load = () => Promise.resolve().then(() => o.load()).then((n) => { nodes = n || []; failed = false; }, () => { failed = true; });
+  const find = (list, id) => { for (const n of list || []) { if (n.id === id) return n; const hit = find(n.children, id); if (hit) return hit; } return null; };
+  const task = (p) => {
+    busy = true; nameMode = null; render();
+    return Promise.resolve(p).then((sel) => { selected = sel || null; }, fail).then(load).then(() => {
+      busy = false;
+      if (selected && selected !== o.root && !find(nodes, selected)) selected = null;
+      if (!done) render();
+    });
+  };
+  const rekey = (from, to) => {
+    const next = {};
+    Object.keys(open).forEach((k) => { next[k === from || k.startsWith(from + '/') ? to + k.slice(from.length) : k] = open[k]; });
+    open = next;
+  };
+  const startName = (mode) => {
+    nameMode = mode; namePicked = false;
+    nameTarget = mode === 'create' ? selected || o.root : selected;
+    nameVal = mode === 'create' ? '' : find(nodes, selected)?.name || '';
+    render();
+  };
+  const cancelName = () => { nameMode = null; nameTarget = null; nameVal = ''; render(); };
+  /* A folder's name is one segment: not empty, no "/", not "." or ".." */
+  const nameOk = () => { const nm = String(nameVal || '').trim(); return !!nm && !nm.includes('/') && nm !== '.' && nm !== '..'; };
+  const commitName = () => {
+    if (!nameOk()) return;
+    const nm = String(nameVal).trim(), target = nameTarget;
+    if (nameMode === 'create') { open[target] = true; task(Promise.resolve().then(() => o.create(target, nm))); return; }
+    if (nm === find(nodes, target)?.name) { cancelName(); return; }
+    task(Promise.resolve().then(() => o.rename(target, nm)));
+  };
+  const remove = () => { const gone = selected; task(Promise.resolve().then(() => o.remove(gone)).then(() => null)); };
+  const msg = (text) => { const p = document.createElement('p'); p.className = 'fp-msg'; p.textContent = text; return p; };
+  const act = (role, ic, tip, off, fn) => { const b = Ayni.dialogButton(role, tip, ic); b.ariaDisabled = !!off; b.addEventListener('click', fn); return b; };
+  function render() {
+    /* The tree stays scrolled where it was across a redraw, and keeps the keys */
+    const was = $('.fp-tree', sheet), scroll = was ? was.scrollTop : 0, hadFocus = !!was && was.contains(document.activeElement);
+    sheet.innerHTML = ''; d.footer.innerHTML = '';
+    if (o.note) { const p = document.createElement('p'); p.className = 'text'; p.textContent = o.note; sheet.append(p); }
+    const box = document.createElement('div'); box.className = 'fp-tree'; sheet.append(box);
+    if (failed) box.append(msg(tx('fp.loadError')));
+    else if (nodes === null) box.append(msg(tx('fp.loading')));
+    else {
+      const roots = o.rootName ? [{ id: o.root, name: o.rootName, children: nodes }] : nodes;
+      if (o.rootName) open[o.root] = open[o.root] !== false;
+      if (!roots.length) box.append(msg(o.noFolders || tx('fp.noFolders')));
+      else {
+        const host = document.createElement('ul'); box.append(host);
+        const tr = tree(host, { nav: true, pick: true, items: () => roots, isOpen: (id) => !!open[id], setOpen: (id, v) => { open[id] = v; },
+          current: () => selected, disabled: () => busy, go: (id) => { selected = id; render(); },
+          confirm: (id) => { if (!busy && !nameMode) finish(id); } });
+        if (hadFocus) tr.focus(selected);
+      }
+    }
+    box.scrollTop = scroll;
+    let input = null;
+    if (nameMode) {
+      const fld = document.createElement('div'), lab = document.createElement('label'); fld.className = 'field';
+      lab.textContent = tx(nameMode === 'create' ? 'fp.newFolder' : 'fp.rename'); fld.append(lab);
+      input = document.createElement('input'); input.className = 'input'; input.type = 'text'; input.autocomplete = 'off'; input.value = nameVal;
+      input.addEventListener('input', () => { nameVal = input.value; ok.ariaDisabled = !nameOk(); });
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commitName(); } });
+      fld.append(input); sheet.append(fld);
+    }
+    if (!nameMode) {
+      /* In the corner: delete or rename the lit folder, create one inside it (with nothing lit, in the root) */
+      const ready = !busy && nodes !== null && !failed, onOne = ready && !!selected && selected !== o.root;
+      const left = document.createElement('div'); left.className = 'extra';
+      left.append(act('danger', null, tx('fp.delete'), !onOne, remove), act('', 'edit', tx('fp.rename'), !onOne, () => startName('rename')),
+        act('', 'folder-plus', tx('fp.newFolder'), !ready, () => startName('create')));
+      d.footer.append(left);
+    }
+    const cancel = Ayni.dialogButton('close', tx('cancel'));
+    const ok = Ayni.dialogButton('primary', tx(!nameMode ? 'fp.choose' : nameMode === 'create' ? 'fp.newFolder' : 'fp.rename'));
+    d.footer.append(cancel, ok);
+    Ayni.init(d.dialog);
+    /* While a name is open the × only drops it: the dialog stays */
+    cancel.addEventListener('click', (e) => { if (nameMode) { e.preventDefault(); cancelName(); } else finish(null); });
+    if (nameMode) {
+      ok.ariaDisabled = !nameOk(); ok.addEventListener('click', commitName);
+      input.focus(); if (!namePicked) { namePicked = true; input.select(); }
+    } else {
+      ok.ariaDisabled = !selected || busy;
+      ok.addEventListener('click', () => { if (selected) finish(selected); });
+    }
+  }
+  o.onOpen?.({ task, rekey, isOpen: () => !done });
+  render(); d.show();
+  load().then(render);
+});
+
+/* ---------- Choose a file: Ayni.pickFile(o) -> the file's node, or null ----------
+   One folder at a time: the crumb on top goes back up, folders first, then the files with their size. A click opens a
+   folder and lights a file; the button or a double click chooses it. The app owns the data: list(dir) -> [{ id, name, dir,
+   size }], dir true for a folder (may be a promise); ids are paths, "/" between folders. o.dir: where it opens; rootName:
+   the first crumb; sizeText(n): how a size reads; okTip: the button's tooltip */
+const pickFile = (o = {}) => new Promise((resolve) => {
+  let dir = o.dir, nodes = null, failed = false, selected = null, seq = 0;
+  const d = Ayni.dialog({ title: o.title || tx('fp.pickFile') }), sheet = d.body;
+  const finish = (node) => { if (d.close()) resolve(node || null); };
+  d.dialog.addEventListener('close', () => finish(null));
+  const openDir = (path) => {
+    dir = path; nodes = null; failed = false; selected = null;
+    const my = ++seq;
+    render();
+    Promise.resolve().then(() => o.list(path)).then((list) => {
+      if (my !== seq) return;
+      nodes = (list || []).slice().sort((a, b) => (!!a.dir !== !!b.dir ? (a.dir ? -1 : 1) : a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
+      render();
+    }, () => { if (my === seq) { failed = true; render(); } });
+  };
+  const msg = (text) => { const p = document.createElement('p'); p.className = 'fp-msg'; p.textContent = text; return p; };
+  const row = (n) => {
+    const r = document.createElement('div'); r.className = 'fp-row' + (selected === n ? ' sel' : '');
+    r.setAttribute('role', 'option'); r.setAttribute('aria-selected', selected === n ? 'true' : 'false');
+    const part = (cls, text) => { const s = document.createElement('span'); s.className = cls; if (text != null) s.textContent = text; r.append(s); return s; };
+    part('fp-caret', n.dir ? '▸' : '');
+    part('fp-ic').innerHTML = Ayni.icon(n.dir ? 'folder' : 'file');
+    part('fp-name', n.name);
+    if (!n.dir) part('fp-size', o.sizeText ? o.sizeText(n.size || 0) : String(n.size || 0));
+    r.addEventListener('click', () => { if (n.dir) { openDir(n.id); return; } selected = n; render(); });
+    if (!n.dir) r.addEventListener('dblclick', () => finish(n));
+    return r;
+  };
+  function render() {
+    sheet.innerHTML = ''; d.footer.innerHTML = '';
+    /* Home > photos > 2024: every step but the last goes back there */
+    const crumbs = document.createElement('div'); crumbs.className = 'fp-crumbs';
+    const parts = String(dir).split('/');
+    parts.forEach((part, i) => {
+      if (i) crumbs.append('›');
+      const label = i === 0 && o.rootName ? o.rootName : part, last = i === parts.length - 1;
+      const el = document.createElement(last ? 'b' : 'button'); el.textContent = label;
+      if (!last) { el.type = 'button'; el.addEventListener('click', () => openDir(parts.slice(0, i + 1).join('/'))); }
+      crumbs.append(el);
+    });
+    sheet.append(crumbs);
+    const box = document.createElement('div'); box.className = 'fp-tree'; box.setAttribute('role', 'listbox'); sheet.append(box);
+    if (failed) box.append(msg(tx('fp.loadError')));
+    else if (nodes === null) box.append(msg(tx('fp.loading')));
+    else if (!nodes.length) box.append(msg(tx('fp.emptyFolder')));
+    else nodes.forEach((n) => box.append(row(n)));
+    const cancel = Ayni.dialogButton('close', tx('cancel')); cancel.addEventListener('click', () => finish(null));
+    const ok = Ayni.dialogButton('primary', o.okTip || tx('fp.chooseFile')); ok.ariaDisabled = !selected;
+    ok.addEventListener('click', () => { if (selected) finish(selected); });
+    d.footer.append(cancel, ok);
+    Ayni.init(d.dialog);
+  }
+  d.show();
+  openDir(dir);
+});
+
+Object.assign(Ayni, { list, tree, pickNode, pickFolder, pickFile, dropZone, makeTypeAhead, keyMatches, dragIds: () => drag.ids, pickTick: tickHtml });
 Ayni.core.family({ setup, init });
 })();

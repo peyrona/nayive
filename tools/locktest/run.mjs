@@ -118,7 +118,7 @@ try
       const opening = s.open('files/informe.docx');
       await typePassword('EQUIVOCADA');           // first try: wrong
       await new Promise(r=>setTimeout(r,400));
-      const asksAgain = !!document.getElementById('askPw1');
+      const asksAgain = !!document.getElementById('ayni-ask-pw');
       await typePassword('contrasena-larga');     // second try: right
       const opened = await opening;
       return { asksAgain, opened, text: DOC.body ? new TextDecoder().decode(DOC.body) : null, locked: s.locked() };
@@ -269,7 +269,7 @@ try
       const asked = !!document.querySelector('dialog.panel[open]');   // "throw it away?"
       await clickConfirm('cancel');              // no: try again
       await new Promise(r=>setTimeout(r,200));
-      const backToPassword = !!document.getElementById('askPw1');
+      const backToPassword = !!document.getElementById('ayni-ask-pw');
       await typePassword('clave-del-borrador');
       await booting;
       return { asked, backToPassword, text: DOC.body ? new TextDecoder().decode(DOC.body) : null };
@@ -313,7 +313,7 @@ try
       s.untitled( null, {} );
       document.getElementById('lockBtn').click();
       await new Promise(r=>setTimeout(r,400));
-      return { pwStraightAway: !!document.getElementById('askPw1'), sheet: sheetText() };
+      return { pwStraightAway: !!document.getElementById('ayni-ask-pw'), sheet: sheetText() };
     })()`);
     ok('the password sheet opens straight away', w1.pwStraightAway, w1.sheet);
     await p.evaluate(`typePassword('sin-pasado-123')`);
@@ -410,7 +410,7 @@ try
     await st('lock', `(()=>{ document.getElementById('lockBtn').click(); return 'ok'; })()`);
     await st('cancel', `pressTitled( T('ui.cancel') )`);
     const w5 = await st('read', `(async()=>{ await new Promise(r=>setTimeout(r,400));
-      return { locked: s.locked(), pw: !!document.getElementById('askPw1'),
+      return { locked: s.locked(), pw: !!document.getElementById('ayni-ask-pw'),
                body: SRV['files/x.docx'] ? new TextDecoder().decode(SRV['files/x.docx']) : null, bin: BIN.length }; })()`);
     ok('no password is asked', w5.pw === false);
     ok('not locked', w5.locked === false);

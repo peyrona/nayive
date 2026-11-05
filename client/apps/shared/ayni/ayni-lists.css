@@ -154,3 +154,32 @@ html.touch :where(.lb, .picker-pop) [role="option"], html.touch [role="treeitem"
 html.touch .tree-sheet [role="tree"][data-nav] [role="treeitem"] > .ti, html.touch .item-list [aria-selected] { min-height: var(--touch); }
 html.touch .pick-tick { position: relative; }
 html.touch .pick-tick::after { content: ""; position: absolute; inset: -11px; }
+
+/* ---------- Choose a folder, choose a file ---------- */
+/* The box of the tree or list (.fp-tree), a file's row (.fp-row), the crumb of the folder on show and a file's size */
+.fp-tree  { margin: 4px 0 2px; min-height: 240px; max-height: min(66vh, 560px); overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius-m); }
+.fp-msg   { margin: 0; padding: 16px; color: var(--text-dim); font-size: .9rem; line-height: 1.4; }
+.fp-row
+{
+    display: flex; align-items: center; gap: 8px; padding: 9px 10px 9px 8px; cursor: pointer;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+.fp-row:last-child { border-bottom: none; }
+.fp-row:hover      { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.fp-row.sel        { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.fp-row.sel .fp-ic,
+.fp-row.sel .fp-name { color: var(--text); }
+.fp-caret
+{
+    flex: 0 0 auto; width: 20px; align-self: stretch; display: flex; align-items: center;
+    justify-content: center; color: var(--text-dim); font-size: .8rem;
+}
+.fp-caret.has:hover { color: var(--text); }
+.fp-ic     { flex: 0 0 auto; display: flex; color: var(--text-dim); }
+.fp-ic svg { width: 16px; height: 16px; }
+.fp-name   { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; }
+.fp-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 0 0 6px; font-size: .85rem; color: var(--text-dim); }
+.fp-crumbs button { border: none; background: none; padding: 2px 4px; border-radius: var(--radius-s); font: inherit; color: var(--link); cursor: pointer; }
+.fp-crumbs button:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.fp-crumbs b { padding: 2px 4px; color: var(--text); font-weight: 600; }
+.fp-size   { flex: 0 0 auto; font-size: .78rem; color: var(--text-dim); }

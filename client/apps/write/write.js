@@ -596,7 +596,7 @@ function openSettings()
 
     if( menusOn() )
     {
-        const edit = document.querySelectorAll( '#menuBar .menu-top' )[ MENUS.findIndex( function( m ) { return m.key === 'ui.menu.edit'; } ) ];
+        const edit = document.querySelectorAll( '#menuBar > button' )[ MENUS.findIndex( function( m ) { return m.key === 'ui.menu.edit'; } ) ];
         MENUBAR.openItems( toolsItems, edit.getBoundingClientRect() );
         return;
     }

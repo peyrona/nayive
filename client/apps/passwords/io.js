@@ -166,8 +166,8 @@ function importCsv( text )
 // lacks (by id) is added, folders included.
 async function importBackup( f )
 {
-    const pw = await NayiveUI.askPassword( { title: T( 'passwords.importBackup' ), body: T( 'passwords.importBackupAsk' ),
-                                             confirm: T( 'passwords.continue' ) } );
+    const pw = await Ayni.ask( { password: true, title: T( 'passwords.importBackup' ), lead: T( 'passwords.importBackupAsk' ),
+                                             okTip: T( 'passwords.continue' ) } );
     if( pw === null || ! isOpen() ) return;
     let k;
     try { k = await PwVault.unlock( f, { password: pw } ); }

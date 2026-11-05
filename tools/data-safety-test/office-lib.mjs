@@ -177,10 +177,10 @@ export const PW = `( function ( w ) {
     w.__sheet = function () { var s = w.document.querySelector( 'dialog.panel[open]' ); return s ? s.textContent : ''; };
     w.__typePassword = async function ( pw ) {
         for( var i = 0; i < 120; i++ ) {
-            var one = w.document.getElementById( 'askPw1' );
+            var one = w.document.getElementById( 'ayni-ask-pw' );
             if( one && one.closest( 'dialog.panel[open]' ) ) {
                 one.value = pw;
-                var two = w.document.getElementById( 'askPw2' ); if( two ) two.value = pw;
+                var two = w.document.getElementById( 'ayni-ask-repeat' ); if( two ) two.value = pw;
                 one.closest( 'dialog' ).querySelector( 'footer button:last-child' ).click();
                 return true;
             }

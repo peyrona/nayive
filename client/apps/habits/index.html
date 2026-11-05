@@ -223,16 +223,12 @@
                         <div class="header-actions tall" role="toolbar" data-i18n-attr="aria-label:ui.actions">
                             <div class="tb-group">
                                 <button id="addBtn" class="btn" type="button" data-i18n-attr="data-tip:habits.newHabit, aria-label:habits.newHabit">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                        <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
-                                    </svg>
+                                    <span class="icon" data-icon="plus" style="--icon:18px"></span>
                                 </button>
                             </div>
                             <div class="tb-group tb-sys">
                                 <button class="btn" data-help-open type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                        <circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>
-                                    </svg>
+                                    <span class="icon" data-icon="help" style="--icon:18px"></span>
                                 </button>
                             </div>
                             <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="data-tip:ui.synced"></button>
@@ -255,9 +251,7 @@
                         </div>
 
                         <div id="homeEmpty" class="empty-state" hidden>
-                            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M12 22V10"></path><path d="M12 12C12 8.5 9.2 5.5 5.5 5.5c0 3.5 2.8 6.5 6.5 6.5z"></path><path d="M12 14c0-3.2 2.6-5.8 6-5.8 0 3.2-2.6 5.8-6 5.8z"></path>
-                            </svg>
+                            <span class="icon" data-icon="sprout" style="--icon:44px"></span>
                             <p data-i18n="habits.noHabits"></p>
                             <p data-i18n="habits.noHabitsHint"></p>
                         </div>
@@ -267,11 +261,11 @@
                     <section id="monthView" hidden>
                         <div class="month-nav">
                             <button id="prevMonth" class="btn sm" type="button" data-i18n-attr="data-tip:habits.prevMonth, aria-label:habits.prevMonth">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                <span class="icon" data-icon="prev"></span>
                             </button>
                             <strong id="monthLabel"></strong>
                             <button id="nextMonth" class="btn sm" type="button" data-i18n-attr="data-tip:habits.nextMonth, aria-label:habits.nextMonth">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                <span class="icon" data-icon="next"></span>
                             </button>
                         </div>
                         <div id="gridWrap" class="grid-wrap"></div>

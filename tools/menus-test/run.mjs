@@ -231,10 +231,10 @@ try
     await key( "Escape", "Escape", 27 );
     await open( "write", 1280 );
     await press( "#chromeMenusBtn" );
-    ok( await until( "!! document.querySelector( '#menuBar[role=menubar] > .menu-top' )" ), "the menu bar is an Ayni menu bar" );
+    ok( await until( "!! document.querySelector( '#menuBar[role=menubar] > button' )" ), "the menu bar is an Ayni menu bar" );
     await ev( "document.querySelector( '.docx-page, #editor' )?.focus?.(); true" );
     await key( "F10", "F10", 121 );
-    ok( await until( "document.activeElement.classList.contains( 'menu-top' )" ), "F10 focuses it" );
+    ok( await until( "document.activeElement.parentElement.id === 'menuBar'" ), "F10 focuses it" );
     for( let i = 0; i < 4; i++ ) await key( "ArrowRight", "ArrowRight", 39 );
     await key( "ArrowDown", "ArrowDown", 40 );
     ok( await until( "!! document.querySelector( '#menuBar-4:popover-open' )" ), "Right x4 + Down opens Format" );

@@ -257,7 +257,7 @@ body.calc-painting #gridHost .htCore td { cursor: copy; }
 
 /* ---- MENU MODE (see PULL-DOWN MENUS in the script) -------------------
    The user picks ONE chrome: the icon toolbar, or the classic
-   "Archivo · Edición · Ver …" bar. #menuBar and .menu-top are styled once
+   "Archivo · Edición · Ver …" bar. #menuBar is placed once
    in shared/app.css, its menus are Ayni's; what belongs to Calc is only
    what has to disappear.
 

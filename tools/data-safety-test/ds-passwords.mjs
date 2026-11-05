@@ -72,8 +72,8 @@ const addEntry = ( p, title, pass ) => p.evaluate( `( function () { var now = no
 
 async function answerPassword( p, pw )
 {
-    await p.until( "!! document.querySelector( 'dialog.panel[open] #askPw1' )" );
-    return p.evaluate( `( function () { document.getElementById( 'askPw1' ).value = ${JSON.stringify( pw )};
+    await p.until( "!! document.querySelector( 'dialog.panel[open] #ayni-ask-pw' )" );
+    return p.evaluate( `( function () { document.getElementById( 'ayni-ask-pw' ).value = ${JSON.stringify( pw )};
         var backs = document.querySelectorAll( 'dialog.panel[open]' ), b = backs[ backs.length - 1 ];
         b.querySelector( '.btn.primary' ).click(); return true; } )()` );
 }

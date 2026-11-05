@@ -77,8 +77,7 @@
  * device opens the way the user left it. At boot the account's copy wins
  * (sync()); after that a click writes both (set()).
  *
- * The bar's CSS - #menuBar, .menu-top - lives in shared/app.css; the menus
- * look like every other Ayni menu.
+ * The bar's place - #menuBar - is in shared/app.css; the bar and its menus are Ayni's.
  *
  * -----------------------------------------------------------------------------
  * NayiveMenus.COLORS   the text colours both menus offer (Word's and Excel's
@@ -158,6 +157,9 @@ const NayiveMenus = ( function ()
                 let n = null;
                 try { n = document.querySelector( src ); } catch ( _ ) {}
 
+                // A named icon may not be drawn yet: the name is enough.
+                const named = n && ! ( n instanceof SVGSVGElement ) && n.querySelector( '.icon[data-icon]' );
+                if( named ) return Ayni.icon( named.dataset.icon );
                 if( n ) svg = n instanceof SVGSVGElement ? n : n.querySelector( 'svg' );
                 if( svg ) svg = svg.cloneNode( true );
 
@@ -209,19 +211,6 @@ const NayiveMenus = ( function ()
 
         //---- opening and closing ---------------------------------------------
 
-        function close()
-        {
-            document.querySelectorAll( '.panel.menu:popover-open' ).forEach( function ( m ) { m.hidePopover(); } );
-        }
-
-        function menuOf( i ) { return gid( BAR + '-' + i ); }
-
-        function openAt( i )
-        {
-            const btn = document.querySelector( '#' + BAR + ' [data-menu="' + i + '"]' );
-            if( btn && menuOf( i ) && ! menuOf( i ).matches( ':popover-open' ) ) btn.click();
-        }
-
         // A drop-down off a button that is not on the bar (Ayni.menuAt: a second
         // press on the button closes it), or off a rectangle (a right-click
         // menu at the pointer, a list under a menu row).
@@ -253,56 +242,6 @@ const NayiveMenus = ( function ()
             if( cfg.exec ) cfg.exec( it );
         }
 
-        //---- the bar itself --------------------------------------------------
-
-        // An Ayni menu bar (shared/ayni/ayni-menus.js: F10, the arrows, sliding
-        // along it): one button and one menu per entry, the menu filled from
-        // the table each time it opens, so its rows show what is true now.
-        function build()
-        {
-            const bar = gid( BAR );
-            if( ! bar ) return;
-
-            bar.querySelectorAll( '.menu-top' ).forEach( function ( b ) { b.remove(); } );
-            document.querySelectorAll( '.panel.menu[data-bar="' + BAR + '"]' ).forEach( function ( m ) { m.remove(); } );
-            bar.setAttribute( 'role', 'menubar' );
-
-            list().forEach( function ( m, i )
-            {
-                const b = document.createElement( 'button' );
-                b.type         = 'button';
-                b.className    = 'menu-top';
-                b.dataset.menu = String( i );
-                b.setAttribute( 'popovertarget', BAR + '-' + i );
-                b.setAttribute( 'aria-haspopup', 'menu' );
-                b.setAttribute( 'aria-expanded', 'false' );
-
-                // applyI18n fills it in - and re-fills it on a language change.
-                if( m.key ) b.setAttribute( 'data-i18n', m.key );
-                else        b.textContent = m.text || '';
-
-                bar.appendChild( b );
-
-                const menu = document.createElement( 'div' );
-                menu.className   = 'panel menu';
-                menu.id          = BAR + '-' + i;
-                menu.dataset.bar = BAR;
-                menu.setAttribute( 'popover', '' );
-                menu.setAttribute( 'role', 'menu' );
-                menu.addEventListener( 'beforetoggle', function ( e )
-                {
-                    if( e.newState !== 'open' || e.target !== menu ) return;
-                    const now = list()[ i ];
-                    Ayni.fillMenu( menu, rows( now ? now.items : [] ) );
-                    menu.setAttribute( 'aria-label', b.textContent );
-                } );
-                document.body.appendChild( menu );
-            } );
-
-            Ayni.i18n.apply( bar );
-            Ayni.init( bar );
-        }
-
         // Where an anchored popup should hang from. In toolbar mode that is the
         // toolbar button that opened it; in menu mode the button is collapsed to
         // a zero-height sliver, so the menu row that ran the entry is the honest
@@ -315,13 +254,21 @@ const NayiveMenus = ( function ()
             return btn.getBoundingClientRect();
         }
 
-        build();
+        // The bar itself is Ayni's (F10, the arrows, sliding along it): each menu
+        // is filled from the table when it opens, so its rows show what is true now.
+        const bar = gid( BAR ) && Ayni.menuBar( gid( BAR ), { menus: function ()
+        {
+            return list().map( function ( m )
+            {
+                return { key: m.key, label: m.text, items: function () { return rows( m.items ); } };
+            } );
+        } } );
 
         return {
-            build:      build,
-            close:      close,
+            build:      function () { if( bar ) bar.build(); },
+            close:      function () { document.querySelectorAll( '.panel.menu:popover-open' ).forEach( function ( m ) { m.hidePopover(); } ); },
             isOpen:     function () { return !! document.querySelector( '.panel.menu:popover-open' ); },
-            openAt:     openAt,
+            openAt:     function ( i ) { if( bar ) bar.openAt( i ); },
             openItems:  openItems,
             anchorRect: anchorRect,
             rect:       function () { return lastRect; }

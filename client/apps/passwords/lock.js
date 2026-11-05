@@ -191,7 +191,7 @@ async function loginOk( login, errId, busyId )
 async function showPhrase()
 {
     if( gateBusy || ! env || ! PwVault.hintValid( env.hint ) ) return;
-    const login = await NayiveUI.askPassword( { title: T( 'passwords.hintShow' ), body: T( 'passwords.hintAsk' ), confirm: T( 'passwords.continue' ) } );
+    const login = await Ayni.ask( { password: true, title: T( 'passwords.hintShow' ), lead: T( 'passwords.hintAsk' ), okTip: T( 'passwords.continue' ) } );
     if( login === null ) return;
     sayError( 'unlockErr', '' );
     setBusy( T( 'passwords.opening' ) );
@@ -513,8 +513,8 @@ async function saveChangePw()
 async function newRecoveryKey()
 {
     if( ! isOpen() ) return;
-    const pw = await NayiveUI.askPassword( { title: T( 'passwords.newRecovery' ), body: T( 'passwords.newRecoveryAsk' ),
-                                             confirm: T( 'passwords.continue' ) } );
+    const pw = await Ayni.ask( { password: true, title: T( 'passwords.newRecovery' ), lead: T( 'passwords.newRecoveryAsk' ),
+                                             okTip: T( 'passwords.continue' ) } );
     if( pw === null || ! isOpen() ) return;
     let raw;
     try { raw = await PwVault.openRaw( env, { password: pw } ); }
@@ -542,7 +542,7 @@ async function newRecoveryKey()
 // plain export). -> true when it is right.
 async function confirmMaster( title, body )
 {
-    const pw = await NayiveUI.askPassword( { title: title, body: body, confirm: T( 'passwords.continue' ) } );
+    const pw = await Ayni.ask( { password: true, title: title, lead: body, okTip: T( 'passwords.continue' ) } );
     if( pw === null || ! isOpen() ) return false;
     try
     {

@@ -318,7 +318,7 @@
             <!-- FILE, first as in Write and Calc: the menu (#topMenu) is built from
                  the hidden #fileTools buttons below (shared/office.js, fileMenu). -->
             <button id="moreBtn" class="btn tb-btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.menu.file, aria-label:ui.menu.file">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="13" y2="17"></line></svg>
+                <span class="icon" data-icon="file-text" style="--icon:17px"></span>
             </button>
 
             <div class="tb-sep"></div>
@@ -361,7 +361,7 @@
             <div class="tb-sep"></div>
 
             <button id="wrapBtn" class="btn tb-btn" data-i18n-attr="data-tip:text.wrap">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="15" y2="12"></line><polyline points="18 9 21 12 18 15"></polyline><line x1="3" y1="18" x2="12" y2="18"></line></svg>
+                <span class="icon" data-icon="wrap" style="--icon:17px"></span>
             </button>
             <div class="picker" id="indentSelect" data-i18n-attr="data-tip:text.indent">
                 <input type="hidden" value="4">
@@ -388,7 +388,7 @@
             <!-- Ayuda. Opens the three-entry menu below (#helpMenu), not the
                  guide card: the card is one of the three entries. -->
             <button id="helpBtn" class="btn tb-btn" data-help-open type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                <span class="icon" data-icon="help" style="--icon:17px"></span>
             </button>
 
             <!-- FILE: new, open, import, "guardar como", restore and the lock. Off
@@ -397,32 +397,32 @@
                  one it came from, so there is one set of handlers. -->
             <div id="fileTools" hidden>
                 <button id="newBtn" class="btn tb-btn" data-i18n-attr="data-tip:write.newDoc">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="12" x2="12" y2="18"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                    <span class="icon" data-icon="file-new" style="--icon:17px"></span>
                 </button>
                 <button id="openBtn" class="btn tb-btn" data-i18n-attr="data-tip:ui.openDoc">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                    <span class="icon" data-icon="folder" style="--icon:17px"></span>
                 </button>
                 <button id="importBtn" class="btn tb-btn" data-i18n-attr="data-tip:ui.importDevice">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    <span class="icon" data-icon="upload" style="--icon:17px"></span>
                 </button>
                 <input id="importInput" type="file" style="display:none">
                 <button id="saveAsBtn" class="btn tb-btn" data-i18n-attr="data-tip:ui.saveAs">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 14 10 18 17 9" stroke-width="2.5"></polyline><line x1="12" y1="1" x2="12" y2="7" stroke-width="2.4"></line><line x1="9" y1="4" x2="15" y2="4" stroke-width="2.4"></line></svg>
+                    <span class="icon" data-icon="save-as" style="--icon:17px"></span>
                 </button>
                 <button id="restoreBtn" class="btn tb-btn" data-i18n-attr="data-tip:write.restore">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"></path><polyline points="3 4 3 9 8 9"></polyline><polyline points="12 8 12 12 15 14"></polyline></svg>
+                    <span class="icon" data-icon="history" style="--icon:17px"></span>
                 </button>
                 <!-- Print and "Save as PDF": the document as the preview shows it (see PRINT). -->
                 <button id="printBtn" class="btn tb-btn" type="button" data-i18n-attr="data-tip:write.print, aria-label:write.print">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                    <span class="icon" data-icon="print" style="--icon:17px"></span>
                 </button>
                 <button id="pdfBtn" class="btn tb-btn" type="button" data-i18n-attr="data-tip:write.savePdf, aria-label:write.savePdf">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><text x="12" y="19" font-size="7" font-family="sans-serif" text-anchor="middle" fill="currentColor" stroke="none">PDF</text></svg>
+                    <span class="icon" data-icon="file-pdf" style="--icon:17px"></span>
                 </button>
                 <!-- Text has no password of its own (Write and Calc only): the key shows
                      just while an old locked file is open, so its lock can come off. -->
                 <button id="lockBtn" class="btn tb-btn" data-only-locked hidden data-i18n-attr="data-tip:lock.title">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="M10.7 12.3 21 2"></path><path d="m15.5 7.5 3 3"></path><path d="m18 5 2.5 2.5"></path></svg>
+                    <span class="icon" data-icon="key" style="--icon:17px"></span>
                 </button>
             </div>
 
@@ -431,10 +431,10 @@
                  and clicks them, so there is one set of handlers (O.helpMenu). -->
             <div id="helpTools" hidden>
                 <button id="statsBtn" class="btn tb-btn" type="button" data-i18n-attr="data-tip:write.stats, aria-label:write.stats">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"></line><line x1="10" y1="20" x2="10" y2="4"></line><line x1="16" y1="20" x2="16" y2="9"></line><line x1="21" y1="20" x2="3" y2="20"></line></svg>
+                    <span class="icon" data-icon="stats" style="--icon:17px"></span>
                 </button>
                 <button id="scBtn" class="btn tb-btn" type="button" data-i18n-attr="data-tip:write.shortcuts, aria-label:write.shortcuts">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6" y2="10"></line><line x1="10" y1="10" x2="10" y2="10"></line><line x1="14" y1="10" x2="14" y2="10"></line><line x1="18" y1="10" x2="18" y2="10"></line><line x1="7" y1="14" x2="17" y2="14"></line></svg>
+                    <span class="icon" data-icon="keyboard" style="--icon:17px"></span>
                 </button>
             </div>
         </div>

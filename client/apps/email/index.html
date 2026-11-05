@@ -72,7 +72,7 @@
              does not fit the row goes into the ⋮ before the gear (Ayni.fitBar). -->
         <div class="topbar">
             <button id="backBtn" class="btn" type="button" hidden data-i18n-attr="data-tip:mail.back, aria-label:mail.back">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                <span class="icon" data-icon="back"></span>
             </button>
             <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><polyline points="22 6 12 13 2 6"></polyline></svg>
             <h1>eMail</h1>
@@ -113,7 +113,7 @@
                         <input id="searchInput" class="input" type="search" enterkeyhint="search" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:mail.search, aria-label:mail.search">
                     </div>
                     <button id="searchBtn" class="btn mail-list-only" type="button" data-rank="20" data-search data-i18n-attr="data-tip:mail.search, aria-label:mail.search">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <span class="icon" data-icon="search"></span>
                     </button>
                     <button id="composeBtn" class="btn mail-list-only" type="button" data-rank="21" data-icon="compose" data-i18n-attr="data-tip:mail.compose, aria-label:mail.compose"></button>
                     <!-- picks the rows that match some fields (the pick dialog) -->
@@ -127,7 +127,7 @@
                     </button>
                     <button id="setBtn" class="btn mail-list-only" type="button" data-rank="30" data-icon="settings" data-i18n-attr="data-tip:mail.settings, aria-label:mail.settings"></button>
                     <button class="btn" data-help-open data-rank="31" type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                        <span class="icon" data-icon="help"></span>
                     </button>
                 </div>
                 <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="data-tip:ui.synced"></button>
@@ -149,7 +149,7 @@
             <main class="mail-main">
                 <!-- No account yet -->
                 <div id="noAcct" class="empty-state" hidden>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><polyline points="22 6 12 13 2 6"></polyline></svg>
+                    <span class="icon" data-icon="mail"></span>
                     <p data-i18n="mail.noAccount"></p>
                     <p data-i18n="mail.noAccountHint"></p>
                     <button id="noAcctAdd" class="btn text primary" type="button" data-i18n="mail.addAccount"></button>
@@ -160,7 +160,7 @@
                     <!-- a phone: the tray or label on screen, and the button that slides the tree in -->
                     <div class="mail-where">
                         <button id="treeBtn" class="btn" type="button" data-i18n-attr="data-tip:mail.labelsAndTrays, aria-label:mail.labelsAndTrays">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                            <span class="icon" data-icon="folder"></span>
                         </button>
                         <span id="whereName" class="mail-where-name"></span>
                     </div>
@@ -250,7 +250,7 @@
             <div id="readRz" class="splitter" hidden></div>
             <section id="readPane" class="mail-pane" hidden>
                 <div id="readNone" class="empty-state">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><polyline points="22 6 12 13 2 6"></polyline></svg>
+                    <span class="icon" data-icon="mail"></span>
                 </div>
             </section>
         </div>
@@ -453,7 +453,7 @@
                     <p id="provWhat"></p>
                     <ol id="provSteps"></ol>
                     <a id="provLink" class="btn text bordered" target="_blank" rel="noopener noreferrer" hidden>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                        <span class="icon" data-icon="external"></span>
                         <span id="provLinkText"></span>
                     </a>
                 </div>

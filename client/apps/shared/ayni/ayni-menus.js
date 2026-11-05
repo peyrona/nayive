@@ -259,6 +259,40 @@ const fillMenu = (menu, list, subs = true) => {
   shapeRows(menu);
   return ownItems(menu).length > 0;
 };
+/* Ayni.menuBar(bar, { menus }): a menu bar built from a list. menus is [{ key | label, items }] (or a function that gives
+   it), key being a text key, items the rows of Ayni.menuAt (or a function that gives them). Each menu is filled every time
+   it opens, so its rows show what is true now. Returns { build() (a new list), openAt(i), close(), isOpen() } */
+const menuBar = (bar, o = {}) => {
+  if (typeof bar === 'string') bar = $(bar);
+  const list = () => (typeof o.menus === 'function' ? o.menus() : o.menus) || [];
+  const close = () => $$('.panel.menu:popover-open').forEach((m) => m.hidePopover());
+  const build = () => {
+    $$(':scope > button[data-menu]', bar).forEach((b) => b.remove());
+    $$(`.panel.menu[data-bar="${bar.id}"]`).forEach((m) => m.remove());
+    bar.setAttribute('role', 'menubar');
+    list().forEach((m, i) => {
+      const b = document.createElement('button'), menu = document.createElement('div');
+      b.type = 'button'; b.dataset.menu = i; b.setAttribute('popovertarget', `${bar.id}-${i}`);
+      b.setAttribute('aria-haspopup', 'menu'); b.setAttribute('aria-expanded', 'false');
+      if (m.key) { b.setAttribute('data-i18n', m.key); b.textContent = Ayni.t(m.key); } else b.textContent = m.label || '';
+      bar.append(b);
+      menu.className = 'panel menu'; menu.id = `${bar.id}-${i}`; menu.dataset.bar = bar.id;
+      menu.setAttribute('popover', ''); menu.setAttribute('role', 'menu');
+      menu.addEventListener('beforetoggle', (e) => {
+        if (e.newState !== 'open' || e.target !== menu) return;
+        const items = list()[i]?.items;
+        fillPage(menu, (typeof items === 'function' ? items() : items) || []);
+        menu.setAttribute('aria-label', b.textContent);
+      });
+      document.body.append(menu);
+    });
+    Ayni.init(bar);
+  };
+  build();
+  return { build, close, isOpen: () => !!$('.panel.menu:popover-open'),
+    openAt: (i) => { const b = $(`:scope > [data-menu="${i}"]`, bar), m = $(`#${bar.id}-${i}`); if (b && m && !m.matches(':popover-open')) b.click(); } };
+};
+
 /* Ayni.fillMenu(menu, items): fills a .panel.menu of the page from a list (as Ayni.menuAt), for a menu that is built
    when it opens (a menu bar's menu: listen for its beforetoggle) */
 const fillPage = (menu, list) => { if (once('menu', menu)) initMenu(menu); return fillMenu(menu, list); };
@@ -671,7 +705,7 @@ const init = (root) => {
 
 Ayni.core.menus = { initMenu, initToolbar, contextMenu, place, iconHtml, invoker: () => invoker };
 Object.assign(Ayni, {
-  place, showPopup, menuAt, fillMenu: fillPage, keyLabel, contextMenu, longTap, fitBar,
+  place, showPopup, menuAt, menuBar, fillMenu: fillPage, keyLabel, contextMenu, longTap, fitBar,
   toolbar: (el) => { if (once('toolbar', el)) initToolbar(el); },
 });
 Ayni.core.family({ setup, init });

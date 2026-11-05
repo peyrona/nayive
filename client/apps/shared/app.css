@@ -692,47 +692,6 @@ input[type="file"] { accent-color: var(--accent); }
 
 
 /* -----------------------------------------------------------------------------
- * CARD ROW  (.card-row)
- *
- * A row in a list - a file in Drive, a trip, a saved document. A --card2
- * surface with --line border and --radius-m corners. Hover firms up the
- * border. A picked row (in an Ayni item list) takes Ayni's soft Accent tint.
- * ---------------------------------------------------------------------------*/
-.card-row
-{
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    color: var(--text);
-    background: var(--card2);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-m);
-    transition: border-color var(--tr-fast), background-color var(--tr-fast);
-}
-.card-row:hover        { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
-
-
-/* -----------------------------------------------------------------------------
- * SECTION LABEL  (.section-label)
- *
- * A small uppercase heading over a group of fields or rows ("DOCUMENTOS",
- * "ETAPAS"). The one place uppercase + letter-spacing is used. Keep it short.
- * --text-faint, one step dimmer than an .btn, so a label beside buttons
- * never reads as one of them.
- * ---------------------------------------------------------------------------*/
-.section-label
-{
-    margin: 4px 2px 8px;
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-faint);
-}
-
-
-/* -----------------------------------------------------------------------------
  * SYNC INDICATOR  - defined in theme.css
  *
  * .sync-indicator  the plug glyph in the header (shared/ui.js draws it). It is
@@ -1002,35 +961,6 @@ button,
 
 
 /* -----------------------------------------------------------------------------
- * EMPTY STATE  (.empty-state)
- *
- * What a list shows when it has nothing to list: the app's own glyph, faint, a
- * bold one-line title and a quieter second line. Same block in Tasks, Habits,
- * Split, Contacts. Toggle it with the `hidden` attribute.
- *
- *     <div class="empty-state" hidden>
- *       <svg ...></svg>
- *       <p class="empty-title">Sin tareas</p>
- *       <p>Pulsa + para crear la primera.</p>
- *     </div>
- * ---------------------------------------------------------------------------*/
-.empty-state
-{
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    padding: 36px 10px 18px;
-    color: var(--text-faint);
-}
-.empty-state svg         { width: 44px; height: 44px; margin-bottom: 10px; opacity: 0.6; }
-.empty-state p           { margin: 4px 0 0; font-size: 0.8rem; }
-.empty-state .empty-title,
-.empty-state p:first-of-type { margin: 0; font-size: 0.93rem; font-weight: 600; color: var(--text-dim); }
-.empty-state .btn.text   { margin-top: 14px; }
-
-
-/* -----------------------------------------------------------------------------
  * IDENTITY COLOURS  ([data-c="0"] ... [data-c="7"]  ->  var(--id-color))
  *
  * The theme has one accent; people (Split) and habits (Habits) have to be told
@@ -1097,7 +1027,7 @@ button,
 }
 
 /* -----------------------------------------------------------------------------
- * PULL-DOWN MENU BAR  (#menuBar > .menu-top)  -  shared/menubar.js
+ * PULL-DOWN MENU BAR  (#menuBar)  -  shared/menubar.js, Ayni.menuBar
  *
  * The classic "Archivo · Edición · Ver …" row Write and Calc offer instead of
  * their icon toolbar: an Ayni menu bar of text buttons, across the window
@@ -1117,19 +1047,6 @@ button,
     gap: 1px; padding: 2px 6px;
     border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--card);
 }
-
-.menu-top
-{
-    padding: 5px 10px;
-    border: none; border-radius: var(--radius-s);
-    background: none; color: var(--text);
-    font: inherit; font-size: 0.92rem; line-height: 1.2;
-    white-space: nowrap; cursor: pointer;
-}
-.menu-top:hover                 { background: color-mix(in srgb, var(--text)  9%, transparent); }
-.menu-top[aria-expanded="true"] { background: color-mix(in srgb, var(--text) 16%, transparent); }
-
-.menu .mi-char                  { display: inline-grid; place-items: center; width: 18px; font-size: 0.95rem; line-height: 1; }
 
 
 
@@ -1252,35 +1169,6 @@ button,
 .folder-pick .fp-btn-ic svg { width: 16px; height: 16px; }
 .folder-pick .fp-btn-nm     { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* NayiveUI.pickFolder / pickFile: the folder tree in the sheet (.fp-tree, one
-   .fp-row per folder), and for pickFile the crumb of the folder on show and
-   a file's size. */
-.fp-tree  { margin: 4px 0 2px; min-height: 240px; max-height: min(66vh, 560px); overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius-m); }
-.fp-msg   { margin: 0; padding: 16px; color: var(--text-dim); font-size: .9rem; line-height: 1.4; }
-.fp-row
-{
-    display: flex; align-items: center; gap: 8px; padding: 9px 10px 9px 8px; cursor: pointer;
-    border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
-}
-.fp-row:last-child { border-bottom: none; }
-.fp-row:hover      { background: color-mix(in srgb, var(--accent) 10%, transparent); }
-.fp-row.sel        { background: color-mix(in srgb, var(--accent) 22%, transparent); }
-.fp-row.sel .fp-ic,
-.fp-row.sel .fp-name { color: var(--text); }
-.fp-caret
-{
-    flex: 0 0 auto; width: 20px; align-self: stretch; display: flex; align-items: center;
-    justify-content: center; color: var(--text-dim); font-size: .8rem;
-}
-.fp-caret.has:hover { color: var(--text); }
-.fp-ic     { flex: 0 0 auto; display: flex; color: var(--text-dim); }
-.fp-ic svg { width: 16px; height: 16px; }
-.fp-name   { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; }
-.fp-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 0 0 6px; font-size: .85rem; color: var(--text-dim); }
-.fp-crumbs button { border: none; background: none; padding: 2px 4px; border-radius: var(--radius-s); font: inherit; color: var(--link); cursor: pointer; }
-.fp-crumbs button:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
-.fp-crumbs b { padding: 2px 4px; color: var(--text); font-weight: 600; }
-.fp-size   { flex: 0 0 auto; font-size: .78rem; color: var(--text-dim); }
 
 /* Help ▸ "Keyboard shortcuts" (Calc, Write): one row per shortcut, its keys on
    the right. NayiveOffice.showShortcuts fills #scList. */

@@ -204,7 +204,10 @@ try
         await press( `${NAME( 2 )} .chip-main` );
         await press( `${FRONT} [data-win="max"]` );
         check( "maximise from the chip", await ev( "NayiveDesktop.windows()[ 1 ].max" ) === true );
+        const maxBtn = `document.querySelector( '${FRONT} [data-win="max"]' )`;
+        check( "...it then says Restore, with its icon", await ev( `${maxBtn}.dataset.tip === 'Restore' && ${maxBtn}.getAttribute( 'aria-label' ) === 'Restore' && ${maxBtn}.querySelector( '.icon' ).dataset.icon === 'restore'` ) );
         await press( `${FRONT} [data-win="max"]` );
+        check( "...and Maximise again once restored", await ev( `${maxBtn}.dataset.tip === 'Maximise' && ! ${maxBtn}.querySelector( '.icon' )` ) );
         await press( `${FRONT} [data-win="scale"]` );
         check( "Scale from the chip", await ev( "NayiveDesktop.windows()[ 1 ].scale" ) === true );
         await press( `${FRONT} [data-win="scale"]` );

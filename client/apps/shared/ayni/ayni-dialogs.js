@@ -267,7 +267,46 @@ const alert = (o = {}) => new Promise((resolve) => {
    trimmed text, or null when cancelled. The text it starts with is selected. An empty field is never an answer: the
    Accept button stays faded until there is text.
    check(text) returns the answer, or false to keep the dialog open (check says why); the field is then selected. */
-const ask = (o = {}) => new Promise((resolve) => {
+/* Ayni.ask({ password: true, title, lead, label, verify, min, okTip, noTip }): the password, exactly as typed, or null.
+   Nothing is kept: the dialog is gone before the promise resolves. verify asks for a NEW password twice (there is no way
+   back from a typo) and refuses one shorter than min (8); else only an empty box is refused. Fields are ayni-ask-pw and
+   ayni-ask-repeat; their eye needs the fields family */
+const askPassword = (o) => new Promise((resolve) => {
+  const dl = dialog({ title: o.title }), min = o.min || 8;
+  if (o.lead) { const p = document.createElement('p'); p.className = 'hint'; p.textContent = o.lead; dl.body.append(p); }
+  const field = (text, id) => {
+    const box = document.createElement('div'), l = document.createElement('label'), g = document.createElement('div'), i = document.createElement('input');
+    box.className = 'field'; g.className = 'input-group'; l.textContent = text; l.htmlFor = id;
+    i.className = 'input'; i.type = 'password'; i.id = id;
+    /* The browser's password manager offers to make a new one, or to fill the one that exists */
+    i.autocomplete = o.verify ? 'new-password' : 'current-password';
+    g.append(i);
+    if (Ayni.dateField) { const eye = document.createElement('button'); eye.type = 'button'; eye.className = 'btn'; eye.setAttribute('data-reveal', ''); g.append(eye); }
+    box.append(l, g); dl.body.append(box);
+    return i;
+  };
+  const one = field(o.label || tx('password'), 'ayni-ask-pw'), two = o.verify ? field(tx('password.repeat'), 'ayni-ask-repeat') : null;
+  const warn = document.createElement('p'); warn.className = 'form-error'; warn.hidden = true; dl.body.append(warn);
+  const no = dialogButton('close', o.noTip || tx('cancel')), ok = dialogButton('primary', o.okTip || tx('accept'));
+  dl.place([no, ok]);
+  const say = (text) => { warn.textContent = text; warn.hidden = false; };
+  const finish = (v) => { if (dl.close()) resolve(v); };
+  ok.addEventListener('click', () => {
+    const pw = one.value;
+    /* The length rule belongs to a new password: one that exists is whatever it is */
+    if (two) {
+      if (pw.length < min) { say(txf('password.tooShort', { n: min })); one.focus(); return; }
+      if (two.value !== pw) { say(tx('password.noMatch')); two.value = ''; two.focus(); return; }
+    } else if (!pw) { one.focus(); return; }
+    finish(pw);
+  });
+  no.addEventListener('click', () => finish(null));
+  dl.dialog.addEventListener('close', () => finish(null));
+  Ayni.init(dl.dialog);
+  dl.show();
+});
+
+const ask = (o = {}) => o.password ? askPassword(o) : new Promise((resolve) => {
   const ids = o.ids || {};
   const dl = dialog({ title: o.title });
   const field = document.createElement('div'); field.className = 'field';

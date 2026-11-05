@@ -215,11 +215,43 @@
     if( window.Ayni ) Ayni.icons.add( {
         eraser: '<path d="M7 21l-4.3-4.3a2.4 2.4 0 0 1 0-3.4l9.6-9.6a2.4 2.4 0 0 1 3.4 0l5.6 5.6a2.4 2.4 0 0 1 0 3.4L13 21"/><line x1="22" y1="21" x2="7" y2="21"/><line x1="5" y1="11" x2="14" y2="20"/>',
         "text-cursor": '<path d="M5 4h1a3 3 0 0 1 3 3 3 3 0 0 1 3-3h1"/><path d="M13 20h-1a3 3 0 0 1-3-3 3 3 0 0 1-3 3H5"/><path d="M5 16H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h1"/><path d="M13 8h7a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-7"/><line x1="9" y1="7" x2="9" y2="17"/>',
+        sidebar: '<rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/>',
+        print: '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
+        music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+        "folder-info": '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="10.5" x2="12.01" y2="10.5"/><line x1="12" y1="13.5" x2="12" y2="17.5"/>',
+        refresh: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>',
+        "file-text": '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>',
+        "file-new": '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/>',
+        history: '<path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/><polyline points="12 8 12 12 15 14"/>',
+        "file-pdf": '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><text x="12" y="19" font-size="7" font-family="sans-serif" text-anchor="middle" fill="currentColor" stroke="none">PDF</text>',
+        stats: '<line x1="4" y1="20" x2="4" y2="12"/><line x1="10" y1="20" x2="10" y2="4"/><line x1="16" y1="20" x2="16" y2="9"/><line x1="21" y1="20" x2="3" y2="20"/>',
+        keyboard: '<rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="10" x2="6" y2="10"/><line x1="10" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="14" y2="10"/><line x1="18" y1="10" x2="18" y2="10"/><line x1="7" y1="14" x2="17" y2="14"/>',
+        expand: '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>',
+        volume: '<path d="M4 9v6h4l5 5V4L8 9H4Z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/>',
+        speaker: '<rect x="6" y="2" width="12" height="20" rx="2"/><circle cx="12" cy="14" r="4"/><circle cx="12" cy="6" r="1"/>',
+        "view-grid": '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+        "view-list": '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3.5" y1="6" x2="3.51" y2="6"/><line x1="3.5" y1="12" x2="3.51" y2="12"/><line x1="3.5" y1="18" x2="3.51" y2="18"/>',
+        prev: '<g stroke-width="2.4"><path d="M15 18l-6-6 6-6"/></g>',
+        next: '<g stroke-width="2.4"><path d="M9 18l6-6-6-6"/></g>',
+        place: '<path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12Z"/><circle cx="12" cy="9" r="2.4"/>',
+        wrap: '<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><polyline points="18 9 21 12 18 15"/><line x1="3" y1="18" x2="12" y2="18"/>',
+        "bar-toolbar": '<rect x="2.5" y="7.5" width="19" height="9" rx="2"/><rect x="5.2" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"/><rect x="10.4" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"/><rect x="15.6" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"/>',
+        "bar-menus": '<line x1="3" y1="5.5" x2="21" y2="5.5"/><rect x="5.5" y="9.5" width="11" height="10.5" rx="1.6"/><line x1="8.2" y1="13.2" x2="13.8" y2="13.2" stroke-width="1.6"/><line x1="8.2" y1="16.5" x2="13.8" y2="16.5" stroke-width="1.6"/>',
+        "align-left": '<path fill-rule="evenodd" d="M5 5h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 1 1 0-2Zm0 4h8c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 1 1 0-2Zm0 8h8c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 0 1 0-2Zm0-4h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 0 1 0-2Z"/>',
+        "table-plus": '<path fill-rule="nonzero" d="M12 13c.5 0 1 .4 1 .9V16h2a1 1 0 0 1 .1 2H13v2a1 1 0 0 1-2 .1V18H9a1 1 0 0 1-.1-2H11v-2c0-.6.4-1 1-1Zm6 7a1 1 0 0 1 0-2h1v-6H5v6h1a1 1 0 0 1 0 2H4a1 1 0 0 1-1-1V6c0-1.1.9-2 2-2h14a2 2 0 0 1 2 2v13c0 .5-.4 1-.9 1H18ZM11 6H5v4h6V6Zm8 0h-6v4h6V6Z"/>',
+        "sort-asc": '<line x1="4" y1="6" x2="13" y2="6"/><line x1="4" y1="12" x2="11" y2="12"/><line x1="4" y1="18" x2="9" y2="18"/><polyline points="17 8 20 5 20 19"/><polyline points="17 8 20 5 23 8"/>',
+        freeze: '<rect x="3" y="3" width="18" height="18" rx="1"/><line x1="9" y1="3" x2="9" y2="21" stroke-width="3"/>',
+        clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
+        recent: '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>',
+        "border-all": '<rect x="3" y="3" width="18" height="18"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="3" y1="12" x2="21" y2="12"/>',
+        sprout: '<path d="M12 22V10"/><path d="M12 12C12 8.5 9.2 5.5 5.5 5.5c0 3.5 2.8 6.5 6.5 6.5z"/><path d="M12 14c0-3.2 2.6-5.8 6-5.8 0 3.2-2.6 5.8-6 5.8z"/>',
+        "page-setup": '<rect x="4" y="3" width="16" height="18" rx="1"/><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="16" x2="20" y2="16"/>',
+        table: '<rect x="4" y="4" width="16" height="16"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="12" y1="4" x2="12" y2="20"/>',
+        mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="22 6 12 13 2 6"/>',
         back: '<g stroke-width="2.2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></g>',
         forward: '<g stroke-width="2.2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></g>',
         "chev-up": '<g stroke-width="2.2"><polyline points="18 15 12 9 6 15"/></g>',
         grid: '<g stroke-width="1.9"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></g>',
-        "folder-plus": '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>',
         unzip: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="10" x2="12" y2="17"/><polyline points="9 14 12 17 15 14"/>',
         "save-as": '<polyline points="5 14 10 18 17 9" stroke-width="2.5"/><line x1="12" y1="1" x2="12" y2="7" stroke-width="2.4"/><line x1="9" y1="4" x2="15" y2="4" stroke-width="2.4"/>',
         save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
@@ -534,131 +566,6 @@
 
     // (CONFIRM / ALERT / ASK FOR ONE NAME are Ayni's: Ayni.confirm, Ayni.alert,
     // Ayni.ask - shared/ayni/ayni-dialogs.js.)
-
-    function normDialogOpts( opts )
-    {
-        if( typeof opts === "string" ) return { body: opts };
-        return opts || {};
-    }
-
-    //------------------------------------------------------------------------//
-    // ASK FOR A PASSWORD  -  the sheet the office apps lock a document with
-    //
-    //   var pw = await NayiveUI.askPassword( { title: '...', body: '...',
-    //                                          confirm: 'Proteger', verify: true } );
-    //   if( pw === null ) { ... }        // cancelled, or Escape
-    //
-    // `verify: true` asks for it twice (setting a NEW password: there is no way
-    // back from a typo) and refuses anything shorter than `min` (default 8).
-    // Without it the sheet asks for a password that already exists, so it only
-    // refuses an empty box.
-    // Built on Ayni.dialog and thrown away like Ayni.confirm, and it closes
-    // the same way: its own buttons or Escape, never a backdrop click.
-    //
-    // The value is returned, never kept: the caller turns it into a key and
-    // this sheet's nodes are gone from the DOM before the promise resolves.
-
-    function askPassword( opts )
-    {
-        opts = normDialogOpts( opts );
-        var min = opts.min || 8;
-
-        return new Promise( function ( resolve )
-        {
-            var d     = Ayni.dialog( { title: opts.title } );
-            var sheet = d.body;
-
-            if( opts.body )
-            {
-                var lead = document.createElement( "p" );
-                lead.className   = "text";
-                lead.textContent = String( opts.body );
-                sheet.appendChild( lead );
-            }
-
-            // A field is the standard .field pair, so it inherits the app's
-            // input styling instead of growing a look-alike of its own.
-            function field( labelText, id )
-            {
-                var box = document.createElement( "div" );
-                var lab = document.createElement( "label" );
-                var inp = document.createElement( "input" );
-
-                box.className    = "field";
-                lab.textContent  = labelText;
-                lab.htmlFor      = id;
-                inp.className    = "input";
-                inp.type         = "password";
-                inp.id           = id;
-                // A new password (verify) or one that already exists: the
-                // browser's password manager offers to make one or to fill it.
-                inp.autocomplete = opts.verify ? "new-password" : "current-password";
-
-                // The eye inside the box's right end: Ayni's [data-reveal].
-                var wrap = document.createElement( "div" );
-                var eye  = document.createElement( "button" );
-                wrap.className = "input-group";
-                eye.type       = "button";
-                eye.className  = "btn";
-                eye.setAttribute( "data-reveal", "" );
-                wrap.appendChild( inp );
-                wrap.appendChild( eye );
-
-                box.appendChild( lab );
-                box.appendChild( wrap );
-                sheet.appendChild( box );
-                return inp;
-            }
-
-            var one = field( t( "lock.password" ), "askPw1" );
-            var two = opts.verify ? field( t( "lock.repeat" ), "askPw2" ) : null;
-
-            var warn = document.createElement( "p" );
-            warn.className = "form-error";
-            warn.hidden    = true;
-            sheet.appendChild( warn );
-
-            var cancel = Ayni.dialogButton( "close", opts.cancel || t( "ui.cancel" ) );
-            var ok     = Ayni.dialogButton( "primary", opts.confirm || t( "ui.accept" ) );
-            d.place( [ cancel, ok ] );
-
-            function complain( key )
-            {
-                warn.textContent = t( key );
-                warn.hidden      = false;
-            }
-
-            function finish( val )
-            {
-                if( d.close() ) resolve( val );
-            }
-
-            function submit()
-            {
-                var pw = one.value;
-
-                // The length rule belongs to a NEW password. Asking for an
-                // existing one only refuses an empty box - the password it
-                // was set with is whatever it is.
-                if( two )
-                {
-                    if( pw.length < min )     { complain( "lock.tooShort" ); one.focus(); return; }
-                    if( two.value !== pw )    { complain( "lock.noMatch" ); two.value = ""; two.focus(); return; }
-                }
-                else if( ! pw ) { one.focus(); return; }
-
-                finish( pw );
-            }
-
-            // Enter in a field is the ✓ and Escape the × (Ayni: the default
-            // button, the data-close one); the first field takes the caret.
-            ok.addEventListener( "click", submit );
-            cancel.addEventListener( "click", function () { finish( null ); } );
-            d.dialog.addEventListener( "close", function () { finish( null ); } );
-
-            d.show();
-        } );
-    }
 
     //------------------------------------------------------------------------//
     // ROOM FOR AN UPLOAD  (and the offer to empty the papelera)
@@ -985,390 +892,122 @@
             .catch( function () {} );
     }
 
-    // Its look: .fp-* in shared/app.css, the tree is Ayni's (Ayni.tree, pick mode).
+    // The dialog is Ayni's (Ayni.pickFolder); what stays here is the data: the
+    // folders of files/, and what a change does to them.
     function pickFolder( opts )
     {
         opts = opts || {};
+        var ctl = null;
 
-        return new Promise( function ( resolve )
+        function sortNodes( nodes )
         {
-            var done      = false;
-            var expanded  = {};       // folder path -> true
-            var selected  = null;     // the folder path the user has highlighted
-            var filesNode = null;     // { path:'files', nodes:[...] }, once loaded
-            var treeErr   = false;
-
-            // The three folder verbs (delete / rename / new folder) live in the
-            // bottom-left corner. While a name is being typed the same sheet
-            // becomes the name form: the tree stays visible, and x / v mean
-            // "drop the name" / "apply it" instead of "cancel" / "choose".
-            // No second dialog is stacked on this one - a child sheet would sit
-            // under this one's document-level Escape handler.
-            var nameMode   = null;    // null | "create" | "rename"
-            var nameTarget = null;    // create: the parent folder;  rename: the folder itself
-            var nameVal    = "";
-            var namePicked = false;   // the text was select()ed once already
-            var busy       = false;   // a server call is in flight
-
-            // Escape presses the × (Ayni): while a name is open, that is what
-            // drops it, and the dialog stays.
-            var d     = Ayni.dialog( { title: opts.title || t( "ui.fp.pickFolder" ) } );
-            var sheet = d.body;
-            d.dialog.addEventListener( "close", function () { finish( null ); } );
-
-            function finish( val )
+            return nodes.filter( function ( n )
             {
-                if( ! d.close() ) return;
-                done = true;
-                resolve( val || null );
-            }
-
-            function sortNodes( nodes )
+                return String( n.path ).split( "/" ).pop().charAt( 0 ) !== ".";   // hide .bak etc.
+            } ).sort( function ( a, b )
             {
-                return nodes.filter( function ( n )
+                return String( a.path ).toLowerCase() < String( b.path ).toLowerCase() ? -1 : 1;
+            } );
+        }
+
+        // The tree from GumApi.dirTree() is folders-only, so every node here is
+        // a folder; a folder with no sub-folders just has nodes:[].
+        function treeNodes( nodes )
+        {
+            return sortNodes( nodes || [] ).filter( function ( n ) { return Array.isArray( n.nodes ); } )
+                .map( function ( n )
                 {
-                    return String( n.path ).split( "/" ).pop().charAt( 0 ) !== ".";   // hide .bak etc.
-                } ).sort( function ( a, b )
-                {
-                    return String( a.path ).toLowerCase() < String( b.path ).toLowerCase() ? -1 : 1;
+                    return { id: n.path, name: String( n.path ).split( "/" ).pop(), children: treeNodes( n.nodes ) };
                 } );
-            }
+        }
 
-            // The tree from GumApi.dirTree() is folders-only, so every node here
-            // is a folder; a folder with no sub-folders just has nodes:[]. It is
-            // drawn by the shared tree (Ayni.tree), the
-            // same one every "Move to…" and side pane uses: the arrow opens and
-            // closes, a click lights a folder, a double-click / Enter chooses it.
-            function treeNodes( nodes )
+        function load()
+        {
+            return ( window.GumApi ? GumApi.dirTree() : Promise.reject( new Error( "no GumApi" ) ) ).then( function ( tree )
             {
-                return sortNodes( nodes || [] ).filter( function ( n ) { return Array.isArray( n.nodes ); } )
-                    .map( function ( n )
-                    {
-                        return { id: n.path, name: String( n.path ).split( "/" ).pop(), children: treeNodes( n.nodes ) };
-                    } );
-            }
+                var nodes = ( tree && tree.nodes ) || [];
+                for( var i = 0; i < nodes.length; i++ )
+                    if( nodes[ i ].path === "files" ) return treeNodes( nodes[ i ].nodes );
+                return [];
+            } );
+        }
 
-            // One of the three bottom-left folder buttons.
-            function fpAct( role, icon, title, off, fn )
+        function renameFolder( from, to )
+        {
+            return GumApi.rename( from, to ).then( function ()
             {
-                var b = Ayni.dialogButton( role, title, icon );
-                b.ariaDisabled = !! off;
-                b.addEventListener( "click", fn );
-                return b;
-            }
+                // The whole sub-tree moves with the folder: what the user had
+                // open under it stays open. Only once the server has said yes: a
+                // refused rename must leave the tree exactly as it was.
+                ctl.rekey( from, to );
 
-            //---- the tree -------------------------------------------------//
+                // The photo notes and scan entries under it follow, as they do
+                // on a rename in Drive.
+                return sidecarUpkeep( "remapPaths", [ [ from, to ] ] );
+            } );
+        }
 
-            function loadTree()
+        // An Undo's server call: on the tree when the picker is still open, on
+        // its own when it has closed meanwhile.
+        function afterUndo( p )
+        {
+            if( ctl.isOpen() ) ctl.task( p );
+            else p.catch( taskFailed );
+        }
+
+        // A name already taken is the server's 409: say it in words, not
+        // "HTTP 409: Conflict".
+        function taskFailed( err )
+        {
+            Ayni.toast( "warn", err && err.status === 409 ? t( "drive.nameExistsTitle" )
+                                             : String( ( err && err.message ) || err ) );
+        }
+
+        function rename( from, name )
+        {
+            var to = from.slice( 0, from.lastIndexOf( "/" ) + 1 ) + name;
+            return renameFolder( from, to ).then( function ()
             {
-                return ( window.GumApi ? GumApi.dirTree() : Promise.reject( new Error( "no GumApi" ) ) )
-                    .then( function ( tree )
-                    {
-                        var nodes = ( tree && tree.nodes ) || [];
-                        var found = null;
-                        for( var i = 0; i < nodes.length; i++ )
-                            if( nodes[ i ].path === "files" ) { found = nodes[ i ]; break; }
-                        filesNode = found || { path: "files", nodes: [] };
-                        treeErr   = false;
-                    },
-                    function () { treeErr = true; } );
-            }
-
-            function nodeAt( node, path )
-            {
-                if( ! node ) return null;
-                if( node.path === path ) return node;
-
-                var kids = node.nodes || [];
-                for( var i = 0; i < kids.length; i++ )
+                Ayni.toast( "ok", t( "ui.toast.renamed" ), { undo: function ()
                 {
-                    var hit = nodeAt( kids[ i ], path );
-                    if( hit ) return hit;
-                }
-                return null;
-            }
+                    afterUndo( renameFolder( to, from ).then( function () { return from; } ) );
+                } } );
+                return to;
+            } );
+        }
 
-            // Run one server call, then re-read the whole tree: the server is
-            // the truth, so nothing here patches the local nodes by hand. `p`
-            // resolves to the path that should stay selected afterwards.
-            function runTask( p )
+        // Straight to the papelera - Drive can put it back - so this acts at
+        // once, with an Undo: a delete already inside a dialog never asks a
+        // second time. Its scan entries and thumbnails go, as on a delete in
+        // Drive (the notes stay, so a restore brings them back).
+        function remove( gone )
+        {
+            return GumApi.binPaths( [ gone ] ).then( function ( ids )
             {
-                busy     = true;
-                nameMode = null;
-                render();
-
-                p.then( function ( sel ) { selected = sel || null; }, taskFailed )
-                 .then( loadTree )
-                 .then( function ()
-                 {
-                     busy = false;
-                     if( selected && ! nodeAt( filesNode, selected ) ) selected = null;
-                     render();
-                 } );
-            }
-
-            //---- delete / rename / new folder -----------------------------//
-
-            function startName( mode )
-            {
-                nameMode   = mode;
-                namePicked = false;
-                nameTarget = mode === "create" ? ( selected || filesNode.path ) : selected;
-                nameVal    = mode === "create" ? "" : String( selected ).split( "/" ).pop();
-                render();
-            }
-
-            function cancelName()
-            {
-                nameMode   = null;
-                nameTarget = null;
-                nameVal    = "";
-                render();
-            }
-
-            // A folder name is ONE segment: not empty, no "/", not "." / "..".
-            function nameOk()
-            {
-                var nm = String( nameVal || "" ).trim();
-                return !! nm && nm.indexOf( "/" ) === -1 && nm !== "." && nm !== "..";
-            }
-
-            function commitName()
-            {
-                if( ! nameOk() ) return;
-
-                var nm     = String( nameVal ).trim();
-                var target = nameTarget;
-
-                if( nameMode === "create" )
-                {
-                    expanded[ target ] = true;          // show the new child at once
-                    runTask( GumApi.makeDir( target, nm )
-                                   .then( function () { return target + "/" + nm; } ) );
-                    return;
-                }
-
-                var to = target.slice( 0, target.lastIndexOf( "/" ) + 1 ) + nm;
-                if( to === target ) { cancelName(); return; }
-
-                runTask( renameFolder( target, to ).then( function ()
-                {
-                    Ayni.toast( "ok", t( "ui.toast.renamed" ), { undo: function ()
+                if( ids && ids.length )
+                    Ayni.toast( "ok", t( "ui.toast.binned" ), { undo: function ()
                     {
-                        afterUndo( renameFolder( to, target ).then( function () { return target; } ) );
+                        afterUndo( GumApi.trashRestore( ids ).then( function () { return gone; } ) );
                     } } );
-                    return to;
-                } ) );
-            }
+                return sidecarUpkeep( "purgePaths", [ gone ] );
+            } );
+        }
 
-            function renameFolder( from, to )
+        return Ayni.pickFolder( {
+            title:     opts.title,
+            note:      opts.note,
+            root:      "files",
+            rootName:  opts.allowRoot ? ( opts.rootLabel || t( "ui.fp.allFiles" ) ) : null,
+            noFolders: t( "ui.fp.noFolders" ),
+            load:      load,
+            create:    function ( parent, name )
             {
-                return GumApi.rename( from, to ).then( function ()
-                {
-                    // The whole sub-tree moves with the folder, so re-key what
-                    // the user had open under it or it all collapses on the
-                    // reload. Only once the server has said yes: a refused
-                    // rename must leave the tree exactly as it was.
-                    var reopen = {};
-                    Object.keys( expanded ).forEach( function ( k )
-                    {
-                        var moved = ( k === from || k.indexOf( from + "/" ) === 0 );
-                        reopen[ moved ? to + k.slice( from.length ) : k ] = expanded[ k ];
-                    } );
-                    expanded = reopen;
-
-                    // The photo notes and scan entries under it follow, as
-                    // they do on a rename in Drive.
-                    return sidecarUpkeep( "remapPaths", [ [ from, to ] ] );
-                } );
-            }
-
-            // An Undo's server call: on the tree when the picker is still open,
-            // on its own when it has closed meanwhile.
-            function afterUndo( p )
-            {
-                if( ! done ) runTask( p );
-                else p.catch( taskFailed );
-            }
-
-            // A name already taken is the server's 409: say it in words, not
-            // "HTTP 409: Conflict".
-            function taskFailed( err )
-            {
-                Ayni.toast( "warn", err && err.status === 409 ? t( "drive.nameExistsTitle" )
-                                                 : String( ( err && err.message ) || err ) );
-            }
-
-            // Straight to the papelera - Drive can put it back - so this acts at
-            // once, with an Undo: a delete already inside a dialog never asks a
-            // second time. Its scan entries and thumbnails go, as on a delete in
-            // Drive (the notes stay, so a restore brings them back).
-            function deleteFolder()
-            {
-                var gone = selected;
-                runTask( GumApi.binPaths( [ gone ] ).then( function ( ids )
-                {
-                    if( ids && ids.length )
-                        Ayni.toast( "ok", t( "ui.toast.binned" ), { undo: function ()
-                        {
-                            afterUndo( GumApi.trashRestore( ids ).then( function () { return gone; } ) );
-                        } } );
-                    return sidecarUpkeep( "purgePaths", [ gone ] ).then( function () { return null; } );
-                } ) );
-            }
-
-            //---- the sheet ------------------------------------------------//
-
-            function render()
-            {
-                // Keep the tree scrolled where it was across the rebuild.
-                var prevBox    = sheet.querySelector( ".fp-tree" );
-                var prevScroll = prevBox ? prevBox.scrollTop : 0;
-                var hadFocus   = !! prevBox && prevBox.contains( document.activeElement );
-
-                sheet.innerHTML    = "";
-                d.footer.innerHTML = "";
-
-                if( opts.note )
-                {
-                    var note = document.createElement( "p" );
-                    note.className   = "text";
-                    note.textContent = opts.note;
-                    sheet.appendChild( note );
-                }
-
-                var box = document.createElement( "div" );
-                box.className = "fp-tree";
-                sheet.appendChild( box );
-
-                var fpMsg = function ( text )
-                {
-                    var p = document.createElement( "p" );
-                    p.className   = "fp-msg";
-                    p.textContent = text;
-                    return p;
-                };
-
-                if( treeErr )
-                    box.appendChild( fpMsg( t( "ui.fp.loadError" ) ) );
-                else if( filesNode === null )
-                    box.appendChild( fpMsg( t( "ui.fp.loading" ) ) );
-                else
-                {
-                    var kids  = treeNodes( filesNode.nodes );
-                    var roots = opts.allowRoot
-                              ? [ { id: filesNode.path, name: opts.rootLabel || t( "ui.fp.allFiles" ), children: kids } ]
-                              : kids;
-                    if( opts.allowRoot ) expanded[ filesNode.path ] = expanded[ filesNode.path ] !== false;
-
-                    if( ! roots.length )
-                        box.appendChild( fpMsg( t( "ui.fp.noFolders" ) ) );
-                    else
-                    {
-                        var host = document.createElement( "ul" );
-                        box.appendChild( host );
-                        var tr = Ayni.tree( host, {
-                            nav:      true,
-                            pick:     true,
-                            items:    function () { return roots; },
-                            isOpen:   function ( id ) { return !! expanded[ id ]; },
-                            setOpen:  function ( id, v ) { expanded[ id ] = v; },
-                            current:  function () { return selected; },
-                            disabled: function () { return busy; },
-                            go:       function ( id ) { selected = id; render(); },
-                            confirm:  function ( id ) { if( ! busy && ! nameMode ) finish( id ); }
-                        } );
-                        if( hadFocus ) tr.focus( selected );     // the keys stay in the tree across a redraw
-                    }
-                }
-
-                box.scrollTop = prevScroll;
-
-                // The name form, only while Rename / New folder is open.
-                var input = null;
-
-                if( nameMode )
-                {
-                    var fld = document.createElement( "div" );
-                    fld.className = "field";
-
-                    var lab = document.createElement( "label" );
-                    lab.textContent = nameMode === "create" ? t( "ui.newFolder" ) : t( "ui.rename" );
-                    fld.appendChild( lab );
-
-                    input = document.createElement( "input" );
-                    input.className    = "input";
-                    input.type         = "text";
-                    input.autocomplete = "off";
-                    input.value        = nameVal;
-                    input.addEventListener( "input", function ()
-                    {
-                        nameVal     = input.value;
-                        ok.ariaDisabled = ! nameOk();
-                    } );
-                    input.addEventListener( "keydown", function ( e )
-                    {
-                        if( e.key === "Enter" ) { e.preventDefault(); commitName(); }
-                    } );
-                    fld.appendChild( input );
-
-                    sheet.appendChild( fld );
-                }
-
-                var arow = d.footer;
-
-                if( ! nameMode )
-                {
-                    // Folder housekeeping, pinned to the far left: delete or
-                    // rename the highlighted folder, create one inside it (with
-                    // nothing highlighted, "new" creates it in Files itself).
-                    var ready = ! busy && !! filesNode && ! treeErr;
-                    var onOne = ready && !! selected && selected !== filesNode.path;
-
-                    var left = document.createElement( "div" );
-                    left.className = "extra";
-                    left.appendChild( fpAct( "danger", null, t( "ui.delete" ), ! onOne, deleteFolder ) );
-                    left.appendChild( fpAct( "", "edit", t( "ui.rename" ), ! onOne,
-                                             function () { startName( "rename" ); } ) );
-                    left.appendChild( fpAct( "", "folder-plus", t( "ui.newFolder" ), ! ready,
-                                             function () { startName( "create" ); } ) );
-                    arow.appendChild( left );
-                }
-
-                var cancel = Ayni.dialogButton( "close", t( "ui.cancel" ) );
-                arow.appendChild( cancel );
-
-                var ok = Ayni.dialogButton( "primary", ! nameMode ? t( "ui.fp.choose" )
-                                                     : nameMode === "create" ? t( "ui.newFolder" ) : t( "ui.rename" ) );
-                arow.appendChild( ok );
-
-                applySheetButtons( d.dialog );
-
-                // While a name is open the × only drops it: the dialog stays.
-                cancel.addEventListener( "click", function ( e )
-                {
-                    if( nameMode ) { e.preventDefault(); cancelName(); }
-                    else           finish( null );
-                } );
-
-                if( nameMode )
-                {
-                    ok.ariaDisabled = ! nameOk();
-                    ok.addEventListener( "click", commitName );
-                    input.focus();
-                    if( ! namePicked ) { namePicked = true; input.select(); }
-                }
-                else
-                {
-                    ok.ariaDisabled = ! selected || busy;
-                    ok.addEventListener( "click", function () { if( selected ) finish( selected ); } );
-                }
-            }
-
-            render();
-            d.show();
-
-            loadTree().then( render );
+                return GumApi.makeDir( parent, name ).then( function () { return parent + "/" + name; } );
+            },
+            rename:    rename,
+            remove:    remove,
+            failed:    taskFailed,
+            onOpen:    function ( c ) { ctl = c; }
         } );
     }
 
@@ -1386,152 +1025,40 @@
     //   const f = await NayiveUI.pickFile( { title: 'Elige un archivo' } );
     //   if( f ) { ... }       // { path: "files/fotos/a.jpg", name: "a.jpg", size: 1234 }
     //
-    // Needs GumApi (listDir). Same closing rules as pickFolder: its own
-    // buttons or Escape, never a backdrop click.
+    // Needs GumApi (listDir).
 
     function pickFile( opts )
     {
         opts = opts || {};
 
-        return new Promise( function ( resolve )
+        function nameOf( n ) { return String( n.path ).split( "/" ).pop(); }
+
+        // The dialog is Ayni's (Ayni.pickFile); the listing is the data.
+        function list( dir )
         {
-            var dir      = opts.dir || "files";
-            var nodes    = null;      // what `dir` holds, once listed
-            var failed   = false;
-            var selected = null;      // the highlighted file's node
-            var seq      = 0;         // the newest listing asked for
-
-            var d     = Ayni.dialog( { title: opts.title || t( "ui.fp.pickFile" ) } );
-            var sheet = d.body;
-            d.dialog.addEventListener( "close", function () { finish( null ); } );
-
-            function finish( node )
+            return ( window.GumApi ? GumApi.listDir( dir ) : Promise.reject( new Error( "no GumApi" ) ) ).then( function ( res )
             {
-                if( d.close() ) resolve( node ? { path: node.path, name: nameOf( node ), size: node.size || 0 } : null );
-            }
-
-            function nameOf( n )  { return String( n.path ).split( "/" ).pop(); }
-            function isDir( n )   { return Array.isArray( n.nodes ); }
-
-            function open( path )
-            {
-                dir = path; nodes = null; failed = false; selected = null;
-                var my = ++seq;
-                render();
-                ( window.GumApi ? GumApi.listDir( path ) : Promise.reject( new Error( "no GumApi" ) ) ).then( function ( res )
+                return ( ( res && res.nodes ) || [] ).filter( function ( n )
                 {
-                    if( my !== seq ) return;
-                    nodes = ( ( res && res.nodes ) || [] ).filter( function ( n )
-                    {
-                        if( nameOf( n ).charAt( 0 ) === "." ) return false;   // hide .bak etc.
-                        return isDir( n ) || ! opts.only || opts.only( nameOf( n ) );
-                    } ).sort( function ( a, b )
-                    {
-                        if( isDir( a ) !== isDir( b ) ) return isDir( a ) ? -1 : 1;
-                        return nameOf( a ).localeCompare( nameOf( b ), undefined, { numeric: true, sensitivity: "base" } );
-                    } );
-                    render();
-                }, function () { if( my === seq ) { failed = true; render(); } } );
-            }
-
-            function fpMsg( text )
-            {
-                var p = document.createElement( "p" );
-                p.className   = "fp-msg";
-                p.textContent = text;
-                return p;
-            }
-
-            function fileRow( n )
-            {
-                var row = document.createElement( "div" );
-                row.className = "fp-row" + ( selected === n ? " sel" : "" );
-                row.setAttribute( "role", "option" );
-                row.setAttribute( "aria-selected", selected === n ? "true" : "false" );
-
-                var caret = document.createElement( "span" );
-                caret.className   = "fp-caret";
-                caret.textContent = isDir( n ) ? "▸" : "";
-                row.appendChild( caret );
-
-                var ic = document.createElement( "span" );
-                ic.className = "fp-ic";
-                ic.innerHTML = Ayni.icon( isDir( n ) ? "folder" : "file" );
-                row.appendChild( ic );
-
-                var name = document.createElement( "span" );
-                name.className   = "fp-name";
-                name.textContent = nameOf( n );
-                row.appendChild( name );
-
-                if( ! isDir( n ) )
+                    if( nameOf( n ).charAt( 0 ) === "." ) return false;   // hide .bak etc.
+                    return Array.isArray( n.nodes ) || ! opts.only || opts.only( nameOf( n ) );
+                } ).map( function ( n )
                 {
-                    var size = document.createElement( "span" );
-                    size.className   = "fp-size";
-                    size.textContent = fmtBytes( n.size || 0 );
-                    row.appendChild( size );
-                }
-
-                row.addEventListener( "click", function ()
-                {
-                    if( isDir( n ) ) { open( n.path ); return; }
-                    selected = n;
-                    render();
+                    return { id: n.path, name: nameOf( n ), dir: Array.isArray( n.nodes ), size: n.size || 0 };
                 } );
-                if( ! isDir( n ) ) row.addEventListener( "dblclick", function () { finish( n ); } );
-                return row;
-            }
+            } );
+        }
 
-            function render()
-            {
-                sheet.innerHTML    = "";
-                d.footer.innerHTML = "";
-
-                // "Archivos > fotos > 2024": every step but the last goes back there.
-                var crumbs = document.createElement( "div" );
-                crumbs.className = "fp-crumbs";
-                var parts = String( dir ).split( "/" );
-                parts.forEach( function ( part, i )
-                {
-                    if( i ) crumbs.appendChild( document.createTextNode( "›" ) );
-                    var label = i === 0 ? t( "ui.filesRoot" ) : part;
-                    var el;
-                    if( i === parts.length - 1 ) { el = document.createElement( "b" ); el.textContent = label; }
-                    else
-                    {
-                        el = document.createElement( "button" );
-                        el.type        = "button";
-                        el.textContent = label;
-                        el.addEventListener( "click", function () { open( parts.slice( 0, i + 1 ).join( "/" ) ); } );
-                    }
-                    crumbs.appendChild( el );
-                } );
-                sheet.appendChild( crumbs );
-
-                var box = document.createElement( "div" );
-                box.className = "fp-tree";
-                box.setAttribute( "role", "listbox" );
-                sheet.appendChild( box );
-
-                if( failed )             box.appendChild( fpMsg( t( "ui.fp.loadError" ) ) );
-                else if( nodes === null ) box.appendChild( fpMsg( t( "ui.fp.loading" ) ) );
-                else if( ! nodes.length ) box.appendChild( fpMsg( t( "ui.fp.emptyFolder" ) ) );
-                else nodes.forEach( function ( n ) { box.appendChild( fileRow( n ) ); } );
-
-                var cancel = Ayni.dialogButton( "close", t( "ui.cancel" ) );
-                cancel.addEventListener( "click", function () { finish( null ); } );
-                d.footer.appendChild( cancel );
-
-                var ok = Ayni.dialogButton( "primary", opts.confirm || t( "ui.fp.chooseFile" ) );
-                ok.ariaDisabled = ! selected;
-                ok.addEventListener( "click", function () { if( selected ) finish( selected ); } );
-                d.footer.appendChild( ok );
-
-                applySheetButtons( d.dialog );
-            }
-
-            d.show();
-            open( dir );
+        return Ayni.pickFile( {
+            title:    opts.title,
+            dir:      opts.dir || "files",
+            rootName: t( "ui.filesRoot" ),
+            okTip:    opts.confirm,
+            list:     list,
+            sizeText: fmtBytes
+        } ).then( function ( n )
+        {
+            return n ? { path: n.id, name: n.name, size: n.size } : null;
         } );
     }
 
@@ -3660,7 +3187,6 @@
         applyHomeLinks:    applyHomeLinks,
         applySyncDots:     applySyncDots,
         windowed:          WINDOWED,     // true inside a desktop window
-        askPassword: askPassword,
         fmtBytes:   fmtBytes,
         ensureRoom: ensureRoom,
         holdIntro: holdIntro,     // no help card / first-visit marks / install offer this load

@@ -7,6 +7,8 @@
 [role="menubar"] > button { font: inherit; color: var(--text); background: none; border: 0; border-radius: var(--radius-s); padding: 4px 10px; cursor: pointer; white-space: nowrap; }
 [role="menubar"] > button:hover { background: color-mix(in srgb, var(--text) 9%, transparent); }
 [role="menubar"] > button[aria-expanded="true"] { background: color-mix(in srgb, var(--text) 16%, transparent); }
+/* A row whose glyph is a character (Calc's "∑") shows it in the icon slot */
+.menu .mi-char { display: inline-grid; place-items: center; width: 18px; font-size: .95rem; line-height: 1; }
 .panel.menu { position: fixed; inset: auto; min-width: 200px; padding: 4px; gap: 0; }
 .panel.menu:not(:popover-open) { display: none; }
 /* RULE: a menu row is the tick column (only in a menu with check or radio items), the icon slot (only in a menu with

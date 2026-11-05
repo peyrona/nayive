@@ -116,10 +116,10 @@
                  a phone. -->
             <div class="tb-modes">
                 <button id="chromeToolbarBtn" class="btn chrome-btn" type="button" data-chrome="toolbar" data-i18n-attr="data-tip:ui.chromeToolbar, aria-label:ui.chromeToolbar">
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="7.5" width="19" height="9" rx="2"></rect><rect x="5.2" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect><rect x="10.4" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect><rect x="15.6" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect></svg>
+                    <span class="icon" data-icon="bar-toolbar" style="--icon:19px"></span>
                 </button>
                 <button id="chromeMenusBtn" class="btn chrome-btn" type="button" data-chrome="menus" data-i18n-attr="data-tip:ui.chromeMenus, aria-label:ui.chromeMenus">
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="5.5" x2="21" y2="5.5"></line><rect x="5.5" y="9.5" width="11" height="10.5" rx="1.6"></rect><line x1="8.2" y1="13.2" x2="13.8" y2="13.2" stroke-width="1.6"></line><line x1="8.2" y1="16.5" x2="13.8" y2="16.5" stroke-width="1.6"></line></svg>
+                    <span class="icon" data-icon="bar-menus" style="--icon:19px"></span>
                 </button>
             </div>
 
@@ -129,7 +129,7 @@
             <div id="topActions" class="topbar-actions tall" role="toolbar" data-i18n-attr="aria-label:ui.actions">
                 <button id="fmtBtn" class="btn" type="button" aria-expanded="true" data-i18n-attr="data-tip:calc.toolbar, aria-label:calc.toolbar">Aa</button>
                 <button id="moreBtn" class="btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.menu.file, aria-label:ui.menu.file">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="13" y2="17"></line></svg>
+                    <span class="icon" data-icon="file-text" style="--icon:18px"></span>
                 </button>
             </div>
 
@@ -219,7 +219,7 @@
             <button id="fmtFillColorClear" class="btn fmt-btn fmt-color-clear" type="button" data-i18n-attr="data-tip:calc.noFillColor, aria-label:calc.noFillColor"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="5" y1="5" x2="19" y2="19"></line><line x1="19" y1="5" x2="5" y2="19"></line></svg></button>
             <div class="fmt-sep"></div>
             <button id="fmtAlignBtn" class="btn fmt-btn" type="button" popovertarget="alignPopup" data-lit-by="fmtWrapBtn" data-i18n-attr="data-tip:calc.grpAlign, aria-label:calc.grpAlign" aria-haspopup="true">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M5 5h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 1 1 0-2Zm0 4h8c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 1 1 0-2Zm0 8h8c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 0 1 0-2Zm0-4h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 0 1 0-2Z"/></svg>
+                <span class="icon" data-icon="align-left" style="--icon:17px"></span>
             </button>
             <div class="picker fmt-select-numfmt fmt-keep" id="fmtNumFormat" data-i18n-attr="data-tip:calc.numFormat">
                 <input type="hidden" value="general">
@@ -242,7 +242,7 @@
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
             </button>
             <button id="fmtTableBtn" class="btn fmt-btn" type="button" popovertarget="tablePopup" data-i18n-attr="data-tip:calc.grpTable, aria-label:calc.grpTable" aria-haspopup="true">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="nonzero" d="M12 13c.5 0 1 .4 1 .9V16h2a1 1 0 0 1 .1 2H13v2a1 1 0 0 1-2 .1V18H9a1 1 0 0 1-.1-2H11v-2c0-.6.4-1 1-1Zm6 7a1 1 0 0 1 0-2h1v-6H5v6h1a1 1 0 0 1 0 2H4a1 1 0 0 1-1-1V6c0-1.1.9-2 2-2h14a2 2 0 0 1 2 2v13c0 .5-.4 1-.9 1H18ZM11 6H5v4h6V6Zm8 0h-6v4h6V6Z"/></svg>
+                <span class="icon" data-icon="table-plus" style="--icon:17px"></span>
             </button>
             <button id="fmtMergeBtn" class="btn fmt-btn" data-i18n-attr="data-tip:calc.mergeCells">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8"></rect><rect x="13" y="3" width="8" height="8"></rect><rect x="3" y="13" width="18" height="8"></rect></svg>
@@ -256,10 +256,10 @@
             <div class="fmt-sep"></div>
             <button id="fxBtn" class="btn fmt-btn fmt-keep" style="font-size: 1.05rem;" data-i18n-attr="data-tip:calc.insertFx">&sum;</button>
             <button id="fmtSortBtn" class="btn fmt-btn" type="button" popovertarget="sortPopup" data-i18n-attr="data-tip:calc.grpSort, aria-label:calc.grpSort" aria-haspopup="true">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="13" y2="6"></line><line x1="4" y1="12" x2="11" y2="12"></line><line x1="4" y1="18" x2="9" y2="18"></line><polyline points="17 8 20 5 20 19"></polyline><polyline points="17 8 20 5 23 8"></polyline></svg>
+                <span class="icon" data-icon="sort-asc" style="--icon:17px"></span>
             </button>
             <button id="fmtFreezeGrpBtn" class="btn fmt-btn" type="button" popovertarget="freezePopup" data-lit-by="fmtFreezeBtn fmtFreezeRowBtn" data-i18n-attr="data-tip:calc.grpFreeze, aria-label:calc.grpFreeze" aria-haspopup="true">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"></rect><line x1="9" y1="3" x2="9" y2="21" stroke-width="3"></line></svg>
+                <span class="icon" data-icon="freeze" style="--icon:17px"></span>
             </button>
             <div class="fmt-sep"></div>
             <button id="undoBtn" class="btn fmt-btn fmt-keep" data-i18n-attr="data-tip:ui.undo">
@@ -269,17 +269,17 @@
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 10H12c-2.8 0-4.4 1.4-4.9 3.5-.4 2 .3 4 1.4 4.6a1 1 0 1 1-1 1.8c-2-1.2-2.9-4.1-2.3-6.8.6-3 3-5.1 6.8-5.1h5.6l-3.3-3.3a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4l3.3-3.3Z" fill-rule="nonzero"/></svg>
             </button>
             <button id="editBtn" class="btn fmt-btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.menu.edit, aria-label:ui.menu.edit">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path></svg>
+                <span class="icon" data-icon="clipboard" style="--icon:17px"></span>
             </button>
             <div class="fmt-sep"></div>
             <!-- Settings: the gear before "?", as in every app. -->
             <button id="settingsBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:ui.settings, aria-label:ui.settings">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                <span class="icon" data-icon="settings" style="--icon:17px"></span>
             </button>
             <!-- Ayuda. Opens the three-entry menu (#helpMenu) rather than the
                  guide card: the card is one of the three entries. -->
             <button id="helpBtn" class="btn fmt-btn" data-help-open type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                <span class="icon" data-icon="help" style="--icon:17px"></span>
             </button>
 
             <!-- Phone only: opens the rest of the toolbar in place (see the phone
@@ -296,38 +296,38 @@
              single set of handlers and the menu can never drift. -->
         <div id="fileTools" hidden>
             <button id="newBtn" class="btn fmt-btn" data-i18n-attr="data-tip:write.newDoc">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="12" x2="12" y2="18"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                <span class="icon" data-icon="file-new" style="--icon:17px"></span>
             </button>
             <button id="openBtn" class="btn fmt-btn" data-i18n-attr="data-tip:ui.openDoc">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                <span class="icon" data-icon="folder" style="--icon:17px"></span>
             </button>
             <button id="recentBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:ui.recent">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline></svg>
+                <span class="icon" data-icon="recent" style="--icon:17px"></span>
             </button>
             <button id="saveBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:ui.save">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span class="icon" data-icon="check" style="--icon:17px"></span>
             </button>
             <input id="importInput" type="file" accept=".xlsx,.csv" style="display:none">
             <button id="importBtn" class="btn fmt-btn" data-i18n-attr="data-tip:ui.importDevice">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                <span class="icon" data-icon="upload" style="--icon:17px"></span>
             </button>
             <button id="saveAsBtn" class="btn fmt-btn" data-i18n-attr="data-tip:ui.saveAs">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 14 10 18 17 9" stroke-width="2.5"></polyline><line x1="12" y1="1" x2="12" y2="7" stroke-width="2.4"></line><line x1="9" y1="4" x2="15" y2="4" stroke-width="2.4"></line></svg>
+                <span class="icon" data-icon="save-as" style="--icon:17px"></span>
             </button>
             <button id="restoreBtn" class="btn fmt-btn" data-i18n-attr="data-tip:write.restore">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"></path><polyline points="3 4 3 9 8 9"></polyline><polyline points="12 8 12 12 15 14"></polyline></svg>
+                <span class="icon" data-icon="history" style="--icon:17px"></span>
             </button>
             <button id="lockBtn" class="btn fmt-btn" data-i18n-attr="data-tip:lock.title">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="M10.7 12.3 21 2"></path><path d="m15.5 7.5 3 3"></path><path d="m18 5 2.5 2.5"></path></svg>
+                <span class="icon" data-icon="key" style="--icon:17px"></span>
             </button>
             <button id="printBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:write.print, aria-label:write.print">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                <span class="icon" data-icon="print" style="--icon:17px"></span>
             </button>
             <button id="pdfBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:write.savePdf, aria-label:write.savePdf">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><text x="12" y="19" font-size="7" font-family="sans-serif" text-anchor="middle" fill="currentColor" stroke="none">PDF</text></svg>
+                <span class="icon" data-icon="file-pdf" style="--icon:17px"></span>
             </button>
             <button id="scBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:write.shortcuts, aria-label:write.shortcuts">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6" y2="10"></line><line x1="10" y1="10" x2="10" y2="10"></line><line x1="14" y1="10" x2="14" y2="10"></line><line x1="18" y1="10" x2="18" y2="10"></line><line x1="7" y1="14" x2="17" y2="14"></line></svg>
+                <span class="icon" data-icon="keyboard" style="--icon:17px"></span>
             </button>
         </div>
 
@@ -337,7 +337,7 @@
              #scBtn just above. -->
         <div id="helpTools" hidden>
             <button id="statsBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:write.stats, aria-label:write.stats">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"></line><line x1="10" y1="20" x2="10" y2="4"></line><line x1="16" y1="20" x2="16" y2="9"></line><line x1="21" y1="20" x2="3" y2="20"></line></svg>
+                <span class="icon" data-icon="stats" style="--icon:17px"></span>
             </button>
         </div>
 
@@ -457,7 +457,7 @@
     <div id="fePanel" class="popup" role="group" data-i18n-attr="aria-label:calc.fe.title">
         <div id="feHead" class="fe-head" data-i18n-attr="title:calc.fe.foldTip">
             <button id="feFoldBtn" type="button" class="btn sm fe-chev" aria-expanded="true" data-i18n-attr="aria-label:calc.fe.foldTip">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                <span class="icon" data-icon="chev-down"></span>
             </button>
             <span data-i18n="calc.fe.title"></span>
         </div>
@@ -488,7 +488,7 @@
     <div id="tablePopup" class="panel popup tools" popover role="group" data-i18n-attr="aria-label:calc.grpTable">
         <div class="popup-row">
                 <button id="insRowBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.insRow">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="nonzero" d="M12 13c.5 0 1 .4 1 .9V16h2a1 1 0 0 1 .1 2H13v2a1 1 0 0 1-2 .1V18H9a1 1 0 0 1-.1-2H11v-2c0-.6.4-1 1-1Zm6 7a1 1 0 0 1 0-2h1v-6H5v6h1a1 1 0 0 1 0 2H4a1 1 0 0 1-1-1V6c0-1.1.9-2 2-2h14a2 2 0 0 1 2 2v13c0 .5-.4 1-.9 1H18ZM11 6H5v4h6V6Zm8 0h-6v4h6V6Z"/></svg>
+                <span class="icon" data-icon="table-plus" style="--icon:17px"></span>
                 </button>
                 <button id="delRowBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.delRow">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="nonzero" d="M19 4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2h14Zm0 2H5v3h2.5v2H5v2h2.5v2H5v3h14v-3h-2.5v-2H19v-2h-2.5V9H19V6Zm-4.7 1.8 1.2 1L13 12l2.6 3.3-1.2 1-2.3-3-2.3 3-1.2-1L11 12 8.5 8.7l1.2-1 2.3 3 2.3-3Z"/></svg>
@@ -507,7 +507,7 @@
     <div id="sortPopup" class="panel popup tools" popover role="group" data-i18n-attr="aria-label:calc.grpSort">
         <div class="popup-row">
                 <button id="sortAscBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.sortAsc">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="13" y2="6"></line><line x1="4" y1="12" x2="11" y2="12"></line><line x1="4" y1="18" x2="9" y2="18"></line><polyline points="17 8 20 5 20 19"></polyline><polyline points="17 8 20 5 23 8"></polyline></svg>
+                <span class="icon" data-icon="sort-asc" style="--icon:17px"></span>
                 </button>
                 <button id="sortDescBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.sortDesc">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="9" y2="6"></line><line x1="4" y1="12" x2="11" y2="12"></line><line x1="4" y1="18" x2="13" y2="18"></line><polyline points="17 16 20 19 20 5"></polyline><polyline points="17 16 20 19 23 16"></polyline></svg>
@@ -518,7 +518,7 @@
     <div id="alignPopup" class="panel popup tools" popover role="group" data-i18n-attr="aria-label:calc.grpAlign">
         <div class="popup-row">
                 <button id="fmtAlignLeftBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.alignLeft">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M5 5h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 1 1 0-2Zm0 4h8c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 1 1 0-2Zm0 8h8c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 0 1 0-2Zm0-4h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 0 1 0-2Z"/></svg>
+                <span class="icon" data-icon="align-left" style="--icon:17px"></span>
                 </button>
                 <button id="fmtAlignCenterBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.alignCenter">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M5 5h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 1 1 0-2Zm3 4h8c.6 0 1 .4 1 1s-.4 1-1 1H8a1 1 0 1 1 0-2Zm0 8h8c.6 0 1 .4 1 1s-.4 1-1 1H8a1 1 0 0 1 0-2Zm-3-4h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 0 1 0-2Z"/></svg>
@@ -540,7 +540,7 @@
         </div>
         <div class="popup-row popup-row-sep">
                 <button id="fmtWrapBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.wrapText">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="15" y2="12"></line><polyline points="18 9 21 12 18 15"></polyline><line x1="3" y1="18" x2="12" y2="18"></line></svg>
+                <span class="icon" data-icon="wrap" style="--icon:17px"></span>
                 </button>
         </div>
     </div>
@@ -548,7 +548,7 @@
     <div id="freezePopup" class="panel popup tools" popover role="group" data-i18n-attr="aria-label:calc.grpFreeze">
         <div class="popup-row">
                 <button id="fmtFreezeBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.freezeCols">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"></rect><line x1="9" y1="3" x2="9" y2="21" stroke-width="3"></line></svg>
+                <span class="icon" data-icon="freeze" style="--icon:17px"></span>
                 </button>
                 <button id="fmtFreezeRowBtn" class="btn pop-btn" data-i18n-attr="data-tip:calc.freezeRows">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"></rect><line x1="3" y1="9" x2="21" y2="9" stroke-width="3"></line></svg>
@@ -559,7 +559,7 @@
     <div id="borderPopup" class="panel popup" popover="manual" role="group" data-i18n-attr="aria-label:calc.borders">
         <div class="popup-row">
             <button type="button" class="btn pop-btn" data-pos="all" data-i18n-attr="data-tip:calc.bAll">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18"></rect><line x1="12" y1="3" x2="12" y2="21"></line><line x1="3" y1="12" x2="21" y2="12"></line></svg>
+                <span class="icon" data-icon="border-all" style="--icon:18px"></span>
             </button>
             <button type="button" class="btn pop-btn" data-pos="outer" data-i18n-attr="data-tip:calc.bOutline">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18"></rect><line x1="12" y1="3" x2="12" y2="21" opacity="0.25"></line><line x1="3" y1="12" x2="21" y2="12" opacity="0.25"></line></svg>
@@ -568,7 +568,7 @@
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" opacity="0.25"></rect><line x1="12" y1="3" x2="12" y2="21"></line><line x1="3" y1="12" x2="21" y2="12"></line></svg>
             </button>
             <button type="button" class="btn pop-btn" data-pos="none" data-i18n-attr="data-tip:calc.bNone">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 3" opacity="0.4"><rect x="3" y="3" width="18" height="18"></rect><line x1="12" y1="3" x2="12" y2="21"></line><line x1="3" y1="12" x2="21" y2="12"></line></svg>
+                <span class="icon" data-icon="border-all" style="--icon:18px"></span>
             </button>
         </div>
         <div class="popup-row">

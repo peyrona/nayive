@@ -1502,6 +1502,18 @@
         st.transform = f.s < 1 ? 'scale(' + f.s + ')' : '';
         if( f.s < 1 ) st.setProperty( '--win-s', f.s ); else st.removeProperty( '--win-s' );
         if( kbWin === w ) kbShrink( w );         // the keyboard is still up: keep clear of it
+        paintMax( w );
+    }
+
+    // The chip's maximise button says what a press will do: Restore while maximised.
+    function paintMax( w )
+    {
+        var b = w.chip.querySelector( '[data-win="max"]' ), on = isMax( w ), max = CTL[ 2 ];
+        if( ! b || b.classList.contains( 'is-max' ) === on ) return;
+        b.classList.toggle( 'is-max', on );
+        b.innerHTML = on && window.Ayni ? Ayni.icon( 'restore' ) : max[ 3 ];
+        setTip( b, on ? t( 'ayni.win.restore', 'Restore' ) : t( max[ 1 ], max[ 2 ] ) );
+        b.setAttribute( 'aria-label', b.dataset.tip );
     }
 
     // An app of a fixed size asks its window to hug the page: cw's frame becomes

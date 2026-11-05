@@ -57,9 +57,9 @@ async function unlock( p, pw )
 // Clicks the ✓ of the dialog on top (askPassword, alert): types `pw` first when it asks one.
 async function answerDialog( p, pw )
 {
-    await p.until( "!! document.querySelector( 'dialog.panel[open] #askPw1' ) || !! document.querySelector( 'dialog.panel[open] .body > p.text' )" );
+    await p.until( "!! document.querySelector( 'dialog.panel[open] #ayni-ask-pw' ) || !! document.querySelector( 'dialog.panel[open] .body > p.text' )" );
     return p.evaluate( `( function () {
-        var i = document.querySelector( 'dialog.panel[open] #askPw1' );
+        var i = document.querySelector( 'dialog.panel[open] #ayni-ask-pw' );
         if( i ) i.value = ${JSON.stringify( pw || "" )};
         var backs = document.querySelectorAll( 'dialog.panel[open]' ), b = backs[ backs.length - 1 ];
         var row = b.querySelectorAll( 'footer button' );

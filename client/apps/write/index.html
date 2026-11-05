@@ -453,10 +453,10 @@
                  file name off a phone. -->
             <div class="tb-modes">
                 <button id="chromeToolbarBtn" class="btn chrome-btn" type="button" data-chrome="toolbar" data-i18n-attr="data-tip:ui.chromeToolbar, aria-label:ui.chromeToolbar">
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="7.5" width="19" height="9" rx="2"></rect><rect x="5.2" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect><rect x="10.4" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect><rect x="15.6" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect></svg>
+                    <span class="icon" data-icon="bar-toolbar" style="--icon:19px"></span>
                 </button>
                 <button id="chromeMenusBtn" class="btn chrome-btn" type="button" data-chrome="menus" data-i18n-attr="data-tip:ui.chromeMenus, aria-label:ui.chromeMenus">
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="5.5" x2="21" y2="5.5"></line><rect x="5.5" y="9.5" width="11" height="10.5" rx="1.6"></rect><line x1="8.2" y1="13.2" x2="13.8" y2="13.2" stroke-width="1.6"></line><line x1="8.2" y1="16.5" x2="13.8" y2="16.5" stroke-width="1.6"></line></svg>
+                    <span class="icon" data-icon="bar-menus" style="--icon:19px"></span>
                 </button>
             </div>
 
@@ -466,7 +466,7 @@
             <div id="topActions" class="topbar-actions tall" role="toolbar" data-i18n-attr="aria-label:ui.actions">
                 <button id="fmtBtn" class="btn" type="button" aria-expanded="true" data-i18n-attr="data-tip:write.formatBar, aria-label:write.formatBar">Aa</button>
                 <button id="moreBtn" class="btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.menu.file, aria-label:ui.menu.file">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="13" y2="17"></line></svg>
+                    <span class="icon" data-icon="file-text" style="--icon:18px"></span>
                 </button>
             </div>
 
@@ -544,7 +544,7 @@
                 <span class="vsep" aria-hidden="true"></span>
                 <button id="undoBtn" class="btn tb-keep" type="button" data-slot="history.undo" data-i18n-attr="data-tip:write.tb.undo, aria-label:write.tb.undo"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M280-200v-80h284q63 0 109.5-40T720-420q0-60-46.5-100T564-560H312l104 104-56 56-200-200 200-200 56 56-104 104h252q97 0 166.5 63T800-420q0 94-69.5 157T564-200H280Z"></path></svg></button>
                 <button id="redoBtn" class="btn" type="button" data-slot="history.redo" data-i18n-attr="data-tip:write.tb.redo, aria-label:write.tb.redo"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M396-200q-97 0-166.5-63T160-420q0-94 69.5-157T396-640h252L544-744l56-56 200 200-200 200-56-56 104-104H396q-63 0-109.5 40T240-420q0 60 46.5 100T396-280h284v80H396Z"></path></svg></button>
-                <button id="editBtn" class="btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.menu.edit, aria-label:ui.menu.edit"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path></svg></button>
+                <button id="editBtn" class="btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.menu.edit, aria-label:ui.menu.edit"><span class="icon" data-icon="clipboard" style="--icon:18px"></span></button>
                 <span class="vsep" aria-hidden="true"></span>
                 <button id="findBtn" class="btn" type="button" data-i18n-attr="data-tip:write.tb.search, aria-label:write.tb.search"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"></path></svg></button>
                 <button id="marksBtn" class="btn" type="button" data-slot="review.paragraphMarks" data-i18n-attr="data-tip:write.formattingMarks, aria-label:write.formattingMarks"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M360-160v-240q-83 0-141.5-58.5T160-600q0-83 58.5-141.5T360-800h360v80h-80v560h-80v-560H440v560h-80Z"></path></svg></button>
@@ -567,10 +567,10 @@
 
                 <span class="vsep" aria-hidden="true"></span>
                 <button id="wrOutputBtn" class="btn" type="button" popovertarget="outputPopup" data-i18n-attr="data-tip:write.grpOutput, aria-label:write.grpOutput" aria-haspopup="true">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                    <span class="icon" data-icon="print" style="--icon:18px"></span>
                 </button>
                 <button id="wrPageBtn" class="btn" type="button" popovertarget="pagePopup" data-i18n-attr="data-tip:write.grpPage, aria-label:write.grpPage" aria-haspopup="true">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"></rect><line x1="4" y1="8" x2="20" y2="8"></line><line x1="4" y1="16" x2="20" y2="16"></line></svg>
+                    <span class="icon" data-icon="page-setup" style="--icon:18px"></span>
                 </button>
                 <button id="paraBtn" class="btn" data-i18n-attr="data-tip:write.paragraph, aria-label:write.paragraph">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="5" x2="20" y2="5"></line><line x1="8" y1="10" x2="20" y2="10"></line><line x1="8" y1="14" x2="20" y2="14"></line><line x1="4" y1="19" x2="20" y2="19"></line><line x1="4" y1="9" x2="4" y2="15" stroke-width="2.6"></line></svg>
@@ -584,7 +584,7 @@
                 <!-- Ayuda. Opens the three-entry menu below (#helpMenu), not the
                      guide card: the card is one of the three entries. -->
                 <button id="helpBtn" class="btn" data-help-open type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    <span class="icon" data-icon="help" style="--icon:18px"></span>
                 </button>
             </div>
 
@@ -595,32 +595,32 @@
                  there is one set of handlers and the menu cannot drift. -->
             <div id="fileTools" hidden>
                 <button id="newBtn" class="btn" data-i18n-attr="data-tip:write.newDoc, aria-label:write.newDoc">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="12" x2="12" y2="18"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                    <span class="icon" data-icon="file-new" style="--icon:18px"></span>
                 </button>
                 <button id="openBtn" class="btn" data-i18n-attr="data-tip:ui.openDoc, aria-label:ui.openDoc">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h5l2 3h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path></svg>
                 </button>
                 <button id="recentBtn" class="btn" type="button" data-i18n-attr="data-tip:ui.recent, aria-label:ui.recent">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline></svg>
+                    <span class="icon" data-icon="recent" style="--icon:18px"></span>
                 </button>
                 <button id="saveBtn" class="btn" type="button" data-i18n-attr="data-tip:ui.save, aria-label:ui.save">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span class="icon" data-icon="check" style="--icon:18px"></span>
                 </button>
                 <input id="importInput" type="file" accept=".docx" style="display:none">
                 <button id="importBtn" class="btn" data-i18n-attr="data-tip:ui.importDevice, aria-label:ui.importDevice">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    <span class="icon" data-icon="upload" style="--icon:18px"></span>
                 </button>
                 <button id="saveAsBtn" class="btn" data-i18n-attr="data-tip:ui.saveAs, aria-label:ui.saveAs">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 14 10 18 17 9" stroke-width="2.5"></polyline><line x1="12" y1="1" x2="12" y2="7" stroke-width="2.4"></line><line x1="9" y1="4" x2="15" y2="4" stroke-width="2.4"></line></svg>
+                    <span class="icon" data-icon="save-as" style="--icon:18px"></span>
                 </button>
                 <button id="restoreBtn" class="btn" data-i18n-attr="data-tip:write.restore, aria-label:write.restore">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"></path><polyline points="3 4 3 9 8 9"></polyline><polyline points="12 8 12 12 15 14"></polyline></svg>
+                    <span class="icon" data-icon="history" style="--icon:18px"></span>
                 </button>
                 <button id="lockBtn" class="btn" data-i18n-attr="data-tip:lock.title, aria-label:lock.title">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="M10.7 12.3 21 2"></path><path d="m15.5 7.5 3 3"></path><path d="m18 5 2.5 2.5"></path></svg>
+                    <span class="icon" data-icon="key" style="--icon:18px"></span>
                 </button>
                 <button id="scBtn" class="btn" type="button" data-i18n-attr="data-tip:write.shortcuts, aria-label:write.shortcuts">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6" y2="10"></line><line x1="10" y1="10" x2="10" y2="10"></line><line x1="14" y1="10" x2="14" y2="10"></line><line x1="18" y1="10" x2="18" y2="10"></line><line x1="7" y1="14" x2="17" y2="14"></line></svg>
+                    <span class="icon" data-icon="keyboard" style="--icon:18px"></span>
                 </button>
             </div>
 
@@ -629,7 +629,7 @@
                  clones its glyph and title (O.helpMenu). -->
             <div id="helpTools" hidden>
                 <button id="statsBtn" class="btn" data-i18n-attr="data-tip:write.stats, aria-label:write.stats">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"></line><line x1="10" y1="20" x2="10" y2="4"></line><line x1="16" y1="20" x2="16" y2="9"></line><line x1="21" y1="20" x2="3" y2="20"></line></svg>
+                    <span class="icon" data-icon="stats" style="--icon:18px"></span>
                 </button>
             </div>
         </div>
@@ -908,10 +908,10 @@
     <div id="outputPopup" class="panel popup tools" popover role="group" data-i18n-attr="aria-label:write.grpOutput">
         <div class="popup-row">
                 <button id="printBtn" class="btn pop-btn" data-i18n-attr="data-tip:write.print, aria-label:write.print">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                <span class="icon" data-icon="print" style="--icon:18px"></span>
                 </button>
                 <button id="pdfBtn" class="btn pop-btn" data-i18n-attr="data-tip:write.savePdf, aria-label:write.savePdf">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><text x="12" y="19" font-size="7" font-family="sans-serif" text-anchor="middle" fill="currentColor" stroke="none">PDF</text></svg>
+                <span class="icon" data-icon="file-pdf" style="--icon:18px"></span>
                 </button>
         </div>
     </div>
@@ -919,7 +919,7 @@
     <div id="pagePopup" class="panel popup tools" popover role="group" data-i18n-attr="aria-label:write.grpPage">
         <div class="popup-row">
                 <button id="pageSetupBtn" class="btn pop-btn" data-i18n-attr="data-tip:write.pageSetup, aria-label:write.pageSetup">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"></rect><line x1="4" y1="8" x2="20" y2="8"></line><line x1="4" y1="16" x2="20" y2="16"></line></svg>
+                <span class="icon" data-icon="page-setup" style="--icon:18px"></span>
                 </button>
                 <button id="headerBtn" class="btn pop-btn" data-i18n-attr="data-tip:write.header, aria-label:write.header">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"></rect><line x1="7" y1="6.5" x2="17" y2="6.5" stroke-width="2.6"></line><line x1="8" y1="12" x2="16" y2="12" stroke-dasharray="1 3"></line><line x1="8" y1="15" x2="14" y2="15" stroke-dasharray="1 3"></line></svg>
@@ -938,7 +938,7 @@
     <div id="tbPopup" class="panel popup tb-popup" popover="manual" role="group" data-i18n-attr="aria-label:write.tableBorders">
         <div class="tb-grid">
             <button type="button" data-tb="all" data-i18n-attr="data-tip:write.bAll, aria-label:write.bAll">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
+                <span class="icon" data-icon="table"></span>
             </button>
             <button type="button" data-tb="box" data-i18n-attr="data-tip:write.bOutline, aria-label:write.bOutline">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" stroke-width="2.4"></rect><line x1="4" y1="12" x2="20" y2="12" stroke-width="1.4" stroke-opacity=".3"></line><line x1="12" y1="4" x2="12" y2="20" stroke-width="1.4" stroke-opacity=".3"></line></svg>
@@ -947,7 +947,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" stroke-width="1.4" stroke-opacity=".3"></rect><line x1="4" y1="12" x2="20" y2="12" stroke-width="2.4"></line><line x1="12" y1="4" x2="12" y2="20" stroke-width="2.4"></line></svg>
             </button>
             <button type="button" data-tb="none" data-i18n-attr="data-tip:write.bNone, aria-label:write.bNone">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="2 2" stroke-opacity=".55"><rect x="4" y="4" width="16" height="16"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
+                <span class="icon" data-icon="table"></span>
             </button>
             <button type="button" data-tb="top" data-i18n-attr="data-tip:write.bTop, aria-label:write.bTop">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><g stroke-width="1.4" stroke-opacity=".28"><rect x="4" y="4" width="16" height="16"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="12" y1="4" x2="12" y2="20"></line></g><line x1="4" y1="4" x2="20" y2="4" stroke-width="2.8"></line></svg>

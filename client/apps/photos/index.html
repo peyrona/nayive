@@ -535,12 +535,12 @@
             <!-- The ranks (Ayni.fitBar): this folder button leaves into the ⋮ last of all
                  (0.5: after the picked photos' actions too); the view modes first (40-43). -->
             <button class="btn" id="folderInfoBtn" type="button" data-rank="0.5" popovertarget="folderMenu" data-i18n-attr="data-tip:ui.folderInfo, aria-label:ui.folderInfo">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="10.5" x2="12.01" y2="10.5"/><line x1="12" y1="13.5" x2="12" y2="17.5"/></svg>
+                <span class="icon" data-icon="folder-info"></span>
             </button>
 
             <!-- A phone's way into the albums tree (it slides in from the left). -->
             <button class="btn" id="treeBtn" type="button" hidden data-i18n-attr="data-tip:photos.albums, aria-label:photos.albums">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
+                <span class="icon" data-icon="sidebar"></span>
             </button>
 
             <div class="tb-modes" role="group" data-i18n-attr="aria-label:photos.galleryMode">
@@ -568,21 +568,21 @@
                         <input type="search" class="input" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:photos.searchByNamePh">
                     </div>
                     <button class="btn" id="searchToggle" type="button" data-rank="20" data-search data-i18n-attr="data-tip:ui.search, aria-label:ui.search">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <span class="icon" data-icon="search"></span>
                     </button>
                     <button class="btn" id="addBtn" type="button" hidden data-rank="21" data-i18n-attr="data-tip:photos.uploadHere, aria-label:photos.uploadHere">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        <span class="icon" data-icon="upload"></span>
                     </button>
                     <button class="btn" id="shareBtn" type="button" hidden data-rank="22" data-i18n-attr="data-tip:photos.shareAlbumTip, aria-label:photos.shareAlbum">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/></svg>
+                        <span class="icon" data-icon="share"></span>
                     </button>
                     <button class="btn" id="reloadBtn" type="button" data-rank="23" data-i18n-attr="data-tip:ui.rescanFolder, aria-label:ui.rescanFolder">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+                        <span class="icon" data-icon="refresh"></span>
                     </button>
                 </div>
                 <div class="tb-group tb-sys">
                     <button class="btn" data-help-open data-rank="31" type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        <span class="icon" data-icon="help"></span>
                     </button>
                 </div>
                 <div class="sync-indicator synced" id="sync" data-i18n-attr="title:ui.sync.synced"></div>
@@ -618,7 +618,7 @@
                     <div class="strip-head">
                         <span id="stripTitle"></span>
                         <button class="btn sm" id="stripX" data-i18n-attr="data-tip:ui.close, aria-label:ui.close">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            <span class="icon" data-icon="close"></span>
                         </button>
                     </div>
                     <div class="strip-scroll" id="stripScroll"></div>
@@ -649,14 +649,14 @@
         <div class="lb-photo">
             <div class="scene" id="lbScene"></div>
             <button class="btn on-media lb-x" id="lbX" data-i18n-attr="data-tip:ui.close, aria-label:ui.close"><span class="icon" data-icon="close"></span></button>
-            <button class="btn on-media lb-nav prev" id="lbPrev" data-i18n-attr="data-tip:ui.prev, aria-label:ui.prev"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
-            <button class="btn on-media lb-nav next" id="lbNext" data-i18n-attr="data-tip:ui.next, aria-label:ui.next"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button>
+            <button class="btn on-media lb-nav prev" id="lbPrev" data-i18n-attr="data-tip:ui.prev, aria-label:ui.prev"><span class="icon" data-icon="prev" style="--icon:18px"></span></button>
+            <button class="btn on-media lb-nav next" id="lbNext" data-i18n-attr="data-tip:ui.next, aria-label:ui.next"><span class="icon" data-icon="next" style="--icon:18px"></span></button>
         </div>
         <div class="lb-foot">
             <div class="lb-foot-row">
                 <div class="lb-cap"><div class="t" id="lbTitle"></div><div class="m" id="lbMeta"></div></div>
                 <button class="lb-btn primary" id="lbPlay"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> <span data-i18n="photos.startHere"></span></button>
-                <button class="lb-btn" id="lbMap"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12Z"/><circle cx="12" cy="9" r="2.4"/></svg> <span data-i18n="photos.seeOnMap"></span></button>
+                <button class="lb-btn" id="lbMap"><span class="icon" data-icon="place" style="--icon:15px"></span> <span data-i18n="photos.seeOnMap"></span></button>
             </div>
             <div class="lb-note" id="lbNote" hidden><p class="note-text" id="lbNoteText"></p></div>
         </div>

@@ -64,7 +64,7 @@ var NayivePlayOn = ( function ()
                 if( items.length ) items.push( { sep: true } );
                 var none = castAvail === false;
                 items.push( { label: T( "media.outCast" ) + ( none ? " (" + T( "media.outNoneShort" ) + ")" : "" ),
-                              icon: btn.querySelector( "svg" ).outerHTML, run: castPrompt,
+                              icon: btn.querySelector( ".icon[data-icon]" ) ? btn.querySelector( ".icon[data-icon]" ).dataset.icon : btn.querySelector( "svg" ).outerHTML, run: castPrompt,
                               disabled: none, why: none ? T( "media.outNone" ) : "" } );
             }
             Ayni.menuAt( items, { anchor: btn, keyboard: keyboard } );

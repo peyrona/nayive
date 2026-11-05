@@ -490,16 +490,17 @@
         ( opts.ids || [] ).forEach( function ( id )
         {
             var src = byId( id );
+            var named = src && src.querySelector( ".icon[data-icon]" );      // may not be drawn yet: the name is enough
             var svg = src && src.querySelector( "svg" );
-            if( ! svg ) return;
+            if( ! svg && ! named ) return;
             var item = document.createElement( "button" );
             var ic   = document.createElement( "span" );
             item.type = "button";
             item.setAttribute( "role", "menuitem" );
             if( phone.indexOf( id ) >= 0 ) item.className = "mi-phone";
             item.dataset.menu = id;
-            ic.className = "icon";
-            ic.appendChild( svg.cloneNode( true ) );
+            if( named ) ic = document.createRange().createContextualFragment( Ayni.icon( named.dataset.icon ) ).firstChild;
+            else { ic.className = "icon"; ic.appendChild( svg.cloneNode( true ) ); }
             item.appendChild( ic );
             item.appendChild( document.createTextNode( src.getAttribute( "aria-label" ) || src.dataset.tip || id ) );
             menu.appendChild( item );
@@ -1843,9 +1844,9 @@
 
             for( ;; )
             {
-                var pw = await NayiveUI.askPassword( { title:   t( "lock.askTitle" ),
-                                                       body:    tf( "lock.askBody", { name: name } ),
-                                                       confirm: t( "lock.openIt" ) } );
+                var pw = await Ayni.ask( { password: true, title:   t( "lock.askTitle" ),
+                                                       lead:    tf( "lock.askBody", { name: name } ),
+                                                       okTip: t( "lock.openIt" ) } );
                 if( pw === null ) return null;
 
                 try
@@ -2810,9 +2811,9 @@
             var how = ( path || saver.drafted() ) ? await warnAlreadyWritten() : "lock";
             if( ! how ) return;
 
-            var pw = await NayiveUI.askPassword( { title:   t( "lock.setTitle" ),
-                                                   body:    t( "lock.setBody" ),
-                                                   confirm: t( "lock.protect" ),
+            var pw = await Ayni.ask( { password: true, title:   t( "lock.setTitle" ),
+                                                   lead:    t( "lock.setBody" ),
+                                                   okTip: t( "lock.protect" ),
                                                    verify:  true } );
             if( pw === null ) return;
 
@@ -3031,10 +3032,9 @@
             Ayni.fillMenu( menu, helpItems().map( function ( it )
             {
                 if( it.run ) return { id: it.cmd, label: it.text, icon: it.icon, run: it.run };
-                var b = byId( it.el ), svg = b.querySelector( "svg" ).cloneNode( true );
-                svg.removeAttribute( "width" );
-                svg.removeAttribute( "height" );
-                return { id: it.el, label: Ayni.t( it.key ), icon: svg.outerHTML, run: function () { b.click(); } };
+                var b = byId( it.el ), named = b.querySelector( ".icon[data-icon]" ), svg = named ? null : b.querySelector( "svg" ).cloneNode( true );
+                if( svg ) { svg.removeAttribute( "width" ); svg.removeAttribute( "height" ); }
+                return { id: it.el, label: Ayni.t( it.key ), icon: named ? named.dataset.icon : svg.outerHTML, run: function () { b.click(); } };
             } ) );
         } );
         return menu;
