@@ -1,0 +1,111 @@
+/* Ayni library 0.1.0, layout family: tabs, the status bar, group boxes, More fields, tags and the splitter. Plain CSS,
+   no build step, evergreen browsers 2024+. Load it after ayni-base.css. The behaviour is in ayni-layout.js; the rules
+   are chapters 11.4, 12, 13 and 14.3 of the guidelines. */
+
+/* ---------- Tabs ---------- */
+/* Tabs look like folder tabs: outlined on three sides; the selected one is filled like the page below it and joins it */
+[role="tablist"] { display: flex; gap: 3px; padding: 6px 8px 0; background: var(--panel-head-bg); box-shadow: inset 0 -1px 0 var(--line);
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+[role="tab"] { max-width: 190px; font: 500 .85rem var(--font-sans); color: var(--text-dim); flex: none; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border: 1px solid var(--line); border-bottom: 0; border-radius: 7px 7px 0 0;
+  background: color-mix(in srgb, var(--line) 45%, var(--panel-head-bg)); }
+[role="tab"]:hover { color: var(--text); background: color-mix(in srgb, var(--line) 20%, var(--panel-bg)); }
+[role="tab"][aria-selected="true"] { color: var(--text); font-weight: 600; background: var(--tab-page, var(--panel-bg)); box-shadow: inset 0 3px 0 var(--accent); position: relative; }
+[role="tab"] .tab-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+[role="tab"]:focus-visible { outline-offset: -3px; }
+[role="tab"] .icon { --icon: 16px; }
+[role="tab"][hidden] { display: none; }
+[role="tab"] .tab-close { display: grid; place-items: center; width: 18px; height: 18px; margin: 0 -6px 0 2px; border-radius: 50%; color: var(--text-dim); }
+[role="tab"] .tab-close .icon { --icon: 12px; }
+[role="tab"] .tab-close:hover { color: var(--text); background: color-mix(in srgb, var(--text) 14%, transparent); }
+[role="tabpanel"] { padding: 20px var(--panel-pad); }
+[role="tabpanel"] { overflow: auto; }
+[role="tab"][aria-disabled="true"] { opacity: .45; cursor: default; }
+/* In a Panel's body the row stays at the top, edge to edge, and only the page below it scrolls */
+.panel > .body:has(> [role="tablist"]:first-child), .panel > form > .body:has(> [role="tablist"]:first-child) { padding-top: 0; }
+.panel > .body > [role="tablist"]:first-child, .panel > form > .body > [role="tablist"]:first-child { position: sticky; top: 0; z-index: 2; flex: none;
+  margin-inline: calc(-1 * var(--panel-pad)); padding-inline: var(--panel-pad); }
+.panel > .body > [role="tabpanel"], .panel > form > .body > [role="tabpanel"] { padding: 0; }
+/* A row under the page (the sheets of a document): the tabs hang from the page, the Accent edge at the bottom */
+[role="tablist"].bottom { padding: 0 8px 4px; box-shadow: inset 0 1px 0 var(--line); scrollbar-width: none; }
+[role="tablist"].bottom [role="tab"] { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 7px 7px; }
+[role="tablist"].bottom [role="tab"][aria-selected="true"] { box-shadow: inset 0 -3px 0 var(--accent); }
+.subtabs { border: var(--panel-border); border-radius: var(--ctl-radius); overflow: hidden; }
+.subtabs [role="tabpanel"] { padding: 12px; min-height: 0; }
+
+/* ---------- Status bar ---------- */
+.statusbar { display: flex; font-size: .8rem; color: var(--text-dim); background: var(--panel-head-bg); box-shadow: inset 0 1px 0 var(--line); overflow-x: auto; }
+.statusbar > :not([role="tablist"]) { display: flex; align-items: center; gap: 14px; flex: none; padding: 4px 12px; border-left: var(--panel-border); white-space: nowrap; }
+.statusbar > :first-child:not([role="tablist"]) { border-left: 0; flex: 1; }
+/* A tab row sits at the start of the bar, and the selected tab covers the bar's line, so it joins the page above it */
+.statusbar > [role="tablist"] { flex: 1 1 auto; min-width: 0; background: none; box-shadow: none; padding: 0 8px 3px; }
+.statusbar > [role="tablist"][hidden] + * { margin-left: auto; border-left: 0; }
+
+/* ---------- Choice row: small bordered text toggles (3.9) ---------- */
+.choices { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+html.touch .choices { gap: 8px; }
+
+/* ---------- Group boxes ---------- */
+fieldset.group { border: var(--panel-border); border-radius: var(--ctl-radius); padding: 8px 12px 12px; }
+fieldset.group legend { padding: 0 4px; margin: 0; }
+
+/* ---------- More fields: a pill on a line folds the rarely used half of a long form away (12.3) ---------- */
+.more-toggle { display: flex; align-items: center; gap: 8px; width: 100%; margin: 4px 0 14px; padding: 6px 0; background: none; border: 0;
+  color: var(--text-dim); font: inherit; font-size: .85rem; cursor: pointer; }
+.more-toggle .more-pill { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; padding: 6px 14px; background: var(--card2); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--radius-pill); transition: background-color var(--tr-fast), border-color var(--tr-fast); }
+.more-toggle:hover .more-pill { background: color-mix(in srgb, var(--text) 10%, var(--card2)); border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+.more-toggle:active .more-pill { background: color-mix(in srgb, var(--text) 16%, var(--card2)); }
+.more-toggle .more-chevron { display: inline-block; font-size: 1rem; line-height: 1; transition: transform var(--tr-fast); }
+.more-toggle[aria-expanded="true"] .more-chevron { transform: rotate(90deg); }
+.more-toggle .more-line { flex: 1 1 auto; height: 1px; background: var(--line); }
+
+/* ---------- Tags: a small read-only word on an item (14.3) ---------- */
+.tag { padding: 4px 10px; font-size: .74rem; color: var(--text-dim); background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-pill); }
+
+/* ---------- Splitter ---------- */
+.split { display: flex; height: 200px; border: var(--panel-border); border-radius: var(--ctl-radius); overflow: hidden; }
+.split .pane { overflow: auto; padding: 10px; min-width: 0; font-size: .85rem; }
+.split .pane:first-child { flex: none; width: var(--split, 35%); }
+.split .pane:last-child { flex: 1; }
+.splitter { flex: none; width: 7px; background: var(--card-head); border-inline: var(--panel-border); cursor: col-resize; touch-action: none;
+  position: relative; display: grid; place-items: center; z-index: 1; }
+.splitter:hover, .splitter:focus-visible, .splitter.dragging { background: var(--accent-soft); outline-offset: -2px; }
+/* Splitter controls (Frasquito, 2026-10-22): small filled glyphs drawn on the bar, close together (no circle, no background); two small arrows send the bar to either end
+   (collapsing that pane) and a small ring in the middle resets both panes. The rest of the bar is dragged. */
+.split-ctl { display: flex; flex-direction: column; align-items: center; gap: 1px; position: relative; z-index: 2; }
+.splitter.rows .split-ctl { flex-direction: row; }
+.split-ctl button { width: 9px; height: 10px; padding: 0; border: 0; background: none; color: var(--text-dim);
+  display: grid; place-items: center; cursor: pointer; position: relative; }
+.splitter.rows .split-ctl button { width: 10px; height: 9px; }
+.split-ctl .tri { background: currentColor; width: 7px; height: 9px; }
+.split-ctl .tri.left { clip-path: polygon(100% 0, 100% 100%, 0 50%); } .split-ctl .tri.right { clip-path: polygon(0 0, 0 100%, 100% 50%); }
+.split-ctl .tri.up, .split-ctl .tri.down { width: 9px; height: 7px; }
+.split-ctl .tri.up { clip-path: polygon(0 100%, 100% 100%, 50% 0); } .split-ctl .tri.down { clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.split-ctl button:hover:not([aria-disabled="true"]) { color: var(--accent); }
+.split-ctl button[aria-disabled="true"] { opacity: .45; cursor: default; }
+.split-ctl .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.split-ctl.short [data-to="first"], .split-ctl.short [data-to="last"] { display: none; }
+.split.rows { flex-direction: column; height: 240px; }
+.split.rows .pane:first-child { width: auto; height: var(--split, 50%); }
+.splitter.rows { width: auto; height: 7px; border-inline: 0; border-block: var(--panel-border); cursor: row-resize; }
+.split .pane { overflow: auto; }
+.split, .split .pane, .splitter { box-sizing: border-box; }
+/* A collapsed pane is hidden; the one left takes the room, whatever the page sized it to */
+.split-fill { flex: 1 1 auto !important; width: auto !important; height: auto !important; max-width: none !important; max-height: none !important; }
+/* While a bar is dragged nothing gets selected and frames do not swallow the pointer */
+html.ayni-dragging { -webkit-user-select: none; user-select: none; }
+html.ayni-dragging iframe { pointer-events: none; }
+
+/* ---------- Touch: tabs are 44 px high; the small close button and the bar keep their look, with larger hit areas ---------- */
+html.touch [role="tab"] { min-height: var(--touch); }
+html.touch [role="tab"] .tab-close { position: relative; margin-left: 6px; }
+html.touch [role="tab"] .tab-close::before { content: ""; position: absolute; inset: -13px; }
+html.touch .splitter { position: relative; }
+html.touch .splitter::before { content: ""; position: absolute; inset: 0 -19px; z-index: 1; }
+html.touch .splitter.rows::before { inset: -19px 0; }
+/* Touch: the glyphs stay close; their invisible areas reach 19 px across the bar, and the arrows' reach 34 px past the ends (44 px); the reset dot's area stays small, and a double-tap on the bar also resets */
+html.touch .split-ctl button::before { content: ""; position: absolute; inset: 0 -19px; }
+html.touch .split-ctl button:first-child::before { top: -34px; } html.touch .split-ctl button:last-child::before { bottom: -34px; }
+html.touch .splitter.rows .split-ctl button::before { inset: -19px 0; }
+html.touch .splitter.rows .split-ctl button:first-child::before { left: -34px; } html.touch .splitter.rows .split-ctl button:last-child::before { right: -34px; }

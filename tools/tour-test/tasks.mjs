@@ -9,7 +9,7 @@ const F = "data/tasks.json";
 const s = await server();
 const c = await browser( s, { mouse: true, lang: "es" } );
 await c.front();
-const filter = t => t.evaluate( "document.querySelector( '[data-filter].is-active' )?.dataset.filter" );
+const filter = t => t.evaluate( "document.querySelector( '[data-filter][aria-pressed=true]' )?.dataset.filter" );
 
 section( "TASKS · NO TASKS YET (ghosts)" );
 ok( await c.open( "/nayive/tasks/" ) && await c.until( "getComputedStyle( document.getElementById( 'emptyState' ) ).display !== 'none'" ), "Tasks opens empty" );

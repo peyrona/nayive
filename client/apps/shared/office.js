@@ -435,26 +435,21 @@
             box.hidden    = ! paths.length;
             if( ! paths.length ) return;
 
-            // One drop-down, so the folder list below keeps the room. The first
-            // option only names the box; picking any other opens that file.
+            // One "Recent" button with its menu, so the folder list below keeps
+            // the room (Ayni rule: a list whose pick opens something is a menu).
+            // Each row opens that file; its tooltip is the folder it is in.
             box.className = "field";
-            var sel = document.createElement( "select" );
-            var ph  = document.createElement( "option" );
-            ph.value       = "";
-            ph.textContent = t( "ui.recent" ) + "…";
-            ph.disabled    = true;
-            ph.selected    = true;
-            sel.appendChild( ph );
-            paths.forEach( function ( p )
+            var btn = document.createElement( "button" );
+            btn.type      = "button";
+            btn.className = "btn text bordered sm";
+            btn.setAttribute( "aria-haspopup", "menu" );
+            btn.textContent = t( "ui.recent" );
+            btn.addEventListener( "click", function ( e )
             {
-                var o = document.createElement( "option" );
-                o.value       = p;
-                o.textContent = baseName( p );
-                o.title       = p;                             // the folder it is in
-                sel.appendChild( o );
+                Ayni.menuAt( paths.map( function ( p ) { return { label: baseName( p ), why: p, run: function () { pick( p ); } }; } ),
+                             { anchor: btn, keyboard: e.detail === 0 } );
             } );
-            sel.addEventListener( "change", function () { if( sel.value ) pick( sel.value ); } );
-            box.appendChild( sel );
+            box.appendChild( btn );
         }
 
         function open( startDir )
@@ -1638,7 +1633,7 @@
                 head( "ui.saveAs" ),
                 '<div class="body">',
                     field( "saveName", "ui.fileName", '<input class="input" type="text" id="saveName" data-i18n-attr="placeholder:' + o.nameKey + '" autocomplete="off">' ),
-                    o.formats ? field( "saveFormat", o.formatKey, '<select id="saveFormat"></select>' ) : "",
+                    o.formats ? field( "saveFormat", o.formatKey, '<div class="picker" id="saveFormat"></div>' ) : "",
                     field( "saveDirBtn", "ui.folder", '<button type="button" id="saveDirBtn" class="folder-pick" data-i18n-attr="data-tip:ui.fp.pickFolder">\n' +
                                                       '<span class="fp-btn-ic"></span><span id="saveDirName" class="fp-btn-nm"></span>\n</button>' ),
                 '</div>',
@@ -1658,21 +1653,16 @@
             '</dialog>'
         ].filter( Boolean ).join( "\n" );
 
-        ( o.formats || [] ).forEach( function ( f )
-        {
-            var op = document.createElement( "option" );
-            op.value = f.value;
-            if( f.key ) op.setAttribute( "data-i18n", f.key );
-            else        op.textContent = f.text;
-            box.querySelector( "#saveFormat" ).appendChild( op );
-        } );
-
         NayiveUI.applySheetButtons( box );
 
         var app   = byId( "app" );
         var host  = app ? app.parentNode : document.body;
         var after = app ? app.nextSibling : null;
         while( box.firstChild ) host.insertBefore( box.firstChild, after );
+
+        // The formats: an Ayni list picker, made once it is on the page (its label names it)
+        if( o.formats )
+            Ayni.picker( byId( "saveFormat" ), { options: o.formats.map( function ( f ) { return { value: f.value, text: f.key ? t( f.key ) : f.text }; } ) } );
     }
 
     function session( o )
@@ -2255,15 +2245,15 @@
 
         // ---- "Guardar como" --------------------------------------------------
 
-        // The #saveFormat option for a name: its extension when offered, else
-        // the "" (other: keep the name as it is) option when there is one, else
+        // The #saveFormat item for a name: its extension when offered, else
+        // the "" (other: keep the name as it is) item when there is one, else
         // the first - so "foo.log" in Text is not turned into "foo.log.txt".
         function formatFor( name )
         {
             var sel = byId( "saveFormat" );
             if( ! sel ) return "";
 
-            var vals = Array.prototype.map.call( sel.options, function ( op ) { return op.value; } );
+            var vals = Ayni.picker( sel ).options.map( function ( op ) { return op.value; } );
             var ext  = extOf( name );
             if( ext && vals.indexOf( ext ) !== -1 ) return ext;
             return vals.indexOf( "" ) !== -1 ? "" : vals[ 0 ];
@@ -2274,11 +2264,11 @@
         // stays part of the name ("v1.2" -> "v1.2.py"). "" (other) leaves it.
         function nameToFormat()
         {
-            var sel   = byId( "saveFormat" );
+            var sel   = byId( "saveFormat" ) && Ayni.picker( byId( "saveFormat" ) );
             var input = byId( "saveName" );
             if( ! sel || ! sel.value ) return;
 
-            var vals = Array.prototype.map.call( sel.options, function ( op ) { return op.value; } );
+            var vals = sel.options.map( function ( op ) { return op.value; } );
             var name = input.value.trim();
             var ext  = extOf( name );
             if( ext && vals.indexOf( ext ) !== -1 ) name = name.slice( 0, -( ext.length + 1 ) );
@@ -2299,7 +2289,7 @@
             askTimer = null;
 
             input.value = name;
-            if( byId( "saveFormat" ) ) byId( "saveFormat" ).value = formatFor( name );
+            if( byId( "saveFormat" ) ) Ayni.picker( byId( "saveFormat" ) ).set( formatFor( name ) );
             if( byId( "saveAsDeleteBtn" ) ) byId( "saveAsDeleteBtn" ).hidden = !! path;   // a Drive file is never deleted from here
 
             // Someone else's document: our copy goes to a folder of ours, never
@@ -2316,7 +2306,7 @@
             var name = safeName( byId( "saveName" ).value );
             if( ! name ) return;
 
-            var fmt = byId( "saveFormat" ) ? byId( "saveFormat" ).value : "";
+            var fmt = byId( "saveFormat" ) ? Ayni.picker( byId( "saveFormat" ) ).value : "";
             name = o.finishName ? o.finishName( name, fmt ) : withExt( name, fmt );
             if( ! name ) return;
 
@@ -2914,7 +2904,7 @@
         on( "saveAsConfirmBtn", "click",   function () { confirmSaveAs(); } );
         on( "saveAsDeleteBtn",  "click",   function () { discardUntitled(); } );
         on( "saveName",         "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); confirmSaveAs(); } } );
-        on( "saveFormat",       "change",  function () { nameToFormat(); } );
+        on( "saveFormat",       "ayni:change", function () { nameToFormat(); } );
 
         // ---- a desktop window ---------------------------------------------------
         //

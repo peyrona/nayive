@@ -33,6 +33,8 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -46,6 +48,8 @@
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
     <script src="../shared/ayni/ayni-fields.js" defer></script>
+    <script src="../shared/ayni/ayni-pickers.js" defer></script>
+    <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Shared header behaviour + the "?" help dialog. Planner keeps no data of
@@ -67,7 +71,6 @@
                     { sel: '[data-pane="habitsPane"]',   text: Ayni.t( 'planner.introHabits' ) }
                   ]
                 : [
-                    { sel: '#habitsRestore', text: Ayni.t( 'planner.introRestore' ), tour: { ghost: '#habitsPane' } }
                   ] ).concat( [
                     { icon: 'help', name: Ayni.t( 'planner.introHelpName' ), text: Ayni.t( 'planner.introHelp' ), tour: { sel: '#panes' } }
                   ] ),
@@ -130,42 +133,6 @@
         #tasksPane    { height: 60%; }
         #habitsPane   { height: 40%; }
 
-        .splitter
-        {
-            flex: 0 0 auto; width: 6px; height: 100%; cursor: col-resize;
-            background: var(--line);
-        }
-        .hsplitter    { flex: 0 0 auto; width: 100%; height: 6px; cursor: row-resize; background: var(--line); }
-        .splitter, .hsplitter { touch-action: none; }   /* a finger drags the handle, never scrolls the page */
-        .splitter:hover, .splitter.dragging,
-        .hsplitter:hover, .hsplitter.dragging { background: var(--accent); }
-
-        .panes.dragging iframe { pointer-events: none; }
-
-        /* HABITS FOLDED AWAY.  The [v] button in the Habits header asks us to
-           give its whole height to Tasks; all that is left is this strip with a
-           chevron to bring it back. PC/tablet only - on a phone the pane tabs
-           already show one app at a time, so the rules below stay switched off
-           even if the collapsed state was remembered from a desktop. */
-        .pane-restore
-        {
-            display: none; align-items: center; justify-content: center; gap: 6px;
-            flex: 0 0 auto; width: 100%; height: 28px; padding: 0;
-            border: none; border-top: 1px solid var(--line);
-            background: var(--card); color: var(--text-dim); cursor: pointer;
-        }
-        .pane-restore:hover  { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
-        .pane-restore svg    { width: 16px; height: 16px; display: block; }
-        .pane-restore .sprout { color: var(--accent); }
-
-        @media (min-width: 641px)
-        {
-            .right.habits-folded > #habitsPane,
-            .right.habits-folded > .hsplitter   { display: none; }
-            .right.habits-folded > #tasksPane   { flex: 1 1 auto; height: auto !important; }
-            .right.habits-folded > .pane-restore { display: flex; }
-        }
-
         /* Phone: the three panes stack - one visible at a time, chosen with the
            icon buttons in the header - because a slice of a phone screen is too
            little for any of them. The right column dissolves (display: contents)
@@ -174,7 +141,7 @@
         {
             .panes     { flex-direction: column; }
             .right     { display: contents; }
-            .splitter, .hsplitter { display: none; }
+            .splitter { display: none; }
             .pane-tabs { display: flex; }
             /* !important: beats the inline sizes the splitters' JS sets on the PC layout */
             .panes iframe { width: 100% !important; height: auto !important; flex: 1 1 auto; min-height: 0; }
@@ -190,14 +157,14 @@
                 <h1>Planner</h1>
             </a>
             <!-- The phone's pane switch: a view switch, so on the left (app.css HEADER). -->
-            <div class="tb-modes pane-tabs" role="tablist" data-i18n-attr="aria-label:planner.view">
-                <button type="button" class="btn" data-pane="calendarPane" role="tab" aria-selected="true" data-tip="Calendar" aria-label="Calendar">
+            <div class="tb-modes pane-tabs" role="group" data-i18n-attr="aria-label:planner.view">
+                <button type="button" class="btn" data-pane="calendarPane" aria-pressed="true" data-tip="Calendar" aria-label="Calendar">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                 </button>
-                <button type="button" class="btn" data-pane="tasksPane" role="tab" aria-selected="false" data-tip="Tasks" aria-label="Tasks">
+                <button type="button" class="btn" data-pane="tasksPane" aria-pressed="false" data-tip="Tasks" aria-label="Tasks">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"></rect><path d="M8 4V3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1"></path><polyline points="8 13 11 16 16 10.5"></polyline></svg>
                 </button>
-                <button type="button" class="btn" data-pane="habitsPane" role="tab" aria-selected="false" data-tip="Habits" aria-label="Habits">
+                <button type="button" class="btn" data-pane="habitsPane" aria-pressed="false" data-tip="Habits" aria-label="Habits">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V10"></path><path d="M12 12C12 8.5 9.2 5.5 5.5 5.5c0 3.5 2.8 6.5 6.5 6.5z"></path><path d="M12 14c0-3.2 2.6-5.8 6-5.8 0 3.2-2.6 5.8-6 5.8z"></path></svg>
                 </button>
             </div>
@@ -214,15 +181,11 @@
         </div>
         <div class="panes" id="panes">
             <iframe id="calendarPane" data-src="../calendar/index.html" title="Calendar"></iframe>
-            <div class="splitter" id="splitter" data-i18n-attr="title:ui.dragResize"></div>
+            <div class="splitter" id="splitter"></div>
             <div class="right" id="rightCol">
                 <iframe id="tasksPane" data-src="../tasks/index.html" title="Tasks"></iframe>
-                <div class="hsplitter" id="hsplitter" data-i18n-attr="title:ui.dragResize"></div>
+                <div class="splitter rows" id="hsplitter"></div>
                 <iframe id="habitsPane" data-src="../habits/index.html" title="Habits"></iframe>
-                <button class="pane-restore" id="habitsRestore" type="button" data-i18n-attr="data-tip:planner.showHabits, aria-label:planner.showHabits">
-                    <svg class="sprout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V10"></path><path d="M12 12C12 8.5 9.2 5.5 5.5 5.5c0 3.5 2.8 6.5 6.5 6.5z"></path><path d="M12 14c0-3.2 2.6-5.8 6-5.8 0 3.2-2.6 5.8-6 5.8z"></path></svg>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-                </button>
             </div>
         </div>
     </div>
@@ -265,8 +228,6 @@
             var rightCol  = document.getElementById( 'rightCol' );
             var taskPane  = document.getElementById( 'tasksPane' );
             var habitPane = document.getElementById( 'habitsPane' );
-            var splitter  = document.getElementById( 'splitter' );
-            var hsplitter = document.getElementById( 'hsplitter' );
             var MIN_PCT   = 30;
             var MAX_PCT   = 85;
             var MIN_TASKS = 25;     // the vertical split of the right column, % for Tasks
@@ -298,8 +259,8 @@
             // A screen seen for the first time starts from the value saved before
             // this was per-screen (the bare 'planner.calPct' / 'planner.tasksPct'),
             // so nobody's split is lost; from its first drag on, that screen writes
-            // its own key only. Nothing is ever migrated away from the bare keys -
-            // they stay as the starting point for the NEXT new screen.
+            // its own key only. Nothing is ever taken from the bare keys - they stay
+            // as the starting point for the NEXT new screen.
             var DEF_CAL   = 75;     // the CSS defaults, repeated because a rotation
             var DEF_TASKS = 60;     // has to be able to go BACK to them
 
@@ -314,122 +275,50 @@
 
             function splitKey( name ) { return 'planner.' + name + '.' + screenId(); }
 
-            function savedPct( name )
+            function seed( name )
             {
-                var v = null;
                 try
                 {
-                    v = localStorage.getItem( splitKey( name ) );
-                    if( v === null ) v = localStorage.getItem( 'planner.' + name );
+                    var bare = localStorage.getItem( 'planner.' + name );
+                    if( bare !== null && localStorage.getItem( splitKey( name ) ) === null ) localStorage.setItem( splitKey( name ), bare );
                 }
                 catch( e ) {}
-                return parseFloat( v );
             }
 
-            // Put both handles where THIS screen left them - on load, and again
-            // whenever the device is turned, which is a different screen to us.
-            function applySplits()
+            function isPhoneNow() { return window.matchMedia( '(max-width: 640px)' ).matches; }
+
+            // Habits folded away before the bar's arrow did it: that arrow takes over.
+            try
             {
-                var c = savedPct( 'calPct' );
-                applyPct( isNaN( c ) ? DEF_CAL : Math.min( MAX_PCT, Math.max( MIN_PCT, c ) ) );
-
-                var t = savedPct( 'tasksPct' );
-                applyTasksPct( isNaN( t ) ? DEF_TASKS : Math.min( MAX_TASKS, Math.max( MIN_TASKS, t ) ) );
+                if( localStorage.getItem( 'planner.habitsFolded' ) === '1' ) localStorage.setItem( splitKey( 'tasksPct' ) + '.fold', 'last' );
+                localStorage.removeItem( 'planner.habitsFolded' );
             }
-
-            applySplits();
-
-            try { window.matchMedia( '(orientation: portrait)' ).addEventListener( 'change', applySplits ); }
             catch( e ) {}
 
-            // One drag routine for both handles: `compute` turns the pointer position
-            // into a percentage, `apply` sets it, `name` says which key remembers it
-            // (resolved when the drag starts - the screen cannot turn mid-drag).
-            function wireSplitter( handle, compute, apply, name, min, max, def )
+            // The bars wait for Ayni, which loads after this page's own scripts.
+            document.addEventListener( 'DOMContentLoaded', function()
             {
-                // Double click: back to the CSS default, remembered for this screen.
-                handle.addEventListener( 'dblclick', function()
+                Ayni.ready.then( function()
                 {
-                    apply( def );
-                    try { localStorage.setItem( splitKey( name ), def ); } catch( err ) {}
-                } );
+                    seed( 'calPct' ); seed( 'tasksPct' );
+                    var calBar = Ayni.splitter( '#splitter', { pane: calPane, other: rightCol, unit: '%', min: MIN_PCT, max: MAX_PCT, def: DEF_CAL,
+                        key: function() { return splitKey( 'calPct' ); }, set: function( v ) { applyPct( v == null ? DEF_CAL : v ); }, off: isPhoneNow } );
+                    var taskBar = Ayni.splitter( '#hsplitter', { pane: taskPane, other: habitPane, rows: true, unit: '%', min: MIN_TASKS, max: MAX_TASKS, def: DEF_TASKS,
+                        key: function() { return splitKey( 'tasksPct' ); }, set: function( v ) { applyTasksPct( v == null ? DEF_TASKS : v ); }, off: isPhoneNow } );
+                    calBar.reload(); taskBar.reload();
 
-                handle.addEventListener( 'pointerdown', function( evt )
-                {
-                    evt.preventDefault();
-                    panes.classList.add( 'dragging' );
-                    handle.classList.add( 'dragging' );
-
-                    var key = splitKey( name );
-
-                    function onMove( e )
+                    // The device was turned: that is another screen to us.
+                    try
                     {
-                        var pct = Math.min( max, Math.max( min, compute( e ) ) );
-                        apply( pct );
-                        try { localStorage.setItem( key, pct ); } catch( err ) {}
+                        window.matchMedia( '(orientation: portrait)' ).addEventListener( 'change', function()
+                        {
+                            seed( 'calPct' ); seed( 'tasksPct' );
+                            calBar.reload(); taskBar.reload();
+                        } );
                     }
-
-                    function onUp()
-                    {
-                        panes.classList.remove( 'dragging' );
-                        handle.classList.remove( 'dragging' );
-                        document.removeEventListener( 'pointermove', onMove );
-                        document.removeEventListener( 'pointerup', onUp );
-                        document.removeEventListener( 'pointercancel', onUp );
-                    }
-
-                    document.addEventListener( 'pointermove', onMove );
-                    document.addEventListener( 'pointerup', onUp );
-                    // A tablet may take the touch back (a system gesture): end the drag too.
-                    document.addEventListener( 'pointercancel', onUp );
+                    catch( e ) {}
                 } );
-            }
-
-            wireSplitter( splitter, function( e )
-            {
-                var rect = panes.getBoundingClientRect();
-                return ((e.clientX - rect.left) / rect.width) * 100;
-            }, applyPct, 'calPct', MIN_PCT, MAX_PCT, DEF_CAL );
-
-            wireSplitter( hsplitter, function( e )
-            {
-                var rect = rightCol.getBoundingClientRect();
-                return ((e.clientY - rect.top) / rect.height) * 100;
-            }, applyTasksPct, 'tasksPct', MIN_TASKS, MAX_TASKS, DEF_TASKS );
-
-            // FOLD HABITS AWAY.  The Habits frame posts { nayive: 'pane-collapse' }
-            // when its [v] button is pressed; the strip under it puts the pane
-            // back. The choice is remembered, like the splitter positions.
-            var restore = document.getElementById( 'habitsRestore' );
-            var FOLDKEY = 'planner.habitsFolded';
-
-            function foldHabits( on )
-            {
-                rightCol.classList.toggle( 'habits-folded', on );
-
-                // Folded, #tasksPane grows on its own (see the CSS); unfolded it
-                // goes back to the remembered split.
-                if( ! on )
-                {
-                    var pct = savedPct( 'tasksPct' );
-                    applyTasksPct( isNaN( pct ) ? DEF_TASKS : Math.min( MAX_TASKS, Math.max( MIN_TASKS, pct ) ) );
-                }
-
-                try { localStorage.setItem( FOLDKEY, on ? '1' : '0' ); } catch( e ) {}
-            }
-
-            window.addEventListener( 'message', function( e )
-            {
-                if( e.origin !== location.origin ) return;
-                if( ! e.data || e.data.nayive !== 'pane-collapse' ) return;
-                if( e.source !== habitPane.contentWindow ) return;
-                if( isPhone() ) return;                 // the pane tabs already do this
-                foldHabits( true );
             } );
-
-            restore.addEventListener( 'click', function() { foldHabits( false ); } );
-
-            try { if( localStorage.getItem( FOLDKEY ) === '1' ) foldHabits( true ); } catch( e ) {}
 
             // Start with the keyboard in the Tasks pane (its own script focuses the
             // "new task" field); the other panes grab nothing on load. Not on a
@@ -533,7 +422,7 @@
                 tabs.querySelectorAll( 'button[data-pane]' ).forEach( function( b )
                 {
                     var on = b.dataset.pane === id;
-                    b.setAttribute( 'aria-selected', String( on ) );
+                    b.setAttribute( 'aria-pressed', String( on ) );
                 } );
                 try { localStorage.setItem( TABKEY, id ); } catch( e ) {}
                 if( id === 'calendarPane' ) checkCalToday();

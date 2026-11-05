@@ -134,40 +134,16 @@ function openSettings()
     buildSheetHeader( T( 'ui.settings' ), 'setSheetBackdrop', sheet );
 
     const tabs = document.createElement( 'div' );
-    tabs.className = 'set-tabs';
     tabs.setAttribute( 'role', 'tablist' );
+    tabs.setAttribute( 'aria-label', T( 'ui.settings' ) );
 
     const panes = [ [ 'location', T( 'trips.tabLocation' ), locationSection() ],
                     [ 'general',  T( 'trips.tabGeneral' ),  reminderSection() ] ];
 
-    function show( key )
-    {
-        tabs.querySelectorAll( '.pill' ).forEach( function( b )
-        {
-            const on = b.getAttribute( 'data-tab' ) === key;
-            b.classList.toggle( 'is-active', on );
-            b.setAttribute( 'aria-selected', on ? 'true' : 'false' );
-        } );
-        sheet.querySelectorAll( '[data-pane]' ).forEach( function( p ) { p.hidden = p.getAttribute( 'data-pane' ) !== key; } );
-    }
-
     sheet.appendChild( tabs );
-    panes.forEach( function( p )
-    {
-        const b = document.createElement( 'button' );
-        b.type = 'button';
-        b.className = 'pill';
-        b.setAttribute( 'role', 'tab' );
-        b.setAttribute( 'data-tab', p[ 0 ] );
-        b.textContent = p[ 1 ];
-        b.addEventListener( 'click', function() { show( p[ 0 ] ); } );
-        tabs.appendChild( b );
+    panes.forEach( function( p ) { sheet.appendChild( p[ 2 ] ); } );
 
-        p[ 2 ].setAttribute( 'data-pane', p[ 0 ] );
-        sheet.appendChild( p[ 2 ] );
-    } );
-
-    show( 'location' );
+    Ayni.tabs( tabs, { value: 'location', items: panes.map( function( p ) { return { value: p[ 0 ], label: p[ 1 ], panel: p[ 2 ] }; } ) } );
     openSheet( 'setSheetBackdrop' );
 }
 

@@ -56,8 +56,9 @@ export function createToolbar( o )
 {
     const bar     = document.getElementById( 'toolbar' );
     const buttons = [ ...bar.querySelectorAll( 'button[data-slot]' ) ];
-    const famSel  = document.getElementById( 'fontFamilySel' );
-    const sizeSel = document.getElementById( 'fontSizeSel' );
+    // Ayni list pickers (the size a combo box: any size can be typed)
+    const famSel  = Ayni.picker( document.getElementById( 'fontFamilySel' ) );
+    const sizeSel = Ayni.picker( document.getElementById( 'fontSizeSel' ), { mode: 'combo' } );
     const slots   = [ ...new Set( buttons.map( function( b ) { return b.dataset.slot; } ).concat( VALUE_SLOTS ) ) ];
 
     let queued  = false;
@@ -66,8 +67,8 @@ export function createToolbar( o )
     fill( sizeSel, o.sizes.map( function( s ) { return [ s, s ]; } ) );
 
     // A toolbar button never takes the focus: the engine keeps its caret and
-    // selection, and the command lands where the user left them. (Not the two
-    // lists - a <select> has to be focused to open.)
+    // selection, and the command lands where the user left them. (The two
+    // lists are Ayni's: in a toolbar they hand the focus back themselves.)
     bar.addEventListener( 'mousedown', function( e )
     {
         if( e.target.closest( 'button' ) ) e.preventDefault();
@@ -89,16 +90,18 @@ export function createToolbar( o )
         o.menus.openItems( items, b );        // a second press closes it (Ayni.menuAt)
     } );
 
-    famSel.addEventListener( 'change', function()
+    famSel.element.addEventListener( 'ayni:change', function( e )
     {
-        if( famSel.value ) o.run( 'font.family', famSel.value );
+        if( e.detail.value ) o.run( 'font.family', e.detail.value );
     } );
 
-    // The list is in points; the engine counts half-points.
-    sizeSel.addEventListener( 'change', function()
+    // The list is in points; the engine counts half-points. A typed size that
+    // is not one (or past Word's 1638) changes nothing: the selection's own comes back.
+    sizeSel.element.addEventListener( 'ayni:change', function( e )
     {
-        const pt = parseFloat( sizeSel.value );
-        if( pt > 0 ) o.run( 'font.size', Math.round( pt * 2 ) );
+        const pt = parseFloat( String( e.detail.value ).replace( ',', '.' ) );
+        if( pt > 0 && pt <= 1638 ) o.run( 'font.size', Math.round( pt * 2 ) );
+        else refresh();
     } );
 
     //---- showing the engine's state ------------------------------------------
@@ -147,31 +150,21 @@ export function createToolbar( o )
         if( o.after ) o.after();
     }
 
-    // A list shows the selection's value, adding it for the moment when it is
-    // not one of ours (a 10.5 pt size, a font the list does not name).
+    // A list shows the selection's value, also one it does not name (a 10.5 pt
+    // size, a font the list does not hold: shown, not added).
     function showValue( sel, st, fmt )
     {
         sel.disabled = ! st || ! st.enabled;
 
         const v = st && st.value !== undefined && st.value !== null && st.value !== '' ? fmt( st.value ) : '';
 
-        const extra = sel.querySelector( 'option[data-extra]' );
-        if( extra && extra.value !== v ) extra.remove();
-
-        if( v && ! [ ...sel.options ].some( function( op ) { return op.value === v; } ) )
-        {
-            const op = new Option( v, v );
-            op.dataset.extra = '1';
-            sel.insertBefore( op, sel.firstChild );
-        }
-
-        sel.value = v;     // '' = a mixed selection: nothing shown
+        // '' = a mixed selection: nothing shown. Never under the user's typing (the size box)
+        if( document.activeElement !== sel.field ) sel.set( v );
     }
 
     function fill( sel, pairs )
     {
-        sel.innerHTML = '';
-        for( const p of pairs ) sel.appendChild( new Option( p[ 1 ], p[ 0 ] ) );
+        sel.options = pairs.map( function( p ) { return { value: p[ 0 ], text: p[ 1 ] }; } );
     }
 
     return { refresh: refresh };

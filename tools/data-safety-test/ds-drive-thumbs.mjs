@@ -138,7 +138,7 @@ section( "PHOTOS · VIDEOS: A FRAME BECOMES THE THUMBNAIL, ADD UPLOADS ONE, THE 
     const T = thumbOf( "files/Vids/clip.webm" );
 
     ok( await c.open( "/nayive/photos/index.html?dir=files/Vids" ), "Photos opens on Vids" );
-    const made = await untilFile( T, 20000 );
+    const made = await untilFile( T, 40000 );                             // longer than Photos' own 30 s for reading a frame
     ok( made && made[ 0 ] === 0xFF && made[ 1 ] === 0xD8, "the video's thumbnail is a JPEG made from a frame" );
     ok( bytesOnDisk( s, "files/Vids/clip.webm" ).equals( CLIP ), "the video itself is untouched" );
 

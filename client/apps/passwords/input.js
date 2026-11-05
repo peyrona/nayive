@@ -156,7 +156,7 @@ function wireItems()
 
     $( 'filterRow' ).addEventListener( 'click', function( e )
     {
-        const p = e.target.closest( '.pill' );
+        const p = e.target.closest( '.btn' );
         if( ! p ) return;
         filter = p.dataset.filter;
         if( filter === 'all' ) curFolder = ROOT;
@@ -259,7 +259,7 @@ function wireItemSheet()
     enterSubmits( 'itemBackdrop', saveItemSheet );
     $( 'itemTypeRow' ).addEventListener( 'click', function( e )
     {
-        const p = e.target.closest( '.pill' );
+        const p = e.target.closest( '.btn' );
         if( p ) setItemType( p.dataset.type );
     } );
     $( 'itGenBtn' ).innerHTML = SVG.dice;
@@ -312,16 +312,17 @@ function wireOtherSheets()
     // Generator
     document.querySelector( '.pw-gen-tabs' ).addEventListener( 'click', function( e )
     {
-        const p = e.target.closest( '.pill' );
+        const p = e.target.closest( '.btn' );
         if( ! p ) return;
         showGenMode( p.dataset.gen );
         regenerate();
     } );
     [ 'genLen', 'genCount' ].forEach( function( id ) { $( id ).addEventListener( 'input', regenerate ); } );
-    [ 'genLower', 'genUpper', 'genDigits', 'genSymbols', 'genNoLook', 'genSep', 'genCaps', 'genNum' ].forEach( function( id )
+    [ 'genLower', 'genUpper', 'genDigits', 'genSymbols', 'genNoLook', 'genCaps', 'genNum' ].forEach( function( id )
     {
         $( id ).addEventListener( 'change', regenerate );
     } );
+    $( 'genSep' ).addEventListener( 'ayni:change', regenerate );
     $( 'genAgainBtn' ).innerHTML = SVG.again;
     $( 'genAgainBtn' ).addEventListener( 'click', regenerate );
     $( 'genCopyBtn' ).innerHTML = Ayni.icon( 'copy' );
@@ -332,8 +333,7 @@ function wireOtherSheets()
     // Settings: close-only, each choice kept on change (this device's).
     const fill = function( sel, list, key, unit )
     {
-        sel.innerHTML = list.map( function( v ) { return '<option value="' + v + '">' + esc( TF( unit, { n: v } ) ) + '</option>'; } ).join( '' );
-        sel.value = String( ui[ key ] );
+        Ayni.picker( sel, { options: list.map( function( v ) { return { value: String( v ), text: TF( unit, { n: v } ) }; } ), value: String( ui[ key ] ) } );
         Ayni.autoSave( sel, function( v ) { ui[ key ] = +v; saveUi(); markActive(); } );
     };
     fill( $( 'setLock' ), LOCK_CHOICES, 'lockMin', 'passwords.minutesN' );
@@ -453,9 +453,11 @@ function applyTreeWidth()
 
 function wireResizer()
 {
-    NayiveUI.paneResizer( $( 'paneResizer' ), $( 'treePane' ),
+    Ayni.splitter( '#paneResizer',
     {
-        min: TREE_MIN, max: TREE_MAX, def: TREE_DEF, off: isPhone, save: saveUi,
+        pane: $( 'treePane' ), min: TREE_MIN, max: TREE_MAX, def: TREE_DEF, off: isPhone,
+        size: ui.treeW > 0 ? ui.treeW : null, collapsed: ui.treeFold,
+        save: function( w, fold ) { ui.treeFold = fold; saveUi(); },
         set: function( w ) { ui.treeW = w; applyTreeWidth(); }
     } );
 }

@@ -24,6 +24,8 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -37,6 +39,8 @@
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
     <script src="../shared/ayni/ayni-fields.js" defer></script>
+    <script src="../shared/ayni/ayni-pickers.js" defer></script>
+    <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Vendored libs (all pinned, no build step). Order matters: CodeMirror core first,
@@ -140,11 +144,15 @@
 
         /* Action toolbar (CodeMirror's free build ships no chrome of its own) */
         #toolbar { display: flex; align-items: center; gap: 2px; padding: 4px 10px; border-bottom: 1px solid var(--line); flex: 0 0 auto; overflow-x: auto; }
+        /* An Ayni toolbar (one Tab stop, the list pickers' toolbar look), drawn as Text's own strip */
+        #toolbar[role="toolbar"] { background: none; border-width: 0 0 1px; border-radius: 0; }
         #toolbar .tb-sep { width: 1px; align-self: stretch; margin: 4px 6px; background: var(--line); flex: 0 0 auto; }
         /* Toolbar buttons: Ayni's .btn at 30 px; a toggle is aria-pressed. */
         .btn.tb-btn { --btn: 30px; }
-        /* .tb-select is shared - see TOOLBAR SELECT in app.css. The right margin
-           is Ayni's number field; only its width is local. */
+        /* The language and indent lists are Ayni list pickers in a toolbar. The
+           right margin is Ayni's number field; only its width is local. */
+        #langSelect { width: 128px; }
+        #indentSelect { width: 104px; }
         #marginInputSpin { width: 112px; flex: 0 0 auto; }
 
         /* Editor host. The sheet is Write's paper in both themes (dimmed ivory on
@@ -153,7 +161,7 @@
         #editorHost { flex: 1 1 0; min-width: 120px; min-height: 0; overflow: hidden; color-scheme: light; color: #1a1a1a; }
 
         /* MARKDOWN PREVIEW. The text on the left, the document as it reads on the
-           right (read-only), the shared .pane-resizer between them. The preview's
+           right (read-only), Ayni's splitter between them. The preview's
            width is --md-w (dragged, kept on this device); none yet = half.
            The document rules below also dress #printDoc, the copy Print and
            "Save as PDF" put on paper (see PRINT). */
@@ -306,7 +314,7 @@
             <div id="syncIndicator" class="sync-indicator" data-i18n-attr="title:ui.sync.synced"></div>
         </div>
 
-        <div id="toolbar">
+        <div id="toolbar" role="toolbar" data-i18n-attr="aria-label:ui.formatBar">
             <!-- FILE, first as in Write and Calc: the menu (#topMenu) is built from
                  the hidden #fileTools buttons below (shared/office.js, fileMenu). -->
             <button id="moreBtn" class="btn tb-btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.menu.file, aria-label:ui.menu.file">
@@ -315,21 +323,24 @@
 
             <div class="tb-sep"></div>
 
-            <select id="langSelect" class="tb-select" data-i18n-attr="title:text.langSelect">
-                <option value="text/plain" data-i18n="text.plainText"></option>
-                <option value="text/html">HTML</option>
-                <option value="text/css">CSS</option>
-                <option value="text/javascript">JavaScript</option>
-                <option value="application/json">JSON</option>
-                <option value="application/xml">XML</option>
-                <option value="text/x-markdown">Markdown</option>
-                <option value="text/x-yaml">YAML</option>
-                <option value="text/x-sh">Shell</option>
-                <option value="text/x-sql">SQL</option>
-                <option value="text/x-python">Python</option>
-                <option value="text/x-csrc">C / C++ / Java</option>
-                <option value="text/x-properties" data-i18n="text.iniProps"></option>
-            </select>
+            <div class="picker" id="langSelect" data-i18n-attr="data-tip:text.langSelect">
+                <input type="hidden" value="text/plain">
+                <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                    <li role="option" data-value="text/plain" data-i18n="text.plainText"></li>
+                    <li role="option" data-value="text/html">HTML</li>
+                    <li role="option" data-value="text/css">CSS</li>
+                    <li role="option" data-value="text/javascript">JavaScript</li>
+                    <li role="option" data-value="application/json">JSON</li>
+                    <li role="option" data-value="application/xml">XML</li>
+                    <li role="option" data-value="text/x-markdown">Markdown</li>
+                    <li role="option" data-value="text/x-yaml">YAML</li>
+                    <li role="option" data-value="text/x-sh">Shell</li>
+                    <li role="option" data-value="text/x-sql">SQL</li>
+                    <li role="option" data-value="text/x-python">Python</li>
+                    <li role="option" data-value="text/x-csrc">C / C++ / Java</li>
+                    <li role="option" data-value="text/x-properties" data-i18n="text.iniProps"></li>
+                </ul></div>
+            </div>
 
             <!-- Markdown only (disabled for every other language, see syncPreview):
                  the document as it reads, in a pane beside the text. -->
@@ -352,11 +363,14 @@
             <button id="wrapBtn" class="btn tb-btn" data-i18n-attr="data-tip:text.wrap">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="15" y2="12"></line><polyline points="18 9 21 12 18 15"></polyline><line x1="3" y1="18" x2="12" y2="18"></line></svg>
             </button>
-            <select id="indentSelect" class="tb-select" data-i18n-attr="title:text.indent">
-                <option value="4" selected data-i18n="text.indent4"></option>
-                <option value="2" data-i18n="text.indent2"></option>
-                <option value="tab" data-i18n="text.indentTab"></option>
-            </select>
+            <div class="picker" id="indentSelect" data-i18n-attr="data-tip:text.indent">
+                <input type="hidden" value="4">
+                <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                    <li role="option" data-value="4" data-i18n="text.indent4"></li>
+                    <li role="option" data-value="2" data-i18n="text.indent2"></li>
+                    <li role="option" data-value="tab" data-i18n="text.indentTab"></li>
+                </ul></div>
+            </div>
             <div class="input-group spin" id="marginInputSpin"><input id="marginInput" class="input" type="number" min="20" max="500" step="1" inputmode="numeric"
                    autocomplete="off" data-i18n-attr="title:text.margin"></div>
 
@@ -435,7 +449,7 @@
         <div id="panes">
             <div id="editorHost"><textarea id="editor"></textarea></div>
             <!-- The preview pane (Markdown only): rendered by renderPreview(). -->
-            <div id="mdResizer" class="pane-resizer" hidden data-i18n-attr="title:ui.dragResize"></div>
+            <div id="mdResizer" class="splitter" hidden></div>
             <article id="preview" hidden><div class="md-doc"></div></article>
         </div>
 
@@ -632,26 +646,27 @@
             // (shared/office.js); the dialogs' × buttons and Escape once for every
             // app by shared/ui.js.
 
-            document.getElementById( 'langSelect' ).addEventListener( 'change', function( e ) { setLanguage( e.target.value ); editor.focus(); } );
+            document.getElementById( 'langSelect' ).addEventListener( 'ayni:change', function( e ) { setLanguage( e.detail.value ); editor.focus(); } );
             document.getElementById( 'previewBtn' ).addEventListener( 'click',  togglePreview );
             document.getElementById( 'preview'    ).addEventListener( 'click',  mdAnchorClick );
             // Drag the bar to share the width; double-click: half and half again.
-            NayiveUI.paneResizer( document.getElementById( 'mdResizer' ), document.getElementById( 'preview' ),
+            Ayni.splitter( '#mdResizer',
             {
-                key: 'gum_text_md_width', min: 120, max: 4000, def: null, right: true,
+                pane: document.getElementById( 'preview' ), side: 'last', glyphs: false,    // the toolbar's button folds it
+                key: 'gum_text_md_width', min: 120, max: 4000,
                 set: function( w )
                 {
                     const pane = document.getElementById( 'panes' );
-                    if( w == null ) { pane.style.removeProperty( '--md-w' ); try { localStorage.removeItem( 'gum_text_md_width' ); } catch( _ ) {} }
+                    if( w == null ) pane.style.removeProperty( '--md-w' );
                     else            pane.style.setProperty( '--md-w', w + 'px' );
                     if( editor ) editor.refresh();
                 }
             } );
-            document.getElementById( 'indentSelect' ).addEventListener( 'change', function( e ) { setIndent( e.target.value ); textCfg.write( { indent: e.target.value } ); editor.focus(); } );
+            document.getElementById( 'indentSelect' ).addEventListener( 'ayni:change', function( e ) { setIndent( e.detail.value ); textCfg.write( { indent: e.detail.value } ); editor.focus(); } );
             document.getElementById( 'wrapBtn'      ).addEventListener( 'click', toggleWrap );
             wireClipboard();
             document.getElementById( 'wrapBtn'      ).setAttribute( 'aria-pressed', lineWrap );   // reflect the remembered choice
-            document.getElementById( 'indentSelect' ).value = indentPref;                        // ditto (overrides the option's `selected`)
+            Ayni.picker( document.getElementById( 'indentSelect' ) ).set( indentPref );            // ditto
             document.getElementById( 'zoomOutBtn'   ).addEventListener( 'click', function() { bumpFontSize( -1 ); } );
             document.getElementById( 'zoomInBtn'    ).addEventListener( 'click', function() { bumpFontSize(  1 ); } );
             document.getElementById( 'printBtn'     ).addEventListener( 'click', function() { printDoc( false ); } );
@@ -777,9 +792,9 @@
 
             if( typeof cfg.wrap === 'boolean' && cfg.wrap !== lineWrap ) applyWrap( cfg.wrap );
 
-            if( INDENTS.includes( cfg.indent ) && cfg.indent !== document.getElementById( 'indentSelect' ).value )
+            if( INDENTS.includes( cfg.indent ) && cfg.indent !== Ayni.picker( document.getElementById( 'indentSelect' ) ).value )
             {
-                document.getElementById( 'indentSelect' ).value = cfg.indent;
+                Ayni.picker( document.getElementById( 'indentSelect' ) ).set( cfg.indent );
                 setIndent( cfg.indent );
             }
         }
@@ -1001,7 +1016,7 @@
 
         // The MIMEs the language <select> offers — also the only values setLanguage()
         // ever puts on the editor, so the toolbar and the highlighting never disagree.
-        const SELECT_MIMES = Array.from( document.getElementById( 'langSelect' ).options ).map( function( o ) { return o.value; } );
+        const SELECT_MIMES = Array.from( document.querySelectorAll( '#langSelect [role="option"]' ) ).map( function( o ) { return o.dataset.value; } );
 
         // File extension → one of SELECT_MIMES. Kept explicit (rather than leaning on
         // meta.js alone) so the mapping stays predictable and web-file focused; meta.js
@@ -1041,7 +1056,7 @@
         {
             const m = SELECT_MIMES.includes( mime ) ? mime : 'text/plain';
             editor.setOption( 'mode', m === 'text/plain' ? null : m );   // null = plain, avoids CM's "no mode" warning
-            document.getElementById( 'langSelect' ).value = m;
+            Ayni.picker( document.getElementById( 'langSelect' ) ).set( m );
             syncPreview();
         }
 
@@ -1097,13 +1112,13 @@
         //
         // For a Markdown file the toolbar's preview button splits the writing area:
         // the text on the left (where you write), the document as it reads on the
-        // right (read-only), the shared pane resizer between them. The pane follows
+        // right (read-only), Ayni's splitter between them. The pane follows
         // the typing a moment after it stops. On or off is remembered on this
         // device; any other language has the button disabled and no pane.
 
         function isMarkdown()
         {
-            return document.getElementById( 'langSelect' ).value === MD_MIME;
+            return Ayni.picker( document.getElementById( 'langSelect' ) ).value === MD_MIME;
         }
 
         function previewOn() { return mdPreview && isMarkdown(); }

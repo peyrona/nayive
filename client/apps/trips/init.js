@@ -19,12 +19,15 @@ Ayni.i18n.ready.then( function()
 
     // In a desktop window the line between the stages and the map is a drag handle
     // (trips.css): the list's width is this device's; the map is told it changed size.
-    NayiveUI.paneResizer( document.getElementById( 'routeResizer' ), document.getElementById( 'tripContent' ),
+    Ayni.splitter( '#routeResizer',
     {
-        key: 'trips-list-width', min: 300, max: 1200, def: 460, off: function() { return ! wideMql.matches; },
-        set: function( w )
+        pane: document.getElementById( 'tripContent' ), other: document.getElementById( 'routePanel' ),
+        key: 'trips-list-width', min: 300, max: 1200, def: 460,
+        off: function() { return ! wideMql.matches || ! document.documentElement.classList.contains( 'is-windowed' ); },
+        set: function( w, fold )
         {
-            document.documentElement.style.setProperty( '--trip-list-w', w + 'px' );
+            if( w != null ) document.documentElement.style.setProperty( '--trip-list-w', w + 'px' );
+            document.querySelector( '.trip-layout' ).dataset.fold = fold || '';
             if( panelMapInstance ) panelMapInstance.invalidateSize();
         }
     } );

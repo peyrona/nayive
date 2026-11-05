@@ -330,7 +330,7 @@ try
     hits = await get( "/e2e/hits" ) || [];
     ok( hits.every( h => ! h.cookie ), "shown: whatever loads carries NO session cookie", hits );
     ok( await c.evaluate( "fetch('/api/whoami').then( r => r.status )" ) === 200, "…and the reader is still signed in" );
-    ok( await c.evaluate( "( b => !b.hidden && b.classList.contains('is-active') && b.textContent === 'Ocultar imágenes' )( document.getElementById('imagesBtn') )" ),
+    ok( await c.evaluate( "( b => !b.hidden && b.getAttribute('aria-pressed') === 'true' && b.textContent === 'Ocultar imágenes' )( document.getElementById('imagesBtn') )" ),
         "the picture button stays, now to hide them", await c.evaluate( "document.getElementById('imagesBtn').textContent" ) );
     await shot( c, "04-pictures" );
     await c.evaluate( "document.getElementById('imagesBtn').click(); true" );
@@ -425,7 +425,7 @@ try
     ok( await waitFor( c, "window.__toasts.some( t => /Contraseña cambiada/.test( t ) )", 8000 ), "the right one is kept", await lastToast( c ) );
     await shot( c, "05-settings" );
     // The "pictures by default" setting is gone (his order, 2026-10-01): only the button in a message.
-    await c.evaluate( "document.querySelector('#setSheet [data-tab=general]').click(); true" );
+    await c.evaluate( "document.querySelector('#setSheet [data-value=general]').click(); true" );
     ok( await c.evaluate( "!document.getElementById('imagesDefault')" ), "no pictures setting (the message's own button does it)" );
     await c.evaluate( "var x = document.getElementById('signature'); x.value = 'Ana  \\nTel 1\\n'; x.dispatchEvent( new Event('input') ); true" );
     await shot( c, "05a-general" );
@@ -506,7 +506,7 @@ try
     const W = "document.getElementById('f').contentWindow", D = W + ".document", $ = id => `${D}.getElementById('${id}')`;
     const FROWS = `${D}.querySelectorAll('#list .mail-row')`;
     await waitFor( c, `${W}.NayiveMail && ${FROWS}.length > 1` );
-    ok( await c.evaluate( `${D}.documentElement.classList.contains('is-windowed') && ${D}.body.classList.contains('split')` ), "a wide desktop window splits" );
+    ok( await c.evaluate( `${D}.documentElement.classList.contains('is-windowed') && ${D}.body.classList.contains('mail-split')` ), "a wide desktop window splits" );
     ok( await c.evaluate( `!${$( "readPane" )}.hidden && !${$( "readNone" )}.hidden && ${$( "readView" )}.parentNode.id === 'readPane'` ), "the right side waits, empty" );
     await c.evaluate( `${FROWS}[0].click(); true` );
     await waitFor( c, `!${$( "readView" )}.hidden && ${W}.NayiveMail.S.msg` );
@@ -533,20 +533,20 @@ try
     await c.evaluate( `${FROWS}[1].click(); true` );
     await waitFor( c, `!${$( "readView" )}.hidden && ${W}.NayiveMail.S.msg` );
     await c.evaluate( `document.getElementById('f').style.width = '900px'; true` );
-    await waitFor( c, `!${D}.body.classList.contains('split')`, 3000 );
+    await waitFor( c, `!${D}.body.classList.contains('mail-split')`, 3000 );
     const nar = await c.evaluate( `( () => { const d = ${D}, g = id => d.getElementById( id );
-        return { split: d.body.classList.contains('split'), inMain: g('readView').parentNode.classList.contains('mail-main'),
+        return { split: d.body.classList.contains('mail-split'), inMain: g('readView').parentNode.classList.contains('mail-main'),
                  list: g('listView').hidden, back: !g('backBtn').hidden, reading: d.body.classList.contains('reading'), pane: g('readPane').hidden }; } )()` );
     ok( ! nar.split && nar.inMain && nar.list && nar.back && nar.reading && nar.pane, "narrowed: the message over the list, with ←", nar );
     ok( await c.evaluate( `!${$( "actions" )}.hidden && ${$( "selActions" )}.hidden` ), "…with the reader's buttons, no pick group" );
     await c.evaluate( `document.getElementById('f').style.width = '1300px'; true` );
-    await waitFor( c, `${D}.body.classList.contains('split')`, 3000 );
-    ok( await c.evaluate( `${D}.body.classList.contains('split') && !${$( "listView" )}.hidden && ${$( "readView" )}.parentNode.id === 'readPane' && !${$( "readView" )}.hidden` ),
+    await waitFor( c, `${D}.body.classList.contains('mail-split')`, 3000 );
+    ok( await c.evaluate( `${D}.body.classList.contains('mail-split') && !${$( "listView" )}.hidden && ${$( "readView" )}.parentNode.id === 'readPane' && !${$( "readView" )}.hidden` ),
         "wide again: side by side, still open" );
     // opened side by side (no history entry), then narrowed: Reply and back
     // must not leave the page (the writer takes no entry it does not own)
     await c.evaluate( `document.getElementById('f').style.width = '900px'; true` );
-    await waitFor( c, `!${D}.body.classList.contains('split')`, 3000 );
+    await waitFor( c, `!${D}.body.classList.contains('mail-split')`, 3000 );
     await c.evaluate( `${$( "actReply" )}.click(); true` );
     await waitFor( c, `!${$( "composeView" )}.hidden` );
     await c.evaluate( `${$( "backBtn" )}.click(); true` );
@@ -554,7 +554,7 @@ try
     ok( await c.evaluate( `location.pathname === '/nayive/desktop/split-host.html' && ${W}.location.pathname === '/nayive/email/index.html' && ${$( "composeView" )}.hidden` ),
         "narrowed, Reply then ←: still in eMail" );
     await c.evaluate( `document.getElementById('f').style.width = '1300px'; true` );
-    await waitFor( c, `${D}.body.classList.contains('split')`, 3000 );
+    await waitFor( c, `${D}.body.classList.contains('mail-split')`, 3000 );
     await c.evaluate( `${$( "composeBtn" )}.click(); true` );
     await waitFor( c, `!${$( "composeView" )}.hidden` );
     ok( await c.evaluate( `getComputedStyle( ${$( "readPane" )} ).display === 'none' && ${$( "composeView" )}.getBoundingClientRect().width > 700` ), "writing takes the whole width" );

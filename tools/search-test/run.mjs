@@ -183,7 +183,7 @@ try
     ok( await until( "document.querySelector('#driveTools .search-field').classList.contains('is-open') && document.activeElement.id === 'searchInput'" ), "Ctrl+F opens it from the page" );
     await press( "#searchBuilderBtn" );
     ok( await until( "document.getElementById('searchBuilderBackdrop').open" ), "the funnel opens the advanced search" );
-    await ev( "( i => { i.value = 'txt'; i.dispatchEvent( new Event( 'input', { bubbles: true } ) ); } )( document.querySelector('#sbRules input') ); true" );
+    await ev( "( i => { i.value = 'txt'; i.dispatchEvent( new Event( 'input', { bubbles: true } ) ); } )( document.querySelector('#sbRules .sb-rule > input.input') ); true" );
     await press( "#sbSearchBtn" );
     ok( await until( "document.getElementById('searchBuilderBtn').classList.contains('is-active')" ), "a search in force: the funnel is lit" );
     ok( await until( "getComputedStyle( document.getElementById('searchBuilderBtn') ).color === ( d => { d.style.color = 'var(--accent)'; document.body.append( d ); const c = getComputedStyle( d ).color; d.remove(); return c; } )( document.createElement( 'i' ) )" ), "…in Accent" );

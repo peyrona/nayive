@@ -61,6 +61,8 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -74,6 +76,8 @@
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
     <script src="../shared/ayni/ayni-fields.js" defer></script>
+    <script src="../shared/ayni/ayni-pickers.js" defer></script>
+    <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
@@ -104,7 +108,7 @@
 
     <style>
     /* ===================================================================
-     * PHOTOS - per-app layout only. Chrome (header, .btn, .pill,
+     * PHOTOS - per-app layout only. Chrome (header, .btn,
      * toast) comes from shared/theme.css + app.css; this block holds the
      * views (grid / list / map / pase) and the two full-screen viewers.
      * =================================================================*/
@@ -510,7 +514,7 @@
     @media (max-width: 640px)
     {
         #treeBtn:not([hidden]) { display: inline-flex; }
-        .pane-resizer { display: none; }
+        #paneResizer { display: none; }
         .pase-cap { left: 14px; bottom: 88px; max-width: 78%; }
         .pase-cap .t { font-size: 1.1rem; }
         .lb-nav.prev { left: 8px; }
@@ -539,17 +543,17 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
             </button>
 
-            <div class="tb-modes" role="tablist" data-i18n-attr="aria-label:photos.galleryMode">
-                <button class="btn" data-mode="grid" data-rank="40" role="tab" aria-selected="true" data-i18n-attr="data-tip:photos.grid, aria-label:photos.grid">
+            <div class="tb-modes" role="group" data-i18n-attr="aria-label:photos.galleryMode">
+                <button class="btn" data-mode="grid" data-rank="40" aria-pressed="true" data-i18n-attr="data-tip:photos.grid, aria-label:photos.grid">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
                 </button>
-                <button class="btn" data-mode="lista" data-rank="41" role="tab" aria-selected="false" data-i18n-attr="data-tip:photos.list, aria-label:photos.list">
+                <button class="btn" data-mode="lista" data-rank="41" aria-pressed="false" data-i18n-attr="data-tip:photos.list, aria-label:photos.list">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
                 </button>
-                <button class="btn" data-mode="map" data-rank="42" role="tab" aria-selected="false" data-i18n-attr="data-tip:photos.map, aria-label:photos.map">
+                <button class="btn" data-mode="map" data-rank="42" aria-pressed="false" data-i18n-attr="data-tip:photos.map, aria-label:photos.map">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
                 </button>
-                <button class="btn" data-mode="pase" data-rank="43" role="tab" aria-selected="false" data-i18n-attr="data-tip:photos.slideshow, aria-label:photos.slideshow">
+                <button class="btn" data-mode="pase" data-rank="43" aria-pressed="false" data-i18n-attr="data-tip:photos.slideshow, aria-label:photos.slideshow">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                 </button>
             </div>
@@ -597,7 +601,7 @@
             <div class="tree-head"><span class="section-label" data-i18n="photos.albums"></span></div>
             <ul id="tree" data-fit data-i18n-attr="aria-label:photos.albums"></ul>
         </nav>
-        <div id="paneResizer" class="pane-resizer" role="separator" aria-orientation="vertical" hidden data-i18n-attr="title:ui.dragResize"></div>
+        <div id="paneResizer" class="splitter" hidden></div>
 
         <div class="stage">
             <div class="pane" id="grid"></div>
@@ -609,7 +613,7 @@
                     <button class="info-tip" data-i18n-attr="data-help:photos.placesInfo"></button>
                 </div>
                 <div class="map-empty" id="mapEmpty" hidden data-i18n="photos.noPlaces"></div>
-                <button class="pill" id="nogeoChip" hidden></button>
+                <button class="btn text sm bordered" id="nogeoChip" hidden></button>
                 <aside class="strip" id="strip">
                     <div class="strip-head">
                         <span id="stripTitle"></span>
@@ -2346,7 +2350,7 @@ function setMode( m )
     $$( ".tb-modes .btn" ).forEach( b =>
     {
         const on = b.dataset.mode === m;
-        b.setAttribute( "aria-selected", on );
+        b.setAttribute( "aria-pressed", on );
     } );
 
     if( m !== "map" ) closeStrip();
@@ -2617,8 +2621,9 @@ function wireTree()
                    drop: ( ids, dest ) => { movePaths( ids, dest ); } }
     } );
     $( "#treeBtn" ).addEventListener( "click", () => treeView.openSheet() );
-    NayiveUI.paneResizer( $( "#paneResizer" ), $( "#treePane" ),
+    Ayni.splitter( "#paneResizer",
     {
+        pane: $( "#treePane" ),
         min: 150, max: 420, def: 220, key: "photos-tree-w", off: () => PHONE.matches,
         set: w => document.documentElement.style.setProperty( "--tree-w", w + "px" )
     } );

@@ -210,7 +210,7 @@ function openAddEngine()
 
 function saveNewEngine()
 {
-    const kind = $( 'addKind' ).value;
+    const kind = Ayni.picker( $( 'addKind' ) ).value;
     const name = $( 'addName' ).value.trim() || ( kind === 'lingva' ? 'Lingva' : 'LibreTranslate' );
     let id = kind + '-' + name.toLowerCase().normalize( 'NFD' ).replace( /[^a-z0-9]+/g, '-' ).replace( /^-|-$/g, '' ).slice( 0, 24 );
     const taken = new Set( tr.getEngines().map( ( e ) => e.id ) );

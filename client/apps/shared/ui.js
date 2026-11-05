@@ -314,68 +314,6 @@
     // Ctrl, and show as glyphs. For every app that names or reads a combo.
     var IS_MAC = /Mac|iPhone|iPad|iPod/.test( navigator.platform || navigator.userAgent || "" );
 
-    // PANE RESIZER - a .pane-resizer handle (app.css) sets the width of the
-    // side pane next to it: Drive's tree, Chat's list, Bookmarks' tree,
-    // Music's queue. Mouse, pen and touch alike; a double-click puts the
-    // default width back.
-    //   rz, pane    the handle and the pane it sizes
-    //   o.min/max   the widths a drag may reach (px)
-    //   o.def       the double-click's width (null: whatever the CSS says)
-    //   o.set( w )  applies a width (a custom property, a style)
-    //   o.key       localStorage key: the width is put back now, and kept
-    //               after a drag and a double-click (this device's own)
-    //   o.save( w ) instead of `key`, when the app keeps it itself
-    //   o.right     the pane is right of the handle (a drag right narrows it)
-    //   o.off()     true while there is nothing to drag (a phone layout)
-    function paneResizer( rz, pane, o )
-    {
-        var keep = o.save || function ( w )
-        {
-            if( o.key ) try { localStorage.setItem( o.key, w ); } catch( _ ) {}
-        };
-
-        if( o.key )
-        {
-            var saved = NaN;
-            try { saved = parseInt( localStorage.getItem( o.key ), 10 ); } catch( _ ) {}
-            if( saved >= o.min && saved <= o.max ) o.set( saved );
-        }
-
-        var dragging = false, startX = 0, startW = 0;
-
-        rz.addEventListener( "pointerdown", function ( e )
-        {
-            if( o.off && o.off() ) return;
-            dragging = true;
-            startX   = e.clientX;
-            startW   = pane.getBoundingClientRect().width;
-            rz.setPointerCapture( e.pointerId );
-            rz.classList.add( "dragging" );
-            document.body.style.userSelect = "none";
-        } );
-        rz.addEventListener( "pointermove", function ( e )
-        {
-            if( ! dragging ) return;
-            var dx = ( e.clientX - startX ) * ( o.right ? -1 : 1 );
-            o.set( Math.max( o.min, Math.min( o.max, Math.round( startW + dx ) ) ) );
-        } );
-        function end()
-        {
-            if( ! dragging ) return;
-            dragging = false;
-            rz.classList.remove( "dragging" );
-            document.body.style.userSelect = "";
-            keep( Math.round( pane.getBoundingClientRect().width ) );
-        }
-        rz.addEventListener( "pointerup", end );
-        rz.addEventListener( "pointercancel", end );
-        rz.addEventListener( "dblclick", function ()
-        {
-            o.set( o.def );
-            if( o.def != null ) keep( o.def );
-        } );
-    }
-
     // THE CLIP'S PANEL (Chat's writer, eMail's): a round coloured button per
     // choice, its name under it, three to a row (app.css .attach). items:
     // [{ icon: <svg> node, label, color: 0-8, act }]. A tap runs onPick (the
@@ -849,7 +787,7 @@
     function onHomeClick( e )
     {
         // a real control inside the header keeps its own job
-        if( e.target.closest && e.target.closest( "a, button, input, select" ) ) return;
+        if( e.target.closest && e.target.closest( "a, button, input, .picker" ) ) return;
         e.preventDefault();
         // In a desktop window "home" is the desktop's menu: leaving would close every window.
         if( WINDOWED ) { try { window.top.NayiveDesktop.menu(); } catch ( err ) {} return; }
@@ -3801,7 +3739,6 @@
         uiInit();
 
     window.NayiveUI = {
-        paneResizer: paneResizer,   // a .pane-resizer handle sizes the pane next to it
         isMac:    IS_MAC,           // shortcuts take ⌘ (Drive, Write, Calc, Text)
         sessionExpired: sessionExpired,   // the shared "your session expired" bar (gum-api / store call it)
         loginRedirect:  loginRedirect,    // to the sign-in page and back here (GumApi.loginRedirect too)

@@ -446,6 +446,7 @@ function loadUi()
             if( s.sort === 'name' || s.sort === 'changed' ) ui.sort = s.sort;
             if( Array.isArray( s.open ) ) ui.open = s.open.filter( function( x ) { return typeof x === 'string'; } );
             if( s.treeW > 0 ) ui.treeW = s.treeW;
+            if( s.treeFold === 'first' || s.treeFold === 'last' ) ui.treeFold = s.treeFold;
             if( LOCK_CHOICES.indexOf( s.lockMin ) >= 0 ) ui.lockMin = s.lockMin;
             if( CLIP_CHOICES.indexOf( s.clipSec ) >= 0 ) ui.clipSec = s.clipSec;
             if( s.gen && typeof s.gen === 'object' ) ui.gen = s.gen;

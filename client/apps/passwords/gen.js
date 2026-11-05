@@ -153,7 +153,7 @@ function openGenerator( target )
     $( 'genDigits' ).checked = o.digits; $( 'genSymbols' ).checked = o.symbols;
     $( 'genNoLook' ).checked = o.noLook;
     $( 'genCount' ).value = o.count;
-    $( 'genSep' ).value = o.sep;
+    Ayni.picker( $( 'genSep' ) ).set( o.sep );
     $( 'genCaps' ).checked = o.caps; $( 'genNum' ).checked = o.num;
     $( 'genUseBtn' ).hidden = ! genFor;
     showGenMode( o.mode );
@@ -163,7 +163,7 @@ function openGenerator( target )
 
 function showGenMode( mode )
 {
-    document.querySelectorAll( '.pw-gen-tabs .pill' ).forEach( function( p ) { p.classList.toggle( 'is-active', p.dataset.gen === mode ); } );
+    document.querySelectorAll( '.pw-gen-tabs .btn' ).forEach( function( p ) { p.setAttribute( 'aria-pressed', p.dataset.gen === mode ); } );
     $( 'genChars' ).hidden = mode !== 'chars';
     $( 'genWords' ).hidden = mode !== 'words';
 }
@@ -177,7 +177,7 @@ function readGen()
         digits: $( 'genDigits' ).checked, symbols: $( 'genSymbols' ).checked,
         noLook: $( 'genNoLook' ).checked,
         count:  +$( 'genCount' ).value,
-        sep:    $( 'genSep' ).value,
+        sep:    Ayni.picker( $( 'genSep' ) ).value,
         caps:   $( 'genCaps' ).checked, num: $( 'genNum' ).checked
     };
     // At least one set: the last one switched off comes back on.

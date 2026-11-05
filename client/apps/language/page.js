@@ -58,17 +58,20 @@ let detected = null;                       // the language "auto" found last tim
 function fillSelects()
 {
     const p = tr.getPreferences();
-    const from = $( 'from' ), to = $( 'to' );
-    from.textContent = ''; to.textContent = '';
-    from.appendChild( new Option( detected ? TF( 'language.detectedOpt', { lang: langName( detected ) } ) : T( 'language.detect' ), 'auto' ) );
-    for( const c of LANGS ) { from.appendChild( new Option( langName( c ), c ) ); to.appendChild( new Option( langName( c ), c ) ); }
-    from.value = p.source;
-    to.value = p.target;
+    // Ayni list pickers
+    pick( 'from' ).options = [ { value: 'auto', text: detected ? TF( 'language.detectedOpt', { lang: langName( detected ) } ) : T( 'language.detect' ) } ]
+        .concat( LANGS.map( ( c ) => ( { value: c, text: langName( c ) } ) ) );
+    pick( 'to' ).options = LANGS.map( ( c ) => ( { value: c, text: langName( c ) } ) );
+    pick( 'from' ).set( p.source );
+    pick( 'to' ).set( p.target );
 }
+
+// The controller of the "from" or "to" list picker
+function pick( id ) { return Ayni.picker( $( id ) ); }
 
 function savePair()
 {
-    try { tr.setPreferences( { source: $( 'from' ).value, target: $( 'to' ).value } ); } catch( e ) {}
+    try { tr.setPreferences( { source: pick( 'from' ).value, target: pick( 'to' ).value } ); } catch( e ) {}
 }
 
 // The pairs no engine can do now get a note, but stay pickable: in Local mode
@@ -79,21 +82,21 @@ async function markPairs()
     const run = ++pairsRun;
     const pairs = await tr.getSupportedPairs().catch( () => null );
     if( ! pairs || run !== pairsRun ) return;
-    const src = $( 'from' ).value === 'auto' ? detected : $( 'from' ).value;
-    for( const o of $( 'to' ).options )
+    const src = pick( 'from' ).value === 'auto' ? detected : pick( 'from' ).value;
+    pick( 'to' ).options = LANGS.map( ( c ) =>
     {
-        const ok = ! src || src === o.value || pairs.some( ( x ) => x.source === src && x.target === o.value );
-        o.textContent = ok ? langName( o.value ) : TF( 'language.noEngineOpt', { lang: langName( o.value ) } );
-    }
+        const ok = ! src || src === c || pairs.some( ( x ) => x.source === src && x.target === c );
+        return { value: c, text: ok ? langName( c ) : TF( 'language.noEngineOpt', { lang: langName( c ) } ) };
+    } );
 }
 
 function swapLangs()
 {
-    const from = $( 'from' ), to = $( 'to' );
+    const from = pick( 'from' ), to = pick( 'to' );
     const src = from.value === 'auto' ? detected : from.value;
     if( ! src ) return;
-    from.value = to.value;
-    to.value = src;
+    from.set( to.value );
+    to.set( src );
     const out = $( 'out' );
     if( ! out.classList.contains( 'placeholder' ) && out.textContent.trim() )
     {
@@ -209,7 +212,7 @@ async function translate( allowRemote )
 {
     if( busy ) { busy.abort(); return; }
     const text = $( 'src' ).value;
-    const source = $( 'from' ).value, target = $( 'to' ).value;
+    const source = pick( 'from' ).value, target = pick( 'to' ).value;
     if( ! text.trim() ) { setStatus( T( 'language.needText' ), 'error' ); $( 'src' ).focus(); return; }
     if( source === target ) { setStatus( T( 'language.sameLangs' ), 'error' ); return; }
     if( text.length > MAX_TEXT_LENGTH ) { setStatus( TF( 'language.tooLong', { n: MAX_TEXT_LENGTH } ), 'error' ); return; }
@@ -261,8 +264,8 @@ async function showError( err, allowRemote )
         return;
     }
     const why = err && err.details && err.details.reason;
-    if( why === 'no-detector' ) { setStatus( T( 'language.noDetector' ), 'error' ); $( 'from' ).focus(); return; }
-    if( why === 'low-confidence' ) { setStatus( T( 'language.unclear' ), 'error' ); $( 'from' ).focus(); return; }
+    if( why === 'no-detector' ) { setStatus( T( 'language.noDetector' ), 'error' ); pick( 'from' ).field.focus(); return; }
+    if( why === 'low-confidence' ) { setStatus( T( 'language.unclear' ), 'error' ); pick( 'from' ).field.focus(); return; }
     if( err && err.details && err.details.detected ) { setStatus( TF( 'language.detectedSame', { lang: langName( err.details.detected ) } ), 'error' ); return; }
     setStatus( T( 'language.err.' + ( c || 'internal' ) ), 'error' );
 }
@@ -278,7 +281,7 @@ async function copyResult()
 async function voiceCheck()
 {
     const b = $( 'speak' );
-    const lang = $( 'to' ).value;
+    const lang = pick( 'to' ).value;
     const voices = await tr.getVoices( lang ).catch( () => [] );
     const has = voices.length > 0;
     b.ariaDisabled = ! lastResult || ! has;
@@ -290,7 +293,7 @@ async function speak()
     const b = $( 'speak' );
     if( tr.isSpeaking() ) { tr.stopSpeaking(); b.classList.remove( 'busy' ); return; }
     if( ! lastResult ) return;
-    const lang = $( 'out' ).lang ? $( 'out' ).lang.split( '-' )[ 0 ] : $( 'to' ).value;
+    const lang = $( 'out' ).lang ? $( 'out' ).lang.split( '-' )[ 0 ] : pick( 'to' ).value;
     b.classList.add( 'busy' );
     try { await tr.speak( lastResult, lang ); }
     catch( e ) { Ayni.toast( ( e.category === 'no-voice' ? 'warn' : 'err' ), e.category === 'no-voice' ? TF( 'language.noVoice', { lang: langName( lang ) } ) : T( 'language.speakFailed' ) ); }
@@ -304,7 +307,7 @@ async function onImage( file )
 {
     if( ! file ) return;
     const st = $( 'ocr-status' ), btn = $( 'ocr-btn' );
-    const lang = $( 'from' ).value === 'auto' ? 'es' : $( 'from' ).value;
+    const lang = pick( 'from' ).value === 'auto' ? 'es' : pick( 'from' ).value;
     const controller = new AbortController();
     ocrBusy = controller;
     btn.setAttribute( 'aria-pressed', true );
@@ -360,7 +363,7 @@ async function lookup( allowRemote )
 {
     const word = $( 'q' ).value.trim();
     if( ! word ) { $( 'entry' ).textContent = ''; return; }
-    const source = $( 'from' ).value === 'auto' ? ( detected || 'es' ) : $( 'from' ).value, target = $( 'to' ).value;
+    const source = pick( 'from' ).value === 'auto' ? ( detected || 'es' ) : pick( 'from' ).value, target = pick( 'to' ).value;
     if( source === target ) { dictHint( T( 'language.sameLangs' ) ); return; }
     if( lookupCtl ) lookupCtl.abort();
     const ctl = new AbortController();
@@ -496,8 +499,8 @@ async function onLocalSwitch()
 
 function wire()
 {
-    $( 'from' ).addEventListener( 'change', () => { savePair(); markPairs(); } );
-    $( 'to' ).addEventListener( 'change', () => { savePair(); markPairs(); voiceCheck(); } );
+    $( 'from' ).addEventListener( 'ayni:change', () => { savePair(); markPairs(); } );
+    $( 'to' ).addEventListener( 'ayni:change', () => { savePair(); markPairs(); voiceCheck(); } );
     $( 'swap' ).addEventListener( 'click', swapLangs );
     $( 'src' ).addEventListener( 'input', onSrcInput );
     $( 'src' ).addEventListener( 'keydown', ( e ) => { if( ( e.ctrlKey || e.metaKey ) && e.key === 'Enter' ) { e.preventDefault(); translate(); } } );

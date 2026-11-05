@@ -79,7 +79,7 @@ const APPS = {
     },
     // Language: nothing to seed - its settings live in the browser.
     language: {
-        path: "/nayive/language/", ready: "!! window.nayiveLanguage && document.querySelectorAll( '#to option' ).length === 5"
+        path: "/nayive/language/", ready: "!! window.nayiveLanguage && document.querySelectorAll( '#to [role=option]' ).length === 5"
     },
     // Passwords: the tour of a vault that is not open yet (set-up): the gate.
     passwords: {

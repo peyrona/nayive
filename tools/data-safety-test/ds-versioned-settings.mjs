@@ -38,7 +38,7 @@ section( "F6 · LOCKER SETTINGS: THE PHONE SAVES BETWEEN CLOSE'S READ AND ITS WR
     ok( await c.until( "!! document.querySelector( '#salonSettings .salon-pane .salon-row' )" ), "dialog drawn (a good read)" );
     await c.evaluate( `( () => {
         const f = [ ...document.querySelectorAll( '#salonSettings .field' ) ].find( x => x.querySelector( 'label' ) && x.querySelector( 'label' ).textContent === Ayni.t( 'salon.contrast' ) );
-        const sel = f.querySelector( 'select' ); sel.value = 'high'; sel.dispatchEvent( new Event( 'change' ) ); return true; } )()` );
+        Ayni.picker( f.querySelector( '.picker' ) ).choose( 'high' ); return true; } )()` );
     await arm( c, SALON, add( { units: "c" } ) );
     // close-only (no ✓): closing saves
     await c.evaluate( "document.querySelector( '#salonSettings [data-close]' ).click(); true" );

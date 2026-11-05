@@ -26,6 +26,8 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -39,6 +41,8 @@
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
     <script src="../shared/ayni/ayni-fields.js" defer></script>
+    <script src="../shared/ayni/ayni-pickers.js" defer></script>
+    <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS (and localhost). -->
@@ -53,7 +57,7 @@
 
     <style>
         /* Base reset, card shell (.page/.page-inner/.card), .header, .btn,
-           .pill, .tag, .card-row and inputs all come from ../shared/app.css.
+           .card-row and inputs all come from ../shared/app.css.
            Only what is unique to Habits lives here. */
 
 
@@ -62,16 +66,14 @@
 
         /* THE TWO VIEWS: Hoy | Mes. They ride IN the header row (inside
            .header-actions, before the [+]) so they cost no vertical space -
-           Habits shares a Planner pane with Tasks. The base .tabs rule (app.css)
-           is still used by #daysPresets inside the sheet. */
-        .tabs                { margin: 0 0 12px; }
+           Habits shares a Planner pane with Tasks. */
 
-        /* In the header the two pills hug the LEFT edge and the buttons the RIGHT
+        /* In the header the two toggles hug the LEFT edge and the buttons the RIGHT
            one: `margin-right: auto` on the pills eats all the slack between them.
            For that to work the <h1> must stop growing (the shared rule makes it
            flex: 1 1 auto), or it would swallow the slack first. */
         .header h1           { flex: 0 1 auto; }
-        .header .tabs        { margin: 0 auto 0 0; flex-wrap: nowrap; }
+        .header .tb-modes    { margin: 0 auto 0 0; }
 
         /* Habits is the narrowest pane in Planner (25% of the window, and less
            if the splitter is pushed). Let the button group fold instead of
@@ -194,7 +196,7 @@
         .swatch              { width: 30px; height: 30px; padding: 0; border: none; border-radius: 50%; background: var(--id-color); cursor: pointer; }
         .swatch.is-active    { outline: 3px solid var(--text); outline-offset: 2px; }
         .dow                 { display: flex; gap: 4px; margin-top: 8px; }
-        .dow .pill           { flex: 1 1 0; padding: 7px 0; text-align: center; }
+        .dow .btn            { flex: 1 1 0; min-width: 0; padding: 0; }
         .left-group          { display: flex; align-items: center; gap: 6px; }
     </style>
 </head>
@@ -213,9 +215,9 @@
                         </svg>
                         <h1 id="appTitle">Habits</h1>
 
-                        <div class="tabs" role="tablist">
-                            <button class="pill is-active" type="button" data-view="today" data-i18n="habits.tabToday"></button>
-                            <button class="pill" type="button" data-view="month" data-i18n="habits.tabMonth"></button>
+                        <div class="tb-modes" role="group" data-i18n-attr="aria-label:planner.view">
+                            <button class="btn" type="button" data-view="today" aria-pressed="true" data-i18n-attr="data-tip:habits.tabToday, aria-label:habits.tabToday"><span class="icon" data-icon="today"></span></button>
+                            <button class="btn" type="button" data-view="month" aria-pressed="false" data-i18n-attr="data-tip:habits.tabMonth, aria-label:habits.tabMonth"><span class="icon" data-icon="calendar"></span></button>
                         </div>
 
                         <div class="header-actions tall" role="toolbar" data-i18n-attr="aria-label:ui.actions">
@@ -223,13 +225,6 @@
                                 <button id="addBtn" class="btn" type="button" data-i18n-attr="data-tip:habits.newHabit, aria-label:habits.newHabit">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                                         <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
-                                    </svg>
-                                </button>
-                                <!-- Only inside Planner (see the script at the foot): folds this pane
-                                     away, leaving Planner's own chevron strip to bring it back. -->
-                                <button id="collapseBtn" class="btn" type="button" hidden data-i18n-attr="data-tip:habits.collapse, aria-label:habits.collapse">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                        <polyline points="6 9 12 15 18 9"></polyline>
                                     </svg>
                                 </button>
                             </div>
@@ -255,7 +250,7 @@
                         </div>
 
                         <div id="archivedBlock" hidden>
-                            <button id="archivedToggle" class="pill archived-toggle" type="button"></button>
+                            <button id="archivedToggle" class="btn text sm bordered archived-toggle" type="button" aria-pressed="false"></button>
                             <div id="archivedList" class="list" style="margin-top: 8px;" hidden></div>
                         </div>
 
@@ -318,11 +313,11 @@
             </div>
             <div class="field">
                 <label data-i18n="habits.days"></label>
-                <div class="tabs" id="daysPresets" style="margin-bottom: 0;">
-                    <button class="pill" type="button" data-preset="all" data-i18n="habits.daysAll"></button>
-                    <button class="pill" type="button" data-preset="weekdays" data-i18n="habits.daysWeekdays"></button>
-                    <button class="pill" type="button" data-preset="weekend" data-i18n="habits.daysWeekend"></button>
-                    <button class="pill" type="button" data-preset="custom" data-i18n="habits.daysCustom"></button>
+                <div class="choices" id="daysPresets" role="group">
+                    <button class="btn text sm bordered" type="button" aria-pressed="false" data-preset="all" data-i18n="habits.daysAll"></button>
+                    <button class="btn text sm bordered" type="button" aria-pressed="false" data-preset="weekdays" data-i18n="habits.daysWeekdays"></button>
+                    <button class="btn text sm bordered" type="button" aria-pressed="false" data-preset="weekend" data-i18n="habits.daysWeekend"></button>
+                    <button class="btn text sm bordered" type="button" aria-pressed="false" data-preset="custom" data-i18n="habits.daysCustom"></button>
                 </div>
                 <!-- Day initials + names come from Intl (see shared/i18n.js), never from a dictionary. -->
                 <div id="dowRow" class="dow" hidden></div>
@@ -348,34 +343,7 @@
     <script src="../shared/gum-api.js" defer></script>
     <!-- Shared UI helpers: sheets, toast, dialogs, i18n. -->
     <script src="../shared/ui.js" defer></script>
-    <!-- COLLAPSE INSIDE PLANNER
-         Habits shares Planner's right column with Tasks. This button folds the
-         whole pane away; Planner draws a chevron strip in its place to reopen
-         it. Standalone (and on a phone, where Planner shows one pane at a time
-         anyway) there is nothing to fold, so the button stays hidden. Planner
-         is same-origin, hence the plain window.parent read. -->
-    <script>
-    Ayni.i18n.ready.then( function () {
-        var btn = document.getElementById( 'collapseBtn' );
-
-        function usable()
-        {
-            if( ! document.documentElement.classList.contains( 'is-embedded' ) ) return false;
-            try { return window.parent.innerWidth > 640; } catch ( e ) { return false; }
-        }
-
-        function sync() { btn.hidden = ! usable(); }
-
-        sync();
-        window.addEventListener( 'resize', sync );
-
-        btn.addEventListener( 'click', function ()
-        {
-            try { window.parent.postMessage( { nayive: 'pane-collapse' }, location.origin ); } catch ( e ) {}
-        } );
-    } );
-    </script>
-    <script>
+        <script>
     Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
         Ayni.help( {
@@ -387,22 +355,18 @@
                 { icon: 'undo', name: Ayni.t( 'habits.introYesterdayName' ), text: Ayni.t( 'habits.introYesterday' ) },
                 { icon: 'edit', name: Ayni.t( 'ui.settings' ), text: Ayni.t( 'habits.introEdit' ) },
                 { icon: 'grid', name: Ayni.t( 'habits.introMonthName' ), text: Ayni.t( 'habits.introMonth' ) }
-            ].concat( document.getElementById( 'collapseBtn' ).hidden
-                      ? []
-                      : [ { sel: '#collapseBtn', text: Ayni.t( 'habits.introCollapse' ) } ] ),
+            ],
             // The guided tour ("Ver el tour" in the card). Rows that need a habit
             // ring the empty list as a ghost until there is one.
             tour: function () {
-                const T = Ayni.t, toToday = function () { const b = document.querySelector( '[data-view="today"]' ); if( b && ! b.classList.contains( 'is-active' ) ) b.click(); };
+                const T = Ayni.t, toToday = function () { const b = document.querySelector( '[data-view="today"]' ); if( b && b.getAttribute( 'aria-pressed' ) !== 'true' ) b.click(); };
                 return [
                     { before: toToday, sel: '#addBtn', title: T( 'habits.newHabit' ), text: T( 'habits.introAdd' ) },
                     { sel: '.habit-row .check-btn', ghost: '#homeEmpty, #dueList', icon: 'check', title: T( 'habits.introMarkName' ), text: T( 'habits.introMark' ) },
                     { sel: '.habit-row .btn.text.danger', ghost: '.habit-row .row-meta, #homeEmpty', icon: 'undo', title: T( 'habits.introYesterdayName' ), text: T( 'habits.introYesterday' ) },
                     { sel: '.habit-row .row-main', ghost: '#homeEmpty', icon: 'edit', title: T( 'ui.settings' ), text: T( 'habits.introEdit' ) },
                     { before: toToday, sel: '[data-view="month"]', tap: true, title: T( 'habits.introMonthName' ), text: T( 'habits.introMonth' ) },
-                    { sel: '#gridWrap', ghost: '#monthEmpty', icon: 'grid', text: T( 'habits.gridHint' ), after: toToday },
-                    document.getElementById( 'collapseBtn' ).hidden ? null
-                        : { sel: '#collapseBtn', text: T( 'habits.introCollapse' ) }
+                    { sel: '#gridWrap', ghost: '#monthEmpty', icon: 'grid', text: T( 'habits.gridHint' ), after: toToday }
                 ];
             }
         } );
@@ -471,7 +435,8 @@
             for( let d = 1; d <= 7; d++ )
             {
                 const b = document.createElement( 'button' );
-                b.className   = 'pill';
+                b.className   = 'btn text sm bordered';
+                b.setAttribute( 'aria-pressed', false );
                 b.type        = 'button';
                 b.dataset.dow = String( d );
                 b.textContent = Ayni.i18n.weekday( d, 'narrow' );
@@ -557,7 +522,7 @@
         {
             const list = $( 'archivedList' );
             list.hidden = ! list.hidden;
-            this.classList.toggle( 'is-active', ! list.hidden );
+            this.setAttribute( 'aria-pressed', ! list.hidden );
         } );
 
         // The habit sheet
@@ -694,7 +659,7 @@
             const today = H.todayIso();
             if( month > H.monthOf( today ) ) month = H.monthOf( today );
 
-            document.querySelectorAll( '[data-view]' ).forEach( b => b.classList.toggle( 'is-active', b.dataset.view === view ) );
+            document.querySelectorAll( '[data-view]' ).forEach( b => b.setAttribute( 'aria-pressed', b.dataset.view === view ) );
             $( 'todayView' ).hidden = view !== 'today';
             $( 'monthView' ).hidden = view !== 'month';
             document.querySelector( '.page-inner' ).classList.toggle( 'month', view === 'month' );
@@ -726,7 +691,7 @@
             const al = $( 'archivedList' );
             al.innerHTML = '';
             arch.forEach( h => al.appendChild( archivedRow( h ) ) );
-            if( ! arch.length ) { al.hidden = true; $( 'archivedToggle' ).classList.remove( 'is-active' ); }
+            if( ! arch.length ) { al.hidden = true; $( 'archivedToggle' ).setAttribute( 'aria-pressed', false ); }
 
             $( 'homeEmpty' ).hidden = habits.length > 0;
         }
@@ -1008,9 +973,9 @@
         function renderDays()
         {
             const preset = hs.custom ? 'custom' : presetOf( hs.days );
-            document.querySelectorAll( '[data-preset]' ).forEach( b => b.classList.toggle( 'is-active', b.dataset.preset === preset ) );
+            document.querySelectorAll( '[data-preset]' ).forEach( b => b.setAttribute( 'aria-pressed', b.dataset.preset === preset ) );
             $( 'dowRow' ).hidden = ! hs.custom;
-            document.querySelectorAll( '[data-dow]' ).forEach( b => b.classList.toggle( 'is-active', hs.days.indexOf( +b.dataset.dow ) !== -1 ) );
+            document.querySelectorAll( '[data-dow]' ).forEach( b => b.setAttribute( 'aria-pressed', hs.days.indexOf( +b.dataset.dow ) !== -1 ) );
         }
 
         function saveHabit()

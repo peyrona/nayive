@@ -1158,7 +1158,7 @@
         bar.appendChild( C.ic( c.video ? "video" : "phone" ) );
         bar.appendChild( h( "span", { text: C.TF( "chat.groupCallOn", { n: n, max: 4 } ) } ) );
         if( ! call && n < 4 )
-            bar.appendChild( h( "button", { class: "pill is-active", attrs: { type: "button" }, text: T( "chat.join" ),
+            bar.appendChild( h( "button", { class: "btn text sm primary", attrs: { type: "button" }, text: T( "chat.join" ),
                                             on: { click: function () { joinFromBar( c, w ); } } } ) );
     };
 

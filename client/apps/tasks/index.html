@@ -24,6 +24,8 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -37,6 +39,8 @@
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
     <script src="../shared/ayni/ayni-fields.js" defer></script>
+    <script src="../shared/ayni/ayni-pickers.js" defer></script>
+    <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
@@ -51,7 +55,7 @@
 
     <style>
         /* Base reset, card shell (.page/.page-inner/.card), .header, .btn,
-           .pill and inputs all come from ../shared/app.css. Only what is unique
+           Inputs all come from ../shared/app.css. Only what is unique
            to the task list lives here. */
 
 
@@ -340,9 +344,9 @@
                     <!-- Status + filters -->
                     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 4px;">
                         <span id="statusText" style="font-size: 0.80rem; color: var(--text-dim);"></span>
-                        <div style="display: flex; gap: 6px;">
-                            <button class="pill" data-filter="active" data-i18n="tasks.filterActive"></button>
-                            <button class="pill" data-filter="done" data-i18n="tasks.filterDone"></button>
+                        <div class="choices" role="group" data-i18n-attr="aria-label:planner.view">
+                            <button class="btn text sm bordered" type="button" aria-pressed="false" data-filter="active" data-i18n="tasks.filterActive"></button>
+                            <button class="btn text sm bordered" type="button" aria-pressed="false" data-filter="done" data-i18n="tasks.filterDone"></button>
                         </div>
                     </div>
 
@@ -448,7 +452,7 @@
             // first task that has some, and fold it again on leaving.
             tour: function () {
                 const T = Ayni.t;
-                const filterTo = f => function () { const b = document.querySelector( '[data-filter="' + f + '"]' ); if( b && ! b.classList.contains( 'is-active' ) ) b.click(); };
+                const filterTo = f => function () { const b = document.querySelector( '[data-filter="' + f + '"]' ); if( b && b.getAttribute( 'aria-pressed' ) !== 'true' ) b.click(); };
                 let unfolded = false;
                 const unfold = function () { if( document.querySelector( '.subtask-row' ) ) return; const c = document.querySelector( '.task-chevron:not(.expanded)' ); if( c ) { c.click(); unfolded = true; } };
                 const refold = function () { if( ! unfolded ) return; unfolded = false; const c = document.querySelector( '.task-chevron.expanded' ); if( c ) c.click(); };
@@ -1902,7 +1906,7 @@
 
             document.querySelectorAll( '[data-filter]' ).forEach( function( btn )
             {
-                btn.classList.toggle( 'is-active', btn.dataset.filter === filter );
+                btn.setAttribute( 'aria-pressed', btn.dataset.filter === filter );
             });
 
             document.getElementById( 'clearCompletedRow' ).style.display =

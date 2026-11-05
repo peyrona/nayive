@@ -24,10 +24,9 @@
 .btn.primary.ok, .btn.primary.warn { color: var(--on-accent); } /* a default button keeps a legible icon */
 /* Rule: a danger button is never the default. If markup breaks it, show it as a plain danger button */
 .btn.primary.danger { background: transparent; border-color: transparent; color: var(--danger); }
-/* A toggle that is on: a soft Accent tint behind an Accent icon, never a fill (a fill means the default button). A round
-   button that is a tab (role="tab") shows its chosen state the same way. */
-.btn[aria-pressed="true"], .btn[role="tab"][aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
-.btn[aria-pressed="true"]:hover:not([aria-disabled="true"]), .btn[role="tab"][aria-selected="true"]:hover:not([aria-disabled="true"]) {
+/* A toggle that is on: a soft Accent tint behind an Accent icon, never a fill (a fill means the default button). */
+.btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.btn[aria-pressed="true"]:hover:not([aria-disabled="true"]) {
   background: color-mix(in oklab, var(--accent) 24%, var(--card)); color: var(--accent); }
 /* RULE: a disabled button uses aria-disabled="true" (not the disabled attribute): faded, ignores clicks and Enter,
    but stays focusable and shows its tooltip, which can say why it is unavailable */

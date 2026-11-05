@@ -77,11 +77,9 @@
     {
         var every = everyPicked();
         E.$( "pickAllBtn" ).textContent = E.T( every ? "mail.pickNone" : "mail.pickAll" );
-        var sel = E.$( "pickLabel" ), was = sel.value;
-        sel.textContent = "";
-        sel.appendChild( h( "option", { text: E.T( "mail.pickAny" ), attrs: { value: "" } } ) );
-        S.labels.forEach( function ( l ) { sel.appendChild( h( "option", { text: l.name, attrs: { value: l.id } } ) ); } );
-        sel.value = S.labels.some( function ( l ) { return l.id === was; } ) ? was : "";
+        var sel = Ayni.picker( E.$( "pickLabel" ) ), was = sel.value;     // an Ayni list picker
+        sel.options = [ { value: "", text: E.T( "mail.pickAny" ) } ].concat( S.labels.map( function ( l ) { return { value: l.id, text: l.name }; } ) );
+        sel.set( S.labels.some( function ( l ) { return l.id === was; } ) ? was : "" );
         E.$( "pickLabel" ).parentNode.hidden = ! S.labels.length;
         document.getElementById( "pickSheet" ).showModal();
     }
@@ -121,9 +119,9 @@
 
     async function pickMatching()
     {
-        var days = +E.$( "pickOlder" ).value, seen = E.$( "pickSeen" ).value;
+        var days = +Ayni.picker( E.$( "pickOlder" ) ).value, seen = Ayni.picker( E.$( "pickSeen" ) ).value;
         var from = Ayni.matcher( E.$( "pickFrom" ).value ), subj = Ayni.matcher( E.$( "pickSubject" ).value );
-        var label = E.$( "pickLabel" ).value, attach = E.$( "pickAttach" ).checked, starred = E.$( "pickStarred" ).checked;
+        var label = Ayni.picker( E.$( "pickLabel" ) ).value, attach = E.$( "pickAttach" ).checked, starred = E.$( "pickStarred" ).checked;
         var before = days ? Date.now() - days * 86400000 : 0;
         document.getElementById( "pickSheet" ).close();
         if( ! await loadAll() ) return;

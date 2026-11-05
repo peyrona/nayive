@@ -87,10 +87,10 @@ function renderFilters()
         fav:    TF( 'bookmarks.filterFav', { n: fav } ),
         recent: T( 'bookmarks.filterRecent' )
     };
-    document.querySelectorAll( '#filterRow .pill' ).forEach( function( p )
+    document.querySelectorAll( '#filterRow .btn' ).forEach( function( p )
     {
         p.textContent = labels[ p.dataset.filter ];
-        p.classList.toggle( 'is-active', ! query && filter === p.dataset.filter );
+        p.setAttribute( 'aria-pressed', ! query && filter === p.dataset.filter );
     } );
 }
 
@@ -197,7 +197,7 @@ function itemHtml( n, withPath )
                ? '<img alt="" loading="lazy" decoding="async"' + ( iconOk.has( host ) ? ' class="ok"' : '' ) +
                  ' src="' + esc( ICON_API + encodeURIComponent( host ) ) + '">' : '';
     const tags = n.tags.length
-               ? '<div class="bm-tags">' + n.tags.map( function( t ) { return '<button type="button" class="pill bm-tag" data-tag="' + esc( t ) + '">#' + esc( t ) + '</button>'; } ).join( '' ) + '</div>'
+               ? '<div class="bm-tags">' + n.tags.map( function( t ) { return '<button type="button" class="btn text sm bordered bm-tag" data-tag="' + esc( t ) + '">#' + esc( t ) + '</button>'; } ).join( '' ) + '</div>'
                : '';
     return '<div class="' + cls + '" data-id="' + esc( n.id ) + '" role="option" tabindex="-1" title="' + esc( n.url ) + '">' +
            '<div class="bm-top">' + tick + '<span class="bm-ic" style="--hue:' + hueOf( domainOf( n.url ) || n.title ) + '">' + esc( initialOf( n ) ) + img + '</span>' +

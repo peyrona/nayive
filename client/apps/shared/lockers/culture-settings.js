@@ -30,10 +30,9 @@ function t( k ) { return window.Ayni ? Ayni.t( k ) : k; }
 
 function el( tag, cls, text, parent ) { return S.engine.el( tag, cls, text, parent ); }   // only once open() has S
 
-// Layout only: every control is a shared one (select, input, .switch,
-// .btn, .pill, the browser's own tick-box).
+// Layout only: every control is a shared one (Ayni list picker, input, .switch,
+// .btn, the browser's own tick-box).
 var STYLE =
-".salon-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }" +
 ".salon-pane { min-height: 330px; }" +
 ".salon-h { margin: 14px 0 6px; font-size: 0.8rem; color: var(--text-dim); }" +
 ".salon-h:first-child { margin-top: 0; }" +
@@ -64,32 +63,17 @@ function open( kind )
     var ui  = Ayni.dialog( { title: t( sci ? "sci.settings" : "salon.settings" ), big: true, id: "salonSettings" } );
     var sheet = ui.body;
 
+    var tabs  = el( "div", null, null, sheet );
     var style = el( "style", null, STYLE + S.faces(), sheet );
-    var tabs  = el( "div", "salon-tabs", null, sheet );
     tabs.setAttribute( "role", "tablist" );
+    tabs.setAttribute( "aria-label", t( sci ? "sci.settings" : "salon.settings" ) );
     var panes = {};
     var TABS = [ [ "content", "salon.tabContent" ], [ "langs", "salon.tabLangs" ],
                  sci ? [ "news", "sci.tabNews" ] : [ "art", "salon.tabArt" ], [ "look", "salon.tabLook" ] ];
     TABS.forEach( function ( x )
     {
-        var b = el( "button", "pill", t( x[ 1 ] ), tabs );
-        b.type = "button";
-        b.setAttribute( "role", "tab" );
-        b.dataset.tab = x[ 0 ];
-        b.addEventListener( "click", function () { show( x[ 0 ] ); } );
         panes[ x[ 0 ] ] = el( "div", "salon-pane", null, sheet );
-        panes[ x[ 0 ] ].setAttribute( "role", "tabpanel" );
     } );
-    function show( id )
-    {
-        [].forEach.call( tabs.children, function ( b )
-        {
-            var on = b.dataset.tab === id;
-            b.classList.toggle( "is-active", on );
-            b.setAttribute( "aria-selected", on ? "true" : "false" );
-        } );
-        for( var k in panes ) panes[ k ].hidden = k !== id;
-    }
 
     var bClose = Ayni.dialogButton( "close", t( "ui.close" ) );
     ui.place( [ bClose ] );                       // a lone × goes in the title row
@@ -98,7 +82,7 @@ function open( kind )
 
     ui.show();
     NayiveUI.applySheetButtons( ui.dialog );
-    show( "content" );
+    Ayni.tabs( tabs, { value: "content", items: TABS.map( function ( x ) { return { value: x[ 0 ], label: t( x[ 1 ] ), panel: panes[ x[ 0 ] ] }; } ) } );
     [].forEach.call( sheet.querySelectorAll( ".salon-pane" ), function ( p ) { el( "p", "salon-note", "…", p ); } );
 
     // `base`: the settings as read, what closing compares with (save). A read
@@ -116,11 +100,11 @@ function open( kind )
         readOnly = true;
         cfg = JSON.parse( JSON.stringify( e && e.local || A.normalise( null ) ) );
         drawAll();
-        [].forEach.call( sheet.querySelectorAll( ".salon-pane input, .salon-pane select, .salon-pane button" ),
-                         function ( x ) { if( x.matches( ".btn" ) ) x.ariaDisabled = true; else x.disabled = true; } );
+        [].forEach.call( sheet.querySelectorAll( ".salon-pane input, .salon-pane .picker, .salon-pane button" ),
+                         function ( x ) { if( x.matches( ".btn" ) ) x.ariaDisabled = true; else if( x.matches( ".picker" ) ) Ayni.picker( x ).disabled = true; else x.disabled = true; } );
         var msg = el( "p", "salon-note", t( "salon.readFail" ), null );
         msg.setAttribute( "role", "status" );
-        sheet.insertBefore( msg, tabs );
+        tabs.after( msg );
     } );
 
     function drawAll()
@@ -156,22 +140,18 @@ function open( kind )
         i.addEventListener( "change", function () { onChange( i.checked ); } );
         return i;
     }
+    // An Ayni list picker with its label; returns its controller (.value)
     function choose( parent, label, value, options, onChange )
     {
         var f = el( "div", "field", null, parent );
         var id = "salon-" + Math.random().toString( 36 ).slice( 2 );
         var l = el( "label", null, label, f );
         l.htmlFor = id;
-        var s = el( "select", null, null, f );
+        var s = el( "div", null, null, f );
         s.id = id;
-        options.forEach( function ( o )
-        {
-            var x = el( "option", null, o[ 1 ], s );
-            x.value = String( o[ 0 ] );
-        } );
-        s.value = String( value );
-        s.addEventListener( "change", function () { onChange( s.value ); } );
-        return s;
+        s.setAttribute( "aria-label", label );
+        return Ayni.picker( s, { options: options.map( function ( o ) { return { value: String( o[ 0 ] ), text: o[ 1 ] }; } ), value: String( value ),
+                                 onChange: function ( v ) { onChange( v ); } } );
     }
     function iconBtn( parent, icon, title, onClick )
     {
@@ -248,9 +228,11 @@ function open( kind )
         } );
         el( "p", "salon-note", t( sci ? "sci.skyFirst" : "salon.weatherFirst" ), p );
 
-        choose( el( "div", null, null, p ), t( "salon.turn" ), cfg.turn,
+        var turn = el( "div", null, null, p );
+        turn.style.marginTop = "14px";
+        choose( turn, t( "salon.turn" ), cfg.turn,
                 [ 3, 7, 10, 15 ].map( function ( m ) { return [ m * 60, m + " min" ]; } ),
-                function ( v ) { cfg.turn = Number( v ); } ).parentNode.style.marginTop = "14px";
+                function ( v ) { cfg.turn = Number( v ); } );
     }
 
     function move( l, by )
@@ -484,9 +466,11 @@ function open( kind )
         }
         sample();
 
-        choose( el( "div", null, null, p ), t( "salon.contrast" ), cfg.contrast,
+        var high = el( "div", null, null, p );
+        high.style.marginTop = "14px";
+        choose( high, t( "salon.contrast" ), cfg.contrast,
                 [ [ "normal", t( "salon.contrast.normal" ) ], [ "high", t( "salon.contrast.high" ) ] ],
-                function ( v ) { cfg.contrast = v; sample(); } ).parentNode.style.marginTop = "14px";
+                function ( v ) { cfg.contrast = v; sample(); } );
     }
 
     //------------------------------------------------------------------------//

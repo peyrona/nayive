@@ -29,6 +29,8 @@
     <link rel="stylesheet" href="shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="shared/ayni/ayni-fields.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-pickers.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="shared/theme.css">
     <link rel="stylesheet" href="shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -42,6 +44,8 @@
     <script src="shared/ayni/ayni-lists.js" defer></script>
     <script src="shared/ayni/ayni-help.js" defer></script>
     <script src="shared/ayni/ayni-fields.js" defer></script>
+    <script src="shared/ayni/ayni-pickers.js" defer></script>
+    <script src="shared/ayni/ayni-layout.js" defer></script>
     <script src="shared/locker.js"></script>
     <script src="shared/ui.js" defer></script>
     <!-- Only for signing a regular account out (the 403 below): its saves
@@ -101,15 +105,16 @@
         }
         /* Look + focus from app.css (FORM FIELD) - the same text field as every
            other app. Only the full-row width is local. */
-        input, select { width: 100%; }
+        input, .picker { width: 100%; }
         .row2 { display: flex; gap: 12px; }
         .row2 > * { flex: 1; }
 
         select:disabled, input:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        /* One tab per section (shared .pill buttons); only the chosen section
-           shows, so the page no longer grows with every new setting. */
-        .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 0 auto; }   /* in the brand row, at the right */
+        /* One tab per section (Ayni's tabs); only the chosen section shows, so
+           the page no longer grows with every new setting. */
+        #tabs { margin: 0 0 14px; border-radius: var(--ctl-radius) var(--ctl-radius) 0 0; }
+        section[role="tabpanel"] { padding: 20px 20px 22px; overflow: visible; }
 
         /* Action buttons use the shared .btn convention (round icon buttons,
            filled in by shared/ui.js). Anything else falls back to this plain pill. */
@@ -198,22 +203,17 @@
             <path d="m9 12 2 2 4-4"/>
         </svg>
         <h1 class="app-title">Nayive · Admin</h1>
-        <!-- Short labels, so the four fit one row on a phone; each section's own
-             heading has the full name. Hidden on first run, when the admin
-             account is the only section. -->
-        <div class="tabs hide" id="tabs" role="tablist">
-            <button class="pill" type="button" role="tab" data-tab="adminSec">Account</button>
-            <button class="pill" type="button" role="tab" data-tab="sitesSec">Web sites</button>
-            <button class="pill" type="button" role="tab" data-tab="usersSec">Users</button>
-            <button class="pill" type="button" role="tab" data-tab="langSec">Language</button>
-        </div>
     </div>
+    <!-- Short labels, so the four fit one row on a phone; each section's own
+         heading has the full name. Hidden on first run, when the admin account
+         is the only section. -->
+    <div id="tabs" role="tablist" aria-label="Sections" hidden></div>
 
     <p class="msg" id="saveMsg"></p>
     <p class="msg err" id="fatal"></p>
 
     <!-- ADMIN ACCOUNT -------------------------------------------------------- -->
-    <section id="adminSec" class="hide" role="tabpanel">
+    <section id="adminSec" hidden>
         <h2>Admin account</h2>
         <p class="banner" id="firstRunBanner">
             First run: create the admin account. It is saved as soon as both
@@ -243,7 +243,7 @@
     </section>
 
     <!-- WEB SITES ---------------------------------------------------------- -->
-    <section id="sitesSec" class="hide" role="tabpanel">
+    <section id="sitesSec" hidden>
         <h2>Web sites</h2>
         <p class="hint lead">
             Plain web sites served by this server, apart from Nayive. Each
@@ -263,7 +263,7 @@
     </section>
 
     <!-- USERS ------------------------------------------------------------- -->
-    <section id="usersSec" class="hide" role="tabpanel">
+    <section id="usersSec" hidden>
         <p class="hint lead">The <strong>+</strong> button above the trash icons adds an empty row for a new user;
            its (&times;) drops the row again.
            Every change is saved on its own when you leave the field (or press Enter);
@@ -292,7 +292,7 @@
     </section>
 
     <!-- LANGUAGE (language/admin.js) ------------------------------------- -->
-    <section id="langSec" class="hide lang-admin" role="tabpanel">
+    <section id="langSec" class="lang-admin" hidden>
         <h2>Language</h2>
         <p class="hint lead">
             The translation engines and dictionaries of the Language app, for
@@ -322,10 +322,13 @@
     <div class="body">
         <div class="field">
             <label for="addKind" data-i18n="language.engineKind"></label>
-            <select id="addKind">
-                <option value="libretranslate">LibreTranslate</option>
-                <option value="lingva">Lingva</option>
-            </select>
+            <div class="picker" id="addKind">
+                <input type="hidden" value="libretranslate">
+                <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                    <li role="option" data-value="libretranslate">LibreTranslate</li>
+                    <li role="option" data-value="lingva">Lingva</li>
+                </ul></div>
+            </div>
         </div>
         <div class="field">
             <label for="addName" data-i18n="language.engineName"></label>
@@ -408,27 +411,6 @@
     // One section at a time. The last tab chosen is remembered in this browser
     // only (a convenience - the page works the same without it).
     var TAB_KEY = 'nayive-admin-tab';
-    var TABS    = [].map.call( document.querySelectorAll( '#tabs [data-tab]' ),
-                               function ( b ) { return b.dataset.tab; } );
-
-    function showTab( id )
-    {
-        if ( TABS.indexOf( id ) < 0 ) id = TABS[ 0 ];
-        document.querySelectorAll( '#tabs [data-tab]' ).forEach( function ( b )
-        {
-            var on = b.dataset.tab === id;
-            b.classList.toggle( 'is-active', on );
-            b.setAttribute( 'aria-selected', on ? 'true' : 'false' );
-        } );
-        TABS.forEach( function ( t ) { $( t ).classList.toggle( 'hide', t !== id ); } );
-        try { localStorage.setItem( TAB_KEY, id ); } catch ( e ) {}
-    }
-
-    $( 'tabs' ).addEventListener( 'click', function ( e )
-    {
-        var b = e.target.closest( '[data-tab]' );
-        if ( b ) showTab( b.dataset.tab );
-    } );
 
     // -- home ---------------------------------------------------------------
     // The icon and the title lead home, as in every app (shared/ui.js) - but
@@ -488,7 +470,7 @@
                                                   : 'new password';
 
         if ( !CONFIGURED )
-            $( 'adminSec' ).classList.remove( 'hide' );   // first run: no tabs
+            $( 'adminSec' ).hidden = false;   // first run: no tabs
         else
         {
             SITES_ORIG = data.sites_dir || '';
@@ -497,10 +479,13 @@
 
             renderUsers( data.users || [] );
 
-            $( 'tabs' ).classList.remove( 'hide' );
             var last = null;
             try { last = localStorage.getItem( TAB_KEY ); } catch ( e ) {}
-            showTab( last );
+            var names = { adminSec: 'Account', sitesSec: 'Web sites', usersSec: 'Users', langSec: 'Language' };
+            $( 'tabs' ).hidden = false;
+            Ayni.tabs( '#tabs', { value: names[ last ] ? last : 'adminSec',
+                items: Object.keys( names ).map( function ( id ) { return { value: id, label: names[ id ], panel: $( id ) }; } ),
+                onSelect: function ( id ) { try { localStorage.setItem( TAB_KEY, id ); } catch ( e ) {} } } );
         }
     }
 

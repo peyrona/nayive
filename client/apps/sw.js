@@ -30,7 +30,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-7c1761d50470";
+var CACHE_VERSION = "nayive-eead07f249f3";
 /* @end */
 
 /* @generated:precache */
@@ -194,22 +194,26 @@ var PRECACHE_SHELL = [
     "shared/ayni/ayni-base.js",
     "shared/ayni/ayni-buttons.css",
     "shared/ayni/ayni-buttons.js",
-    "shared/ayni/ayni-toasts.css",
-    "shared/ayni/ayni-toasts.js",
     "shared/ayni/ayni-dialogs.css",
     "shared/ayni/ayni-dialogs.js",
-    "shared/ayni/ayni-menus.css",
-    "shared/ayni/ayni-menus.js",
-    "shared/ayni/ayni-search.css",
-    "shared/ayni/ayni-search.js",
-    "shared/ayni/ayni-lists.css",
-    "shared/ayni/ayni-help.css",
     "shared/ayni/ayni-fields.css",
-    "shared/ayni/ayni-lists.js",
-    "shared/ayni/ayni-help.js",
     "shared/ayni/ayni-fields.js",
+    "shared/ayni/ayni-help.css",
+    "shared/ayni/ayni-help.js",
     "shared/ayni/ayni-i18n.js",
     "shared/ayni/ayni-icons.js",
+    "shared/ayni/ayni-lists.css",
+    "shared/ayni/ayni-lists.js",
+    "shared/ayni/ayni-menus.css",
+    "shared/ayni/ayni-menus.js",
+    "shared/ayni/ayni-pickers.css",
+    "shared/ayni/ayni-pickers.js",
+    "shared/ayni/ayni-layout.css",
+    "shared/ayni/ayni-layout.js",
+    "shared/ayni/ayni-search.css",
+    "shared/ayni/ayni-search.js",
+    "shared/ayni/ayni-toasts.css",
+    "shared/ayni/ayni-toasts.js",
     "shared/ayni/i18n/de.json",
     "shared/ayni/i18n/en.json",
     "shared/ayni/i18n/es.json",

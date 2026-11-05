@@ -1,5 +1,5 @@
 /* email.css - eMail's own styles. */
-/* Base reset, .app shell, .topbar, .btn, .pill, .field and the
+/* Base reset, .app shell, .topbar, .btn, .field and the
    input look all come from ../shared/app.css. eMail keeps the page still
    (the tray column and the list / message pane scroll themselves) and adds
    its rows, the message header and the reading frame. */
@@ -27,7 +27,7 @@ body.composing #listTools { display: none; }
 .mail-cfield         { display: flex; align-items: center; gap: 10px; }
 .mail-cfield label   { flex: 0 0 64px; font-size: 0.82rem; color: var(--text-dim); }
 .mail-cfield input,
-.mail-cfield select  { flex: 1 1 auto; min-width: 0; }
+.mail-cfield .picker { flex: 1 1 auto; min-width: 0; }
 .mail-cfield .btn.text { flex: 0 0 auto; }
 /* The text box: the format bar on top, then Squire's editable area. The box
    wears Ayni's field look (.input: Field line border, Text dim on hover, Accent
@@ -91,7 +91,7 @@ body.composing #listTools { display: none; }
     border-right: 1px solid var(--line);
     overflow: hidden;              /* the tree scrolls, not the column */
 }
-.mail-side .tb-select { width: 100%; }
+.mail-side .picker { width: 100%; }
 .mail-tree         { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; }
 .mail-tree li.is-missing > .ti { opacity: 0.5; }
 .mail-tree .mail-node-labels { margin-top: 8px; }
@@ -111,10 +111,11 @@ body.composing #listTools { display: none; }
 
 /* SPLIT (read.js): a desktop window wide enough - the list at its width
    (the handle drags it), the open message on its right. Writing takes it all. */
-body.split .mail-main          { flex: 0 1 var(--mail-list-w, 380px); }
+body.mail-split .mail-main          { flex: 0 1 var(--mail-list-w, 380px); }
 .mail-pane                     { flex: 1 1 0; min-width: 0; overflow-y: auto; }
 .mail-pane .empty-state        { height: 100%; justify-content: center; }
-body.split.composing .mail-main { flex: 1 1 auto; }
+body.mail-split.composing .mail-main { flex: 1 1 auto; }
+body.composing .mail-main[hidden]    { display: flex !important; }   /* writing needs it, a collapsed list or not */
 body.composing .mail-pane,
 body.composing #readRz         { display: none; }
 
@@ -179,7 +180,6 @@ body.composing #readRz         { display: none; }
 .mail-chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c, var(--accent)); }
 .mail-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 10px; }
 /* Settings' tabs (as the desktop's) and a label's colours. */
-.mail-tabs     { display: flex; gap: 6px; margin: 0 0 16px; }
 .mail-swatches { display: flex; flex-wrap: wrap; gap: 10px; }
 .mail-swatch
 {
@@ -223,7 +223,7 @@ body.composing #readRz         { display: none; }
 .mail-meta-btn  { display: inline-flex; vertical-align: middle; margin: -4px 4px 0 0; }
 .mail-meta-btn svg { transition: transform var(--tr-move); }
 .mail-meta-btn.open svg { transform: rotate(180deg); }
-.mail-images-btn { vertical-align: middle; margin: -3px 6px 0 0; padding: 4px 12px; }
+.mail-images-btn { vertical-align: middle; margin: -3px 6px 0 0; }
 .mail-head .mail-chips { display: inline-flex; vertical-align: middle; margin: -3px 0 0; font-size: 1rem; line-height: normal; }
 .mail-meta
 {

@@ -25,6 +25,8 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -38,6 +40,8 @@
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
     <script src="../shared/ayni/ayni-fields.js" defer></script>
+    <script src="../shared/ayni/ayni-pickers.js" defer></script>
+    <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <link rel="manifest" href="manifest.json">
@@ -138,7 +142,7 @@
                  shared Ayni.tree, browse.js). A column on a wide screen; on a
                  phone it slides in from the folder button over the list. -->
             <nav id="side" class="mail-side tree-pane" hidden>
-                <select id="acctSel" class="tb-select" hidden data-i18n-attr="aria-label:mail.account"></select>
+                <div class="picker" id="acctSel" hidden data-i18n-attr="aria-label:mail.account"></div>
                 <ul id="tree" class="mail-tree" data-fit data-i18n-attr="aria-label:mail.labelsAndTrays"></ul>
             </nav>
 
@@ -170,7 +174,7 @@
                     <!-- An advanced search in force: what it asks, and the way out (search.js). -->
                     <div id="advBar" class="mail-images-bar" hidden>
                         <span id="advBarText" class="mail-adv-text"></span>
-                        <button id="advOffBtn" class="pill" type="button" data-i18n="mail.advOff"></button>
+                        <button id="advOffBtn" class="btn text sm bordered" type="button" data-i18n="mail.advOff"></button>
                     </div>
                     <div id="list" class="mail-list" role="listbox" aria-multiselectable="true"></div>
                     <div id="listEmpty" class="empty-state" hidden>
@@ -186,7 +190,7 @@
                     <div class="mail-head">
                         <h2 id="readSubject" class="mail-subject"></h2>
                         <button id="metaBtn" class="btn sm mail-meta-btn" type="button" data-icon="chevron" aria-controls="readMeta" aria-expanded="false" data-i18n-attr="data-tip:mail.details, aria-label:mail.details"></button>
-                        <button id="imagesBtn" class="pill mail-images-btn" type="button" hidden aria-pressed="false" data-i18n="mail.showImages"></button>
+                        <button id="imagesBtn" class="btn text sm bordered mail-images-btn" type="button" hidden aria-pressed="false" data-i18n="mail.showImages"></button>
                         <span id="readLabels" class="mail-chips" hidden></span>
                     </div>
                     <div id="readMeta" class="mail-meta" hidden></div>
@@ -200,7 +204,7 @@
                 <section id="composeView" class="mail-compose" hidden>
                     <div id="cFromRow" class="mail-cfield" hidden>
                         <label for="cFrom" data-i18n="mail.from"></label>
-                        <select id="cFrom"></select>
+                        <div class="picker" id="cFrom"></div>
                     </div>
                     <div class="mail-cfield">
                         <label for="cTo" data-i18n="mail.to"></label>
@@ -243,7 +247,7 @@
 
             <!-- SPLIT: a desktop window wide enough shows the open message
                  beside the list. #readView moves in here and back (read.js). -->
-            <div id="readRz" class="pane-resizer" hidden></div>
+            <div id="readRz" class="splitter" hidden></div>
             <section id="readPane" class="mail-pane" hidden>
                 <div id="readNone" class="empty-state">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><polyline points="22 6 12 13 2 6"></polyline></svg>
@@ -299,23 +303,23 @@
         <div class="body">
             <div class="field">
                 <label for="pickOlder" data-i18n="mail.pickOlder"></label>
-                <select id="pickOlder">
-                    <option value="" data-i18n="mail.pickAny"></option>
-                    <option value="7"   data-i18n="mail.pickWeek"></option>
-                    <option value="30"  data-i18n="mail.pickMonth"></option>
-                    <option value="90"  data-i18n="mail.pick3Months"></option>
-                    <option value="180" data-i18n="mail.pick6Months"></option>
-                    <option value="365" data-i18n="mail.pickYear"></option>
-                    <option value="730" data-i18n="mail.pick2Years"></option>
-                </select>
+                <div class="picker" id="pickOlder"><input type="hidden" value=""><div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                        <li role="option" data-value="" data-i18n="mail.pickAny"></li>
+                        <li role="option" data-value="7" data-i18n="mail.pickWeek"></li>
+                        <li role="option" data-value="30" data-i18n="mail.pickMonth"></li>
+                        <li role="option" data-value="90" data-i18n="mail.pick3Months"></li>
+                        <li role="option" data-value="180" data-i18n="mail.pick6Months"></li>
+                        <li role="option" data-value="365" data-i18n="mail.pickYear"></li>
+                        <li role="option" data-value="730" data-i18n="mail.pick2Years"></li>
+                    </ul></div></div>
             </div>
             <div class="field">
                 <label for="pickSeen" data-i18n="mail.pickSeen"></label>
-                <select id="pickSeen">
-                    <option value=""       data-i18n="mail.pickAny"></option>
-                    <option value="unread" data-i18n="mail.pickUnread"></option>
-                    <option value="read"   data-i18n="mail.pickRead"></option>
-                </select>
+                <div class="picker" id="pickSeen"><input type="hidden" value=""><div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                        <li role="option" data-value="" data-i18n="mail.pickAny"></li>
+                        <li role="option" data-value="unread" data-i18n="mail.pickUnread"></li>
+                        <li role="option" data-value="read" data-i18n="mail.pickRead"></li>
+                    </ul></div></div>
             </div>
             <div class="field">
                 <label for="pickFrom" data-i18n="mail.pickFrom"></label>
@@ -327,7 +331,7 @@
             </div>
             <div class="field">
                 <label for="pickLabel" data-i18n="mail.pickLabel"></label>
-                <select id="pickLabel"></select>
+                <div class="picker" id="pickLabel"></div>
             </div>
             <label class="mail-pick-switch switch end">
                 <span data-i18n="mail.pickAttach"></span>
@@ -384,15 +388,15 @@
             <div class="field-row">
                 <div class="field">
                     <label for="advSeen" data-i18n="mail.pickSeen"></label>
-                    <select id="advSeen">
-                        <option value=""       data-i18n="mail.pickAny"></option>
-                        <option value="unread" data-i18n="mail.pickUnread"></option>
-                        <option value="read"   data-i18n="mail.pickRead"></option>
-                    </select>
+                    <div class="picker" id="advSeen"><input type="hidden" value=""><div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                        <li role="option" data-value="" data-i18n="mail.pickAny"></li>
+                        <li role="option" data-value="unread" data-i18n="mail.pickUnread"></li>
+                        <li role="option" data-value="read" data-i18n="mail.pickRead"></li>
+                    </ul></div></div>
                 </div>
                 <div class="field">
                     <label for="advLabel" data-i18n="mail.pickLabel"></label>
-                    <select id="advLabel"></select>
+                    <div class="picker" id="advLabel"></div>
                 </div>
             </div>
             <label class="mail-pick-switch switch end">
@@ -425,18 +429,18 @@
             <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
         </header>
         <div class="body">
-            <div class="mail-tabs" role="tablist">
-                <button class="pill is-active" type="button" role="tab" data-tab="accounts" data-i18n="mail.tabAccounts"></button>
-                <button class="pill"           type="button" role="tab" data-tab="general"  data-i18n="mail.tabGeneral"></button>
+            <div id="setTabs" role="tablist" data-i18n-attr="aria-label:mail.settings">
+                <button type="button" role="tab" aria-controls="setAccounts" data-value="accounts" data-i18n="mail.tabAccounts"></button>
+                <button type="button" role="tab" aria-controls="setGeneral" data-value="general" data-i18n="mail.tabGeneral"></button>
             </div>
 
-            <div data-pane="accounts">
+            <div id="setAccounts">
                 <div id="acctList" class="mail-acct-list"></div>
                 <div class="section-label" data-i18n="mail.addAccount"></div>
                 <div class="field-row">
                     <div class="field mail-prov">
                         <label for="addProv" data-i18n="mail.provider"></label>
-                        <select id="addProv"></select>
+                        <div class="picker" id="addProv"></div>
                     </div>
                     <div class="field">
                         <label for="addEmail" data-i18n="mail.email"></label>
@@ -507,7 +511,7 @@
 
             </div>
 
-            <div data-pane="general" hidden>
+            <div id="setGeneral" hidden>
                 <div class="section-label" data-i18n="mail.tray.trash"></div>
                 <div class="field">
                     <label for="trashDays"><span data-i18n="mail.trashDays"></span>

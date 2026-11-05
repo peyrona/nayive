@@ -115,7 +115,7 @@
         {
             if( ! String( getSelection() ) ) E.toggleMeta();     // not while its words are being selected
         } );
-        E.$( "acctSel" ).addEventListener( "change", function ( e ) { E.openAccount( e.target.value ); } );
+        E.$( "acctSel" ).addEventListener( "ayni:change", function ( e ) { E.openAccount( e.detail.value ); } );
         E.$( "syncIndicator" ).addEventListener( "click", function () { E.refresh( true ); } );
 
         // The magnifier opens the field; its × and Escape clear the search and fold it.

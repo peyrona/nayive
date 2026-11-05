@@ -22,12 +22,13 @@ function fillFolderSelect( sel, chosen, skip )
         bad.add( id );
         for( const d of descendants( id ) ) bad.add( d.id );
     }
-    sel.innerHTML = folderList().filter( function( e ) { return ! bad.has( e.f.id ); } ).map( function( e )
+    // An Ayni list picker: the list shows the tree's indents, the closed field the name alone
+    const pk = Ayni.picker( sel );
+    pk.options = folderList().filter( function( e ) { return ! bad.has( e.f.id ); } ).map( function( e )
     {
-        return '<option value="' + esc( e.f.id ) + '"' + ( e.f.id === chosen ? ' selected' : '' ) + '>' +
-               '   '.repeat( e.depth ) + esc( folderName( e.f ) ) + '</option>';
-    } ).join( '' );
-    if( ! sel.value ) sel.value = ROOT;
+        return { value: e.f.id, text: '   '.repeat( e.depth ) + folderName( e.f ), short: folderName( e.f ) };
+    } );
+    pk.set( pk.options.some( function( o ) { return o.value === chosen; } ) ? chosen : ROOT );
 }
 
 // Where a new thing goes: the folder on screen, or the root while a search
@@ -170,7 +171,7 @@ function saveBookmarkSheet()
         notes:    document.getElementById( 'bmNotes' ).value.trim(),
         favorite: document.getElementById( 'bmFav' ).checked
     };
-    const dest = document.getElementById( 'bmFolder' ).value || ROOT;
+    const dest = Ayni.picker( document.getElementById( 'bmFolder' ) ).value || ROOT;
 
     let b;
     if( editId && node( editId ) )
@@ -209,7 +210,7 @@ function saveFolderSheet()
     if( ! canEdit() ) return;
     const name = document.getElementById( 'folderName' ).value.trim();
     if( ! name ) { document.getElementById( 'folderName' ).focus(); return; }
-    const dest = document.getElementById( 'folderParent' ).value || ROOT;
+    const dest = Ayni.picker( document.getElementById( 'folderParent' ) ).value || ROOT;
 
     if( folderEdit && node( folderEdit ) )
     {

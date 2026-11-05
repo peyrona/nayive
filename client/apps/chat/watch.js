@@ -399,7 +399,7 @@
 
     function pill( icon, key, fn )
     {
-        return h( "button", { class: "pill is-active watch-btn", attrs: { type: "button" }, on: { click: fn } }, C.ic( icon ), T( key ) );
+        return h( "button", { class: "btn text sm primary watch-btn", attrs: { type: "button" }, on: { click: fn } }, C.ic( icon ), T( key ) );
     }
 
     // Every row of the open chat, after a change.

@@ -125,10 +125,10 @@ function renderFilters()
         all: TF( 'passwords.filterAll', { n: all.length } ),
         fav: TF( 'passwords.filterFav', { n: all.filter( function( n ) { return n.fav; } ).length } )
     };
-    document.querySelectorAll( '#filterRow .pill' ).forEach( function( p )
+    document.querySelectorAll( '#filterRow .btn' ).forEach( function( p )
     {
         p.textContent = labels[ p.dataset.filter ];
-        p.classList.toggle( 'is-active', ! query && filter === p.dataset.filter );
+        p.setAttribute( 'aria-pressed', ! query && filter === p.dataset.filter );
     } );
 }
 

@@ -310,13 +310,16 @@ const ask = (o = {}) => new Promise((resolve) => {
 /* ---------- A field saved as it changes ---------- */
 /* Ayni.autoSave(field, save, { wait, msg, done }) for dialogs without Accept: save(value) runs on change, and after
    `wait` ms (700) of typing in a text field; one save at a time, in order. A failed save puts the last good value
-   back (switches, lists) and shows "Could not save." in `msg`, an element inside the dialog. Returns
+   back (switches, lists, list pickers) and shows "Could not save." in `msg`, an element inside the dialog. Returns
    { saved(value) } to tell it a value the app stored itself. */
 const autoSave = (field, save, o = {}) => {
+  /* A list picker (ayni-pickers.js): its value, its ayni:change, faded while it saves */
+  const pk = field.matches?.('.picker') && Ayni.picker ? Ayni.picker(field) : null;
   const box = field.type === 'checkbox';
-  const typed = field.tagName === 'TEXTAREA' || (field.tagName === 'INPUT' && !box && field.type !== 'radio');
-  const get = () => (box ? field.checked : field.value);
-  const put = (v) => { if (box) field.checked = v; else field.value = v; };
+  const typed = !pk && (field.tagName === 'TEXTAREA' || (field.tagName === 'INPUT' && !box && field.type !== 'radio'));
+  const get = () => (pk ? pk.value : box ? field.checked : field.value);
+  const put = (v) => { if (pk) pk.set(v); else if (box) field.checked = v; else field.value = v; };
+  const lock = (on) => { if (pk) pk.disabled = on; else field.disabled = on; };
   const say = (s) => { if (o.msg) { o.msg.textContent = s || ''; o.msg.hidden = !s; } };
   let good = get(), timer = 0, queue = Promise.resolve();
   const run = () => {
@@ -324,14 +327,14 @@ const autoSave = (field, save, o = {}) => {
     queue = queue.then(() => {
       const v = get();
       if (v === good) return;
-      if (!typed) field.disabled = true;
+      if (!typed) lock(true);
       say('');
       return Promise.resolve().then(() => save(v))
         .then(() => { good = v; o.done?.(v); }, () => { if (!typed) put(good); say(o.fail || tx('saveFailed')); })
-        .then(() => { field.disabled = false; });
+        .then(() => { lock(false); });
     });
   };
-  field.addEventListener('change', run);
+  field.addEventListener(pk ? 'ayni:change' : 'change', run);
   if (typed) field.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, o.wait || 700); });
   return { saved: (v) => { good = v; } };
 };

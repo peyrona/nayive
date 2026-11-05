@@ -26,6 +26,8 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -39,6 +41,8 @@
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
     <script src="../shared/ayni/ayni-fields.js" defer></script>
+    <script src="../shared/ayni/ayni-pickers.js" defer></script>
+    <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS (and localhost). -->
@@ -53,7 +57,7 @@
 
     <style>
         /* Base reset, card shell (.page/.page-inner/.card), .header, .btn,
-           .pill, .card-row and inputs all come from ../shared/app.css.
+           .card-row and inputs all come from ../shared/app.css.
            Only what is unique to Split lives here. */
 
 
@@ -118,6 +122,8 @@
         .home-block          { margin-top: 18px; }
         .home-block:first-child { margin-top: 4px; }
         .archived-toggle     { margin-top: 18px; }
+        #groupTabs           { margin: 0 0 12px; }
+        #entriesTab, #balancesTab { padding: 0; overflow: visible; }
 
         /* HEADER TITLE: on the group list it is the app icon + "Split" in
            --accent (shared/app.css). Open a group and that pair is swapped for
@@ -147,8 +153,7 @@
 
         /* TABS: Gastos | Saldos, at the right end of the title's row (Habits
            does the same). nowrap - they are two short pills and splitting them
-           over two lines helps nobody. The base .tabs rule is app.css's. */
-        .header .tabs        { flex: 0 0 auto; flex-wrap: nowrap; margin-left: 8px; }
+           over two lines helps nobody. */
 
         /* IN A GROUP: look left, act right (2026-10-01). ← · name · Gastos |
            Saldos on the left, the button bar on the right of the SAME row. The
@@ -190,7 +195,8 @@
         .kind-tabs           { margin: -4px 0 14px; }
         .amount-row          { display: flex; gap: 8px; align-items: stretch; margin-bottom: 14px; }
         .amount-input        { flex: 1 1 auto; min-width: 0; font-size: 1.7rem; font-weight: 700; text-align: right; padding: 8px 12px; }
-        .amount-row select   { flex: 0 0 auto; width: 7em; font-weight: 600; }   /* "USD" + arrow; the amount gets the rest */
+        .amount-row .picker  { flex: 0 0 auto; width: 7em; }
+        .amount-row .picker > .input { font-weight: 600; height: 100%; }   /* "USD" + arrow; the amount gets the rest */
         .rate-row            { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         .rate-row input      { flex: 0 1 150px; min-width: 0; }
         .rate-row .preview   { font-size: 0.85rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
@@ -200,8 +206,8 @@
         .field .field-label-row { margin-bottom: 5px; }
         .field-label-row .btn.text { padding: 3px 10px; font-size: 0.8rem; }   /* "Todos": the shared quiet button, label-sized */
         .chips               { display: flex; flex-wrap: wrap; gap: 6px; }
-        .chips .pill         { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px 4px 4px; font-size: 0.82rem; }
-        .chips .pill .avatar { width: 24px; height: 24px; font-size: 0.62rem; }
+        .chips .btn          { padding: 0 11px 0 4px; }
+        .chips .btn .avatar  { width: 24px; height: 24px; font-size: 0.62rem; }
         .parts               { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
         .part-row            { display: flex; align-items: center; gap: 8px; }
         .part-row .name      { flex: 1 1 auto; min-width: 0; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -228,7 +234,7 @@
         @media (max-width: 640px)
         {
             .amount-input        { font-size: 1.5rem; }
-            .chips .pill         { min-height: 36px; }
+            .chips .btn          { min-height: 36px; }
             .part-row input      { width: 100px; }
             .row-meta            { white-space: normal; }
         }
@@ -285,12 +291,6 @@
                                 <span id="groupBadge"></span>
                             </div>
                             <div id="groupSub" class="head-title-sub"></div>
-                        </div>
-
-                        <!-- Gastos | Saldos ride the title's row (as in Habits). -->
-                        <div id="groupTabs" class="tabs" role="tablist" hidden>
-                            <button class="pill is-active" type="button" data-tab="entries" data-i18n="split.tabEntries"></button>
-                            <button class="pill" type="button" data-tab="balances" data-i18n="split.tabBalances"></button>
                         </div>
 
                         <div class="header-actions tall" role="toolbar" data-i18n-attr="aria-label:ui.actions">
@@ -370,7 +370,7 @@
                         </div>
 
                         <div id="archivedBlock" hidden>
-                            <button id="archivedToggle" class="pill archived-toggle" type="button"></button>
+                            <button id="archivedToggle" class="btn text sm bordered archived-toggle" type="button" aria-pressed="false"></button>
                             <div id="archivedList" class="list" style="margin-top: 8px;" hidden></div>
                         </div>
 
@@ -387,6 +387,10 @@
 
                     <!-- A GROUP: Gastos | Saldos -->
                     <section id="groupView" hidden>
+                        <div id="groupTabs" role="tablist" data-i18n-attr="aria-label:planner.view">
+                            <button type="button" role="tab" aria-controls="entriesTab" data-value="entries" data-i18n="split.tabEntries"></button>
+                            <button type="button" role="tab" aria-controls="balancesTab" data-value="balances" data-i18n="split.tabBalances"></button>
+                        </div>
                         <div id="entriesTab">
                             <div id="entryList" class="list"></div>
                             <p id="noMatch" class="hint" hidden data-i18n="split.noMatch"></p>
@@ -400,7 +404,7 @@
                             <div id="totalsLine" class="totals"></div>
                             <div class="row-between">
                                 <div class="section-label" data-i18n="split.balances"></div>
-                                <button id="perCurBtn" class="pill" type="button" data-i18n="split.perCurrency" hidden data-i18n-attr="data-tip:split.perCurrencyTip"></button>
+                                <button id="perCurBtn" class="btn text sm bordered" type="button" aria-pressed="false" data-i18n="split.perCurrency" hidden data-i18n-attr="data-tip:split.perCurrencyTip"></button>
                             </div>
                             <div id="balanceList"></div>
                         </div>
@@ -425,7 +429,7 @@
             <div class="field">
                 <label for="groupCurSel"><span data-i18n="split.groupCurrency"></span>
                     <button id="groupCurHint" class="info-tip" type="button" hidden data-i18n-attr="data-help:split.currencyLocked"></button></label>
-                <select id="groupCurSel"></select>
+                <div class="picker" id="groupCurSel" data-picker="filter"></div>
             </div>
             <div class="fields" id="groupPeople">
                 <div class="field">
@@ -450,14 +454,14 @@
             <h2 id="entrySheetTitle" data-i18n="split.newEntryTitle"></h2>
         </header>
         <div class="body">
-            <div class="tabs kind-tabs" id="kindTabs">
-                <button class="pill is-active" type="button" data-kind="expense" data-i18n="split.kindExpense"></button>
-                <button class="pill" type="button" data-kind="payment" data-i18n="split.kindPayment"></button>
+            <div class="choices kind-tabs" id="kindTabs" role="group">
+                <button class="btn text sm bordered" type="button" aria-pressed="true" data-kind="expense" data-i18n="split.kindExpense"></button>
+                <button class="btn text sm bordered" type="button" aria-pressed="false" data-kind="payment" data-i18n="split.kindPayment"></button>
             </div>
 
             <div class="amount-row">
                 <input id="amountInput" class="input amount-input" type="text" inputmode="decimal" placeholder="0,00" autocomplete="off" data-i18n-attr="aria-label:split.amount">
-                <select id="currencySel" data-i18n-attr="aria-label:split.currency"></select>
+                <div class="picker" id="currencySel" data-picker="filter" data-i18n-attr="aria-label:split.currency"></div>
             </div>
 
             <div class="field" id="rateField" hidden>
@@ -500,11 +504,11 @@
 
             <div class="field" id="modeField">
                 <label data-i18n="split.splitLabel"></label>
-                <div class="tabs" id="modeTabs">
-                    <button class="pill is-active" type="button" data-mode="equal" data-i18n="split.modeEqual"></button>
-                    <button class="pill" type="button" data-mode="exact" data-i18n="split.modeExact"></button>
-                    <button class="pill" type="button" data-mode="shares" data-i18n="split.modeShares"></button>
-                    <button class="pill" type="button" data-mode="percent" data-i18n="split.modePercent"></button>
+                <div class="choices" id="modeTabs" role="group">
+                    <button class="btn text sm bordered" type="button" aria-pressed="true" data-mode="equal" data-i18n="split.modeEqual"></button>
+                    <button class="btn text sm bordered" type="button" aria-pressed="false" data-mode="exact" data-i18n="split.modeExact"></button>
+                    <button class="btn text sm bordered" type="button" aria-pressed="false" data-mode="shares" data-i18n="split.modeShares"></button>
+                    <button class="btn text sm bordered" type="button" aria-pressed="false" data-mode="percent" data-i18n="split.modePercent"></button>
                 </div>
                 <div id="partsList" class="parts" hidden></div>
             </div>
@@ -558,7 +562,7 @@
         // The guided tour ("Ver el tour" in the card) walks the rows of the card
         // on screen ('rows'): `tour` gives the rows with no button of their
         // own something to light - a row, a block, the empty state as a ghost.
-        var tab = function ( k ) { return function () { var b = document.querySelector( '#groupTabs [data-tab="' + k + '"]' ); if( b && ! b.classList.contains( 'is-active' ) ) b.click(); }; };
+        var tab = function ( k ) { return function () { var b = document.querySelector( '#groupTabs [data-value="' + k + '"]' ); if( b && b.getAttribute( 'aria-selected' ) !== 'true' ) b.click(); }; };
         var NO_GROUP = '#groupList > .card-row, #homeEmpty';
         var NO_ENTRY = '#entryList > *, #entriesEmpty';
 
@@ -807,10 +811,7 @@
             NayiveUI.shareSheet( { path: g._base, app: 'split', title: g.name || 'Split' } );
         } );
 
-        document.querySelectorAll( '[data-tab]' ).forEach( function( b )
-        {
-            b.addEventListener( 'click', function() { tab = b.dataset.tab; renderGroup(); } );
-        } );
+        Ayni.tabs( '#groupTabs', { onSelect: function( v ) { tab = v; renderGroup(); } } );
         // SEARCH - the shared fold: the magnifier opens the field, the other
         // buttons stay unless the bar is too narrow; its × (or Escape) empties
         // and folds it. On the list it filters the groups; in a group, its
@@ -830,7 +831,7 @@
         {
             const list = $( 'archivedList' );
             list.hidden = ! list.hidden;
-            this.classList.toggle( 'is-active', ! list.hidden );
+            this.setAttribute( 'aria-pressed', ! list.hidden );
         } );
 
         // Group sheet
@@ -849,10 +850,10 @@
             if( b && es ) { es.mode = b.dataset.mode; renderEntrySheet(); }
         } );
         $( 'amountInput' ).addEventListener( 'input', function() { if( es ) { es.amountText = this.value; refreshEntryHints(); } } );
-        $( 'currencySel' ).addEventListener( 'change', function()
+        $( 'currencySel' ).addEventListener( 'ayni:change', function( e )
         {
             if( ! es ) return;
-            es.currency = this.value;
+            es.currency = e.detail.value;
             const known = current && current.rates && current.rates[ es.currency ];
             es.rateText = es.currency === current.currency ? '' : ( known ? decText( known ) : '' );
             renderEntrySheet();
@@ -1079,7 +1080,6 @@
             setHidden( $( 'appIcon'    ), inGroup );
             setHidden( $( 'appTitle'   ), inGroup );
             setHidden( $( 'groupTitle' ), ! inGroup );
-            setHidden( $( 'groupTabs'  ), ! inGroup );
 
             // .in-group marks the open-group header (hooks for the CSS).
             document.querySelector( '.header' ).classList.toggle( 'in-group', inGroup );
@@ -1160,9 +1160,9 @@
             const al = $( 'archivedList' );
             al.innerHTML = '';
             arch.forEach( g => al.appendChild( groupRow( g ) ) );
-            if( ! arch.length && ! q ) { al.hidden = true; $( 'archivedToggle' ).classList.remove( 'is-active' ); }
+            if( ! arch.length && ! q ) { al.hidden = true; $( 'archivedToggle' ).setAttribute( 'aria-pressed', false ); }
             // A search shows the archived matches without unfolding them for good.
-            else al.hidden = ! ( q || $( 'archivedToggle' ).classList.contains( 'is-active' ) );
+            else al.hidden = ! ( q || $( 'archivedToggle' ).getAttribute( 'aria-pressed' ) === 'true' );
 
             $( 'homeEmpty' ).hidden = groups.length > 0;
         }
@@ -1272,9 +1272,7 @@
             if( g.archived ) facts.push( T( 'split.archivedWord' ) );
             $( 'groupSub' ).textContent = facts.join( ' · ' );
 
-            document.querySelectorAll( '[data-tab]' ).forEach( b => b.classList.toggle( 'is-active', b.dataset.tab === tab ) );
-            $( 'entriesTab'  ).hidden = tab !== 'entries';
-            $( 'balancesTab' ).hidden = tab !== 'balances';
+            Ayni.tabs( '#groupTabs' ).select( tab );
 
             if( tab === 'entries' ) renderEntries(); else renderBalances();
         }
@@ -1379,7 +1377,7 @@
 
             const pcb = $( 'perCurBtn' );
             pcb.hidden = used.length < 2;
-            pcb.classList.toggle( 'is-active', perCur && used.length > 1 );
+            pcb.setAttribute( 'aria-pressed', perCur && used.length > 1 );
 
             const box = $( 'balanceList' );
             box.innerHTML = '';
@@ -1531,56 +1529,28 @@
             setTimeout( function() { $( 'amountInput' ).focus(); }, 60 );
         }
 
-        // The currency <select>: the group's + the ones already used + the
-        // favourites first, then every other code alphabetically.
+        // The currency list (an Ayni filtered list: type to narrow it): the
+        // group's + the ones already used + the favourites first, then every
+        // other code alphabetically. Closed, it shows the code alone: "USD ·
+        // Dólar estadounidense" would leave no room for the amount beside it.
         function fillCurrencySelect( sel, g, value )
         {
-            sel.innerHTML = '';
             const first = [];
             const push  = c => { if( c && first.indexOf( c ) === -1 ) first.push( c ); };
             if( g ) M.usedCurrencies( g ).forEach( push );
             M.FAVOURITES.forEach( push );
             push( value );
 
-            const optFor = c => { const o = el( 'option', null, c + ' · ' + M.currency( c ).name ); o.value = c; o.dataset.full = o.textContent; return o; };
-
-            const g1 = el( 'optgroup' ); g1.label = T( 'split.frequent' );
-            first.forEach( c => g1.appendChild( optFor( c ) ) );
-            sel.appendChild( g1 );
-
-            const g2 = el( 'optgroup' ); g2.label = T( 'split.allCurrencies' );
-            M.codes().filter( c => first.indexOf( c ) === -1 ).forEach( c => g2.appendChild( optFor( c ) ) );
-            sel.appendChild( g2 );
-
-            sel.value = value;
-            compactSelect( sel );
-        }
-
-        // A native <select> shows the chosen option's full text when closed, and
-        // "USD · Dólar estadounidense" leaves no room for the amount beside it.
-        // So: closed = the code only; while the list is open, every option
-        // shows code + name. Wired once per <select>.
-        function compactSelect( sel )
-        {
-            const relabel = open =>
-            {
-                Array.from( sel.options ).forEach( o =>
-                {
-                    o.textContent = ( ! open && o.selected ) ? o.value : ( o.dataset.full || o.value );
-                } );
-            };
-            if( ! sel._compact )
-            {
-                sel._compact = true;
-                [ 'mousedown', 'touchstart', 'focus', 'keydown' ].forEach( ev => sel.addEventListener( ev, function() { relabel( true ); }, { passive: true } ) );
-                [ 'change', 'blur' ].forEach( ev => sel.addEventListener( ev, function() { relabel( false ); } ) );
-            }
-            relabel( false );
+            const item = c => ( { value: c, text: c + ' · ' + M.currency( c ).name, short: c } );
+            const pk = Ayni.picker( sel );
+            pk.options = [ { heading: T( 'split.frequent' ) } ].concat( first.map( item ),
+                [ { heading: T( 'split.allCurrencies' ) } ], M.codes().filter( c => first.indexOf( c ) === -1 ).map( item ) );
+            pk.set( value );
         }
 
         function chip( g, id, active, onClick )
         {
-            const b = el( 'button', 'pill' + ( active ? ' is-active' : '' ) );
+            const b = el( 'button', 'btn text sm bordered' );
             b.type = 'button';
             b.appendChild( avatar( g, id, true ) );
             b.appendChild( el( 'span', null, nameOf( g, id ) ) );
@@ -1605,8 +1575,8 @@
             if( ! g || ! es ) return;
             const pay = es.kind === 'payment';
 
-            document.querySelectorAll( '#kindTabs [data-kind]' ).forEach( b => b.classList.toggle( 'is-active', b.dataset.kind === es.kind ) );
-            document.querySelectorAll( '#modeTabs [data-mode]' ).forEach( b => b.classList.toggle( 'is-active', b.dataset.mode === es.mode ) );
+            document.querySelectorAll( '#kindTabs [data-kind]' ).forEach( b => b.setAttribute( 'aria-pressed', b.dataset.kind === es.kind ) );
+            document.querySelectorAll( '#modeTabs [data-mode]' ).forEach( b => b.setAttribute( 'aria-pressed', b.dataset.mode === es.mode ) );
 
             $( 'textField'  ).hidden = pay;
             $( 'toField'    ).hidden = ! pay;
@@ -1838,7 +1808,7 @@
             fillCurrencySelect( $( 'groupCurSel' ), g, g ? g.currency : 'EUR' );
 
             const locked = !! ( g && g.entries.length );
-            $( 'groupCurSel' ).disabled = locked;
+            Ayni.picker( $( 'groupCurSel' ) ).disabled = locked;
             $( 'groupCurHint' ).hidden  = ! locked;
 
             $( 'groupPeople' ).hidden = !! g;
@@ -1857,7 +1827,7 @@
             if( ! gs ) return;
             const name = $( 'groupNameInput' ).value.trim();
             if( ! name ) { $( 'groupNameInput' ).focus(); return; }
-            const cur = $( 'groupCurSel' ).value || 'EUR';
+            const cur = Ayni.picker( $( 'groupCurSel' ) ).value || 'EUR';
 
             if( gs.g )
             {

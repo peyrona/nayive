@@ -423,10 +423,9 @@
 
     function show( f, replaceHistory )
     {
-        var sel = E.$( "cFrom" );
-        sel.textContent = "";
-        S.accounts.forEach( function ( a ) { sel.appendChild( h( "option", { text: ( a.name ? a.name + " <" + a.email + ">" : a.email ), attrs: { value: a.id } } ) ); } );
-        sel.value = C.acct;
+        var sel = Ayni.picker( E.$( "cFrom" ) );     // an Ayni list picker
+        sel.options = S.accounts.map( function ( a ) { return { value: a.id, text: ( a.name ? a.name + " <" + a.email + ">" : a.email ) }; } );
+        sel.set( C.acct );
         E.$( "cFromRow" ).hidden = S.accounts.length < 2;
         E.$( "cTo" ).value = f.to;
         E.$( "cCc" ).value = f.cc;
@@ -1008,7 +1007,7 @@
     // the next save there - its files are still read from it until then).
     function fromChanged()
     {
-        var to = E.$( "cFrom" ).value;
+        var to = Ayni.picker( E.$( "cFrom" ) ).value;
         if( ! C || to === C.acct ) return;
         if( C.draftRef && C.draftAcct !== to ) { C.staleDraft = { acct: C.draftAcct, ref: C.draftRef }; C.draftRef = ""; C.draftAcct = ""; }
         C.acct = to;
@@ -1587,7 +1586,7 @@
             E.$( "cCcBtn" ).hidden = true;
             E.$( "cCc" ).focus();
         } );
-        E.$( "cFrom" ).addEventListener( "change", fromChanged );
+        E.$( "cFrom" ).addEventListener( "ayni:change", fromChanged );
         startEditor();
         [ "cTo", "cCc", "cBcc", "cSubject" ].forEach( function ( id )
         {

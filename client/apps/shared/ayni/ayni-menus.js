@@ -123,7 +123,8 @@ const initMenu = (menu) => {
     if (!menu.dataset.switching && (menu.contains(a) || a === document.body)) (ctxPoint ? ctxReturn : invoker)?.focus();
   });
   menu.addEventListener('keydown', (e) => {
-    if (e.target.closest('.panel.menu') !== menu) return;
+    /* A control in a menu row (a list picker) handled the key itself */
+    if (e.target.closest('.panel.menu') !== menu || e.defaultPrevented) return;
     const list = items(), i = list.indexOf(document.activeElement), cur = list[i];
     const n = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: list.length - 1 }[e.key];
     if (n !== undefined) { e.preventDefault(); list[(n + list.length) % list.length].focus(); return; }
@@ -399,7 +400,8 @@ const initToolbar = (bar) => {
    ones, in toolbar order, then the app's own items (more: () => menu items). Nothing to list: no More. The order never
    changes; the rest close up. btn: the app's own More button to use. A tool the app hides itself is not ours: it never
    goes into More. Search (a .search-field, or a button marked data-search) never leaves while nothing is picked (.has-selection on the row or inside it); while picking,
-   the actions get the room. A group can give the menu item for one of its tools itself: group.ayniMenuRow(button).
+   the actions get the room. A group can give the menu item for one of its tools itself: group.ayniMenuRow(button); a
+   list picker gives its own (a submenu of its items).
    Calling it again on the same row updates the options */
 const fitBar = (header, opts = {}) => {
   if (typeof header === 'string') header = $(header);
@@ -483,6 +485,9 @@ const fitBar = (header, opts = {}) => {
 
   /* The menu item for a hidden tool: its group's own, or a copy of the tool */
   const itemFor = (el) => {
+    /* A list picker (ayni-pickers.js) gives its own row: a submenu of its items */
+    const pk = el.matches('.picker') ? el : $('.picker', el);
+    if (pk?.ayniMenuRow) return pk.ayniMenuRow();
     const b = el.matches('button') ? el : $('button:not([hidden])', el);
     if (!b) return null;
     const mine = b.closest('.tb-group')?.ayniMenuRow?.(b); if (mine) return mine;

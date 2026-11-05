@@ -54,7 +54,7 @@ const run  = keys => c.evaluate( `( () => { calcPress( 'clear' ); const r = calc
 const same = ( got, want ) => JSON.stringify( got ) === JSON.stringify( want );
 const txt  = id => c.evaluate( `document.getElementById( '${id}' ).textContent` );
 // Picks a currency in a drop-down as a person does (a change event follows).
-const pick  = ( id, v ) => c.evaluate( `( () => { const e = document.getElementById( '${id}' ); e.value = '${v}'; e.dispatchEvent( new Event( 'change' ) ); return true; } )()` );
+const pick  = ( id, v ) => c.evaluate( `( () => { Ayni.picker( document.getElementById( '${id}' ) ).choose( '${v}' ); return true; } )()` );
 const click = sel => c.evaluate( `document.querySelector( ${JSON.stringify( sel )} ).click(); true` );
 
 section( "ARITHMETIC" );
@@ -160,7 +160,7 @@ await c.evaluate( "goToDetail( 9100 ); true" );
 ok( await c.until( "[ ...document.querySelectorAll( '#tripHeader .btn' ) ].some( b => b.dataset.tip === Ayni.t( 'trips.fxTitle' ) )" ), "the converter button is there" );
 await c.evaluate( "[ ...document.querySelectorAll( '#tripHeader .btn' ) ].find( b => b.dataset.tip === Ayni.t( 'trips.fxTitle' ) ).click(); true" );
 ok( await c.until( "/^\\/nayive\\/calculator\\//.test( location.pathname ) && window.calcPress" ), "it opens Calculator in place (a phone)", await c.evaluate( "location.href" ) );
-const landed = await c.evaluate( "[ document.getElementById( 'calc' ).dataset.mode, document.getElementById( 'fxFrom' ).value, document.getElementById( 'fxTo' ).value, ! document.getElementById( 'backBtn' ).hidden, document.getElementById( 'fxGuess' ).hidden ]" );
+const landed = await c.evaluate( "[ document.getElementById( 'calc' ).dataset.mode, Ayni.picker( document.getElementById( 'fxFrom' ) ).value, Ayni.picker( document.getElementById( 'fxTo' ) ).value, ! document.getElementById( 'backBtn' ).hidden, document.getElementById( 'fxGuess' ).hidden ]" );
 ok( same( landed, [ "fx", "JPY", "EUR", true, true ] ), "currency mode, JPY → EUR, with a ←, no guess warning", landed );
 await click( "#backBtn" );
 ok( await c.until( "location.pathname === '/nayive/trips/'" ), "← goes back to Trips" );

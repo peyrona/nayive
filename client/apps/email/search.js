@@ -150,17 +150,19 @@
 
     var FIELDS = [ "from", "to", "subject", "since", "until", "seen", "label" ];
     function el( f ) { return E.$( "adv" + f.charAt( 0 ).toUpperCase() + f.slice( 1 ) ); }
+    // "seen" and "label" are Ayni list pickers, the rest text and date fields
+    var PICKED = { seen: 1, label: 1 };
+    function get( f ) { return PICKED[ f ] ? Ayni.picker( el( f ) ).value : el( f ).value; }
+    function put( f, v ) { if( PICKED[ f ] ) Ayni.picker( el( f ) ).set( v ); else el( f ).value = v; }
 
     function fill( a )
     {
         a = a || {};
         var sel = E.$( "advLabel" );
-        sel.textContent = "";
-        sel.appendChild( h( "option", { text: E.T( "mail.pickAny" ), attrs: { value: "" } } ) );
-        S.labels.forEach( function ( l ) { sel.appendChild( h( "option", { text: l.name, attrs: { value: l.id } } ) ); } );
+        Ayni.picker( sel ).options = [ { value: "", text: E.T( "mail.pickAny" ) } ].concat( S.labels.map( function ( l ) { return { value: l.id, text: l.name }; } ) );
         sel.parentNode.hidden = ! S.labels.length;
-        FIELDS.forEach( function ( f ) { el( f ).value = a[ f ] || ""; } );
-        if( a.label && ! S.labels.some( function ( l ) { return l.id === a.label; } ) ) sel.value = "";
+        FIELDS.forEach( function ( f ) { put( f, a[ f ] || "" ); } );
+        if( a.label && ! S.labels.some( function ( l ) { return l.id === a.label; } ) ) put( "label", "" );
         E.$( "advAttach" ).checked = !! a.attach;
         E.$( "advStarred" ).checked = !! a.starred;
     }
@@ -180,7 +182,7 @@
         var a = {}, any = false;
         FIELDS.forEach( function ( f )
         {
-            var v = el( f ).value.trim();
+            var v = get( f ).trim();
             if( v ) { a[ f ] = v; any = true; }
         } );
         if( a.since && a.until && a.since > a.until ) { var t = a.since; a.since = a.until; a.until = t; }

@@ -32,6 +32,8 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <!-- The theme before the first paint, and the service worker (what other
@@ -47,6 +49,8 @@
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
     <script src="../shared/ayni/ayni-fields.js" defer></script>
+    <script src="../shared/ayni/ayni-pickers.js" defer></script>
+    <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS. -->
@@ -126,12 +130,12 @@
                 </div>
                 <ul id="tree" data-fit data-i18n-attr="aria-label:ui.folders"></ul>
             </nav>
-            <div id="paneResizer" class="pane-resizer" role="separator" aria-orientation="vertical" data-i18n-attr="title:ui.dragResize"></div>
+            <div id="paneResizer" class="splitter"></div>
 
             <main id="listPane" class="list-pane">
-                <div id="filterRow" class="filter-row">
-                    <button class="pill" type="button" data-filter="all"></button>
-                    <button class="pill" type="button" data-filter="fav"></button>
+                <div id="filterRow" class="filter-row choices" role="group">
+                    <button class="btn text sm bordered" type="button" aria-pressed="false" data-filter="all"></button>
+                    <button class="btn text sm bordered" type="button" aria-pressed="false" data-filter="fav"></button>
                 </div>
 
                 <div class="crumb-row">
@@ -226,9 +230,9 @@
             <h2 id="itemTitle"></h2>
         </header>
         <div class="body">
-            <div id="itemTypeRow" class="tabs pw-type-tabs">
-                <button class="pill" type="button" data-type="login" data-i18n="passwords.typeLogin"></button>
-                <button class="pill" type="button" data-type="note" data-i18n="passwords.typeNote"></button>
+            <div id="itemTypeRow" class="choices pw-type-tabs" role="group">
+                <button class="btn text sm bordered" type="button" aria-pressed="false" data-type="login" data-i18n="passwords.typeLogin"></button>
+                <button class="btn text sm bordered" type="button" aria-pressed="false" data-type="note" data-i18n="passwords.typeNote"></button>
             </div>
             <div class="field">
                 <label for="itName" data-i18n="passwords.name"></label>
@@ -278,7 +282,7 @@
             </details>
             <div class="field">
                 <label for="itFolder" data-i18n="ui.folder"></label>
-                <select id="itFolder"></select>
+                <div class="picker" id="itFolder"></div>
             </div>
             <label class="check-row switch end"><span data-i18n="passwords.favourite"></span><input role="switch" id="itFav" type="checkbox"></label>
             <details id="itHistory" class="pw-more" hidden>
@@ -306,7 +310,7 @@
             </div>
             <div class="field">
                 <label for="folderParent" data-i18n="passwords.parent"></label>
-                <select id="folderParent"></select>
+                <div class="picker" id="folderParent"></div>
             </div>
         </div>
         <footer>
@@ -321,9 +325,9 @@
             <h2 data-i18n="passwords.generator"></h2>
         </header>
         <div class="body">
-            <div class="tabs pw-gen-tabs">
-                <button class="pill" type="button" data-gen="chars" data-i18n="passwords.genChars"></button>
-                <button class="pill" type="button" data-gen="words" data-i18n="passwords.genWords"></button>
+            <div class="choices pw-gen-tabs" role="group">
+                <button class="btn text sm bordered" type="button" aria-pressed="false" data-gen="chars" data-i18n="passwords.genChars"></button>
+                <button class="btn text sm bordered" type="button" aria-pressed="false" data-gen="words" data-i18n="passwords.genWords"></button>
             </div>
             <div class="input-group pw-line pw-gen-out">
                 <input id="genOut" class="input pw-mono" type="text" readonly spellcheck="false" autocomplete="off">
@@ -349,12 +353,15 @@
                 </div>
                 <div class="field">
                     <label for="genSep" data-i18n="passwords.genSep"></label>
-                    <select id="genSep">
-                        <option value="-">-</option>
-                        <option value=".">.</option>
-                        <option value="_">_</option>
-                        <option value=" " data-i18n="passwords.genSpace"></option>
-                    </select>
+                    <div class="picker" id="genSep">
+                        <input type="hidden" value="-">
+                        <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                            <li role="option" data-value="-">-</li>
+                            <li role="option" data-value=".">.</li>
+                            <li role="option" data-value="_">_</li>
+                            <li role="option" data-value=" " data-i18n="passwords.genSpace"></li>
+                        </ul></div>
+                    </div>
                 </div>
                 <label class="check-row switch end"><span data-i18n="passwords.genCaps"></span><input role="switch" id="genCaps" type="checkbox"></label>
                 <label class="check-row switch end"><span data-i18n="passwords.genNumber"></span><input role="switch" id="genNum" type="checkbox"></label>
@@ -375,11 +382,11 @@
         <div class="body">
             <div class="field">
                 <label for="setLock" data-i18n="passwords.setLock"></label>
-                <select id="setLock"></select>
+                <div class="picker" id="setLock"></div>
             </div>
             <div class="field">
                 <label for="setClip" data-i18n="passwords.setClip"></label>
-                <select id="setClip"></select>
+                <div class="picker" id="setClip"></div>
             </div>
             <div class="choice-row pw-set-btns">
                 <button id="chpwOpenBtn" class="btn text bordered" type="button" data-i18n="passwords.changePw"></button>

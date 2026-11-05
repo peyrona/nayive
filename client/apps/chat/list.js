@@ -287,8 +287,8 @@
         var filters = h( "div", { class: "filters", attrs: { id: "filters" } } );
         [ [ "all", "chat.fAll" ], [ "unread", "chat.fUnread" ], [ "groups", "chat.fGroups" ] ].forEach( function ( f )
         {
-            filters.appendChild( h( "button", { class: "pill" + ( S.filter === f[ 0 ] ? " is-active" : "" ), text: T( f[ 1 ] ),
-                attrs: { type: "button" }, data: { f: f[ 0 ] },
+            filters.appendChild( h( "button", { class: "btn text sm bordered", text: T( f[ 1 ] ),
+                attrs: { type: "button", "aria-pressed": S.filter === f[ 0 ] }, data: { f: f[ 0 ] },
                 on: { click: function () { S.filter = f[ 0 ]; C.renderList(); } } } ) );
         } );
         // Auto-delete: one number of days for every chat of the home, so it
@@ -437,8 +437,7 @@
         if( ! rows ) return;
         rows.textContent = "";
 
-        var pills = document.querySelectorAll( "#filters .pill" );
-        pills.forEach( function ( p ) { p.classList.toggle( "is-active", p.dataset.f === S.filter ); } );
+        document.querySelectorAll( "#filters .btn[data-f]" ).forEach( function ( p ) { p.setAttribute( "aria-pressed", p.dataset.f === S.filter ); } );
 
         var ttl = document.getElementById( "listTtl" );
         if( ttl )
@@ -1119,16 +1118,13 @@
         var prof = C.profilePane(), del = C.autoDeletePane();
         var panes = { profile: prof, autodel: del };
         var no = Ayni.dialogButton( "close", T( "ui.close" ) );
-        var tabs = h( "div", { class: "set-tabs", attrs: { role: "tablist" } } );
+        var tabs = h( "div", { attrs: { role: "tablist", "aria-label": T( "ui.settings" ) } } );
         // Escape presses its × (save); the picture picker, the innermost
         // dialog, closes first.
         var d = Ayni.dialog( { cls: "chat-settings", title: T( "ui.settings" ) } );
         d.body.appendChild( tabs );
         [ [ "profile", "chat.yourProfile" ], [ "autodel", "chat.autoDelete" ] ].forEach( function ( t )
         {
-            tabs.appendChild( h( "button", { class: "pill", attrs: { type: "button", role: "tab" }, data: { tab: t[ 0 ] },
-                                             on: { click: function () { show( t[ 0 ] ); } } }, T( t[ 1 ] ) ) );
-            panes[ t[ 0 ] ].el.dataset.pane = t[ 0 ];
             d.body.appendChild( panes[ t[ 0 ] ].el );
             panes[ t[ 0 ] ].input.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); save(); } } );
         } );
@@ -1137,17 +1133,9 @@
         d.show();
         NayiveUI.applySheetButtons( d.dialog );
 
-        function show( key )
-        {
-            tabs.querySelectorAll( ".pill" ).forEach( function ( b )
-            {
-                var on = b.dataset.tab === key;
-                b.classList.toggle( "is-active", on );
-                b.setAttribute( "aria-selected", on ? "true" : "false" );
-            } );
-            for( var k in panes ) panes[ k ].el.hidden = k !== key;
-        }
-        show( tab === "autodel" ? "autodel" : "profile" );
+        Ayni.tabs( tabs, { value: tab === "autodel" ? "autodel" : "profile", items: [
+            { value: "profile", label: T( "chat.yourProfile" ), panel: prof.el },
+            { value: "autodel", label: T( "chat.autoDelete" ), panel: del.el } ] } );
         setTimeout( function () { panes[ tab === "autodel" ? "autodel" : "profile" ].focus(); }, 30 );
 
         var closed = false;

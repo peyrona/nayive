@@ -236,42 +236,35 @@ function renderSheetTabs( naming )
     const visible = doc.sheets.filter( function( sh ) { return ! sh.hidden; } );
 
     strip.hidden = visible.length < 2 && naming == null;     // a one-sheet file looks untouched
-    strip.innerHTML = '';
 
-    // Double-click a tab: rename it in place. On the strip, once - a click
-    // re-draws the tabs, so the second click of the pair lands on a new one.
+    // A pick, a double-click (rename it in place) and a drag: on the strip, once.
     if( ! strip.dataset.wired )
     {
         strip.dataset.wired = '1';
+        const tabOf = function( e ) { return e.target.closest( '[role="tab"]' ); };
+        Ayni.tabs( strip, { scope: strip.closest( '.app' ),
+            // A drag's click is no pick: the row goes back to the sheet in use.
+            onSelect: function( v ) { if( Date.now() - tabDropAt > 300 ) switchToSheet( Number( v ) ); else renderSheetTabs(); } } );
         strip.addEventListener( 'dblclick', function( e )
         {
-            const tab = e.target.closest( '.sheet-tab' );
-            if( tab ) editSheetName( Number( tab.dataset.i ) );
+            const tab = tabOf( e );
+            if( tab ) editSheetName( Number( tab.dataset.value ) );
         } );
+        strip.addEventListener( 'pointerdown', function( e )
+        {
+            const tab = tabOf( e );
+            if( tab ) dragTab( e, tab, Number( tab.dataset.value ) );
+        } );
+        // A finger that is dragging must not also pan the strip or open a menu.
+        strip.addEventListener( 'touchmove',   function( e ) { if( tabDragging ) e.preventDefault(); }, { passive: false } );
+        strip.addEventListener( 'contextmenu', function( e ) { if( tabDragging ) e.preventDefault(); } );
     }
 
+    strip.querySelector( '.sheet-tab-edit' )?.remove();
     if( strip.hidden ) return;
 
-    doc.sheets.forEach( function( sh, i )
-    {
-        if( sh.hidden ) return;
-
-        const b = document.createElement( 'button' );
-        b.type      = 'button';
-        b.className = 'sheet-tab' + ( i === doc.active ? ' is-active' : '' );
-        b.textContent = sh.name;
-        b.title       = sh.name + ' \u00b7 ' + T( 'calc.renameSheetHint' );
-        b.setAttribute( 'role', 'tab' );
-        b.setAttribute( 'aria-selected', i === doc.active ? 'true' : 'false' );
-        b.dataset.i = i;
-        b.addEventListener( 'click', function() { if( Date.now() - tabDropAt > 300 ) switchToSheet( i ); } );
-        b.addEventListener( 'pointerdown', function( e ) { dragTab( e, b, i ); } );
-        // A finger that is dragging must not also pan the strip or open a menu.
-        b.addEventListener( 'touchmove',   function( e ) { if( tabDragging ) e.preventDefault(); }, { passive: false } );
-        b.addEventListener( 'contextmenu', function( e ) { if( tabDragging ) e.preventDefault(); } );
-
-        strip.appendChild( b );
-    });
+    Ayni.tabs( strip ).set( doc.sheets.map( function( sh, i ) { return { value: String( i ), label: sh.name, hidden: sh.hidden, tip: sh.name + ' \u00b7 ' + T( 'calc.renameSheetHint' ) }; } )
+                                      .filter( function( it ) { return ! it.hidden; } ), String( doc.active ) );
 }
 
 // Drag a tab along the strip to move its sheet. A mouse drags as soon as it
@@ -303,7 +296,7 @@ function dragTab( e, tab, from )
     // `to` is where the sheet ends up once it has left its old place.
     function mark( x )
     {
-        const tabs = Array.prototype.slice.call( strip.querySelectorAll( '.sheet-tab' ) );
+        const tabs = Array.prototype.slice.call( strip.querySelectorAll( '[role="tab"]' ) );
         let over = tabs[ tabs.length - 1 ], after = true;
 
         tabs.forEach( function( t ) { t.classList.remove( 'drop-before', 'drop-after' ); } );
@@ -314,7 +307,7 @@ function dragTab( e, tab, from )
             if( x < r.left + r.width / 2 ) { over = t; after = false; break; }
         }
 
-        const at = Number( over.dataset.i ) + ( after ? 1 : 0 );
+        const at = Number( over.dataset.value ) + ( after ? 1 : 0 );
         to = at > from ? at - 1 : at;
 
         if( to !== from ) over.classList.add( after ? 'drop-after' : 'drop-before' );
@@ -341,7 +334,7 @@ function dragTab( e, tab, from )
         window.removeEventListener( 'pointermove',   move );
         window.removeEventListener( 'pointerup',     up   );
         window.removeEventListener( 'pointercancel', end  );
-        strip.querySelectorAll( '.sheet-tab' ).forEach( function( t ) { t.classList.remove( 'is-dragging', 'drop-before', 'drop-after' ); } );
+        strip.querySelectorAll( '[role="tab"]' ).forEach( function( t ) { t.classList.remove( 'is-dragging', 'drop-before', 'drop-after' ); } );
 
         const was = tabDragging;
         tabDragging = false;
@@ -405,7 +398,7 @@ function editSheetName( i )
 
     renderSheetTabs( i );
     const strip = document.getElementById( 'sheetTabs' );
-    const tab   = strip.querySelector( '.sheet-tab[data-i="' + i + '"]' );
+    const tab   = strip.querySelector( '[role="tab"][data-value="' + i + '"]' );
     if( ! tab ) return;
 
     const old   = doc.sheets[ i ].name;
@@ -580,6 +573,10 @@ function addSheet()
 function switchToSheet( i )
 {
     if( ! table || i === doc.active || ! doc.sheets[ i ] ) return;
+
+    // A key can leave a cell still being typed (a click on a tab closes it first)
+    const editing = table.getActiveEditor();
+    if( editing && editing.isOpened() ) editing.finishEditing();
 
     stashActiveSheet();          // the sheet being left keeps everything it had
     setActiveSheet( i );
@@ -2668,7 +2665,7 @@ function wireFormulaPanel()
     {
         const b = document.createElement( 'button' );
         b.type        = 'button';
-        b.className   = 'pill';
+        b.className   = 'btn text sm bordered';
         b.dataset.fn  = name;
         b.textContent = name;
         all.parentNode.insertBefore( b, all );

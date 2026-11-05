@@ -15,17 +15,15 @@ function fieldShell( sLabel, elControl )
     return field;
 }
 
-// The <option>s of a <select>, sValue picked: aOptions is [ [ value, text ], ... ].
-function fillOptions( select, aOptions, sValue )
+// An Ayni list picker named sName, sValue picked, telling fnOnPick( value ) on
+// each pick: aOptions is [ [ value, text ], ... ].
+function listPicker( sName, aOptions, sValue, fnOnPick )
 {
-    aOptions.forEach( function( opt )
-    {
-        const o = document.createElement( 'option' );
-        o.value = opt[0];
-        o.textContent = opt[1];
-        if( opt[0] === sValue ) o.selected = true;
-        select.appendChild( o );
-    });
+    const el = document.createElement( 'div' );
+    el.setAttribute( 'aria-label', sName );
+    Ayni.picker( el, { options: aOptions.map( function( o ) { return { value: o[0], text: o[1] }; } ), value: sValue,
+                       onChange: function( v ) { fnOnPick( v ); } } );
+    return el;
 }
 
 function textField( sLabel, sPlaceholder, sValue, fnOnChange )
@@ -110,10 +108,7 @@ function timeField( sLabel, sValue, fnOnChange ) { return dtField( 'time', sLabe
 
 function selectField( sLabel, sValue, aOptions, fnOnChange )
 {
-    const select = document.createElement( 'select' );
-    fillOptions( select, aOptions, sValue );
-    select.addEventListener( 'change', function() { fnOnChange( select.value ); } );
-    return fieldShell( sLabel, select );
+    return fieldShell( sLabel, listPicker( sLabel, aOptions, sValue, fnOnChange ) );
 }
 
 // An on / off option: a <label class="sClass"> holding aBefore (the text, its
@@ -208,9 +203,7 @@ function buildDocRow( d, fnSetType, fnRemove, fnFolder, fnRerender, fnSiblings )
     const row = document.createElement( 'div' );
     row.className = 'doc-row';
 
-    const typeSelect = document.createElement( 'select' );
-    fillOptions( typeSelect, [ ['passport',T( 'trips.docPassport' )], ['visa',T( 'trips.docVisa' )], ['ticket',T( 'trips.docTicket' )], ['hotel',T( 'trips.docHotel' )], ['other',T( 'trips.trOther' )] ], d.type );
-    typeSelect.addEventListener( 'change', function() { fnSetType( typeSelect.value ); } );
+    const typeSelect = listPicker( T( 'trips.document' ), [ ['passport',T( 'trips.docPassport' )], ['visa',T( 'trips.docVisa' )], ['ticket',T( 'trips.docTicket' )], ['hotel',T( 'trips.docHotel' )], ['other',T( 'trips.trOther' )] ], d.type, fnSetType );
 
     const attach = document.createElement( 'div' );
     attach.className = 'doc-attach';

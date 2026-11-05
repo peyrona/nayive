@@ -14,11 +14,11 @@
     var S = C.S, h = C.h;
 
     // Drag the divider to set the list width (desktop only: a phone hides
-    // it). Saved in this browser, so each device keeps its own. Double-click:
-    // back to default (shared/ui.js).
+    // it). Saved in this browser, so each device keeps its own.
     function initResizer( rz, side )
     {
-        NayiveUI.paneResizer( rz, side, { key: "chat-side-width", min: 260, max: 600, def: 340,
+        Ayni.splitter( rz, { pane: side, key: "chat-side-width", min: 260, max: 600, def: 340,
+            off: function () { return matchMedia( "(max-width: 640px)" ).matches; },
             set: function ( w ) { document.documentElement.style.setProperty( "--side-w", w + "px" ); } } );
     }
 
@@ -31,7 +31,7 @@
 
         var side = h( "section", { class: "side" } );
         var main = h( "section", { class: "main" } );
-        var rz   = h( "div", { class: "pane-resizer", attrs: { title: C.T( "ui.dragResize" ) } } );
+        var rz   = h( "div", { class: "splitter" } );
         var root = h( "div", { class: "chat", attrs: { id: "chat" } }, side, rz, main );
         var host = document.getElementById( "app" );
         host.textContent = "";

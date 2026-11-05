@@ -449,8 +449,8 @@ function updateToolbarActiveState()
     document.getElementById( 'fmtFillColor'  ).value = '#' + ( ( style && style.bg )    || ink.paper );
     setColorBar( document.getElementById( 'fmtFontColor' ) );
     setColorBar( document.getElementById( 'fmtFillColor' ) );
-    document.getElementById( 'fmtFontFamily' ).value = ( style && style.fontFamily ) || '';
-    document.getElementById( 'fmtFontSize'   ).value = ( style && style.size )        || '';
+    Ayni.picker( document.getElementById( 'fmtFontFamily' ) ).set( ( style && style.fontFamily ) || '' );
+    Ayni.picker( document.getElementById( 'fmtFontSize'   ) ).set( String( ( style && style.size ) || '' ) );
     showNumFmt( style && style.numFmt );
 
     document.getElementById( 'fmtSplitBtn'     ).ariaDisabled = ! mergesInSelection().length;
@@ -708,17 +708,12 @@ function numFmtCategory( code )
     return 'numero';
 }
 
-// The drop-down never rests on a real row: the hidden first one carries the
-// cell's category label. So picking that same category again still fires
-// 'change' and reopens the dialog - 2 decimals to 3 without clearing first.
+// The list picker shows the cell's category. Picking that same category
+// again still tells (Ayni's ayni:change comes on every pick) and reopens the
+// dialog - 2 decimals to 3 without clearing first.
 function showNumFmt( code )
 {
-    const sel = document.getElementById( 'fmtNumFormat' );
-    const cat = numFmtCategory( code );
-
-    sel.dataset.cur = cat;
-    sel.options[ 0 ].textContent = sel.querySelector( 'option[value="' + cat + '"]' ).textContent;
-    sel.selectedIndex = 0;
+    Ayni.picker( document.getElementById( 'fmtNumFormat' ) ).set( numFmtCategory( code ) );
 }
 
 // Opening on a cell of the same category starts from its own code.
@@ -727,7 +722,7 @@ function fillNumFmtFields( code )
     const num = code.split( ';' )[ 0 ];
     const dec = /\.(0+)/.exec( num );
     const sym = /"([^"]*)"/.exec( num );
-    const set = function( id, v ) { const el = document.getElementById( id ); if( el.querySelector( 'option[value="' + v + '"]' ) ) el.value = v; };
+    const set = function( id, v ) { const pk = Ayni.picker( document.getElementById( id ) ); if( pk.options.some( function( o ) { return o.value === String( v ); } ) ) pk.set( String( v ) ); };
 
     set( 'nfDecimals',    dec ? dec[ 1 ].length : 0 );
     set( 'nfDatePattern', code );
@@ -737,7 +732,7 @@ function fillNumFmtFields( code )
     if( sym )
     {
         document.getElementById( 'nfCurrency'    ).value = sym[ 1 ].trim();
-        document.getElementById( 'nfCurrencyPos' ).value = num.indexOf( '"' ) === 0 ? 'before' : 'after';
+        Ayni.picker( document.getElementById( 'nfCurrencyPos' ) ).set( num.indexOf( '"' ) === 0 ? 'before' : 'after' );
     }
 }
 
@@ -745,8 +740,8 @@ function openNumFmtDialog( cat )
 {
     const st = lastSelection ? styleOf( activeSheet, lastSelection.r1, lastSelection.c1 ) : null;
 
-    // The pick moved the drop-down off its shown row: put it back now, so
-    // however the dialog closes (×, Esc, outside) the next pick still fires.
+    // The pick showed the category picked: back to the cell's own, however
+    // the dialog then closes (×, Esc).
     showNumFmt( st && st.numFmt );
 
     if( ! lastSelection ) return;
@@ -775,14 +770,14 @@ function openNumFmtDialog( cat )
 // Assembles an Excel number-format code from the dialog's current field values.
 function buildNumFmtCode()
 {
-    const decimals = Number( document.getElementById( 'nfDecimals' ).value );
+    const decimals = Number( Ayni.picker( document.getElementById( 'nfDecimals' ) ).value );
     const decPart  = decimals > 0 ? ( '.' + '0'.repeat( decimals ) ) : '';
 
     if( nfCategory === 'porcentaje' )
         return '0' + decPart + '%';
 
     if( nfCategory === 'fecha' )
-        return document.getElementById( 'nfDatePattern' ).value;
+        return Ayni.picker( document.getElementById( 'nfDatePattern' ) ).value;
 
     const thousands = document.getElementById( 'nfThousands' ).checked;
     const redNeg    = document.getElementById( 'nfRedNeg'    ).checked;
@@ -792,7 +787,7 @@ function buildNumFmtCode()
     if( nfCategory === 'moneda' )
     {
         const sym = document.getElementById( 'nfCurrency'    ).value.trim() || '€';
-        const pos = document.getElementById( 'nfCurrencyPos' ).value;
+        const pos = Ayni.picker( document.getElementById( 'nfCurrencyPos' ) ).value;
 
         num = ( pos === 'before' ) ? ( '"' + sym + '" ' + num ) : ( num + ' "' + sym + '"' );
     }

@@ -187,7 +187,7 @@
     // the page): next to a label, never a grey line under a field.
     C.info = function ( text )
     {
-        return h( "button", { class: "info-tip", attrs: { type: "button", "data-help": text } } );
+        return C.h( "button", { class: "info-tip", attrs: { type: "button", "data-help": text } } );
     };
 
     C.ic = function ( name, cls )

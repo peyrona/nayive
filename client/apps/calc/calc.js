@@ -193,9 +193,13 @@ function wireStaticUI()
 
     document.getElementById( 'numFmtCloseBtn'   ).addEventListener( 'click', cancelNumFmt );
     document.getElementById( 'numFmtConfirmBtn' ).addEventListener( 'click', confirmNumFmt );
-    [ 'nfDecimals', 'nfThousands', 'nfRedNeg', 'nfCurrency', 'nfCurrencyPos', 'nfDatePattern' ].forEach( function( id )
+    [ 'nfThousands', 'nfRedNeg', 'nfCurrency' ].forEach( function( id )
     {
         document.getElementById( id ).addEventListener( 'input', updateNumFmtPreview );
+    });
+    [ 'nfDecimals', 'nfCurrencyPos', 'nfDatePattern' ].forEach( function( id )     // Ayni list pickers
+    {
+        document.getElementById( id ).addEventListener( 'ayni:change', updateNumFmtPreview );
     });
 
     // Outside click / ESC dismiss the border popup and any open dialog.
@@ -222,7 +226,7 @@ function wireStaticUI()
             const ed = table.getActiveEditor();
             if( ed && ed.isOpened() ) return;
             const a = document.activeElement;
-            if( a && a.matches( 'input, select, textarea, [contenteditable=""], [contenteditable="true"]' ) && ! a.closest( '#gridHost' ) ) return;
+            if( a && a.matches( 'input, [role="combobox"], textarea, [contenteditable=""], [contenteditable="true"]' ) && ! a.closest( '#gridHost' ) ) return;
             if( document.querySelector( '.popup.open, .panel.menu:popover-open, .panel.popup:popover-open, dialog.panel[open]' ) ) return;
             table.listen();
             table.getFocusManager().focusOnHighlightedCell();
@@ -352,8 +356,15 @@ function wireStaticUI()
     document.getElementById( 'delColBtn' ).addEventListener( 'click', function() { if( lastSelection ) table.alter( 'remove_col', lastSelection.c1, lastSelection.c2 - lastSelection.c1 + 1 ); } );
     document.getElementById( 'addSheetBtn' ).addEventListener( 'click', addSheet );
 
-    document.getElementById( 'fmtFontFamily' ).addEventListener( 'change', function( e ) { setOrClearStyleField( 'fontFamily', e.target.value ); } );
-    document.getElementById( 'fmtFontSize'   ).addEventListener( 'change', function( e ) { setOrClearStyleField( 'size', e.target.value ? Number( e.target.value ) : null ); } );
+    // Ayni list pickers in the toolbar; the size is a combo box: a typed size that is not one (or out of
+    // Excel's 1-409) changes nothing, and the cell's own size comes back
+    document.getElementById( 'fmtFontFamily' ).addEventListener( 'ayni:change', function( e ) { setOrClearStyleField( 'fontFamily', e.detail.value ); } );
+    document.getElementById( 'fmtFontSize'   ).addEventListener( 'ayni:change', function( e )
+    {
+        const v = e.detail.value.replace( ',', '.' ), n = Number( v );
+        if( v && ! ( n >= 1 && n <= 409 ) ) { updateToolbarActiveState(); return; }
+        setOrClearStyleField( 'size', v ? n : null );
+    } );
 
     document.getElementById( 'fmtBoldBtn'        ).addEventListener( 'click', function() { toggleStyleField( 'bold' ); } );
     document.getElementById( 'fmtItalicBtn'      ).addEventListener( 'click', function() { toggleStyleField( 'italic' ); } );
@@ -378,9 +389,9 @@ function wireStaticUI()
     document.getElementById( 'fmtFillColor'      ).addEventListener( 'input', function( e ) { setStyleField( 'bg',    e.target.value.replace( '#', '' ).toUpperCase() ); setColorBar( e.target ); } );
     document.getElementById( 'fmtFontColorClear' ).addEventListener( 'click', function() { setOrClearStyleField( 'color', '' ); } );
     document.getElementById( 'fmtFillColorClear' ).addEventListener( 'click', function() { setOrClearStyleField( 'bg',    '' ); } );
-    document.getElementById( 'fmtNumFormat'      ).addEventListener( 'change', function( e )
+    document.getElementById( 'fmtNumFormat'      ).addEventListener( 'ayni:change', function( e )
     {
-        const cat = e.target.value || e.target.dataset.cur;   // '' = the shown row (iOS lists hidden rows)
+        const cat = e.detail.value;   // picking the cell's own category again reopens its dialog too
 
         if( cat === 'general' ) setOrClearStyleField( 'numFmt', '' );
         else                    openNumFmtDialog( cat );
@@ -1095,27 +1106,22 @@ function styleOn( field, value )
 
 function haveSelection() { return !! lastSelection; }
 
-// A <select> in the toolbar becomes a submenu: one row per option, the
-// current one ticked. Picking a row sets the select and fires its own
-// 'change' handler - the same path a click on the toolbar takes. A hidden
-// row is only the toolbar's label; data-cur, when set, is the real pick.
+// A list picker in the toolbar becomes a submenu: one row per item, the
+// current one ticked. Picking a row picks it in the toolbar's picker
+// (Ayni's choose: its ayni:change runs) - the same path a pick there takes.
 function selectItems( id )
 {
     return function()
     {
-        const sel = document.getElementById( id );
+        const pk = Ayni.picker( document.getElementById( id ) );
 
-        return Array.prototype.filter.call( sel.options, function( opt ) { return ! opt.hidden; } ).map( function( opt )
+        return pk.options.map( function( opt )
         {
             return {
-                text    : opt.textContent,
-                checked : function() { return ( sel.dataset.cur || sel.value ) === opt.value; },
+                text    : opt.text,
+                checked : function() { return pk.value === opt.value; },
                 enabled : haveSelection,
-                run     : function()
-                {
-                    sel.value = opt.value;
-                    sel.dispatchEvent( new Event( 'change', { bubbles: true } ) );
-                }
+                run     : function() { pk.choose( opt.value ); }
             };
         } );
     };
@@ -1409,7 +1415,7 @@ function openSettings()
     for( const id in SET_FIELDS )
     {
         const v = String( calcPrefs[ SET_FIELDS[ id ] ] || '' );
-        document.getElementById( id ).value = v;
+        Ayni.picker( document.getElementById( id ) ).set( v );
         if( setCtls[ id ] ) setCtls[ id ].saved( v );
     }
     document.getElementById( 'settingsBackdrop' ).showModal();
@@ -1420,8 +1426,8 @@ function wireSettings()
     document.getElementById( 'settingsBtn' ).addEventListener( 'click', openSettings );
 
     // The toolbar's own fonts and sizes: one list each, in index.html.
-    document.getElementById( 'setFont' ).innerHTML = document.getElementById( 'fmtFontFamily' ).innerHTML;
-    document.getElementById( 'setSize' ).innerHTML = document.getElementById( 'fmtFontSize' ).innerHTML;
+    Ayni.picker( document.getElementById( 'setFont' ), { options: Ayni.picker( document.getElementById( 'fmtFontFamily' ) ).options } );
+    Ayni.picker( document.getElementById( 'setSize' ), { options: Ayni.picker( document.getElementById( 'fmtFontSize' ) ).options } );
 
     for( const id in SET_FIELDS )
     {

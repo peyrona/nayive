@@ -241,7 +241,7 @@
             if( document.querySelector( "dialog.panel[open]" ) || !! document.querySelector( ".panel.menu:popover-open" ) ) return;
             if( e.key === "Backspace" ) return;         // in the reader it is no "delete"
             var t = document.activeElement;
-            if( t && t.closest && t.closest( "input, textarea, select, [contenteditable]" ) ) return;
+            if( t && t.closest && t.closest( "input, textarea, .picker, [contenteditable]" ) ) return;
             for( var i = 0; i < actions.length; i++ )
             {
                 var a = actions[ i ];

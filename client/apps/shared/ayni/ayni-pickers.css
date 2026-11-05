@@ -1,0 +1,48 @@
+/* Ayni library 0.1.0, pickers family: the list picker (drop-down list and combo box), its popup and phone sheet,
+   headings, and its look in a toolbar. Load it after ayni-base.css, ayni-menus.css (popups) and ayni-lists.css (the
+   option rows are the list box's). The rules are chapter 7 of the guidelines.
+   RULE: one list picker serves every drop-down list and combo box, on every device: no native select, datalist or
+   wheel. A field with our popup triangle; the list opens in a Panel popup below the field (above when there is no
+   room), or as a bottom sheet on phones that sits above the on-screen keyboard. */
+.picker { position: relative; }
+.picker > .input { padding-right: 28px; }
+.picker > div.input { display: flex; align-items: center; cursor: pointer; user-select: none; overflow: hidden; white-space: nowrap; }
+/* Nothing chosen: the placeholder, dim */
+.picker > div.input:empty::before { content: attr(data-placeholder); color: var(--text-dim); }
+.picker::after { content: ""; position: absolute; right: 10px; top: 50%; translate: 0 -50%; width: 9px; height: 6px; background: var(--accent);
+  clip-path: polygon(0 0, 100% 0, 50% 100%); pointer-events: none; }
+.picker-pop { position: fixed; inset: auto; margin: 0; padding: 4px; }
+.picker-pop:not(:popover-open) { display: none; }
+.picker-pop [role="listbox"] { border: 0; padding: 0; max-height: none; overflow: visible; background: none; }
+.picker-pop [role="option"] { white-space: nowrap; }
+.picker-pop :is([role="option"], li.heading)[hidden] { display: none; }
+.picker-pop [role="option"].active:not([aria-selected="true"]) { background: var(--card-head); box-shadow: none; }
+/* The chosen item of a list picker is full Accent (a picked row in a list is only tinted) */
+.picker-pop [role="option"][aria-selected="true"] { background: var(--accent); color: var(--on-accent); }
+/* A disabled item shows, faded, and cannot be picked */
+.picker-pop [role="option"][aria-disabled="true"] { opacity: .45; cursor: default; background: none; }
+/* A heading splits a long list (Frequent, All currencies); it is not an item */
+.picker-pop li.heading { list-style: none; padding: 8px 8px 2px; font-size: .75rem; font-weight: 600; color: var(--text-dim); cursor: default; user-select: none; }
+.picker-pop li.heading:first-child { padding-top: 2px; }
+.picker-empty { margin: 0; padding: 6px 8px; font-size: .85rem; color: var(--text-dim); }
+.panel.picker-pop.sheet { left: 0; right: 0; width: auto; min-width: 0 !important; max-width: none; border-radius: var(--panel-radius) var(--panel-radius) 0 0; padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px)); }
+
+/* A filtered list's "!" (a text that names no item) sits before the triangle */
+.picker > .err-mark { position: absolute; right: 26px; top: 50%; translate: 0 -50%; }
+.picker > .input[aria-invalid="true"] { padding-right: 46px; }
+
+/* States: disabled is faded and takes no press; read-only shows the value on the tint, with no border and no triangle */
+.picker:has(> .input[aria-disabled="true"]) { opacity: .45; cursor: default; pointer-events: none; }
+.picker > .input[aria-readonly="true"] { border-color: transparent; background: var(--readonly-bg); }
+.picker:has(> .input[aria-readonly="true"])::after { display: none; }
+
+/* RULE: a list picker in a toolbar (a font and its size) takes the toolbar's 30 px, sits on it without a fill and keeps
+   a thin line round it, so it shows where it ends; under the pointer it gets the grey tint of the toolbar's buttons
+   (Accent never means hover). Its width is the page's. Its tooltip names it. */
+[role="toolbar"] .picker { flex: 0 0 auto; }
+[role="toolbar"] .picker > .input { min-height: 30px; height: 30px; padding-block: 0; padding-inline: 6px 22px; background: transparent; border-color: var(--line); }
+html:not(.touch) [role="toolbar"] .picker > .input { font-size: .82rem; }
+[role="toolbar"] .picker::after { right: 8px; }
+[role="toolbar"] .picker:hover > .input:not([aria-disabled="true"]):not(:focus) { background: color-mix(in srgb, var(--text) 9%, transparent); }
+/* On touch it keeps its drawn 30 px and gets a 44 px hit area, as the toolbar's buttons do */
+html.touch [role="toolbar"] .picker > div.input::before { content: ""; position: absolute; inset: -7px 0; }

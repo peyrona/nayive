@@ -110,6 +110,8 @@ html, body { height: 100%; overflow: hidden; }
     border-bottom: 1px solid var(--line); flex: 0 0 auto;
     overflow-x: visible;
 }
+/* An Ayni toolbar (one Tab stop; the list pickers' toolbar look), drawn as Calc's own strip */
+#fmtToolbar[role="toolbar"] { border-width: 0 0 1px; border-radius: 0; }
 .fmt-sep { width: 1px; align-self: stretch; margin: 4px 6px; background: var(--line); flex: 0 0 auto; }
 /* Toolbar buttons: Ayni's .btn at 30 px (a toggle is aria-pressed); B / I / U
    are letters, in bold. */
@@ -125,9 +127,9 @@ html, body { height: 100%; overflow: hidden; }
     position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
     border: 0; opacity: 0; overflow: hidden; clip: rect(0 0 0 0);
 }
-/* The three format drop-downs are .tb-select (TOOLBAR SELECT in app.css),
-   the same control Text's editor bar uses. Only their widths are Calc's. */
-.fmt-select-narrow { width: 52px; }
+/* The three format drop-downs are Ayni list pickers in a toolbar (the font
+   size a combo box), as in Text's and Write's bars. Only their widths are Calc's. */
+.fmt-select-narrow { width: 60px; }
 .fmt-select-font { width: 104px; }
 .fmt-select-numfmt { width: 92px; }
 /* The small × right after each colour picker: back to no colour. */
@@ -136,48 +138,16 @@ html, body { height: 100%; overflow: hidden; }
 /* The bottom bar: sheet tabs on the left, the selection's totals on the
    right — the one place a spreadsheet is allowed chrome below the grid.
    Always present; the tab strip inside it only appears with 2+ sheets. */
-#statusBar
-{
-    display: flex; align-items: stretch; gap: 8px;
-    background: var(--calc-chrome); border-top: 1px solid var(--line);
-    flex: 0 0 auto; min-height: 26px;
-}
-#sheetTabs
-{
-    display: flex; align-items: stretch; gap: 2px;
-    padding: 3px 8px; flex: 1 1 auto; overflow-x: auto; min-width: 0;
-}
-#sheetTabs[hidden] { display: none; }
-/* With no tabs the totals still sit on the right of the bar. */
-#sheetTabs[hidden] + #selStats { margin-left: auto; }
-#selStats
-{
-    display: flex; align-items: center; gap: 14px;
-    padding: 3px 12px; flex: 0 0 auto;
-    color: var(--text-dim); font-size: 0.8rem; white-space: nowrap;
-}
+#statusBar { background: var(--calc-chrome); flex: 0 0 auto; min-height: 26px; --tab-page: var(--calc-paper); }
 #selStats b { color: var(--text); font-weight: 600; }
 #selStats:empty { display: none; }
-.sheet-tab
-{
-    flex: 0 0 auto; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    padding: 5px 12px; border: none; border-radius: var(--radius-s) var(--radius-s) 0 0;
-    background: transparent; color: var(--text-dim);
-    font-family: inherit; font-size: 0.85rem; cursor: pointer;
-    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
-}
-.sheet-tab:hover   { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--text); }
-.sheet-tab.is-active
-{
-    background: var(--calc-paper); color: var(--text); font-weight: 600;
-    box-shadow: inset 0 2px 0 var(--accent);
-}
 /* Renaming a tab (grid.js, editSheetName): the tab becomes this field, in place. */
-.sheet-tab-edit { height: auto; align-self: stretch; min-width: 6ch; max-width: 33ch; border-radius: var(--radius-s) var(--radius-s) 0 0; }
+.sheet-tab-edit { height: auto; align-self: stretch; min-width: 6ch; max-width: 33ch; border-radius: 0 0 var(--radius-s) var(--radius-s); }
 /* Dragging a tab (grid.js, dragTab): it fades, and a line marks where it lands. */
-.sheet-tab.is-dragging { opacity: 0.5; cursor: grabbing; }
-.sheet-tab.drop-before { box-shadow: inset 3px 0 0 var(--accent); }
-.sheet-tab.drop-after  { box-shadow: inset -3px 0 0 var(--accent); }
+#sheetTabs [role="tab"] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+#sheetTabs .is-dragging { opacity: 0.5; cursor: grabbing; }
+#sheetTabs .drop-before { box-shadow: inset 3px 0 0 var(--accent); }
+#sheetTabs .drop-after  { box-shadow: inset -3px 0 0 var(--accent); }
 
 /* ---- THE FORMULA ROW ------------------------------------------------
    One row of its own, right under the chrome, where LibreOffice Calc and
@@ -294,7 +264,8 @@ body.calc-painting #gridHost .htCore td { cursor: copy; }
    The toolbar collapses to height 0 with visibility:hidden - never
    display:none. The menu entries WORK BY CLICKING THOSE VERY BUTTONS, so
    they have to stay in the layout; a display:none button delivers no
-   click, and the two <select>s and the colour pickers could not be set.
+   click, and the colour pickers could not be set (the list pickers' menu
+   rows pick through Ayni.picker().choose).
 
    "Aa" folds a row that is already gone and "⋮" repeats the Archivo
    menu, so both come off the header here. */
@@ -410,7 +381,7 @@ body.calc-painting #gridHost .htCore td { cursor: copy; }
 
 /* ---- FORMULA EDITOR (see FORMULA EDITOR in the script) -------------
    The .popup card, fixed over the top-right of the cells while a cell's
-   "=…" is typed. Only layout lives here: the pieces are the shared .pill,
+   "=…" is typed. Only layout lives here: the pieces are the shared
    .btn and dialog buttons, and this sheet's .pop-btn, .fx-item and
    .nf-preview. z-index 300: over the grid's clones (up to 210) and its
    open cell editor (200), under the menus (400) and the dialogs (500). */
@@ -429,7 +400,7 @@ body.calc-painting #gridHost .htCore td { cursor: copy; }
 .fe-help               { font-size: 0.78rem; line-height: 1.35; color: var(--text-dim); }
 .fe-help b             { color: var(--accent); }
 .fe-row                { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
-/* .pill has no disabled look of its own (only this panel needs one): Range
+/* Range
    is off while a tap on the sheet could not put a reference in. */
 #feRangeBtn:disabled   { opacity: 0.45; cursor: default; }
 .fe-list               { max-height: 168px; overflow-y: auto; margin: 0 -10px; border-block: 1px solid var(--line); }

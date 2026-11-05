@@ -49,10 +49,10 @@ try
     // --- My account row
     await a.evaluate( "openAccountDialog(); 1" );
     await sleep( 600 );
-    const row = JSON.parse( await a.evaluate( `JSON.stringify((()=>{var s=document.getElementById('lockSel'),m=document.getElementById('lockMin');var a=s.getBoundingClientRect(),b=m.getBoundingClientRect();return {opts:[...s.options].map(o=>o.value+'='+o.textContent),v:s.value,min:m.value,dis:m.disabled,sameRow:Math.abs((a.top+a.height/2)-(b.top+b.height/2))<4,vis:a.width>0&&b.width>0,textHidden:document.getElementById('lockTextWrap').hidden}})())` ) );
+    const row = JSON.parse( await a.evaluate( `JSON.stringify((()=>{var s=document.getElementById('lockSel'),m=document.getElementById('lockMin');var a=s.getBoundingClientRect(),b=m.getBoundingClientRect();return {opts:Ayni.picker(s).options.map(o=>o.value+'='+o.text),v:Ayni.picker(s).value,min:m.value,dis:m.disabled,sameRow:Math.abs((a.top+a.height/2)-(b.top+b.height/2))<4,vis:a.width>0&&b.width>0,textHidden:document.getElementById('lockTextWrap').hidden}})())` ) );
     console.log( row );
     ok( row.opts.length === 5 && row.v === "" && row.min === "15" && row.sameRow && row.vis && row.textHidden, "row: none default, 15 min, same row" );
-    await a.evaluate( `(()=>{var s=document.getElementById('lockSel');s.value='clock';s.dispatchEvent(new Event('change'));var m=document.getElementById('lockMin');m.value='0';m.dispatchEvent(new Event('change'));var t=document.getElementById('lockText');t.value='Back soon';t.dispatchEvent(new Event('input'));return 1})()` );
+    await a.evaluate( `(()=>{Ayni.picker(document.getElementById('lockSel')).choose('clock');var m=document.getElementById('lockMin');m.value='0';m.dispatchEvent(new Event('change'));var t=document.getElementById('lockText');t.value='Back soon';t.dispatchEvent(new Event('input'));return 1})()` );
     const st = await a.evaluate( "localStorage.getItem('nayive-locker')+'|'+document.getElementById('lockMin').value+'|'+document.getElementById('lockTextWrap').hidden" );
     ok( st === '{"id":"clock","min":1,"text":"Back soon"}|1|false', "saved clock, min clamped to 1, text row shown: " + st );
     await a.shot( "account" );

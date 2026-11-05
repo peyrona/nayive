@@ -422,7 +422,7 @@
             var pills = el( "div", "tb-group ie-pills", optsBar );
             ADJ.forEach( function ( k )
             {
-                var p = el( "button", "pill", pills );
+                var p = el( "button", "btn text sm bordered", pills );
                 p.type = "button";
                 p.textContent = T( ADJ_KEY[ k ] );
                 p.dataset.ie = "adj-" + k;
@@ -463,7 +463,7 @@
         function syncAdjust()
         {
             if( ! range ) return;
-            optsBar.querySelectorAll( ".pill" ).forEach( function ( p ) { p.classList.toggle( "is-active", p.dataset.ie === "adj-" + adjKey ); } );
+            optsBar.querySelectorAll( "[data-ie]" ).forEach( function ( p ) { p.setAttribute( "aria-pressed", p.dataset.ie === "adj-" + adjKey ); } );
             range.value = state[ adjKey ];
             range.setAttribute( "aria-label", T( ADJ_KEY[ adjKey ] ) );
             showVal( state[ adjKey ] );
@@ -568,7 +568,7 @@
             var pills = el( "div", "tb-group ie-pills", optsBar );
             RATIOS.forEach( function ( r )
             {
-                var b = el( "button", "pill", pills );
+                var b = el( "button", "btn text sm bordered", pills );
                 b.type = "button";
                 b.textContent = r[ 1 ] ? T( r[ 1 ] ) : r[ 0 ].replace( "x", ":" );
                 b.dataset.ie = "ratio-" + r[ 0 ];
@@ -616,7 +616,7 @@
 
         function syncRatio()
         {
-            optsBar.querySelectorAll( ".pill" ).forEach( function ( p ) { p.classList.toggle( "is-active", p.dataset.ie === "ratio-" + ratio ); } );
+            optsBar.querySelectorAll( "[data-ie]" ).forEach( function ( p ) { p.setAttribute( "aria-pressed", p.dataset.ie === "ratio-" + ratio ); } );
             crop.classList.toggle( "fixed", ratio !== "free" );
         }
 

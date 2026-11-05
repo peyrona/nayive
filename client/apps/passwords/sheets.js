@@ -14,12 +14,13 @@ let folderEdit = null;    // the folder being renamed, or null for a new one
 // below it may not be offered (moving that folder).
 function fillFolderSelect( sel, chosen, skip )
 {
-    sel.innerHTML = folderList().filter( function( e ) { return ! skip || ! isInside( e.id, skip ); } ).map( function( e )
+    // An Ayni list picker: the list shows the tree's indents, the closed field the name alone
+    const pk = Ayni.picker( sel );
+    pk.options = folderList().filter( function( e ) { return ! skip || ! isInside( e.id, skip ); } ).map( function( e )
     {
-        return '<option value="' + esc( e.id ) + '"' + ( e.id === chosen ? ' selected' : '' ) + '>' +
-               '   '.repeat( e.depth ) + esc( e.name ) + '</option>';
-    } ).join( '' );
-    if( ! sel.value ) sel.value = ROOT;
+        return { value: e.id, text: '   '.repeat( e.depth ) + e.name, short: e.name };
+    } );
+    pk.set( pk.options.some( function( o ) { return o.value === chosen; } ) ? chosen : ROOT );
 }
 
 // Where a new thing goes: the folder on screen, or the top while a search
@@ -76,7 +77,7 @@ function openItemSheet( id )
 function setItemType( type )
 {
     editType = type === 'note' ? 'note' : 'login';
-    document.querySelectorAll( '#itemTypeRow .pill' ).forEach( function( p ) { p.classList.toggle( 'is-active', p.dataset.type === editType ); } );
+    document.querySelectorAll( '#itemTypeRow .btn' ).forEach( function( p ) { p.setAttribute( 'aria-pressed', p.dataset.type === editType ); } );
     document.querySelectorAll( '#itemBackdrop .pw-login-only' ).forEach( function( el ) { el.hidden = editType !== 'login'; } );
     $( 'itNotes' ).rows = editType === 'note' ? 8 : 3;
     // A login keeps its notes under "More fields"; a note's text is the note itself.
@@ -189,7 +190,7 @@ function saveItemSheet()
         notes:  $( 'itNotes' ).value,
         totp:   login ? $( 'itTotp' ).value.trim() : ( old ? old.totp || '' : '' ),
         fields: readFields(),
-        folder: $( 'itFolder' ).value || ROOT,
+        folder: Ayni.picker( $( 'itFolder' ) ).value || ROOT,
         fav:    $( 'itFav' ).checked,
         history: old && old.history ? old.history.slice() : [],
         created: old && old.created ? old.created : now,
@@ -237,7 +238,7 @@ function saveFolderSheet()
     if( ! canEdit() ) return;
     const name = $( 'folderName' ).value.trim();
     if( ! name ) { $( 'folderName' ).focus(); return; }
-    const dest = $( 'folderParent' ).value || ROOT;
+    const dest = Ayni.picker( $( 'folderParent' ) ).value || ROOT;
     const old  = folderEdit ? item( folderEdit ) : null;
     if( old && dest !== ROOT && isInside( dest, old.id ) ) { Ayni.toast( 'warn', T( 'passwords.cycle' ) ); return; }
     const now = nowIso();

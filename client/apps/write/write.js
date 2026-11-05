@@ -272,12 +272,15 @@ function wireStaticUI()
     // user actually changed (see PARRAFO).
     for( const g in PARA_GROUPS )
         for( const id of PARA_GROUPS[ g ] )
-            document.getElementById( id ).addEventListener( 'change', function( e )
+        {
+            const el = document.getElementById( id );
+            el.addEventListener( el.classList.contains( 'picker' ) ? 'ayni:change' : 'change', function()   // Ayni list pickers tell ayni:change
             {
-                markParagraphTouched( e.target.id );
-                if( e.target.id === 'paListLevel' ) showListFormat();
+                markParagraphTouched( id );
+                if( id === 'paListLevel' ) showListFormat();
                 syncParagraphRows();
             } );
+        }
 
     document.getElementById( 'statsCloseBtn'    ).addEventListener( 'click', function() { setBackdrop( 'statsBackdrop', false ); } );
     document.getElementById( 'scCloseBtn'       ).addEventListener( 'click', function() { setBackdrop( 'scBackdrop', false ); } );
@@ -301,7 +304,7 @@ function wireStaticUI()
     document.getElementById( 'recentBtn'           ).addEventListener( 'click', openRecent );
     document.getElementById( 'pageSetupCancelBtn'  ).addEventListener( 'click', function() { setBackdrop( 'pageSetupBackdrop', false ); } );
     document.getElementById( 'pageSetupConfirmBtn' ).addEventListener( 'click', confirmPageSetup );
-    document.getElementById( 'psSize'              ).addEventListener( 'change', syncPageSizeRows );
+    document.getElementById( 'psSize'              ).addEventListener( 'ayni:change', syncPageSizeRows );
 
     // ---- the header menu and the group cards ----
     NayiveOffice.fileMenu( { btn: 'moreBtn', menu: 'topMenu', ids: MENU_IDS, phoneOnly: MENU_PHONE_ONLY } );
@@ -1075,21 +1078,12 @@ function openSymbols()
 
 function renderSymbols()
 {
-    const tabs = document.getElementById( 'symTabs' );
     const grid = document.getElementById( 'symGrid' );
 
-    tabs.innerHTML = '';
     grid.innerHTML = '';
-
-    SYMBOL_SETS.forEach( function( set, i )
-    {
-        const b = document.createElement( 'button' );
-        b.type        = 'button';
-        b.className   = 'pill sym-tab' + ( i === symTab ? ' is-active' : '' );
-        b.textContent = Ayni.t( 'write.sym.' + set.key );
-        b.addEventListener( 'click', function() { symTab = i; renderSymbols(); } );
-        tabs.appendChild( b );
-    } );
+    Ayni.tabs( '#symTabs', { value: String( symTab ),
+        items: SYMBOL_SETS.map( function( set, i ) { return { value: String( i ), label: Ayni.t( 'write.sym.' + set.key ) }; } ),
+        onSelect: function( v ) { symTab = Number( v ); renderSymbols(); } } );
 
     for( const ch of Array.from( SYMBOL_SETS[ symTab ].chars ) )
     {
@@ -1134,6 +1128,9 @@ let paraTouched = new Set();
 let paraFmt     = null;     // snapshot().formatting when the dialog opened
 let paraList    = null;     // { paraId, numId, ilvl, formats } when the caret is in a numbered list
 
+// The controller of one of the dialogs' Ayni list pickers
+function pk( id ) { return Ayni.picker( document.getElementById( id ) ); }
+
 // "1,5" in Spanish, "1.5" in English - the dialogs' own numbers (this one's
 // and the page setup's).
 function fmtNum( v ) { return ( Math.round( v * 100 ) / 100 ).toLocaleString( Ayni.i18n.lang(), { maximumFractionDigits: 2 } ); }
@@ -1147,7 +1144,7 @@ function openParagraph()
     try { f = editor.snapshot().formatting; } catch( _ ) {}
     paraFmt = f || {};
 
-    const val = function( id, v ) { document.getElementById( id ).value = v; };
+    const val = function( id, v ) { const el = document.getElementById( id ); if( el.classList.contains( 'picker' ) ) pk( id ).set( v ); else el.value = v; };
     const has = function( v ) { return v !== null && v !== undefined; };
     const ind = paraFmt.indent || null;
 
@@ -1177,28 +1174,21 @@ function openParagraph()
 }
 
 // The line spacing list holds Word's multiples; a value it does not name (1,08,
-// "exactly 12 pt") is added for the moment, so the dialog shows the truth and
-// applying it without touching it changes nothing.
+// "exactly 12 pt") is shown for the moment (not added), so the dialog shows the
+// truth and applying it without touching it changes nothing.
 function showLineSpacing( ls )
 {
-    const sel   = document.getElementById( 'paLine' );
-    const extra = sel.querySelector( 'option[data-extra]' );
-    if( extra ) extra.remove();
+    const sel = pk( 'paLine' );
 
-    // The multiples in the markup are labelled in the language's own way: "1,5" or "1.5".
-    for( const o of sel.options ) o.textContent = fmtNum( parseFloat( o.value ) );
+    // The multiples are labelled in the language's own way: "1,5" or "1.5".
+    sel.options = sel.options.map( function( o ) { return { value: o.value, text: fmtNum( parseFloat( o.value ) ) }; } );
 
-    if( ! ls ) { sel.value = ''; return; }
+    if( ! ls ) { sel.set( '' ); return; }
 
     const v = ls.rule === 'multiple' ? String( Math.round( ls.value * 100 ) / 100 ) : ls.rule + ':' + ls.value;
 
-    if( ! [ ...sel.options ].some( function( o ) { return o.value === v; } ) )
-    {
-        const op = new Option( ls.rule === 'multiple' ? fmtNum( ls.value ) : fmtNum( ls.value ) + ' pt', v );
-        op.dataset.extra = '1';
-        sel.appendChild( op );
-    }
-    sel.value = v;
+    if( sel.options.some( function( o ) { return o.value === v; } ) ) sel.set( v );
+    else sel.set( v, ls.rule === 'multiple' ? fmtNum( ls.value ) : fmtNum( ls.value ) + ' pt' );
 }
 
 // The list part: which level of the caret's list, and how it is numbered. The
@@ -1210,12 +1200,12 @@ let paraListAsk = 0;     // the newest fillParagraphList: an older answer is dro
 async function fillParagraphList()
 {
     const note  = document.getElementById( 'paListNote' );
-    const level = document.getElementById( 'paListLevel' );
-    const fmt   = document.getElementById( 'paListFormat' );
+    const level = pk( 'paListLevel' );
+    const fmt   = pk( 'paListFormat' );
     const mine  = ++paraListAsk;
 
-    level.value    = '1';
-    fmt.value      = 'decimal';
+    level.set( '1' );
+    fmt.set( 'decimal' );
     note.hidden    = true;
     level.disabled = fmt.disabled = false;
 
@@ -1230,7 +1220,7 @@ async function fillParagraphList()
         if( ! info || mine !== paraListAsk ) return;
 
         paraList    = Object.assign( { paraId: paraId }, info );
-        level.value = String( Math.min( info.ilvl + 1, level.options.length ) );
+        level.set( String( Math.min( info.ilvl + 1, level.options.length ) ) );
         note.hidden = false;
         showListFormat();
     }
@@ -1244,25 +1234,19 @@ function showListFormat()
 {
     if( ! paraList ) return;
 
-    const sel   = document.getElementById( 'paListFormat' );
-    const want  = paraList.formats[ parseInt( document.getElementById( 'paListLevel' ).value, 10 ) - 1 ] || 'decimal';
-    const extra = sel.querySelector( 'option[data-extra]' );
-    if( extra ) extra.remove();
+    const sel   = pk( 'paListFormat' );
+    const want  = paraList.formats[ parseInt( pk( 'paListLevel' ).value, 10 ) - 1 ] || 'decimal';
 
-    if( ! [ ...sel.options ].some( function( o ) { return o.value === want; } ) )
-    {
-        const op = new Option( want === 'bullet' ? '•' : want, want );
-        op.dataset.extra = '1';
-        sel.appendChild( op );
-    }
-    sel.value = want;
+    // A format the list does not name is shown, not added
+    if( sel.options.some( function( o ) { return o.value === want; } ) ) sel.set( want );
+    else sel.set( want, want === 'bullet' ? '•' : want );
 }
 
 // "Primera línea" / "Francesa" need an amount; "Ninguna" does not. Same
 // row-hiding idiom Calc's number-format dialog uses.
 function syncParagraphRows()
 {
-    const sp = document.getElementById( 'paSpecial' ).value;
+    const sp = pk( 'paSpecial' ).value;
     document.getElementById( 'paSpecialByField' ).hidden = sp === 'none';
 }
 
@@ -1275,7 +1259,7 @@ function markParagraphTouched( id )
 // and the user left it so) is left out, not zeroed.
 function paragraphCommand()
 {
-    const val = function( id ) { return document.getElementById( id ).value; };
+    const val = function( id ) { const el = document.getElementById( id ); return el.classList.contains( 'picker' ) ? pk( id ).value : el.value; };
     const cmd = { type: 'setParagraphFormat' };
 
     if( paraTouched.has( 'paSpacing' ) )
@@ -1353,8 +1337,8 @@ async function applyListFormat()
 {
     if( ! paraList ) { Ayni.toast( 'warn', Ayni.t( 'write.notInList' ) ); return; }
 
-    const ilvl = parseInt( document.getElementById( 'paListLevel' ).value, 10 ) - 1;
-    const fmt  = document.getElementById( 'paListFormat' ).value;
+    const ilvl = parseInt( pk( 'paListLevel' ).value, 10 ) - 1;
+    const fmt  = pk( 'paListFormat' ).value;
     if( paraList.formats[ ilvl ] === fmt ) return;
 
     const list = paraList;
@@ -1428,15 +1412,13 @@ async function withDefaultStyles( bytes )
 
 function wireStyles()
 {
-    const sel = function( id, list ) { const el = document.getElementById( id ); for( const o of list ) el.add( new Option( o[1], o[0] ) ); };
+    pk( 'stFont' ).options = MENU_FONTS;
+    pk( 'stSize' ).options = MENU_SIZES;
 
-    sel( 'stFont', MENU_FONTS.map( function( f ) { return [ f, f ]; } ) );
-    sel( 'stSize', MENU_SIZES.map( function( n ) { return [ n, n ]; } ) );
-
-    document.getElementById( 'stStyle' ).addEventListener( 'change', function( e ) { showStyle( e.target.value ); } );
+    document.getElementById( 'stStyle' ).addEventListener( 'ayni:change', function( e ) { showStyle( e.detail.value ); } );
 
     for( const id in ST_FIELDS )
-        document.getElementById( id ).addEventListener( 'change', function()
+        document.getElementById( id ).addEventListener( document.getElementById( id ).classList.contains( 'picker' ) ? 'ayni:change' : 'change', function()
         {
             const v = readStyleField( id );
             if( v === null ) return;                 // an unreadable number: nothing changes
@@ -1447,8 +1429,9 @@ function wireStyles()
 
 function readStyleField( id )
 {
-    const el = document.getElementById( id );
+    let el = document.getElementById( id );
     if( el.type === 'checkbox' ) return el.checked;
+    if( el.classList.contains( 'picker' ) ) el = pk( id );     // an Ayni list picker: its value
     if( id === 'stSize' ) { const n = parseFloat( el.value ); return Number.isFinite( n ) ? n : null; }
     if( id === 'stBefore' || id === 'stAfter' ) { const n = parseNum( el.value ); return n === null || n < 0 ? null : n; }
     return el.value;
@@ -1468,12 +1451,11 @@ async function openStyles()
 
     // The colour list: Automatic, then the menu's own colours (labelled now,
     // so they follow the language).
-    const col = document.getElementById( 'stColor' );
-    col.length = 0;
-    col.add( new Option( Ayni.t( 'write.stAuto' ), 'auto' ) );
-    for( const c of NayiveMenus.COLORS ) col.add( new Option( Ayni.t( 'ui.color.' + c[1] ), c[0].slice( 1 ) ) );
+    pk( 'stColor' ).options = [ { value: 'auto', text: Ayni.t( 'write.stAuto' ) } ]
+        .concat( NayiveMenus.COLORS.map( function( c ) { return { value: c[0].slice( 1 ), text: Ayni.t( 'ui.color.' + c[1] ) }; } ) );
 
     stVals = {}; stTouched = {};
+    const styleItems = pk( 'stStyle' ).options;
     for( const key of ST_KEYS )
     {
         const id = styleIdFor( key );
@@ -1486,11 +1468,12 @@ async function openStyles()
                              bold: !! p.bold, italic: !! p.italic,
                              beforePt: sp ? sp.beforePt : 0, afterPt: sp ? sp.afterPt : 0 };
         stTouched[ key ] = new Set();
-        document.querySelector( '#stStyle option[value="' + key + '"]' ).disabled = ! id;
+        styleItems.find( function( o ) { return o.value === key; } ).disabled = ! id;
     }
+    pk( 'stStyle' ).options = styleItems;      // a style the document lacks shows, faded
 
     document.getElementById( 'stDefault' ).checked = false;
-    document.getElementById( 'stStyle' ).value = 'Normal';
+    pk( 'stStyle' ).set( 'Normal' );
     showStyle( 'Normal' );
     setBackdrop( 'stylesBackdrop', true );
 }
@@ -1504,18 +1487,12 @@ function showStyle( key )
 
     const pick = function( id, value, label )
     {
-        const el = document.getElementById( id );
-        const extra = el.querySelector( 'option[data-extra]' );
-        if( extra ) extra.remove();
-        if( value === null ) { el.value = ''; return; }
+        const sel = pk( id );
+        if( value === null ) { sel.set( '' ); return; }
 
-        if( ! [ ...el.options ].some( function( o ) { return o.value === String( value ); } ) )
-        {
-            const op = new Option( label, String( value ) );
-            op.dataset.extra = '1';
-            el.add( op, 0 );
-        }
-        el.value = String( value );
+        // A value the list does not name is shown, not added
+        if( sel.options.some( function( o ) { return o.value === String( value ); } ) ) sel.set( String( value ) );
+        else sel.set( String( value ), label );
     };
 
     pick( 'stFont',  v.font, v.font );
@@ -1889,7 +1866,7 @@ function zoomFixed()
 // EDITOR is not such a box - shortcuts are for use while writing.
 function inOwnField( t )
 {
-    const f = ( t && t.closest ) ? t.closest( 'input, textarea, select' ) : null;
+    const f = ( t && t.closest ) ? t.closest( 'input, textarea, .picker' ) : null;
     return !! f && ! f.closest( '#editor' );
 }
 
@@ -3008,8 +2985,8 @@ function openPageSetup()
 
     const v = cur || pageSetup;
 
-    document.getElementById( 'psSize'   ).value = PAGE_SIZES[ v.size ] ? v.size : 'custom';
-    document.getElementById( 'psOrient' ).value = v.orientation;
+    pk( 'psSize'   ).set( PAGE_SIZES[ v.size ] ? v.size : 'custom' );
+    pk( 'psOrient' ).set( v.orientation );
     document.getElementById( 'psTop'    ).value = fmtNum( v.top );
     document.getElementById( 'psBottom' ).value = fmtNum( v.bottom );
     document.getElementById( 'psLeft'   ).value = fmtNum( v.left );
@@ -3025,7 +3002,7 @@ function openPageSetup()
 function syncPageSizeRows()
 {
     document.getElementById( 'psCustomRow' ).hidden =
-        document.getElementById( 'psSize' ).value !== 'custom';
+        pk( 'psSize' ).value !== 'custom';
 }
 
 // The open document's page setup, in the dialog's units: centimetres for the
@@ -3076,11 +3053,11 @@ function pageSetupCommand( setup, scope )
 
 function confirmPageSetup()
 {
-    const chosen = document.getElementById( 'psSize' ).value;
+    const chosen = pk( 'psSize' ).value;
 
     const next = {
         size        : PAGE_SIZES[ chosen ] ? chosen : 'custom',
-        orientation : document.getElementById( 'psOrient' ).value === 'landscape' ? 'landscape' : 'portrait',
+        orientation : pk( 'psOrient' ).value === 'landscape' ? 'landscape' : 'portrait',
         // A page, not a margin: 200 cm is a generous ceiling, 1 cm a sane floor.
         width       : Math.max( parseCm( document.getElementById( 'psWidth'  ).value, 200 ) ?? 21,   1 ) / CM_PER_IN,
         height      : Math.max( parseCm( document.getElementById( 'psHeight' ).value, 200 ) ?? 29.7, 1 ) / CM_PER_IN,

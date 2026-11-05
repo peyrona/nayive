@@ -34,15 +34,10 @@
     // phone, the name of what is on screen beside the tree's button.
     E.renderSide = function ()
     {
-        var sel = E.$( "acctSel" );
+        var sel = E.$( "acctSel" ), pk = Ayni.picker( sel );     // an Ayni list picker
         sel.hidden = S.accounts.length < 2;
-        sel.textContent = "";
-        S.accounts.forEach( function ( a )
-        {
-            var o = h( "option", { text: a.email + ( a.unread ? "  (" + a.unread + ")" : "" ), attrs: { value: a.id } } );
-            if( a.id === S.acct ) o.selected = true;
-            sel.appendChild( o );
-        } );
+        pk.options = S.accounts.map( function ( a ) { return { value: a.id, text: a.email + ( a.unread ? "  (" + a.unread + ")" : "" ) }; } );
+        pk.set( S.acct );
 
         if( E.renderTree ) E.renderTree();
         var l = S.label && E.labelById( S.label );
@@ -341,7 +336,7 @@
         if( io ) io.disconnect();
         var box = E.$( "listMore" );
         box.textContent = "";
-        box.appendChild( E.h( "button", { class: "pill", text: E.T( "mail.advKeep" ), attrs: { type: "button" },
+        box.appendChild( E.h( "button", { class: "btn text sm bordered", text: E.T( "mail.advKeep" ), attrs: { type: "button" },
             on: { click: function () { S.advDry = 0; E.loadList( true ); } } } ) );
     }
 } )();

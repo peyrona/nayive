@@ -483,7 +483,7 @@ const initError = (c) => {
     if (lab || c.matches('fieldset')) (lab || c).append(m);
     /* A list with no visible label: the "!" sits inside its top-right corner, as inside a text field */
     else { const w = document.createElement('span'); w.className = 'err-wrap err-corner'; c.before(w); w.append(c, m); }
-  } else if (c.parentElement.matches('.input-group, .spin')) c.after(m);
+  } else if (c.parentElement.matches('.input-group, .spin, .picker')) c.after(m);
   else { const w = document.createElement('span'); w.className = 'err-wrap'; c.before(w); w.append(c, m); }
   errMarks.set(c, m);
   m.addEventListener('pointerdown', (e) => e.preventDefault());
@@ -494,8 +494,9 @@ const initError = (c) => {
   new MutationObserver(() => { if (errFor === c) showErr(c, errPinned); }).observe(src, { childList: true, characterData: true, subtree: true });
   errSync(c);
 };
-/* The tree's rename field (ayni-lists.js) uses the same "!" */
-Ayni.core.errors = { init: initError, forget: (c) => { errMarks.delete(c); if (errFor === c) hideErr(); } };
+/* The tree's rename field (ayni-lists.js) and the filtered list (ayni-pickers.js) use the same "!"; check(field, fn)
+   registers a field's own check, which Ayni.focusFirstError runs first */
+Ayni.core.errors = { init: initError, forget: (c) => { errMarks.delete(c); if (errFor === c) hideErr(); }, check: (c, fn) => checks.set(c, fn) };
 /* Ayni.focusFirstError(root): on sending a form, true when a field is wrong: the focus goes to the first one, so its message
    shows. Typed date, time and number fields are checked again first */
 const focusFirstError = (root = document) => {

@@ -48,7 +48,7 @@ try
 
         const found = await page.evaluate( async half =>
         {
-            const CLICK = 'button, a[href], input:not([type=hidden]), select, summary, label[for], [role=button], ' +
+            const CLICK = 'button, a[href], input:not([type=hidden]), [role=combobox], summary, label[for], [role=button], ' +
                           '[role=checkbox], [role=switch], [role=tab], [role=menuitem], [onclick], [draggable=true]';
             const TEXT  = 'textarea, [contenteditable=""], [contenteditable=true], input:not([type]), ' +
                           'input[type=text], input[type=search], input[type=email], input[type=password], ' +

@@ -31,26 +31,22 @@
     var picked    = false;   // the user chose the provider by hand
 
 
-    function prov() { return providers.filter( function ( p ) { return p.id === E.$( "addProv" ).value; } )[ 0 ] || null; }
+    function prov() { return providers.filter( function ( p ) { return p.id === Ayni.picker( E.$( "addProv" ) ).value; } )[ 0 ] || null; }
 
     async function loadProviders()
     {
         if( providers.length ) return;
         var r = await E.api( "GET", "providers" );
         providers = r.providers || [];
-        var sel = E.$( "addProv" );
-        sel.textContent = "";
-        providers.forEach( function ( p )
-        {
-            sel.appendChild( h( "option", { text: p.name, attrs: { value: p.id } } ) );
-        } );
-        sel.appendChild( h( "option", { text: E.T( "mail.prov.other" ), attrs: { value: "other" } } ) );
+        // an Ayni list picker
+        Ayni.picker( E.$( "addProv" ) ).options = providers.map( function ( p ) { return { value: p.id, text: p.name }; } )
+            .concat( [ { value: "other", text: E.T( "mail.prov.other" ) } ] );
     }
 
     // openSettings( "accounts" | "general" ): the dialog, on that tab.
     E.openSettings = async function ( tab )
     {
-        showTab( tab || "accounts" );
+        Ayni.tabs( "#setTabs" ).select( tab || "accounts" );
         E.$( "trashDays" ).value = S.settings.trashDays;
         E.$( "signature" ).value = S.settings.signature || "";
         E.$( "trashDaysHint" ).hidden = ! S.accounts.some( function ( a ) { return a.provider === "gmail" || /gmail\.com$/.test( a.imapHost || "" ); } );
@@ -64,22 +60,11 @@
         picked = false;
         try { await loadProviders(); }
         catch( err ) { Ayni.toast( "err", E.errText( err ) ); }
-        E.$( "addProv" ).value = providers.length ? providers[ 0 ].id : "other";
+        Ayni.picker( E.$( "addProv" ) ).set( providers.length ? providers[ 0 ].id : "other" );
         renderProvider();
         document.getElementById( "setSheet" ).showModal();
         if( ! S.accounts.length && tab !== "general" ) setTimeout( function () { E.$( "addEmail" ).focus(); }, 50 );
     };
-
-    function showTab( tab )
-    {
-        document.querySelectorAll( "#setSheet .mail-tabs .pill" ).forEach( function ( b )
-        {
-            var on = b.getAttribute( "data-tab" ) === tab;
-            b.classList.toggle( "is-active", on );
-            b.setAttribute( "aria-selected", on ? "true" : "false" );
-        } );
-        document.querySelectorAll( "#setSheet [data-pane]" ).forEach( function ( p ) { p.hidden = p.getAttribute( "data-pane" ) !== tab; } );
-    }
 
     var daysTimer = 0;
     function saveDays()
@@ -127,9 +112,9 @@
         var domain = v.slice( at + 1 );
         var p = providers.filter( function ( x ) { return x.domains.indexOf( domain ) >= 0; } )[ 0 ];
         var want = p ? p.id : ( /\.[a-z]{2,}$/.test( domain ) ? "other" : null );
-        if( want && want !== E.$( "addProv" ).value )
+        if( want && want !== Ayni.picker( E.$( "addProv" ) ).value )
         {
-            E.$( "addProv" ).value = want;
+            Ayni.picker( E.$( "addProv" ) ).set( want );
             renderProvider();
         }
     }
@@ -334,7 +319,7 @@
         }
         catch( err )
         {
-            if( err.code === "hosts" ) { E.$( "addProv" ).value = "other"; picked = true; renderProvider(); }
+            if( err.code === "hosts" ) { Ayni.picker( E.$( "addProv" ) ).set( "other" ); picked = true; renderProvider(); }
             errBox.textContent = E.errText( err );
             errBox.hidden = false;
         }
@@ -353,16 +338,11 @@
         {
             E.$( id ).addEventListener( "input", function () { E.$( "addError" ).hidden = true; } );   // fixed: the old complaint goes
         } );
-        E.$( "addProv" ).addEventListener( "change", function () { picked = true; renderProvider(); } );
+        E.$( "addProv" ).addEventListener( "ayni:change", function () { picked = true; renderProvider(); } );
         E.$( "addPass" ).addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); E.addAccount(); } } );
         E.$( "trashDays" ).addEventListener( "input", saveDays );
         E.$( "signature" ).addEventListener( "input", saveSignature );
         E.$( "signature" ).addEventListener( "change", retrySignature );
         E.$( "setSheet" ).addEventListener( "close", retrySignature );
-        document.querySelector( "#setSheet .mail-tabs" ).addEventListener( "click", function ( e )
-        {
-            var b = e.target.closest( "[data-tab]" );
-            if( b ) showTab( b.getAttribute( "data-tab" ) );
-        } );
     } );
 } )();

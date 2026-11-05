@@ -208,7 +208,7 @@ function wireItems()
     // The filter pills, the crumbs, ← up, the empty screen's buttons.
     $( 'filterRow' ).addEventListener( 'click', function( e )
     {
-        const p = e.target.closest( '.pill' );
+        const p = e.target.closest( '[data-filter]' );
         if( ! p ) return;
         filter = p.dataset.filter;
         if( filter === 'all' ) curFolder = ROOT;
@@ -443,9 +443,11 @@ function applyTreeWidth()
 
 function wireResizer()
 {
-    NayiveUI.paneResizer( $( 'paneResizer' ), $( 'treePane' ),
+    Ayni.splitter( '#paneResizer',
     {
-        min: TREE_MIN, max: TREE_MAX, def: TREE_DEF, off: isPhone, save: saveUi,
+        pane: $( 'treePane' ), min: TREE_MIN, max: TREE_MAX, def: TREE_DEF, off: isPhone,
+        size: ui.treeW > 0 ? ui.treeW : null, collapsed: ui.treeFold,
+        save: function( w, fold ) { ui.treeFold = fold; saveUi(); },
         set: function( w ) { ui.treeW = w; applyTreeWidth(); }
     } );
 }

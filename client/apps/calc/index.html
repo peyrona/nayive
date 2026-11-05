@@ -23,6 +23,8 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -36,6 +38,8 @@
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
     <script src="../shared/ayni/ayni-fields.js" defer></script>
+    <script src="../shared/ayni/ayni-pickers.js" defer></script>
+    <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Vendored libs (all pinned, no build step). Order matters: classic scripts run before the deferred module script below. -->
@@ -162,31 +166,37 @@
              The FILE buttons are not on the bar at all: they live in #fileTools
              below, hidden, and reach the user through the header's "..." menu -
              on a PC as much as on a phone. File last, as in Write. -->
-        <div id="fmtToolbar">
+        <div id="fmtToolbar" role="toolbar" data-i18n-attr="aria-label:ui.formatBar">
             <!-- A PC's File button (#moreBtn) goes in before this rule - calc.js
                  moves it here from the header, and back on a phone. -->
             <div id="fileSep" class="fmt-sep"></div>
-            <select id="fmtFontFamily" class="tb-select fmt-select-font" data-i18n-attr="title:calc.fontFamily">
-                <option value="">Calibri</option>
-                <option value="Arial">Arial</option>
-                <option value="Georgia">Georgia</option>
-                <option value="'Courier New'">Courier New</option>
-                <option value="Verdana">Verdana</option>
-            </select>
-            <select id="fmtFontSize" class="tb-select fmt-select-narrow" data-i18n-attr="title:calc.fontSize">
-                <option value="">11</option>
-                <option value="8">8</option>
-                <option value="9">9</option>
-                <option value="10">10</option>
-                <option value="12">12</option>
-                <option value="14">14</option>
-                <option value="16">16</option>
-                <option value="18">18</option>
-                <option value="20">20</option>
-                <option value="24">24</option>
-                <option value="28">28</option>
-                <option value="36">36</option>
-            </select>
+            <div class="picker fmt-select-font" id="fmtFontFamily" data-i18n-attr="data-tip:calc.fontFamily">
+                <input type="hidden" value="">
+                <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                    <li role="option" data-value="">Calibri</li>
+                    <li role="option" data-value="Arial">Arial</li>
+                    <li role="option" data-value="Georgia">Georgia</li>
+                    <li role="option" data-value="'Courier New'">Courier New</li>
+                    <li role="option" data-value="Verdana">Verdana</li>
+                </ul></div>
+            </div>
+            <div class="picker fmt-select-narrow" id="fmtFontSize" data-picker="combo" data-i18n-attr="data-tip:calc.fontSize">
+                <input type="hidden" value="">
+                <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                    <li role="option" data-value="">11</li>
+                    <li role="option" data-value="8">8</li>
+                    <li role="option" data-value="9">9</li>
+                    <li role="option" data-value="10">10</li>
+                    <li role="option" data-value="12">12</li>
+                    <li role="option" data-value="14">14</li>
+                    <li role="option" data-value="16">16</li>
+                    <li role="option" data-value="18">18</li>
+                    <li role="option" data-value="20">20</li>
+                    <li role="option" data-value="24">24</li>
+                    <li role="option" data-value="28">28</li>
+                    <li role="option" data-value="36">36</li>
+                </ul></div>
+            </div>
             <div class="fmt-sep"></div>
             <button id="fmtBoldBtn" class="btn fmt-btn fmt-keep" data-i18n-attr="data-tip:calc.bold">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M7.8 19c-.3 0-.5 0-.6-.2l-.2-.5V5.7c0-.2 0-.4.2-.5l.6-.2h5c1.5 0 2.7.3 3.5 1 .7.6 1.1 1.4 1.1 2.5a3 3 0 0 1-.6 1.9c-.4.6-1 1-1.6 1.2.4.1.9.3 1.3.6s.8.7 1 1.2c.4.4.5 1 .5 1.6 0 1.3-.4 2.3-1.3 3-.8.7-2.1 1-3.8 1H7.8Zm5-8.3c.6 0 1.2-.1 1.6-.5.4-.3.6-.7.6-1.3 0-1.1-.8-1.7-2.3-1.7H9.3v3.5h3.4Zm.5 6c.7 0 1.3-.1 1.7-.4.4-.4.6-.9.6-1.5s-.2-1-.7-1.4c-.4-.3-1-.4-2-.4H9.4v3.8h4Z"/></svg>
@@ -211,15 +221,16 @@
             <button id="fmtAlignBtn" class="btn fmt-btn" type="button" popovertarget="alignPopup" data-lit-by="fmtWrapBtn" data-i18n-attr="data-tip:calc.grpAlign, aria-label:calc.grpAlign" aria-haspopup="true">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M5 5h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 1 1 0-2Zm0 4h8c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 1 1 0-2Zm0 8h8c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 0 1 0-2Zm0-4h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 0 1 0-2Z"/></svg>
             </button>
-            <select id="fmtNumFormat" class="tb-select fmt-select-numfmt fmt-keep" data-i18n-attr="title:calc.numFormat">
-                <!-- the shown row: holds the cell's category label (see showNumFmt) -->
-                <option value="" hidden></option>
-                <option value="general" data-i18n="calc.nfGeneral"></option>
-                <option value="numero" data-i18n="calc.nfNumber"></option>
-                <option value="moneda" data-i18n="calc.nfCurrency"></option>
-                <option value="porcentaje" data-i18n="calc.nfPercent"></option>
-                <option value="fecha" data-i18n="calc.nfDate"></option>
-            </select>
+            <div class="picker fmt-select-numfmt fmt-keep" id="fmtNumFormat" data-i18n-attr="data-tip:calc.numFormat">
+                <input type="hidden" value="general">
+                <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                    <li role="option" data-value="general" data-i18n="calc.nfGeneral"></li>
+                    <li role="option" data-value="numero" data-i18n="calc.nfNumber"></li>
+                    <li role="option" data-value="moneda" data-i18n="calc.nfCurrency"></li>
+                    <li role="option" data-value="porcentaje" data-i18n="calc.nfPercent"></li>
+                    <li role="option" data-value="fecha" data-i18n="calc.nfDate"></li>
+                </ul></div>
+            </div>
             <button id="fmtPainterBtn" class="btn fmt-btn" data-i18n-attr="data-tip:write.tb.copyFormat, aria-label:write.tb.copyFormat">
                 <svg width="17" height="17" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M440-80q-33 0-56.5-23.5T360-160v-160H240q-33 0-56.5-23.5T160-400v-280q0-66 47-113t113-47h480v440q0 33-23.5 56.5T720-320H600v160q0 33-23.5 56.5T520-80h-80ZM240-560h480v-200h-40v160h-80v-160h-40v80h-80v-80H320q-33 0-56.5 23.5T240-680v120Zm0 160h480v-80H240v80Zm0 0v-80 80Z"></path></svg>
             </button>
@@ -345,8 +356,8 @@
 
         <!-- Bottom bar. The tab strip appears only for a workbook with more than
              one sheet; the totals for whatever is selected are always there. -->
-        <div id="statusBar" data-toasts-above>
-            <div id="sheetTabs" role="tablist" hidden></div>
+        <div id="statusBar" class="statusbar" data-toasts-above>
+            <div id="sheetTabs" role="tablist" class="bottom" data-i18n-attr="aria-label:calc.sheets" hidden></div>
             <div id="selStats" aria-live="polite"></div>
         </div>
 
@@ -381,32 +392,38 @@
         <div class="body">
             <div class="field">
                 <label for="setDec"><span data-i18n="calc.setDec"></span> <button class="info-tip" type="button" data-i18n-attr="data-help:calc.setDecInfo"></button></label>
-                <select id="setDec">
-                    <option value="" data-i18n="calc.setByLang"></option>
-                    <option value=",">1.234,5</option>
-                    <option value=".">1,234.5</option>
-                </select>
+                <div class="picker" id="setDec">
+                    <input type="hidden" value="">
+                    <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                        <li role="option" data-value="" data-i18n="calc.setByLang"></li>
+                        <li role="option" data-value=",">1.234,5</li>
+                        <li role="option" data-value=".">1,234.5</li>
+                    </ul></div>
+                </div>
             </div>
 
             <div class="field">
                 <label for="setDate"><span data-i18n="calc.setDate"></span> <button class="info-tip" type="button" data-i18n-attr="data-help:calc.setDateInfo"></button></label>
-                <select id="setDate">
-                    <option value="" data-i18n="calc.setByLang"></option>
-                    <option value="dd/mm/yyyy">31/12/2026</option>
-                    <option value="mm/dd/yyyy">12/31/2026</option>
-                    <option value="dd.mm.yyyy">31.12.2026</option>
-                    <option value="yyyy-mm-dd">2026-12-31</option>
-                </select>
+                <div class="picker" id="setDate">
+                    <input type="hidden" value="">
+                    <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                        <li role="option" data-value="" data-i18n="calc.setByLang"></li>
+                        <li role="option" data-value="dd/mm/yyyy">31/12/2026</li>
+                        <li role="option" data-value="mm/dd/yyyy">12/31/2026</li>
+                        <li role="option" data-value="dd.mm.yyyy">31.12.2026</li>
+                        <li role="option" data-value="yyyy-mm-dd">2026-12-31</li>
+                    </ul></div>
+                </div>
             </div>
 
             <div class="field-row">
                 <div class="field">
                     <label for="setFont"><span data-i18n="calc.setFont"></span> <button class="info-tip" type="button" data-i18n-attr="data-help:calc.setFontInfo"></button></label>
-                    <select id="setFont"></select>     <!-- #fmtFontFamily's options (calc.js wireSettings) -->
+                    <div class="picker" id="setFont"></div>     <!-- #fmtFontFamily's items (calc.js wireSettings) -->
                 </div>
                 <div class="field">
                     <label for="setSize" data-i18n="calc.fontSize"></label>
-                    <select id="setSize"></select>     <!-- #fmtFontSize's options (calc.js wireSettings) -->
+                    <div class="picker" id="setSize"></div>     <!-- #fmtFontSize's items (calc.js wireSettings) -->
                 </div>
             </div>
         </div>
@@ -447,11 +464,11 @@
         <div class="fe-body">
             <div class="fe-row">
                 <div id="feResult" class="input fe-result" role="status" aria-live="polite" data-i18n-attr="aria-label:calc.fe.result"></div>
-                <button id="feRangeBtn" type="button" class="pill" aria-pressed="false" data-i18n="calc.fe.range" data-i18n-attr="data-tip:calc.fe.rangeTip"></button>
+                <button id="feRangeBtn" type="button" class="btn text sm bordered" aria-pressed="false" data-i18n="calc.fe.range" data-i18n-attr="data-tip:calc.fe.rangeTip"></button>
             </div>
             <div id="feFnHelp" class="fe-help" hidden></div>
             <div id="feFns" class="fe-row">
-                <button id="feAllBtn" type="button" class="pill" aria-expanded="false" data-i18n="calc.fe.all"></button>
+                <button id="feAllBtn" type="button" class="btn text sm bordered" aria-expanded="false" data-i18n="calc.fe.all"></button>
             </div>
             <div id="feList" class="fe-list" hidden></div>
             <div id="feKeys"></div>
@@ -590,16 +607,19 @@
         <div class="body">
             <div class="field" data-nf="numero moneda porcentaje">
                 <label for="nfDecimals" data-i18n="calc.decimals"></label>
-                <select id="nfDecimals">
-                    <option value="0">0</option>
-                    <option value="1">1</option>
-                    <option value="2" selected>2</option>
-                    <option value="3">3</option>
-                    <option value="4">4</option>
-                    <option value="6">6</option>
-                    <option value="8">8</option>
-                    <option value="10">10</option>
-                </select>
+                <div class="picker" id="nfDecimals">
+                    <input type="hidden" value="2">
+                    <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                        <li role="option" data-value="0">0</li>
+                        <li role="option" data-value="1">1</li>
+                        <li role="option" data-value="2">2</li>
+                        <li role="option" data-value="3">3</li>
+                        <li role="option" data-value="4">4</li>
+                        <li role="option" data-value="6">6</li>
+                        <li role="option" data-value="8">8</li>
+                        <li role="option" data-value="10">10</li>
+                    </ul></div>
+                </div>
             </div>
 
             <div class="field" data-nf="numero moneda">
@@ -617,23 +637,29 @@
 
             <div class="field" data-nf="moneda">
                 <label for="nfCurrencyPos" data-i18n="calc.symbolPosition"></label>
-                <select id="nfCurrencyPos">
-                    <option value="after" data-i18n="calc.symbolAfter"></option>
-                    <option value="before" data-i18n="calc.symbolBefore"></option>
-                </select>
+                <div class="picker" id="nfCurrencyPos">
+                    <input type="hidden" value="after">
+                    <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                        <li role="option" data-value="after" data-i18n="calc.symbolAfter"></li>
+                        <li role="option" data-value="before" data-i18n="calc.symbolBefore"></li>
+                    </ul></div>
+                </div>
             </div>
 
             <div class="field" data-nf="fecha">
                 <label for="nfDatePattern" data-i18n="calc.pattern"></label>
-                <select id="nfDatePattern">
-                    <option value="yyyy-mm-dd">2026-12-31</option>
-                    <option value="yyyy-mm-dd hh:mm">2026-12-31 14:30</option>
-                    <option value="dd/mm/yyyy">31/12/2026</option>
-                    <option value="d/m/yy">31/12/26</option>
-                    <option value="dd/mm/yyyy hh:mm">31/12/2026 14:30</option>
-                    <option value="hh:mm">14:30</option>
-                    <option value="hh:mm:ss">14:30:00</option>
-                </select>
+                <div class="picker" id="nfDatePattern">
+                    <input type="hidden" value="yyyy-mm-dd">
+                    <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                        <li role="option" data-value="yyyy-mm-dd">2026-12-31</li>
+                        <li role="option" data-value="yyyy-mm-dd hh:mm">2026-12-31 14:30</li>
+                        <li role="option" data-value="dd/mm/yyyy">31/12/2026</li>
+                        <li role="option" data-value="d/m/yy">31/12/26</li>
+                        <li role="option" data-value="dd/mm/yyyy hh:mm">31/12/2026 14:30</li>
+                        <li role="option" data-value="hh:mm">14:30</li>
+                        <li role="option" data-value="hh:mm:ss">14:30:00</li>
+                    </ul></div>
+                </div>
             </div>
 
             <div class="field">

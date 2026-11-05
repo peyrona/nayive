@@ -80,7 +80,7 @@ body       { overflow: hidden; }
 @media (max-width: 640px)
 {
     .side          { flex: 1 1 auto; }
-    .pane-resizer  { display: none; }
+    .chat > .splitter { display: none; }
     .main          { display: none; }
     .chat.in-main .side { display: none; }
     .chat.in-main .main { display: flex; }
@@ -175,7 +175,7 @@ button.who { cursor: pointer; }
 
 /* ---- the list of chats --------------------------------------------------- */
 .filters { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 8px 12px 6px; overflow-x: auto; }
-.filters .pill { font-size: 0.8rem; padding: 5px 12px; }
+html.touch .filters { gap: 8px; }
 /* auto-delete: a clock with the days, one for every chat - the row's right end.
    It only tells; the clock in the bar is the button. */
 .filters .ttl
@@ -1071,7 +1071,7 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 .watch-tap svg   { width: 16px; height: 16px; }
 .watch-row       { display: flex; align-items: center; gap: 6px; margin: 6px 0 2px; }
-.watch-btn       { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }   /* a .pill (app.css) */
+.watch-btn       { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
 .watch-btn svg   { width: 14px; height: 14px; }
 .row .flag.watching svg { color: var(--accent); }
 

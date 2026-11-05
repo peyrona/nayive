@@ -16,6 +16,11 @@
 .menu [role^="menuitem"] { font: inherit; font-size: .92rem; color: var(--text); text-align: left; background: none; border: 0;
   border-radius: var(--radius-s); padding: 7px 10px; display: flex; align-items: center; gap: 10px; cursor: pointer;
   white-space: nowrap; flex: none; min-width: 0; }
+/* A setting in a menu row: its text, then the control at the row's end (a list picker, a switch); a pick there does
+   not close the menu */
+.menu .menu-field { display: flex; align-items: center; gap: 12px; padding: 4px 8px 4px 12px; font-size: .92rem; color: var(--text); }
+.menu .menu-field > :last-child { margin-left: auto; }
+.menu .menu-field > .picker { min-width: 120px; }
 .menu [role^="menuitem"] > .icon { --icon: 18px; flex: none; color: var(--text-dim); }
 .menu [role^="menuitem"] > .icon.none { width: 18px; height: 18px; }
 .menu [role^="menuitem"] > .tick { flex: none; width: 15px; display: inline-flex; color: var(--accent); visibility: hidden; }

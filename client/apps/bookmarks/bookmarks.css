@@ -1,6 +1,6 @@
 /* bookmarks.css - Bookmarks' own layout. Every control wears the shared look
-   from ../shared/app.css and Ayni (.btn, the tree, .card-row, .pill,
-   .field, .open-crumb, .empty-hint, .pane-resizer, .btn.text);
+   from ../shared/app.css and Ayni (.btn, the tree, .card-row,
+   .field, .open-crumb, .empty-hint, .btn.text);
    only placement and the few things no other app has live here. */
 
 /* A tool shell (like Drive): the header stays, the tree and the list scroll
@@ -24,6 +24,7 @@ html, body { height: 100%; overflow: hidden; }
 /* Search, in the title bar: the shared SEARCH FOLD (app.css). */
 
 .filter-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+html.touch .filter-row { margin-bottom: 15px; }   /* the 44 px pads of its buttons clear the row below */
 
 .crumb-row  { display: flex; align-items: center; gap: 4px; min-height: 36px; margin-bottom: 8px; }
 #treeBtn    { display: none; }                      /* a phone's way into the tree */
@@ -63,7 +64,7 @@ html, body { height: 100%; overflow: hidden; }
     white-space: pre-line;
 }
 .bm-tags  { display: flex; flex-wrap: wrap; gap: 4px; }
-.bm-tag   { padding: 3px 9px; }        /* the shared .pill, one size down to sit inside a card */
+.bm-tag   { --btn: 24px; padding: 0 9px; }   /* one size down to sit inside a card */
 
 /* The coloured initial (hue from the domain), with the site's own icon laid
    over it once it loads ("ok", input.js) - unseen until then, so the initial
@@ -117,7 +118,7 @@ html, body { height: 100%; overflow: hidden; }
    its row. */
 @media (max-width: 640px)
 {
-    .pane-resizer { display: none; }
+    #paneResizer { display: none; }
     #treeBtn      { display: flex; }
     .list-pane { padding: 10px 10px 24px; }
     .tb-modes  { display: none; }

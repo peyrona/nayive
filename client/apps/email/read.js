@@ -138,6 +138,7 @@
 
     var wide = window.matchMedia( "(min-width: 1080px)" );
     E.split = false;
+    var splitBar = null;
     E.listShown = function () { return ! S.open || E.split; };
 
     // the open message's row, marked (split only)
@@ -151,7 +152,7 @@
     E.showPane = function ()
     {
         var on = E.split && S.accounts.length > 0;
-        document.body.classList.toggle( "split", on );
+        document.body.classList.toggle( "mail-split", on );
         E.$( "readRz" ).hidden = ! on;
         E.$( "readPane" ).hidden = ! on;
     };
@@ -166,12 +167,17 @@
         else E.$( "composeView" ).parentNode.insertBefore( view, E.$( "composeView" ) );
         E.showPane();
         if( S.open ) { setReading( true ); E.syncBar(); }
+        if( splitBar ) splitBar.reload();     // the panes are back: a collapsed one folds again
     }
 
-    NayiveUI.paneResizer( E.$( "readRz" ), E.$( "composeView" ).parentNode, {
-        key: "email-list-width", min: 280, max: 700, def: 380,
-        off: function () { return ! E.split; },
-        set: function ( w ) { document.documentElement.style.setProperty( "--mail-list-w", w + "px" ); } } );
+    Ayni.ready.then( function ()                  // its names come from the language files
+    {
+        splitBar = Ayni.splitter( E.$( "readRz" ), {
+            pane: E.$( "composeView" ).parentNode, other: E.$( "readPane" ),
+            key: "email-list-width", min: 280, max: 700, def: 380,
+            off: function () { return ! E.split; },
+            set: function ( w ) { document.documentElement.style.setProperty( "--mail-list-w", w + "px" ); } } );
+    } );
     syncSplit();
     // the desktop resizes this window's frame: each resize asks again
     window.addEventListener( "resize", syncSplit );
@@ -312,7 +318,6 @@
         b.hidden = ! remote;
         b.textContent = word;
         b.setAttribute( "aria-pressed", S.showImages ? "true" : "false" );
-        b.classList.toggle( "is-active", S.showImages );
     }
 
     // plain text, with its web addresses as links (built as nodes, never HTML)

@@ -66,6 +66,8 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -79,6 +81,8 @@
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
     <script src="../shared/ayni/ayni-fields.js" defer></script>
+    <script src="../shared/ayni/ayni-pickers.js" defer></script>
+    <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/ui.js" defer></script>
     <script src="../shared/store.js" defer></script>
@@ -330,14 +334,14 @@
         .tour-overlay { z-index: 200000; }   /* the guided tour over the bar's menus and pop-ups */
         #moreMenu .tile-sw { padding: 8px 12px; }
         /* Sticky windows, the clock and the bar: rows of the menu with the shared
-           .switch, a <select> or the height slider at their end. */
+           .switch, a list picker or the height slider at their end. */
         #moreMenu .menu-item > .switch,
-        #moreMenu .menu-item > select { margin-left: auto; }
-        #moreMenu .menu-item > select { width: auto; min-width: 0; padding: 4px 8px; }
+        #moreMenu .menu-item > .picker { margin-left: auto; }
+        #moreMenu .menu-item > .picker { min-width: 130px; }
         #moreMenu .slider-row         { margin-left: auto; width: 150px; }
-        /* The screen locker: its <select> first, the minutes at the end; the
+        /* The screen locker: its list first, the minutes at the end; the
            clock's text row hides unless the clock is picked. */
-        #moreMenu .lock-row > select  { margin-left: 0; }
+        #moreMenu .lock-row > .picker { margin-left: 0; min-width: 150px; }
         #moreMenu .lock-min           { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); }
         #moreMenu #lockMinSpin        { display: inline-flex; width: 116px; vertical-align: middle; }
         #moreMenu #lockText           { margin-left: auto; width: 150px; }
@@ -598,32 +602,25 @@
             <!-- SCALE ON OPEN - new windows start with Scale on (set.scaleNew; see SCALE).
                  The (i) is a span, not a button: a button would close the menu. -->
             <label class="menu-item switch end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 11 5 5 11 5"></polyline><polyline points="19 13 19 19 13 19"></polyline><line x1="5" y1="5" x2="19" y2="19"></line></svg><span data-i18n="desktop.scaleNew"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.scaleNewInfo"></span><input role="switch" type="checkbox" id="scaleNewChk"></label>
-            <!-- THE CLOCK - what it shows beside the time (see THE CLOCK). Labels, not
-                 buttons, so a change leaves the menu open. -->
+            <!-- THE CLOCK - what it shows beside the time (see THE CLOCK). Rows, not
+                 buttons, so a change leaves the menu open; the lists are Ayni's list
+                 pickers (a row holding one is a div: a label around it would click
+                 its field again after a pick). -->
             <div class="menu-sep"></div>
             <div class="menu-label" data-i18n="desktop.tabClock"></div>
-            <label class="menu-item"><span data-i18n="desktop.weekday"></span>
-                <select id="setDow">
-                    <option value="none"  data-i18n="desktop.weekdayNone"></option>
-                    <option value="short" data-i18n="desktop.weekdayShort"></option>
-                    <option value="long"  data-i18n="desktop.weekdayLong"></option>
-                </select></label>
+            <div class="menu-item"><label for="setDow" data-i18n="desktop.weekday"></label>
+                <div class="picker" id="setDow"><input type="hidden" value="none"><div class="panel popup picker-pop" popover="manual"><ul role="listbox"><li role="option" data-value="none" data-i18n="desktop.weekdayNone"></li><li role="option" data-value="short" data-i18n="desktop.weekdayShort"></li><li role="option" data-value="long" data-i18n="desktop.weekdayLong"></li></ul></div></div></div>
             <label class="menu-item switch end"><span data-i18n="desktop.showDate"></span><input role="switch" type="checkbox" id="setDate"></label>
             <label class="menu-item switch end"><span data-i18n="desktop.showSeconds"></span><input role="switch" type="checkbox" id="setSecs"></label>
             <!-- SECOND CLOCK - on: its zone's list below (filled at each menu open, see THE CLOCK AND THE BAR). -->
             <label class="menu-item switch end"><span data-i18n="desktop.clock2"></span><input role="switch" type="checkbox" id="setTz2On"></label>
-            <label class="menu-item" id="tz2Wrap" hidden><span data-i18n="desktop.clock2Zone"></span>
-                <select id="setTz2"></select></label>
+            <div class="menu-item" id="tz2Wrap" hidden><label for="setTz2" data-i18n="desktop.clock2Zone"></label>
+                <div class="picker" id="setTz2" data-picker="filter"></div></div>
             <!-- THE BAR - its side of the screen and its height (its width when at a side). -->
             <div class="menu-sep"></div>
             <div class="menu-label" data-i18n="desktop.tabDesktop"></div>
-            <label class="menu-item"><span data-i18n="desktop.barPos"></span>
-                <select id="setBar">
-                    <option value="top"    data-i18n="desktop.barTop"></option>
-                    <option value="bottom" data-i18n="desktop.barBottom"></option>
-                    <option value="left"   data-i18n="desktop.barLeft"></option>
-                    <option value="right"  data-i18n="desktop.barRight"></option>
-                </select></label>
+            <div class="menu-item"><label for="setBar" data-i18n="desktop.barPos"></label>
+                <div class="picker" id="setBar"><input type="hidden" value="bottom"><div class="panel popup picker-pop" popover="manual"><ul role="listbox"><li role="option" data-value="top" data-i18n="desktop.barTop"></li><li role="option" data-value="bottom" data-i18n="desktop.barBottom"></li><li role="option" data-value="left" data-i18n="desktop.barLeft"></li><li role="option" data-value="right" data-i18n="desktop.barRight"></li></ul></div></div></div>
             <label class="menu-item"><span data-i18n="desktop.barHeight"></span>
                 <span class="slider-row"><input type="range" id="setBarH" min="36" max="72" step="2"><output id="setBarHOut" for="setBarH"></output></span></label>
             <!-- SCREEN LOCKER (shared/locker.js): which one + after how many idle
@@ -632,7 +629,7 @@
             <div class="menu-sep"></div>
             <div class="menu-label" data-i18n="acct.locker"></div>
             <div class="menu-item lock-row">
-                <select id="lockSel" data-i18n-attr="aria-label:acct.locker"></select>
+                <div class="picker" id="lockSel" data-i18n-attr="aria-label:acct.locker"></div>
                 <span class="lock-min"><span class="input-group spin" id="lockMinSpin"><input class="input" id="lockMin" type="number" min="0" max="999" step="1" inputmode="numeric"
                        data-i18n-attr="title:acct.lockerMin, aria-label:acct.lockerMin"></span> <span data-i18n="acct.lockerUnit"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:acct.lockerOff"></span></span></div>
             <label class="menu-item" id="lockTextWrap" hidden><span data-i18n="acct.lockerText"></span>
@@ -761,9 +758,9 @@
     var APPS = {};     // "drive" -> { name, svg }
     // A new window's widest (openApp): one-column apps, and Write - an A4 page
     // at 100 % (794 + the engine's 2 x 24 gutter) + scrollbar + borders.
-    var NARROW = { contact: 560, write: 864, calculator: 360 };
+    var NARROW = { contact: 560, write: 864, calculator: 328 };
     // ...and no taller than it needs: Calculator is a small fixed panel.
-    var SHORT  = { calculator: 660 };
+    var SHORT  = { calculator: 539 };
     var appsReady = fetch( '../index.html', { credentials: 'same-origin' } )
         .then( function ( r ) { return r.text(); } )
         .then( function ( html )
@@ -1311,7 +1308,7 @@
     // document opened blank) keeps the desktop's own bar.
 
     var HEAD_SEL    = '.topbar, .header, .trip-header';
-    var INTERACTIVE = 'button, a, input, select, textarea, label, [contenteditable], [role="button"], [tabindex]';
+    var INTERACTIVE = 'button, a, input, .picker, textarea, label, [contenteditable], [role="button"], [tabindex]';
 
     function findHead( doc )
     {
@@ -1583,6 +1580,23 @@
         if( f.s < 1 ) st.setProperty( '--win-s', f.s ); else st.removeProperty( '--win-s' );
         if( kbWin === w ) kbShrink( w );         // the keyboard is still up: keep clear of it
     }
+
+    // An app of a fixed size asks its window to hug the page: cw's frame becomes
+    // W x H, its corner stays, all on the desk. Calculator (hugWindow). Answers
+    // false for a window that must keep its size (maximised, tiled, Scale on) or
+    // when the desk is too small for it.
+    window.nayiveFitWindow = function ( cw, W, H )
+    {
+        var w = wins.filter( function ( x ) { return x.frame.contentWindow === cw; } )[ 0 ];
+        if( ! w || isMax( w ) || w.scale || ( tiled && tiled.snaps.has( w ) ) ) return false;
+        var d  = deskRect();
+        var gw = Math.min( W + w.el.offsetWidth  - w.frame.offsetWidth,  d.w );
+        var gh = H + w.el.offsetHeight - w.frame.offsetHeight;
+        if( gh > d.h ) return false;
+        place( w, { l: Math.max( 0, Math.min( w.g.l, d.w - gw ) ), t: Math.max( 0, Math.min( w.g.t, d.h - gh ) ), w: gw, h: gh } );
+        saveWins();
+        return true;
+    };
 
     function moveTo( w, l, t )
     {
@@ -1881,14 +1895,20 @@
         barH: document.getElementById( 'setBarH' )
     };
     var barHOut = document.getElementById( 'setBarHOut' );
-    F.dow.value = set.dow; F.date.checked = !! set.date; F.secs.checked = !! set.secs;
-    F.bar.value = set.bar; F.barH.value = set.barH; barHOut.textContent = set.barH + ' px';
+    F.date.checked = !! set.date; F.secs.checked = !! set.secs;
+    F.barH.value = set.barH; barHOut.textContent = set.barH + ' px';
+    // The weekday and the bar's side are Ayni list pickers: set once Ayni has started
+    document.addEventListener( 'DOMContentLoaded', function () { if( window.Ayni ) Ayni.ready.then( function ()
+    {
+        Ayni.picker( F.dow ).set( set.dow ); Ayni.picker( F.bar ).set( set.bar );
+        loadTz2(); loadLocker();
+    } ); } );
     Object.keys( F ).forEach( function ( k )
     {
-        F[ k ].addEventListener( k === 'barH' ? 'input' : 'change', function ()
+        F[ k ].addEventListener( k === 'barH' ? 'input' : k === 'dow' || k === 'bar' ? 'ayni:change' : 'change', function ()
         {
-            set.dow = F.dow.value; set.date = F.date.checked; set.secs = F.secs.checked;
-            set.bar = F.bar.value; set.barH = +F.barH.value;
+            set.dow = Ayni.picker( F.dow ).value; set.date = F.date.checked; set.secs = F.secs.checked;
+            set.bar = Ayni.picker( F.bar ).value; set.barH = +F.barH.value;
             barHOut.textContent = set.barH + ' px';
             saveSet();
             applyLayout();
@@ -1903,33 +1923,27 @@
         tz2Wrap = document.getElementById( 'tz2Wrap' );
     function loadTz2()
     {
+        if( ! window.Ayni || ! Ayni.picker ) return;      // an Ayni filtered list; called again once Ayni has started
+        var pk = Ayni.picker( tz2Sel );
         var zones = window.NayiveUI ? NayiveUI.timeZones().slice() : [ 'UTC' ];
         if( set.tz2 && zones.indexOf( set.tz2 ) < 0 ) zones.unshift( set.tz2 );
         if( zones.indexOf( 'UTC' ) < 0 ) zones.unshift( 'UTC' );
-        if( tz2Sel.options.length !== zones.length )
-        {
-            tz2Sel.innerHTML = '';
-            zones.forEach( function ( z )
-            {
-                var o = document.createElement( 'option' );
-                o.value = z; o.textContent = z.replace( /_/g, ' ' );
-                tz2Sel.appendChild( o );
-            } );
-        }
-        tz2Sel.value = set.tz2 || 'UTC';
+        if( pk.options.length !== zones.length )
+            pk.options = zones.map( function ( z ) { return { value: z, text: z.replace( /_/g, ' ' ) }; } );
+        pk.set( set.tz2 || 'UTC' );
         tz2On.checked = !! set.tz2On;
         tz2Wrap.hidden = ! set.tz2On;
     }
     function saveTz2()
     {
-        set.tz2On = tz2On.checked; set.tz2 = tz2Sel.value || 'UTC';
+        set.tz2On = tz2On.checked; set.tz2 = Ayni.picker( tz2Sel ).value || 'UTC';
         tz2Wrap.hidden = ! set.tz2On;
         saveSet();
         tick();
         placeMore();
     }
     tz2On.addEventListener( 'change', saveTz2 );
-    tz2Sel.addEventListener( 'change', saveTz2 );
+    tz2Sel.addEventListener( 'ayni:change', saveTz2 );
     loadTz2();
     moreBtn.addEventListener( 'click', loadTz2 );
 
@@ -1938,19 +1952,12 @@
         lockText = document.getElementById( 'lockText' );
     function loadLocker()
     {
-        if( ! window.NayiveLock ) return;
+        if( ! window.NayiveLock || ! window.Ayni || ! Ayni.picker ) return;
         var s = NayiveLock.settings();
-        lockSel.innerHTML = '';
-        NayiveLock.LOCKERS.concat( [ '' ] ).forEach( function ( id )    // '' = plain black, last
-        {
-            var o = document.createElement( 'option' );
-            o.value = id;
-            o.textContent = t( id ? 'scrlock.' + id : 'scrlock.none' );
-            lockSel.appendChild( o );
-            // A line after Science: the two "learn something" lockers above, the rest below.
-            if( id === 'science' ) lockSel.appendChild( document.createElement( 'hr' ) );
-        } );
-        lockSel.value  = s.id;
+        // An Ayni list picker; '' = plain black, last
+        var pk = Ayni.picker( lockSel );
+        pk.options = NayiveLock.LOCKERS.concat( [ '' ] ).map( function ( id ) { return { value: id, text: t( id ? 'scrlock.' + id : 'scrlock.none' ) }; } );
+        pk.set( s.id );
         lockMin.value  = s.min;
         lockText.value = s.text;
         document.getElementById( 'lockTextWrap' ).hidden = s.id !== 'clock';
@@ -1962,9 +1969,9 @@
     }
     // The minutes are ONE value for every locker: choosing a locker never
     // touches them (it used to turn 0 into 15, which looked like minutes per locker).
-    lockSel.addEventListener( 'change', function ()
+    lockSel.addEventListener( 'ayni:change', function ( e )
     {
-        NayiveLock.save( { id: lockSel.value } );
+        NayiveLock.save( { id: e.detail.value } );
         loadLocker();
     } );
     // Saved at every key and arrow, not only when the field is left: a menu

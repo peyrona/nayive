@@ -714,6 +714,7 @@ function loadUi()
             if( [ 'saved', 'az', 'za', 'new', 'old' ].indexOf( s.sort ) >= 0 ) ui.sort = s.sort;
             if( Array.isArray( s.open ) ) ui.open = s.open.filter( function( x ) { return typeof x === 'string'; } );
             if( s.treeW > 0 ) ui.treeW = s.treeW;
+            if( s.treeFold === 'first' || s.treeFold === 'last' ) ui.treeFold = s.treeFold;
         }
     }
     catch( e ) {}

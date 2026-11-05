@@ -44,10 +44,10 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
    Accent while an advanced search is in force (advsearch.js). */
 
 /* Advanced search dialog. Layout only: every control in it is a shared one
-   (.field, .pill, .btn.text, .btn). */
+   (.field, .btn.text, .btn). */
 .sb-rules    { display: flex; flex-direction: column; gap: 8px; }
 .sb-rule     { display: flex; align-items: center; gap: 8px; }
-.sb-rule select { flex: 0 0 auto; width: 150px; }
+.sb-rule .picker { flex: 0 0 auto; width: 150px; }
 .sb-rule input  { flex: 1 1 auto; min-width: 0; }
 .sb-rule-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 8px; }
 .sb-rule-bar .btn.text.dashed { width: auto; }      /* the shared "add" button, as wide as its words */
@@ -83,7 +83,7 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
 .breadcrumb .crumb.current:hover { background: none; }
 .breadcrumb .crumb-sep { color: var(--text-dim); padding: 0 1px; }
 /* An advanced search: its words after "Resultados (n)", then the shared
-   .pill that ends it. */
+   button that ends it. */
 .breadcrumb .crumb-summary { flex: 1 1 auto; min-width: 0; padding: 0 6px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .breadcrumb .crumb-clear   { flex: 0 0 auto; }
 
@@ -387,7 +387,7 @@ body.trash-mode .tb-modes { display: none; }
        sends the buttons to a second row on a 320px phone. */
     .topbar-actions > .tb-group::before { display: none; }
 
-    .sb-rule select { width: 128px; }
+    .sb-rule .picker { width: 128px; }
 
     /* B4 — the view switch leaves the header for its ⋮ (menus.js viewMenuItems). */
     .tb-modes { display: none; }

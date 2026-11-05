@@ -24,6 +24,8 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -37,6 +39,8 @@
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
     <script src="../shared/ayni/ayni-fields.js" defer></script>
+    <script src="../shared/ayni/ayni-pickers.js" defer></script>
+    <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
@@ -151,13 +155,13 @@
         #setExportRow                { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-bottom: 4px; }
         #setExportRow .field         { flex: 1 1 120px; min-width: 0; margin-bottom: 0; }
         #setExportRow input,
-        #setExportRow select         { width: 100%; min-width: 0; }
+        #setExportRow .picker        { width: 100%; min-width: 0; }
 
         /* The "all day" switch is the shared .switch (shared/app.css). */
 
-        /* The "más campos" fold is the shared .more-toggle block (shared/app.css). */
+        /* The "más campos" fold is Ayni's More fields line. */
 
-        /* The day buttons are the shared .pill (shared/app.css), .is-active when on. */
+        /* The day buttons are a choice row (Ayni): aria-pressed when on. */
         .dow-picker { display: flex; gap: 6px; flex-wrap: wrap; }
 
         .radio-row { display: flex; flex-direction: column; gap: 8px; }
@@ -428,15 +432,9 @@
             <!-- Editing a series edits all of it: said here too, where it shows with "More" shut. -->
             <div class="tz-hint" id="seriesHint" data-i18n="calendar.editsSeries" hidden></div>
 
-            <button type="button" id="moreToggle" class="more-toggle" aria-expanded="false" aria-controls="moreSection">
-                <span class="more-pill">
-                    <span id="moreChevron" class="more-chevron">&#8250;</span>
-                    <span id="moreLabel" data-i18n="calendar.more"></span>
-                </span>
-                <span class="more-line"></span>
-            </button>
+            <button type="button" id="moreToggle" class="more-toggle" aria-expanded="false" aria-controls="moreSection"></button>
 
-            <div class="fields" id="moreSection" style="display:none;">
+            <div class="fields" id="moreSection" hidden>
 
                 <div class="field-row">
                     <div class="field">
@@ -462,13 +460,10 @@
 
                 <div class="field" id="fTzWrap">
                     <label for="fFloating" data-i18n="calendar.timezone"></label>
-                    <select id="fFloating">
-                        <option value="0" data-i18n="calendar.tzPinned"></option>
-                        <option value="1" data-i18n="calendar.tzFloating"></option>
-                    </select>
+                    <div class="picker" id="fFloating"><input type="hidden" value="0"><div class="panel popup picker-pop" popover="manual"><ul role="listbox"><li role="option" data-value="0" data-i18n="calendar.tzPinned"></li><li role="option" data-value="1" data-i18n="calendar.tzFloating"></li></ul></div></div>
+                    <!-- An Ayni filtered list of every zone the browser knows: typing narrows it -->
                     <div id="fTzPickerWrap" style="margin-top:8px;">
-                        <input class="input" type="text" id="fTzid" list="tzList" autocomplete="off" data-i18n-attr="placeholder:calendar.tzPh">
-                        <datalist id="tzList"></datalist>
+                        <div class="picker" id="fTzid" data-picker="filter" data-i18n-attr="aria-label:calendar.timezone"></div>
                     </div>
                     <div class="tz-hint" id="fTzHint"></div>
                 </div>
@@ -477,13 +472,7 @@
 
                 <div class="field">
                     <label for="fRepeat" data-i18n="calendar.repeat"></label>
-                    <select id="fRepeat">
-                        <option value="none" data-i18n="calendar.repeatNone"></option>
-                        <option value="daily" data-i18n="calendar.repeatDaily"></option>
-                        <option value="weekly" data-i18n="calendar.repeatWeekly"></option>
-                        <option value="monthly" data-i18n="calendar.repeatMonthly"></option>
-                        <option value="yearly" data-i18n="calendar.repeatYearly"></option>
-                    </select>
+                    <div class="picker" id="fRepeat"><input type="hidden" value="none"><div class="panel popup picker-pop" popover="manual"><ul role="listbox"><li role="option" data-value="none" data-i18n="calendar.repeatNone"></li><li role="option" data-value="daily" data-i18n="calendar.repeatDaily"></li><li role="option" data-value="weekly" data-i18n="calendar.repeatWeekly"></li><li role="option" data-value="monthly" data-i18n="calendar.repeatMonthly"></li><li role="option" data-value="yearly" data-i18n="calendar.repeatYearly"></li></ul></div></div>
                 </div>
 
                 <div class="fields" id="repeatDetails" style="display:none;">
@@ -571,7 +560,7 @@
                 <div class="field">
                     <label for="gMonth" data-i18n="calendar.month"></label>
                     <!-- Month names come from Intl (shared/i18n.js). -->
-                    <select id="gMonth"></select>
+                    <div class="picker" id="gMonth"></div>
                 </div>
                 <div class="field">
                     <label for="gDay" data-i18n="calendar.day"></label>
@@ -628,11 +617,7 @@
                     </div>
                     <div class="field field-format">
                         <label for="xFormat" data-i18n="calendar.exportFormat"></label>
-                        <select id="xFormat">
-                            <option value="pdf">PDF</option>
-                            <option value="txt">TXT</option>
-                            <option value="ics">ICS</option>
-                        </select>
+                        <div class="picker" id="xFormat"><input type="hidden" value="pdf"><div class="panel popup picker-pop" popover="manual"><ul role="listbox"><li role="option" data-value="pdf">PDF</li><li role="option" data-value="txt">TXT</li><li role="option" data-value="ics">ICS</li></ul></div></div>
                     </div>
                     <div class="actions-row">
                         <button class="btn primary" id="exportGoBtn" data-i18n-attr="data-tip:ui.download"><span class="icon" data-icon="download"></span></button>
@@ -685,21 +670,17 @@
             {
                 const b = document.createElement( 'button' );
                 b.type          = 'button';
-                b.className     = 'pill';
+                b.className     = 'btn text sm bordered';
+                b.setAttribute( 'aria-pressed', false );
                 b.dataset.dow   = code;
                 b.textContent   = Ayni.i18n.weekday( i + 1, 'narrow' );
                 Ayni.setTip( b, Ayni.i18n.weekday( i + 1 ) );
                 picker.appendChild( b );
             } );
 
-            const months = document.getElementById( 'gMonth' );
-            for( let m = 0; m < 12; m++ )
-            {
-                const o = document.createElement( 'option' );
-                o.value       = String( m );
-                o.textContent = Ayni.i18n.month( m );
-                months.appendChild( o );
-            }
+            const months = [];
+            for( let m = 0; m < 12; m++ ) months.push( { value: String( m ), text: Ayni.i18n.month( m ) } );
+            Ayni.picker( document.getElementById( 'gMonth' ), { options: months } );
         } )();
 
         const { DateTime, Settings } = luxon;
@@ -1603,17 +1584,14 @@
             });
 
             document.getElementById( 'fAllDay' ).addEventListener( 'change', updateSheetVisibility );
-            document.getElementById( 'fFloating' ).addEventListener( 'change', updateSheetVisibility );
-            document.getElementById( 'fRepeat' ).addEventListener( 'change', updateRepeatDetails );
+            document.getElementById( 'fFloating' ).addEventListener( 'ayni:change', updateSheetVisibility );
+            document.getElementById( 'fRepeat' ).addEventListener( 'ayni:change', updateRepeatDetails );
 
-            document.getElementById( 'moreToggle' ).addEventListener( 'click', function()
-            {
-                setMoreOpen( ! this.classList.contains( 'open' ) );
-            });
+            Ayni.moreFields( '#moreToggle', { more: T( 'calendar.more' ), less: T( 'calendar.less' ) } );
 
-            document.querySelectorAll( '#dowPicker .pill' ).forEach( function( btn )
+            document.querySelectorAll( '#dowPicker .btn' ).forEach( function( btn )
             {
-                btn.addEventListener( 'click', function() { btn.classList.toggle( 'is-active' ); } );
+                btn.addEventListener( 'click', function() { btn.setAttribute( 'aria-pressed', btn.getAttribute( 'aria-pressed' ) !== 'true' ); } );
             });
 
             document.getElementById( 'cancelBtn' ).addEventListener( 'click', closeSheet );
@@ -1673,7 +1651,7 @@
         {
             const base = calendar ? calendar.getDate() : new Date();
             document.getElementById( 'gDay' ).value   = base.getDate();
-            document.getElementById( 'gMonth' ).value = base.getMonth();
+            pick( 'gMonth' ).set( String( base.getMonth() ) );
             document.getElementById( 'gYear' ).value  = base.getFullYear();
             document.getElementById( 'goToBackdrop' ).showModal();
         }
@@ -1683,7 +1661,7 @@
         function commitGoTo()
         {
             const day   = parseInt( document.getElementById( 'gDay' ).value, 10 );
-            const month = parseInt( document.getElementById( 'gMonth' ).value, 10 );
+            const month = parseInt( pick( 'gMonth' ).value, 10 );
             const year  = parseInt( document.getElementById( 'gYear' ).value, 10 );
 
             if( calendar && Number.isFinite( year ) )
@@ -1911,7 +1889,7 @@
             if( Ayni.focusFirstError( document.getElementById( 'setExportRow' ) ) ) return;
             const from   = document.getElementById( 'xFrom' ).value;
             const to     = document.getElementById( 'xTo'   ).value;
-            const format = document.getElementById( 'xFormat' ).value;
+            const format = pick( 'xFormat' ).value;
 
             if( ! from || ! to )        { Ayni.toast( 'warn', T( 'calendar.exportNeedDates' ) ); return; }
             if( from > to )             { Ayni.toast( 'warn', T( 'calendar.exportBadRange' ) );  return; }
@@ -2140,8 +2118,8 @@
             document.getElementById( 'fEndDate' ).value = (allDay ? e.minus({days:1}) : e).toISODate();
             document.getElementById( 'fStartTime' ).value = d.toFormat( 'HH:mm' );
             document.getElementById( 'fEndTime' ).value = e.toFormat( 'HH:mm' );
-            document.getElementById( 'fFloating' ).value = '0';
-            document.getElementById( 'fTzid' ).value = VIEWER_TZ;
+            pick( 'fFloating' ).set( '0' );
+            pick( 'fTzid' ).set( VIEWER_TZ );
 
             updateSheetVisibility();
             sheetStart  = sheetStartDt();
@@ -2170,8 +2148,8 @@
             document.getElementById( 'fEndDate' ).value = def.end.date;
             document.getElementById( 'fStartTime' ).value = def.start.time || '09:00';
             document.getElementById( 'fEndTime' ).value = def.end.time || '10:00';
-            document.getElementById( 'fFloating' ).value = def.floating ? '1' : '0';
-            document.getElementById( 'fTzid' ).value = def.tzid || VIEWER_TZ;
+            pick( 'fFloating' ).set( def.floating ? '1' : '0' );
+            pick( 'fTzid' ).set( def.tzid || VIEWER_TZ );
 
             document.getElementById( 'seriesHint' ).hidden = ! def.rrule;
 
@@ -2181,12 +2159,12 @@
             }
             else if( def.rrule )
             {
-                document.getElementById( 'fRepeat' ).value = def.rrule.freq.toLowerCase();
+                pick( 'fRepeat' ).set( def.rrule.freq.toLowerCase() );
                 document.getElementById( 'fInterval' ).value = def.rrule.interval || 1;
 
-                document.querySelectorAll( '#dowPicker .pill' ).forEach( function( btn )
+                document.querySelectorAll( '#dowPicker .btn' ).forEach( function( btn )
                 {
-                    btn.classList.toggle( 'is-active', !!(def.rrule.byweekday && def.rrule.byweekday.includes( btn.dataset.dow )) );
+                    btn.setAttribute( 'aria-pressed', !!(def.rrule.byweekday && def.rrule.byweekday.includes( btn.dataset.dow )) );
                 });
 
                 if( def.rrule.until )
@@ -2215,21 +2193,16 @@
         // sheet wrote "RRULE:FREQ=;" or a plain "every Tuesday".
         function setRepeatCustom( on )
         {
-            const sel = document.getElementById( 'fRepeat' );
-            let   opt = sel.querySelector( 'option[value=custom]' );
+            const sel = pick( 'fRepeat' );
+            const has = sel.options.some( function( o ) { return o.value === 'custom'; } );
 
-            if( on && ! opt )
-            {
-                opt = document.createElement( 'option' );
-                opt.value       = 'custom';
-                opt.textContent = T( 'calendar.repeatCustom' );
-                sel.appendChild( opt );
-            }
-            else if( ! on && opt )
-                opt.remove();
+            if( on && ! has )
+                sel.options = sel.options.concat( [ { value: 'custom', text: T( 'calendar.repeatCustom' ) } ] );
+            else if( ! on && has )
+                sel.options = sel.options.filter( function( o ) { return o.value !== 'custom'; } );
 
             sel.disabled = on;
-            if( on ) sel.value = 'custom';
+            if( on ) sel.set( 'custom' );
         }
 
         // The repeat controls as one string: equal at open and at save means the
@@ -2237,9 +2210,9 @@
         // BYDAY order... everything the controls do not hold).
         function repeatSignature()
         {
-            return [ document.getElementById( 'fRepeat' ).value,
+            return [ pick( 'fRepeat' ).value,
                      document.getElementById( 'fInterval' ).value,
-                     Array.from( document.querySelectorAll( '#dowPicker .pill.is-active' ) ).map( b => b.dataset.dow ).join( ',' ),
+                     Array.from( document.querySelectorAll( '#dowPicker .btn[aria-pressed="true"]' ) ).map( b => b.dataset.dow ).join( ',' ),
                      document.querySelector( 'input[name=endMode]:checked' ).value,
                      document.getElementById( 'fUntil' ).value,
                      document.getElementById( 'fCount' ).value ].join( '|' );
@@ -2296,9 +2269,9 @@
             document.getElementById( 'fLocation' ).value = '';
             document.getElementById( 'fNotes' ).value = '';
             setRepeatCustom( false );
-            document.getElementById( 'fRepeat' ).value = 'none';
+            pick( 'fRepeat' ).set( 'none' );
             document.getElementById( 'fInterval' ).value = 1;
-            document.querySelectorAll( '#dowPicker .pill' ).forEach( b => b.classList.remove( 'is-active' ) );
+            document.querySelectorAll( '#dowPicker .btn' ).forEach( b => b.setAttribute( 'aria-pressed', false ) );
             document.querySelector( 'input[name=endMode][value=never]' ).checked = true;
             document.getElementById( 'fUntil' ).value = '';
             document.getElementById( 'fCount' ).value = 10;
@@ -2309,16 +2282,13 @@
 
         function setMoreOpen( open )
         {
-            document.getElementById( 'moreToggle' ).classList.toggle( 'open', open );
-            document.getElementById( 'moreToggle' ).setAttribute( 'aria-expanded', String( open ) );
-            document.getElementById( 'moreSection' ).style.display = open ? '' : 'none';
-            document.getElementById( 'moreLabel' ).textContent = open ? T( 'calendar.less' ) : T( 'calendar.more' );
+            Ayni.moreFields( '#moreToggle' ).set( open );
         }
 
         function updateSheetVisibility()
         {
             const allDay   = document.getElementById( 'fAllDay' ).checked;
-            const floating = document.getElementById( 'fFloating' ).value === '1';
+            const floating = pick( 'fFloating' ).value === '1';
 
             document.getElementById( 'fStartTimeWrap' ).style.display = allDay ? 'none' : '';
             document.getElementById( 'fEndTimeWrap' ).style.display = allDay ? 'none' : '';
@@ -2332,7 +2302,7 @@
 
         function updateRepeatDetails()
         {
-            const freq = document.getElementById( 'fRepeat' ).value;
+            const freq = pick( 'fRepeat' ).value;
             const show = freq !== 'none' && freq !== 'custom';
 
             document.getElementById( 'repeatDetails' ).style.display = show ? '' : 'none';
@@ -2361,8 +2331,8 @@
             if( ! title ) { Ayni.toast( 'warn', T( 'calendar.needTitle' ) ); return; }
 
             const allDay   = document.getElementById( 'fAllDay' ).checked;
-            const floating = document.getElementById( 'fFloating' ).value === '1';
-            const typedTzid = document.getElementById( 'fTzid' ).value.trim();
+            const floating = pick( 'fFloating' ).value === '1';
+            const typedTzid = pick( 'fTzid' ).value.trim();
 
             if( ! floating && ! allDay && typedTzid && ! isValidTimezone( typedTzid ) )
             {
@@ -2401,7 +2371,7 @@
             def.end   = { date: document.getElementById( 'fEndDate' ).value,
                           time: def.allDay ? null : document.getElementById( 'fEndTime' ).value };
 
-            const freq = document.getElementById( 'fRepeat' ).value;
+            const freq = pick( 'fRepeat' ).value;
 
             if( freq === 'custom' || ( editingKey && repeatSignature() === sheetRepeat ) )
             {
@@ -2413,7 +2383,7 @@
             }
             else
             {
-                const byweekday = Array.from( document.querySelectorAll( '#dowPicker .pill.is-active' ) ).map( b => b.dataset.dow );
+                const byweekday = Array.from( document.querySelectorAll( '#dowPicker .btn[aria-pressed="true"]' ) ).map( b => b.dataset.dow );
                 const endMode = document.querySelector( 'input[name=endMode]:checked' ).value;
                 const wkst    = def.rrule && def.rrule.wkst;   // the file's week start, which the sheet does not show
 
@@ -2558,17 +2528,12 @@
 
         function populateTimezoneList()
         {
-            const dl = document.getElementById( 'tzList' );
-
             knownZones = NayiveUI.timeZones();
-
-            for( const z of knownZones )
-            {
-                const opt = document.createElement( 'option' );
-                opt.value = z;
-                dl.appendChild( opt );
-            }
+            Ayni.picker( document.getElementById( 'fTzid' ), { options: knownZones, placeholder: T( 'calendar.tzPh' ) } );
         }
+
+        // The controller of one of the sheet's Ayni list pickers
+        function pick( id ) { return Ayni.picker( document.getElementById( id ) ); }
 
         function isValidTimezone( sZone )
         {

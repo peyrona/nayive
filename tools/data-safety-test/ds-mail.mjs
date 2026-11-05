@@ -612,6 +612,7 @@ section( "OL4 (bugs-2) - DELETED FOR GOOD AS THE TAB CLOSES: EVERY PIECE GOES" )
 }
 
 section( "OL5 (bugs-2) - A SIGNATURE THAT FAILED TO SAVE GOES AGAIN WHEN THE DIALOG CLOSES" );
+await c.front();                                                          // the other tabs took the front; a page behind them gets no dialog 'close'
 await c.open( PAGE );                                                     // on the Trash, empty now
 ok( await c.until( "NayiveMail.S.acct && ! NayiveMail.S.loading" ), "eMail again" );
 await c.evaluate( "NayiveMail.openSettings( 'general' ); true" );

@@ -7,6 +7,7 @@
        the operators solid (below) - so the keypad follows the colour scheme. */
     --key-digit: color-mix(in srgb, var(--accent) 14%, var(--card));
     --key-fn:    color-mix(in srgb, var(--accent) 32%, var(--card));
+    --panel-w:   292px;     /* keys of 64 px */
 }
 
 .app { height: 100vh; height: 100dvh; }
@@ -31,21 +32,20 @@
 {
     width: min(100%, 300px);
     /* As wide as the window allows, but short enough to fit its height: the panel is
-       about 1.57 x its width + 57 px tall (currency mode, the taller one). */
-    width: min(100cqw, 63.7cqh - 36px, 460px);
+       about 1.515 x its width + 57 px tall (currency mode, the taller one). */
+    width: min(100cqw, 66cqh - 38px, var(--panel-w));
     min-width: min(100cqw, 240px);
     margin-block: auto;
     display: flex;
     flex-direction: column;
     gap: 12px;
-    /* The screen's sizes follow the panel's width (cqw); 326 px wide = the sizes of
-       the window as it first opens (desktop NARROW/SHORT). */
+    /* The screen's sizes follow the panel's width (cqw). */
     container-type: inline-size;
 }
 
 /* Currency mode: the two currencies and ⇄ on one row over the screen. */
 .fx-bar             { display: flex; align-items: center; gap: 6px; }
-.fx-bar select      { flex: 1 1 0; min-width: 0; }
+.fx-bar .picker     { flex: 1 1 0; min-width: 0; }
 .fx-guess
 {
     margin: 0;
@@ -66,7 +66,7 @@
     flex-direction: column;
     justify-content: flex-end;
     flex: none;
-    height: 31.9cqw;
+    height: 26.5cqw;
     padding: 0 8px;
     overflow: hidden;
 }
@@ -85,7 +85,7 @@
     display: block;
     margin-left: auto;
     font-weight: 300;
-    font-size: 22.1cqw;
+    font-size: 17cqw;
     line-height: 1.1;
     white-space: nowrap;
     letter-spacing: -0.02em;
@@ -93,7 +93,7 @@
     user-select: all;
 }
 .line   { display: flex; align-items: baseline; justify-content: flex-end; gap: 12px; min-width: 0; }
-.sym    { flex: none; font-weight: 300; font-size: 22.1cqw; line-height: 1.1; color: var(--text-dim); }
+.sym    { flex: none; font-weight: 300; font-size: 17cqw; line-height: 1.1; color: var(--text-dim); }
 
 /* The rate and its day; a tap shows how it was checked. Amber when there is no rate. */
 .fx-note
@@ -120,7 +120,7 @@
 .calc:not([data-mode="fx"]) :is(.fx-bar, .fx-guess, .fx-note, .sym, .line.to) { display: none; }
 .calc[data-mode="fx"] .expr                      { display: none; }
 .calc[data-mode="fx"] .line                      { flex: 1 1 0; align-items: center; }
-.calc[data-mode="fx"] :is(.display, .sym)        { font-size: 12.9cqw; line-height: 1; }
+.calc[data-mode="fx"] :is(.display, .sym)        { font-size: 10.5cqw; line-height: 1; }
 .calc[data-mode="fx"] .line.to > .display        { color: var(--text-dim); }
 
 /* The keypad: round keys, four to a row; the operators in the accent. */
@@ -178,6 +178,15 @@
 .fx-sources         { display: flex; flex-direction: column; gap: 4px; margin: 0 0 10px; }
 .fx-source-row      { display: flex; justify-content: space-between; gap: 10px; font-size: 0.78rem; color: var(--text-dim); background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-s); padding: 7px 10px; }
 .fx-source-row span:first-child { color: var(--text); }
+
+/* A desktop window that hugs the panel (hugWindow): the panel keeps its full size
+   whatever the window's height is at that moment; no scrollbar to steal its width. */
+html.hug-window .calc       { width: min(100cqw, var(--panel-w)); }
+html.hug-window .calc-page  { overflow: hidden; padding-block: 12px; }
+/* The header stays on one row at this width; a long title gives way. */
+html.hug-window .topbar     { flex-wrap: nowrap; }
+html.hug-window .topbar h1  { margin-right: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html.hug-window .mode-pair  { margin-left: 4px; flex: none; }
 
 /* A desktop window has its own close. */
 html.is-windowed #backBtn { display: none; }

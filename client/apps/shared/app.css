@@ -341,7 +341,7 @@ html.is-embedded .header                 { justify-content: flex-end; }
 
    Nothing has to move to make room: calendar's .topbar starts with the icon,
    tasks' always-open compose field (flex-grow) still pushes the buttons to the
-   right edge, and habits' .tabs already carry margin-right: auto. One detail
+   right edge, and habits' .tb-modes already carry margin-right: auto. One detail
    though (the icon is 20px in every header now, so no trim is needed; habits'
    header, already the fullest row, wraps its buttons to a second line in a 25%
    pane either way): the header packs from the LEFT again: the flex-end above was written for a header
@@ -570,6 +570,14 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
  * 44 x 44 (Ayni, html.touch).
  * ---------------------------------------------------------------------------*/
 
+/* A bare inline <svg> straight inside a .btn (no width attribute, no .icon
+   span) got no size once .icon-btn's "svg { 19px }" left with family 2, so it
+   filled the whole 36 px circle (Language, Bookmarks, Chat...). Give it the
+   icon size Ayni gives a .btn .icon. :where() weighs nothing: an app's own
+   svg rule still wins. */
+:where(.btn > svg:not([width]))    { width: 18px; height: 18px; flex: none; }
+:where(.btn.sm > svg:not([width])) { width: 15px; height: 15px; }
+
 
 /* -----------------------------------------------------------------------------
  * DIALOG  (Ayni's dialog.panel - shared/ayni/ayni-dialogs.css + .js)
@@ -650,30 +658,15 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
  *   date / time        .input-group + Ayni.dateField / Ayni.timeField
  *   edit in place      span.inline-text <-> input.input.inline
  *   in a toolbar       inside [role="toolbar"]: its 30 px, no label
+ *   drop-down list     .picker (Ayni's list picker, ayni-pickers.*), never a
+ *                      <select>: Ayni.picker( el, { mode, options, value } ),
+ *                      its controller's value / set(); it tells ayni:change.
+ *                      Long lists (zones, currencies) are mode "filter".
  * Before saving a form with typed dates, times or numbers:
  *   if( Ayni.focusFirstError( dialog ) ) return;
  *
- * Still Nayive's below: the drop-down <select> (until Ayni's list picker moves
- * in) and the browser's own check / radio / colour / file boxes.
+ * Still Nayive's below: the browser's own check / radio / colour / file boxes.
  * ---------------------------------------------------------------------------*/
-.field select      { width: 100%; }
-
-select
-{
-    padding: 6px 10px;
-    font: inherit;
-    font-size: var(--field-fs);
-    color: var(--text);
-    background: var(--card2);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-s);
-    outline: none;
-}
-select:focus       { border-color: color-mix(in srgb, var(--text) 30%, transparent); }
-
-/* The drop-down list a <select> opens is painted by the OS, and left alone it
- * comes back white-on-white in the dark theme. */
-select option      { color: var(--text); background: var(--card2); }
 
 /* Check / radio / colour / file keep the browser's box, in the accent. A
  * switch is Ayni's drawing. */
@@ -685,75 +678,10 @@ input[type="file"] { accent-color: var(--accent); }
 
 
 
-/* -----------------------------------------------------------------------------
- * TOOLBAR SELECT  (.tb-select)  -  Calc's format bar, Text's editor bar
- *
- *     <select class="tb-select">…</select>
- *
- * Nayive's until Ayni's list picker moves in. A drop-down that sits in
- * a toolbar row, not in a form: it takes the row's 30px button height and stays
- * transparent, so it reads as one of the toolbar's controls instead of a filled
- * field parked in the chrome. 0.82rem is the toolbar's own type size.
- *
- * It keeps a 1px --line outline where the round .btn next to it has none -
- * a drop-down has to look pressable and show where it ends. Its hover is the
- * accent wash Text's .tb-btn uses, not .btn's grey.
- *
- * Give it a width from the app (.fmt-select-font, .fmt-select-narrow ...): how
- * wide a font list needs to be is the app's business, the look is not.
- * ---------------------------------------------------------------------------*/
-.tb-select
-{
-    height: 30px;
-    flex: 0 0 auto;
-    padding: 0 4px;
-    font: inherit;
-    font-size: 0.82rem;
-    color: var(--text);
-    background: transparent;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-s);
-    cursor: pointer;
-    outline: none;
-}
-.tb-select:hover   { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 
 
 
 
-
-/* -----------------------------------------------------------------------------
- * PILL  (.pill)  and  TAG  (.tag)
- *
- * .pill  - a small rounded button, used for filters and mode switches. At rest
- *          it is a quiet --card2 chip; add .is-active for the accent state.
- * .tag   - the same shape but read-only (a metadata chip on a card). No hover,
- *          no active state, default cursor.
- * ---------------------------------------------------------------------------*/
-.pill
-{
-    padding: 7px 14px;
-    font-family: inherit;
-    font-size: 0.77rem;
-    color: var(--text-dim);
-    background: var(--card2);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-pill);
-    cursor: pointer;
-    transition: opacity var(--tr-fast), background-color var(--tr-fast);
-}
-.pill:hover        { opacity: 0.85; }
-.pill.is-active
-{
-    color: var(--on-accent);
-    background: var(--accent);
-    border-color: var(--accent);
-}
-/* A settings dialog's tabs: a row of .pill buttons over its panes
-   (Trips, Chat). */
-.set-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
-/* A page's own row of .pill tabs (Habits, Split): the margin is the page's. */
-.tabs     { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* In a dialog: a red box that says plainly what went wrong or cannot be
    trusted (.warn-box), and a small dim line under the facts (.dim-note).
@@ -761,15 +689,6 @@ input[type="file"] { accent-color: var(--accent); }
 .warn-box { font-size: 0.8rem; color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent); border-radius: var(--radius-s); padding: 10px 12px; margin: 0 0 14px; line-height: 1.4; }
 .dim-note { font-size: 0.78rem; color: var(--text-dim); margin: 0 0 14px; line-height: 1.4; }
 
-.tag
-{
-    padding: 4px 10px;
-    font-size: 0.74rem;
-    color: var(--text-dim);
-    background: var(--card2);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-pill);
-}
 
 
 /* -----------------------------------------------------------------------------
@@ -831,18 +750,6 @@ input[type="file"] { accent-color: var(--accent); }
  * ---------------------------------------------------------------------------*/
 
 
-/* -----------------------------------------------------------------------------
- * PANE RESIZER  (.pane-resizer)
- *
- * A 5px drag handle between two side-by-side panes (Drive tree, Chat list).
- * The app's JS sets a width custom property and hides it on a phone.
- * ---------------------------------------------------------------------------*/
-.pane-resizer
-{
-    flex: 0 0 auto; width: 5px; cursor: col-resize; background: var(--line);
-    touch-action: none;
-}
-.pane-resizer:hover, .pane-resizer.dragging { background: var(--accent); }
 
 
 /* A long-press on a button would otherwise pop the iOS callout / selection menu.
@@ -1288,46 +1195,6 @@ button,
 
 
 
-/* -----------------------------------------------------------------------------
- * "MORE FIELDS" TOGGLE  (.more-toggle)
- *
- * The pill-on-a-line that folds the rarely used half of a long form away
- * (Calendar's event sheet, Contacts' edit form). The app toggles .open and
- * flips the label; the chevron turns on its own.
- * ---------------------------------------------------------------------------*/
-.more-toggle
-{
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    margin: 4px 0 14px;
-    padding: 6px 0;
-    background: none;
-    border: none;
-    color: var(--text-dim);
-    font-family: inherit;
-    font-size: 0.85rem;
-    cursor: pointer;
-}
-.more-toggle .more-pill
-{
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex: 0 0 auto;
-    padding: 6px 14px;
-    background: var(--card2);
-    color: var(--text);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-pill);
-    transition: background-color var(--tr-fast), border-color var(--tr-fast);
-}
-.more-toggle:hover .more-pill  { background: color-mix(in srgb, var(--text) 10%, var(--card2)); border-color: color-mix(in srgb, var(--text) 22%, transparent); }
-.more-toggle:active .more-pill { background: color-mix(in srgb, var(--text) 16%, var(--card2)); }
-.more-toggle .more-chevron     { display: inline-block; font-size: 1rem; line-height: 1; transition: transform var(--tr-move); }
-.more-toggle.open .more-chevron { transform: rotate(90deg); }
-.more-toggle .more-line        { flex: 1 1 auto; height: 1px; background: var(--line); }
 
 
 /* -----------------------------------------------------------------------------
@@ -1697,7 +1564,7 @@ button,
    tools (.ie-tools, only when the app's header keeps no place for them - Chat),
    a tool's options (.ie-opts) and, under them, the picture (.ie-main, with the
    zoom box over its corner). It is a dark island in both schemes:
-   it sets the colour tokens the shared controls read (.btn, .pill, the
+   it sets the colour tokens the shared controls read (.btn, the
    range), so they are the standard ones, on dark. */
 .ie
 {
@@ -1770,10 +1637,10 @@ button,
    and ✓ never do - its pills scroll sideways instead. */
 .ie-opts:has(> .ie-range) { flex-wrap: wrap; row-gap: 6px; }
 .ie-pills            { flex: 0 1 auto; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-.ie-pills .pill      { flex: 0 0 auto; }
+.ie-pills .btn       { flex: 0 0 auto; }
 @media (max-width: 640px)
 {
-    .ie-pills .pill  { padding-inline: 10px; }
+    .ie-pills .btn   { padding-inline: 10px; }
 }
 .ie-range            { display: flex; align-items: center; gap: 10px; width: min(320px, 70vw); margin-left: 10px; }
 .ie-val              { flex: 0 0 auto; min-width: 34px; text-align: right; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
@@ -1846,17 +1713,8 @@ button,
  * ---------------------------------------------------------------------------*/
 @media (max-width: 640px)
 {
-    /* Fingers, not pointers: the dense 30px toolbar button grows to 36px, and
-       the toolbar select grows with it so the row stays one height. */
+    /* Fingers, not pointers: the dense 30px toolbar button grows to 36px. */
     .btn.sm            { --btn: 36px; }
-    .tb-select         { height: 36px; }
-}
-/* A field under 16px makes iOS Safari zoom the whole page in when it gets
-   focus - and it never zooms back out. Ayni's fields take 16px on a touch
-   phone by themselves (--field-fs); the drop-down still is Nayive's. */
-@media (max-width: 640px) and (pointer: coarse)
-{
-    select             { font-size: 16px; }
 }
 
 /* THE CLIP'S PANEL (NayiveUI.attachPanel): round coloured buttons, three to a
@@ -2025,12 +1883,12 @@ html.nv-locked body { visibility: hidden; }
 {
     :root { --hit: 44px; }
 
-    :where(.pill, .task-chevron, .stage-drag, .subtask-handle,
+    :where(.task-chevron, .stage-drag, .subtask-handle,
            h1.nayive-home-link, .app-title.nayive-home-link, .detail-heading.collapsible)
     {
         position: relative;
     }
-    :where(.pill, .task-chevron, .stage-drag, .subtask-handle,
+    :where(.task-chevron, .stage-drag, .subtask-handle,
            h1.nayive-home-link, .app-title.nayive-home-link, .detail-heading.collapsible)::before
     {
         content: "";
@@ -2047,13 +1905,13 @@ html.nv-locked body { visibility: hidden; }
     html :is(.topbar, .header, .topbar-actions, .header-actions, .tb-group, .tb-modes) { gap: 8px; }   /* rows too: a header that wraps */
     html :is(.topbar-actions, .header-actions, .ie-bar) > .tb-group::before             { margin-inline: 0 !important; }   /* beats Ayni's toolbar line */
 
-    :where(.stage-top, .subtask-row, .queue-row, .sheet-tab)
+    :where(.stage-top, .subtask-row, .queue-row)
     {
         -webkit-user-select: none;
         user-select: none;
         -webkit-touch-callout: none;
     }
-    :where(.stage-top, .subtask-row, .queue-row, .sheet-tab) :is(input, textarea, [contenteditable=""], [contenteditable="true"])
+    :where(.stage-top, .subtask-row, .queue-row) :is(input, textarea, [contenteditable=""], [contenteditable="true"])
     {
         -webkit-user-select: text;
         user-select: text;

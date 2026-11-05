@@ -580,12 +580,13 @@ function lock()
     } );
     // Nor anything the hidden vault screen still holds: names in the lists,
     // the sheet's heading, the folder pickers, the tree and the crumbs.
-    [ 'itFields', 'itHistoryList', 'items', 'tree', 'crumbs', 'itFolder', 'folderParent', 'itemTitle', 'printRoot' ].forEach( function( id )
+    [ 'itFields', 'itHistoryList', 'items', 'tree', 'crumbs', 'itemTitle', 'printRoot' ].forEach( function( id )
     {
         $( id ).innerHTML = '';
     } );
+    [ 'itFolder', 'folderParent' ].forEach( function( id ) { const pk = Ayni.picker( $( id ) ); pk.options = []; pk.set( '' ); } );
     $( 'folderName' ).value = '';
-    document.querySelectorAll( '#filterRow .pill' ).forEach( function( p ) { p.textContent = ''; } );
+    document.querySelectorAll( '#filterRow .btn' ).forEach( function( p ) { p.textContent = ''; } );
     if( query ) { query = ''; $( 'searchInput' ).value = ''; if( searchFold ) searchFold.close(); }
     if( clipTimer ) wipeClipboard();
     render();

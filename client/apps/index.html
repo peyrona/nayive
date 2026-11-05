@@ -61,6 +61,8 @@
     <link rel="stylesheet" href="shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="shared/ayni/ayni-fields.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-pickers.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="shared/theme.css">
     <link rel="stylesheet" href="shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -74,6 +76,8 @@
     <script src="shared/ayni/ayni-lists.js" defer></script>
     <script src="shared/ayni/ayni-help.js" defer></script>
     <script src="shared/ayni/ayni-fields.js" defer></script>
+    <script src="shared/ayni/ayni-pickers.js" defer></script>
+    <script src="shared/ayni/ayni-layout.js" defer></script>
     <script src="shared/ui.js" defer></script>
     <script src="shared/store.js" defer></script>
     <script>
@@ -460,7 +464,7 @@
         /* Look from app.css (FORM FIELD); only width and the gap are local. */
         .scm-input { width: 100%; margin: 10px 0; }
 
-        .scm-seg { display: flex; align-items: center; gap: 6px; }   /* two .pill buttons */
+        .scm-seg { display: flex; align-items: center; gap: 6px; }   /* a choice row of two */
 
         /* Name field and the Dark / Light switch share one row; both take the row's height. */
         .scm-name-row { display: flex; align-items: stretch; gap: 8px; margin: 10px 0; }
@@ -487,11 +491,11 @@
 
         .scm-assign { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; font-size: 0.88rem; }
         .scm-assign.scm-assign-inline { justify-content: flex-start; }   /* spinner sits right after the label, not pushed to the edge */
-        .scm-assign select { max-width: 190px; }   /* the shared field look (app.css) */
+        .scm-assign .picker { min-width: 120px; max-width: 190px; }   /* Ayni's list picker */
         /* Colour schemes: the dark and light pickers share one row, half each. */
         .scm-assign-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 8px 0; }
         .scm-assign-row .scm-assign { margin: 0; min-width: 0; }
-        .scm-assign-row .scm-assign select { flex: 1 1 auto; min-width: 0; max-width: none; }
+        .scm-assign-row .scm-assign .picker { flex: 1 1 auto; min-width: 0; max-width: none; }
         /* The zone list is the widest select in the dialog, and on a narrow phone
            it left too little for its own label ("Fuseau horaire" wrapped). Cap it
            at a share of the row instead, so the label always gets one line. */
@@ -693,28 +697,31 @@
                 <button id="pwChangeBtn" type="button" class="btn text bordered sm" data-i18n="acct.changePwBtn"></button>
             </div>
 
-            <label class="scm-assign" for="langSel">
-                <span data-i18n="acct.languagePrompt"></span>
-                <select id="langSel">
-                    <!-- Index 0 = no choice made: the browser's language decides.
-                         The rest are endonyms and stay literal. -->
-                    <option value="" data-i18n="acct.langDefault"></option>
-                    <option value="de">Deutsch</option>
-                    <option value="en">English</option>
-                    <option value="es">Español</option>
-                    <option value="fr">Français</option>
-                    <option value="pt">Português</option>
-                </select>
-            </label>
+            <div class="scm-assign">
+                <label for="langSel" data-i18n="acct.languagePrompt"></label>
+                <!-- An Ayni list picker. The first item = no choice made: the
+                     browser's language decides. The rest are endonyms and stay literal. -->
+                <div class="picker" id="langSel">
+                    <input type="hidden" value="">
+                    <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                        <li role="option" data-value="" data-i18n="acct.langDefault"></li>
+                        <li role="option" data-value="de">Deutsch</li>
+                        <li role="option" data-value="en">English</li>
+                        <li role="option" data-value="es">Español</li>
+                        <li role="option" data-value="fr">Français</li>
+                        <li role="option" data-value="pt">Português</li>
+                    </ul></div>
+                </div>
+            </div>
             <p class="scm-msg" id="langMsg" hidden></p>
 
-            <label class="scm-assign" for="tzSel">
-                <span data-i18n="acct.timezone"></span>
-                <!-- Filled from Intl.supportedValuesOf('timeZone'), so the list is
-                     always the browser's own IANA database and nobody can type a
-                     zone that does not exist. -->
-                <select id="tzSel"></select>
-            </label>
+            <div class="scm-assign">
+                <label for="tzSel" data-i18n="acct.timezone"></label>
+                <!-- An Ayni filtered list, filled from Intl.supportedValuesOf('timeZone'):
+                     the browser's own IANA database; typing narrows it, and a zone
+                     that does not exist is never taken. -->
+                <div class="picker" id="tzSel" data-picker="filter"></div>
+            </div>
             <p class="scm-msg" id="tzMsg" hidden></p>
 
             <!-- Automatic light/dark. Unlike the timezone this is DEVICE state,
@@ -731,14 +738,17 @@
             <!-- Open the desktop: Auto / Always / Never - DEVICE state too (see the
                  <head>). The ONLY place for it (one action, one knob): a big screen,
                  or inside the desktop (it follows the change, see its OPEN THE DESKTOP). -->
-            <label class="scm-assign" for="deskModeSel" id="deskModeWrap" hidden>
-                <span><span data-i18n="desktop.openMode"></span> <button class="info-tip" type="button" data-i18n-attr="data-help:desktop.openModeInfo"></button></span>
-                <select id="deskModeSel">
-                    <option value="auto"   data-i18n="desktop.openAuto"></option>
-                    <option value="always" data-i18n="desktop.openAlways"></option>
-                    <option value="never"  data-i18n="desktop.openNever"></option>
-                </select>
-            </label>
+            <div class="scm-assign" id="deskModeWrap" hidden>
+                <span><label for="deskModeSel" data-i18n="desktop.openMode"></label> <button class="info-tip" type="button" data-i18n-attr="data-help:desktop.openModeInfo"></button></span>
+                <div class="picker" id="deskModeSel">
+                    <input type="hidden" value="auto">
+                    <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                        <li role="option" data-value="auto"   data-i18n="desktop.openAuto"></li>
+                        <li role="option" data-value="always" data-i18n="desktop.openAlways"></li>
+                        <li role="option" data-value="never"  data-i18n="desktop.openNever"></li>
+                    </ul></div>
+                </div>
+            </div>
 
             <div class="scm-check-row" id="pushChkWrap">
                 <label class="scm-check" for="pushChk"><span data-i18n="acct.notifsOff"></span></label>
@@ -797,8 +807,8 @@
             <div class="scm-name-row">
                 <input class="input scm-input" id="scmName" spellcheck="false" autocomplete="off" data-i18n-attr="placeholder:scm.namePh">
                 <div class="scm-seg" role="group" data-i18n-attr="aria-label:scm.kind">
-                    <button type="button" class="pill" data-kind="dark" id="scmKindDark" data-i18n="scm.dark"></button>
-                    <button type="button" class="pill" data-kind="light" id="scmKindLight" data-i18n="scm.light"></button>
+                    <button type="button" class="btn text sm bordered" aria-pressed="false" data-kind="dark" id="scmKindDark" data-i18n="scm.dark"></button>
+                    <button type="button" class="btn text sm bordered" aria-pressed="false" data-kind="light" id="scmKindLight" data-i18n="scm.light"></button>
                 </div>
             </div>
             <div id="scmTokens">
@@ -818,8 +828,8 @@
 
             <p class="scm-h" data-i18n="scm.assignHead"></p>
             <div class="scm-assign-row">
-                <label class="scm-assign"><span data-i18n="scm.dark"></span><select id="scmActiveDark"></select></label>
-                <label class="scm-assign"><span data-i18n="scm.light"></span><select id="scmActiveLight"></select></label>
+                <div class="scm-assign"><label for="scmActiveDark" data-i18n="scm.dark"></label><div class="picker" id="scmActiveDark"></div></div>
+                <div class="scm-assign"><label for="scmActiveLight" data-i18n="scm.light"></label><div class="picker" id="scmActiveLight"></div></div>
             </div>
         </div>
     </dialog>
@@ -1185,8 +1195,8 @@
                 titleSpan.textContent = Ayni.tf( 'scm.editing', { name: draft.name || Ayni.t( 'scm.unnamed' ) } );
                 kindDark.setAttribute( 'aria-pressed', draft.kind === 'dark'  ? 'true' : 'false' );
                 kindLite.setAttribute( 'aria-pressed', draft.kind === 'light' ? 'true' : 'false' );
-                kindDark.classList.toggle( 'is-active', draft.kind === 'dark' );
-                kindLite.classList.toggle( 'is-active', draft.kind === 'light' );
+                kindDark.setAttribute( 'aria-pressed', draft.kind === 'dark' );
+                kindLite.setAttribute( 'aria-pressed', draft.kind === 'light' );
 
                 NKEYS.forEach( function ( k )
                 {
@@ -1211,14 +1221,9 @@
 
             function fillSelect( sel, kind, activeId )
             {
-                sel.innerHTML = '';
-                data.schemes.filter( function ( s ){ return s.kind === kind; } ).forEach( function ( s )
-                {
-                    var o = document.createElement( 'option' );
-                    o.value = s.id; o.textContent = s.name;
-                    if( s.id === activeId ) o.selected = true;
-                    sel.appendChild( o );
-                } );
+                var pk = Ayni.picker( sel );
+                pk.options = data.schemes.filter( function ( s ){ return s.kind === kind; } ).map( function ( s ){ return { value: s.id, text: s.name }; } );
+                pk.set( activeId );
             }
 
             function openDialog()
@@ -1336,8 +1341,8 @@
                 } } );
             } );
 
-            selDark.addEventListener( 'change', function (){ data.activeDark  = this.value; persist(); render(); } );
-            selLite.addEventListener( 'change', function (){ data.activeLight = this.value; persist(); render(); } );
+            selDark.addEventListener( 'ayni:change', function ( e ){ data.activeDark  = e.detail.value; persist(); render(); } );
+            selLite.addEventListener( 'ayni:change', function ( e ){ data.activeLight = e.detail.value; persist(); render(); } );
 
             // Keep the in-memory model consistent, but don't write to localStorage until
             // the user actually changes something - a fresh install stays 100% theme.css.
@@ -1387,15 +1392,12 @@
             // a choice made on the phone reaches the PC; shared/i18n.js keeps a
             // copy on this device to paint with, and reloads so every string
             // re-renders. See Ayni.i18n.setLang and server/go/users.go UserLang.
-            if( langSel && window.Ayni )
-            {
-                // The CHOICE, not the language in use: with nothing stored the
-                // box sits on "por defecto" even though the UI is in some
-                // language. Picking it again clears the choice. By the time the
-                // dialog opens the boot probe has already copied the account's
-                // language down here, so this shows the account's answer.
-                langSel.value = Ayni.i18n.saved() || '';
-            }
+            // (The CHOICE, not the language in use: with nothing stored the
+            // box sits on "por defecto" even though the UI is in some
+            // language. Picking it again clears the choice. By the time the
+            // dialog opens the boot probe has already copied the account's
+            // language down here, so this shows the account's answer. Set once
+            // Ayni's list picker is there, below.)
 
             // The SERVER first (Ayni.autoSave: the box is off while it
             // saves, and back on the old value with langMsg on a failure).
@@ -1428,9 +1430,16 @@
             {
                 // Language and time zone save themselves (shared/ui.js is
                 // deferred: here it is there).
-                if( langSel && window.Ayni )
-                    Ayni.autoSave( langSel, saveLang, { msg: langMsg, fail: Ayni.t( 'acct.langFailed' ), done: langSaved } );
-                tzCtl = Ayni.autoSave( tzSel, saveTz, { msg: tzMsg, fail: Ayni.t( 'acct.tzFailed' ), done: tzDone } );
+                // Both are Ayni list pickers, there once Ayni has started.
+                Ayni.ready.then( function ()
+                {
+                    if( langSel )
+                    {
+                        Ayni.picker( langSel ).set( Ayni.i18n.saved() || '' );
+                        Ayni.autoSave( langSel, saveLang, { msg: langMsg, fail: Ayni.t( 'acct.langFailed' ), done: langSaved } );
+                    }
+                    tzCtl = Ayni.autoSave( tzSel, saveTz, { msg: tzMsg, fail: Ayni.t( 'acct.tzFailed' ), done: tzDone } );
+                } );
             } );
 
             // One row's message line under its setting: hidden when empty,
@@ -1463,14 +1472,9 @@
                 // and the next stray change would overwrite a good value.
                 if( current && zones.indexOf( current ) === -1 ) zones.unshift( current );
 
-                tzSel.textContent = '';
-                zones.forEach( function ( z )
-                {
-                    var o = document.createElement( 'option' );
-                    o.value = z; o.textContent = z;
-                    tzSel.appendChild( o );
-                } );
-                tzSel.value = current || '';
+                var pk = Ayni.picker( tzSel );
+                pk.options = zones;
+                pk.set( current || '' );
             }
 
             async function loadTz()
@@ -1484,7 +1488,7 @@
                 }
                 catch ( e ) { /* keep whatever we had */ }
                 fillZones( tzSaved || NayiveUI.viewerTz() );
-                if( tzCtl ) tzCtl.saved( tzSel.value );
+                if( tzCtl ) tzCtl.saved( Ayni.picker( tzSel ).value );
             }
 
             // Ayni.autoSave runs it on change; a failure puts the box back
@@ -1501,7 +1505,7 @@
             // The server's spelling of the zone wins.
             function tzDone()
             {
-                tzSel.value = tzSaved;
+                Ayni.picker( tzSel ).set( tzSaved );
                 tzCtl.saved( tzSaved );
             }
 
@@ -1860,13 +1864,13 @@
                 var big = window.matchMedia( '(min-width: 1024px) and (min-height: 600px)' ).matches ||
                           window.matchMedia( '(min-width: 600px) and (min-height: 1024px)' ).matches;
                 document.getElementById( 'deskModeWrap' ).hidden = window.top === window && ! big;
-                deskSel.value = nayiveDeskMode();
+                Ayni.picker( deskSel ).set( nayiveDeskMode() );
             }
-            deskSel.addEventListener( 'change', function ()
+            deskSel.addEventListener( 'ayni:change', function ()
             {
                 var cur = {};
                 try { cur = JSON.parse( localStorage.getItem( 'balata-desktop' ) || 'null' ) || {}; } catch( e ) {}
-                cur.mode = deskSel.value;
+                cur.mode = Ayni.picker( deskSel ).value;
                 try { localStorage.setItem( 'balata-desktop', JSON.stringify( cur ) ); } catch( e ) {}
                 if( window.top === window && nayiveWantDesk( cur.mode ) ) location.replace( 'desktop/' );
             } );
@@ -1915,6 +1919,13 @@
 
             function focusOnce( el, sheetBack )
             {
+                // An Ayni list picker: its field, once Ayni has made it
+                if( el.classList && el.classList.contains( 'picker' ) )
+                {
+                    var later = function (){ Ayni.ready.then( function (){ focusOnce( Ayni.picker( el ).field, sheetBack ); } ); };
+                    if( window.Ayni && Ayni.ready ) later(); else document.addEventListener( 'DOMContentLoaded', later );
+                    return;
+                }
                 el.focus();
                 // Opened at boot the page may still be hidden until its words
                 // are in (shared/i18n.js), and a hidden field takes no focus:

@@ -46,7 +46,7 @@ const DRAWN = "!! document.querySelector( '#salonSettings .salon-pane .salon-row
 const close = () => c.evaluate( "( () => { const b = document.querySelector( '#salonSettings [data-close]' ); if( b ) b.click(); return !! b; } )()" );
 const setField = ( key, value ) => c.evaluate( `( () => {
     const f = [ ...document.querySelectorAll( '#salonSettings .field' ) ].find( x => x.querySelector( 'label' ) && x.querySelector( 'label' ).textContent === Ayni.t( ${JSON.stringify( key )} ) );
-    const sel = f.querySelector( 'select' ); sel.value = ${JSON.stringify( value )}; sel.dispatchEvent( new Event( 'change' ) ); return true; } )()` );
+    Ayni.picker( f.querySelector( '.picker' ) ).choose( ${JSON.stringify( value )} ); return true; } )()` );
 const readFailShown = "document.querySelector( '#salonSettings' ).textContent.indexOf( Ayni.t( 'salon.readFail' ) ) !== -1";
 // The save runs after the dialog is gone (a read, then the PUT): wait for the disk.
 async function onDiskWhen( fn, ms = 10000 )
@@ -62,7 +62,7 @@ await c.evaluate( "window.__failRead = 'salon.json'; NayiveSalonSettings.open();
 ok( await c.until( DRAWN ), "dialog drawn" );
 ok( await c.evaluate( NO_OK ), "close-only: no ✓" );
 ok( await c.evaluate( readFailShown ), "it says the settings could not be read" );
-ok( await c.evaluate( "[ ...document.querySelectorAll( '#salonSettings .salon-pane select, #salonSettings .salon-pane input' ) ].every( x => x.disabled )" ),
+ok( await c.evaluate( "[ ...document.querySelectorAll( '#salonSettings .salon-pane .picker' ) ].every( x => Ayni.picker( x ).disabled ) && [ ...document.querySelectorAll( '#salonSettings .salon-pane input' ) ].every( x => x.disabled )" ),
     "every control is read-only" );
 ok( await close(), "closed by its ×" );
 ok( await c.until( "! document.querySelector( '#salonSettings' )" ), "closed" );

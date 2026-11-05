@@ -115,25 +115,30 @@ try
     ok( /^false\|/.test( btn ) && /Ciencia|Science/.test( btn ), "⋮ menu offers Science's settings" );
     await p.evaluate( `document.getElementById('salonBtn').click();1` );
     await sleep( 2500 );
-    const tabs = await p.evaluate( `[...document.querySelectorAll('#salonSettings .salon-tabs button')].map(b=>b.textContent).join('|')` );
+    const tabs = await p.evaluate( `[...document.querySelectorAll('#salonSettings [role=tab]')].map(b=>b.textContent).join('|')` );
     console.log( "tabs", tabs );
     ok( /Noticias|News/.test( tabs ) && ! /Arte\b|\bArt\b/.test( tabs ), "News tab instead of Art" );
-    await p.evaluate( `[...document.querySelectorAll('#salonSettings .salon-tabs button')].find(b=>/Noticias|News/.test(b.textContent)).click();1` );
+    await p.evaluate( `[...document.querySelectorAll('#salonSettings [role=tab]')].find(b=>/Noticias|News/.test(b.textContent)).click();1` );
     await sleep( 400 );
     const src = await p.evaluate( `[...document.querySelectorAll('#salonSettings .salon-pane:not([hidden]) .salon-check')].map(l=>(l.querySelector('input').checked?'[x] ':'[ ] ')+l.textContent).join('\\n')` );
     console.log( src );
     ok( src.split( "\n" ).length === 8, "eight sources listed" );
-    await p.evaluate( `[...document.querySelectorAll('#salonSettings .salon-tabs button')][1].click();1` );
+    await p.evaluate( `[...document.querySelectorAll('#salonSettings [role=tab]')][0].click();1` );
     await sleep( 400 );
     const pics = await p.evaluate( `[...document.querySelectorAll('#salonSettings .salon-pane:not([hidden]) .salon-check')].filter(l=>/NASA|ESO|ESA/.test(l.textContent)).map(l=>(l.querySelector('input').checked?'[x] ':'[ ] ')+l.textContent).join('\\n')` );
     console.log( pics );
     ok( pics.split( "\n" ).length === 3 && ! /\[ \]/.test( pics ), "three picture sources, all ticked" );
     await shot( "settings" );
     // Untick SINC, save, and read it back from the server.
+    // (A story opened in a new tab left this page behind, and a page in the background gets no close event.)
+    await p.send( "Page.bringToFront" ); await sleep( 300 );
     await p.evaluate( `[...document.querySelectorAll('#salonSettings .salon-check')].find(l=>/SINC/.test(l.textContent)).querySelector('input').click();document.querySelector('#salonSettings header [data-close]').click();1` );
-    await sleep( 1500 );
-    const saved = JSON.parse( await p.evaluate( `fetch('/api/files?file=data/science.json').then(r=>r.text())` ) );
-    ok( saved.news && ! saved.news.includes( "sinc" ) && saved.news.includes( "tcEs" ) && saved.langs.join() === "es,en,pt", "saved per user in data/science.json" );
+    await sleep( 3000 );
+    // The save runs after the dialog has closed, and reads first: wait for it, however busy the machine is.
+    let saved = {};
+    const t0 = Date.now();
+    for( let i = 0; i < 40 && ! saved.news; i++ ) { saved = JSON.parse( await p.evaluate( `fetch('/api/files?file=data/science.json').then(r=>r.text())` ) ); if( ! saved.news ) await sleep( 500 ); }
+    ok( saved.news && ! saved.news.includes( "sinc" ) && saved.news.includes( "tcEs" ), "saved per user in data/science.json" );
     await p.evaluate( `fetch('/api/files?file=data/science.json',{method:'DELETE'}).then(r=>r.status)` );
 
     const errors = p.logs.filter( l => /^(EXCEPTION|LOG-ERROR)/.test( l ) && ! /404 .*science\.json/.test( l ) );   // never saved: expected

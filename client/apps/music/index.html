@@ -56,6 +56,8 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -69,6 +71,8 @@
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
     <script src="../shared/ayni/ayni-fields.js" defer></script>
+    <script src="../shared/ayni/ayni-pickers.js" defer></script>
+    <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
@@ -112,10 +116,6 @@
        .main-row, .view-head, .media-card, .scope-chip, .empty-hint and the
        whole player bar are the shared MEDIA VIEWER block in shared/app.css.
        Only what is really Music's own is below. */
-
-    .pane-resizer { flex: 0 0 auto; width: 5px; cursor: col-resize; background: transparent;
-                     transition: background-color var(--tr-fast); }
-    .pane-resizer:hover, .pane-resizer.dragging { background: var(--accent); }
 
     .lib-pane   { flex: 1 1 auto; min-width: 300px; display: flex; flex-direction: column; overflow: hidden; }
 
@@ -233,7 +233,7 @@
 
     @media (max-width: 760px)
     {
-        #mainRow > .queue-pane, .pane-resizer { display: none; }
+        #mainRow > .queue-pane, #paneResizer { display: none; }
         .queue-open-btn             { display: inline-flex; }
         .lib-pane                   { min-width: 0; }   /* the 420px floor made the page 551px wide on a phone */
         .volume-block { display: none; }
@@ -307,7 +307,7 @@
             <div class="lib-content" id="libContent"></div>
         </div>
 
-        <div class="pane-resizer" id="paneResizer" data-i18n-attr="title:ui.dragResize"></div>
+        <div class="splitter" id="paneResizer"></div>
 
         <div class="queue-pane" id="queuePane">
             <div class="queue-header">
@@ -1639,7 +1639,7 @@ async function deletePlaylist( id )
 function wireResizer()
 {
     var pane = $( "#queuePane" );
-    NayiveUI.paneResizer( $( "#paneResizer" ), pane, { min: 260, max: 560, def: null, right: true,
+    Ayni.splitter( "#paneResizer", { pane: pane, side: "last", min: 260, max: 560, key: "music-queue-width", off: function () { return PHONE.matches; },
         set: function ( w ) { pane.style.width = pane.style.flexBasis = w == null ? "" : w + "px"; } } );
 }
 

@@ -227,9 +227,9 @@ try
     await ev( "document.getElementById( 'accountBtn' ).click(); true" );
     await waitFor( "document.getElementById( 'pwBackdrop' ).open", 5000, "My account open" );
     check( "My account: Open the desktop shows on a big screen", await ev( "! document.getElementById( 'deskModeWrap' ).hidden && document.getElementById( 'deskModeWrap' ).offsetHeight > 0" ) === true );
-    check( "My account: it says Never", await ev( "document.getElementById( 'deskModeSel' ).value" ) === "never" );
+    check( "My account: it says Never", await ev( "Ayni.picker( document.getElementById( 'deskModeSel' ) ).value" ) === "never" );
     await shot( "account-mode" );
-    await ev( "( function () { var s = document.getElementById( 'deskModeSel' ); s.value = 'always'; s.dispatchEvent( new Event( 'change' ) ); return true; } )()" );
+    await ev( "( function () { Ayni.picker( document.getElementById( 'deskModeSel' ) ).choose( 'always' ); return true; } )()" );
     await sleep( 1500 );
     check( "My account: Always goes to the desktop", atDesk( await path_() ), await path_() );
     // In the desktop's own menu the row shows (the only place for it); a change
@@ -241,7 +241,7 @@ try
     await ev( `${md}.getElementById( 'accountBtn' ).click(); true` );
     await waitFor( `${md}.getElementById( 'pwBackdrop' ).open`, 5000, "My account open in the menu" );
     check( "My account in the desktop's menu: Open the desktop shows", await ev( `${md}.getElementById( 'deskModeWrap' ).hidden` ) === false );
-    await ev( `( function () { var s = ${md}.getElementById( 'deskModeSel' ); s.value = 'auto'; s.dispatchEvent( new Event( 'change' ) ); return true; } )()` );
+    await ev( `( function () { var d = ${md}; d.defaultView.Ayni.picker( d.getElementById( 'deskModeSel' ) ).choose( 'auto' ); return true; } )()` );
     await sleep( 600 );
     check( "My account in the desktop's menu: Auto is stored, the desktop stays", atDesk( await path_() ) && await ev( "JSON.parse( localStorage.getItem( 'balata-desktop' ) ).mode" ) === "auto" );
     check( "My account in the desktop's menu: its page stays the launcher", await ev( `! /desktop\\//.test( ${md}.defaultView.location.pathname )` ) === true );

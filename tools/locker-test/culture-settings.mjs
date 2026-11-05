@@ -30,11 +30,12 @@ try
     await p.evaluate( "document.getElementById('moreBtn').click();1" ); await sleep( 400 );
     ok( await p.evaluate( "!document.getElementById('salonBtn').hidden" ), "Salon settings in the ⋮ menu when Salon is chosen" );
     await p.evaluate( "document.getElementById('salonBtn').click();1" ); await sleep( 2500 );
-    ok( await p.evaluate( "!!document.querySelector('#salonSettings[open] .salon-tabs')" ), "dialog opens" );
-    const tabs = await p.evaluate( "[...document.querySelectorAll('.salon-tabs .pill')].map(b=>b.textContent).join('|')" );
+    ok( await p.evaluate( "!!document.querySelector('#salonSettings[open] [role=tablist]')" ), "dialog opens" );
+    const tabs = await p.evaluate( "[...document.querySelectorAll('#salonSettings [role=tab]')].map(b=>b.textContent).join('|')" );
     console.log( "tabs:", tabs );
     ok( tabs.split( "|" ).length === 4, "four tabs" );
     // Nothing saved: every language on, the account's (English here) first.
+    await p.evaluate( "document.querySelectorAll('#salonSettings [role=tab]')[1].click();1" );
     const dflt = await p.evaluate( `[...document.querySelectorAll('.salon-pane:not([hidden]) .salon-row')].filter(r=>!r.classList.contains('off')).map(r=>r.textContent.trim()).join(',')` );
     console.log( "default:", dflt );
     ok( dflt === "English,español,français,Deutsch,português", "by default all languages, the account's first" );
@@ -44,6 +45,7 @@ try
     await p.evaluate( `fetch('/api/files?file=data/salon.json',{method:'PUT',body:JSON.stringify({langs:['es','en','pt']})}).then(r=>r.status)` );
     await p.evaluate( "document.getElementById('moreBtn').click();1" ); await sleep( 400 );
     await p.evaluate( "document.getElementById('salonBtn').click();1" ); await sleep( 2500 );
+    await p.evaluate( "document.querySelectorAll('#salonSettings [role=tab]')[1].click();1" );
     await shot( "langs" );
 
     // Languages: tick French, move it up; untick pt for the word.
@@ -56,21 +58,21 @@ try
     await p.evaluate( `(()=>{var tr=[...document.querySelectorAll('.salon-grid tbody tr')][3];tr.querySelectorAll('input')[1].click();return 1})()` );
 
     // Content: quote off, a new work every 4 h.
-    await p.evaluate( "document.querySelector('.salon-tabs .pill:nth-child(2)').click();1" );
-    await p.evaluate( `(()=>{var r=[...document.querySelectorAll('.salon-pane:not([hidden]) .salon-row')].find(x=>x.textContent.trim()==='${"Quote"}');r.querySelector('input').click();var s=document.querySelector('.salon-pane:not([hidden]) select');s.value='4';s.dispatchEvent(new Event('change'));return 1})()` );
+    await p.evaluate( "document.querySelector('#salonSettings [role=tab]:nth-child(1)').click();1" );
+    await p.evaluate( `(()=>{var r=[...document.querySelectorAll('.salon-pane:not([hidden]) .salon-row')].find(x=>x.textContent.trim()==='${"Quote"}');r.querySelector('input').click();Ayni.picker(document.querySelector('.salon-pane:not([hidden]) .picker')).choose('4');return 1})()` );
     await shot( "content" );
     // Art: add the Louvre, sculpture; Baroque only.
-    await p.evaluate( "document.querySelector('.salon-tabs .pill:nth-child(3)').click();1" );
+    await p.evaluate( "document.querySelector('#salonSettings [role=tab]:nth-child(3)').click();1" );
     await p.evaluate( `(()=>{var ls=[...document.querySelectorAll('.salon-pane:not([hidden]) .salon-check')];['Musée du Louvre','Sculpture','1600–1750 (Baroque)'].forEach(n=>ls.find(l=>l.textContent===n).querySelector('input').click());return 1})()` );
     await shot( "art" );
     // Look (select 0 = who gives the weather): a city, °F, 12 h, the clear letters, large, high contrast.
-    await p.evaluate( "document.querySelector('.salon-tabs .pill:nth-child(4)').click();1" );
+    await p.evaluate( "document.querySelector('#salonSettings [role=tab]:nth-child(4)').click();1" );
     await p.evaluate( `(()=>{var pane=document.querySelector('.salon-pane:not([hidden])');var q=pane.querySelector('input[type=text]');q.value='Lisboa';pane.querySelector('.salon-row button').click();return 1})()` );
     await sleep( 2500 );
     const found = await p.evaluate( "[...document.querySelectorAll('.salon-pane:not([hidden]) .salon-note')].map(n=>n.textContent).join('|')" );
     console.log( "city:", found );
     ok( /Lisbo/.test( found ), "city found" );
-    await p.evaluate( `(()=>{var ss=[...document.querySelectorAll('.salon-pane:not([hidden]) select')];var set=(i,v)=>{ss[i].value=v;ss[i].dispatchEvent(new Event('change'))};set(1,'f');set(2,'12');set(3,'clear');set(4,'l');set(5,'high');return 1})()` );
+    await p.evaluate( `(()=>{var ss=[...document.querySelectorAll('.salon-pane:not([hidden]) .picker')];var set=(i,v)=>Ayni.picker(ss[i]).choose(v);set(1,'f');set(2,'12');set(3,'clear');set(4,'l');set(5,'high');return 1})()` );
     await sleep( 500 );
     await shot( "look" );
     ok( await p.evaluate( "getComputedStyle(document.querySelector('.salon-preview .big')).fontFamily.includes('Atkinson')" ), "the sample shows the chosen letters" );
@@ -107,7 +109,7 @@ try
     // Settings live only in the desktop's menu: no gear on the lock screen.
     await p.evaluate( "document.querySelector('.lock-dlg').dispatchEvent(new KeyboardEvent('keydown',{key:'a',bubbles:true}));1" );
     await sleep( 300 );
-    ok( await p.evaluate( "document.querySelectorAll('.lock-card button').length === 1" ), "the password box has only its unlock button" );
+    ok( await p.evaluate( "document.querySelectorAll('.lock-card button:not([data-reveal])').length === 1" ), "the password box has only its unlock button" );
     const errors = p.logs.filter( l => /^(EXCEPTION|LOG-ERROR)/.test( l ) && ! /favicon|salon\.json/.test( l ) );
     ok( errors.length === 0, "no errors" + ( errors.length ? ":\n  " + errors.join( "\n  " ) : "" ) );
 }

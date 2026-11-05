@@ -29,6 +29,8 @@
     <script src="../shared/ayni/ayni-lists.js" defer></script>
     <script src="../shared/ayni/ayni-help.js" defer></script>
     <script src="../shared/ayni/ayni-fields.js" defer></script>
+    <script src="../shared/ayni/ayni-pickers.js" defer></script>
+    <script src="../shared/ayni/ayni-layout.js" defer></script>
     <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
     <script src="../shared/gum-api.js" defer></script>
     <!-- Small shared UI helpers: backdrop open/close, toast. -->
@@ -97,6 +99,8 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-lists.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-help.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -175,7 +179,7 @@
            #writeTools, so its buttons and Write's own share ONE wrap flow. */
         #toolbar { display: contents; }
         .tb-font { width: 124px; }
-        .tb-size { width: 56px; }
+        .tb-size { width: 60px; }
 
         /* The colour under the "A" and the marker: the selection's own, or the
            glyph's colour when it has none (toolbar.js sets --tb-bar). */
@@ -269,10 +273,9 @@
         #editor.is-ready .editor-loading { opacity: 0; pointer-events: none; }
 
         /* Símbolos popup — same shell as the table-borders one (.popup.tb-popup).
-           The tabs are the shared .pill, a size smaller. */
+           Its sets are tabs with one view (Ayni). */
         .sym-popup { width: 320px; max-width: calc(100vw - 16px); }
-        .sym-tabs  { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
-        .sym-tab   { font-size: 0.74rem; padding: 3px 8px; }
+        #symTabs   { margin-bottom: 6px; }
         .sym-grid  { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; max-height: 230px; overflow-y: auto; }
         .sym-cell
         {
@@ -501,13 +504,13 @@
                  .tb-keep: the ones a phone keeps on its one row.
                  Glyphs: Material Symbols (Apache-2.0), the path data the engine's
                  own chrome ships; styles, footnote, symbols and zoom are Write's. -->
-            <div id="toolbar">
+            <div id="toolbar" role="toolbar" data-i18n-attr="aria-label:ui.formatBar">
                 <!-- A PC's File button (#moreBtn) goes in before this rule - write.js
                      moves it here from the header, and back on a phone. -->
                 <span id="fileSep" class="vsep" aria-hidden="true"></span>
                 <button id="stylesBtn" class="btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:write.tb.linkedStyles, aria-label:write.tb.linkedStyles"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 19 8 5l5 14"></path><line x1="4.8" y1="14" x2="11.2" y2="14"></line><line x1="15" y1="8" x2="21" y2="8"></line><line x1="15" y1="12" x2="21" y2="12"></line><line x1="15" y1="16" x2="21" y2="16"></line></svg></button>
-                <select id="fontFamilySel" class="tb-select tb-font" data-i18n-attr="title:write.tb.fontFamily, aria-label:write.tb.fontFamily"></select>
-                <select id="fontSizeSel" class="tb-select tb-size tb-keep" data-i18n-attr="title:write.tb.fontSize, aria-label:write.tb.fontSize"></select>
+                <div class="picker tb-font" id="fontFamilySel" data-i18n-attr="data-tip:write.tb.fontFamily, aria-label:write.tb.fontFamily"></div>
+                <div class="picker tb-size tb-keep" id="fontSizeSel" data-picker="combo" data-i18n-attr="data-tip:write.tb.fontSize, aria-label:write.tb.fontSize"></div>
                 <span class="vsep" aria-hidden="true"></span>
                 <button id="boldBtn" class="btn tb-keep" type="button" data-slot="text.bold" data-i18n-attr="data-tip:write.tb.bold, aria-label:write.tb.bold"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M272-200v-560h221q65 0 120 40t55 111q0 51-23 78.5T602-491q25 11 55.5 41t30.5 90q0 89-65 124.5T501-200H272Zm121-112h104q48 0 58.5-24.5T566-372q0-11-10.5-35.5T494-432H393v120Zm0-228h93q33 0 48-17t15-38q0-24-17-39t-44-15h-95v109Z"></path></svg></button>
                 <button id="italicBtn" class="btn tb-keep" type="button" data-slot="text.italic" data-i18n-attr="data-tip:write.tb.italic, aria-label:write.tb.italic"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M200-200v-100h160l120-360H320v-100h400v100H580L460-300h140v100H200Z"></path></svg></button>
@@ -664,15 +667,18 @@
         <div class="body">
             <div class="field">
                 <label for="psSize" data-i18n="write.size"></label>
-                <select id="psSize">
-                    <option value="A4" data-i18n="write.paperA4"></option>
-                    <option value="Letter" data-i18n="write.paperLetter"></option>
-                    <option value="Legal" data-i18n="write.paperLegal"></option>
-                    <option value="A3" data-i18n="write.paperA3"></option>
-                    <option value="A5" data-i18n="write.paperA5"></option>
-                    <option value="B5" data-i18n="write.paperB5"></option>
-                    <option value="custom" data-i18n="write.paperCustom"></option>
-                </select>
+                <div class="picker" id="psSize">
+                    <input type="hidden" value="A4">
+                    <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                        <li role="option" data-value="A4" data-i18n="write.paperA4"></li>
+                        <li role="option" data-value="Letter" data-i18n="write.paperLetter"></li>
+                        <li role="option" data-value="Legal" data-i18n="write.paperLegal"></li>
+                        <li role="option" data-value="A3" data-i18n="write.paperA3"></li>
+                        <li role="option" data-value="A5" data-i18n="write.paperA5"></li>
+                        <li role="option" data-value="B5" data-i18n="write.paperB5"></li>
+                        <li role="option" data-value="custom" data-i18n="write.paperCustom"></li>
+                    </ul></div>
+                </div>
             </div>
             <div class="field-row" id="psCustomRow" hidden>
                 <div class="field"><label for="psWidth" data-i18n="write.paperWidth"></label><input class="input" type="text" id="psWidth" inputmode="decimal"></div>
@@ -680,10 +686,13 @@
             </div>
             <div class="field">
                 <label for="psOrient" data-i18n="write.orientation"></label>
-                <select id="psOrient">
-                    <option value="portrait" data-i18n="write.portrait"></option>
-                    <option value="landscape" data-i18n="write.landscape"></option>
-                </select>
+                <div class="picker" id="psOrient">
+                    <input type="hidden" value="portrait">
+                    <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                        <li role="option" data-value="portrait" data-i18n="write.portrait"></li>
+                        <li role="option" data-value="landscape" data-i18n="write.landscape"></li>
+                    </ul></div>
+                </div>
             </div>
             <div class="field-row">
                 <div class="field"><label for="psTop" data-i18n="write.marginTop"></label><input class="input" type="text" id="psTop" inputmode="decimal"></div>
@@ -713,12 +722,15 @@
                 <div class="field"><label for="paBefore" data-i18n="write.paBefore"></label><input class="input" type="text" id="paBefore" inputmode="decimal" value="0"></div>
                 <div class="field"><label for="paAfter" data-i18n="write.paAfter"></label><input class="input" type="text" id="paAfter" inputmode="decimal" value="0"></div>
                 <div class="field"><label for="paLine" data-i18n="write.paLine"></label>
-                    <select id="paLine">
-                        <option value="1">1</option>
-                        <option value="1.15">1,15</option>
-                        <option value="1.5">1,5</option>
-                        <option value="2">2</option>
-                    </select>
+                    <div class="picker" id="paLine">
+                        <input type="hidden" value="1">
+                        <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                            <li role="option" data-value="1">1</li>
+                            <li role="option" data-value="1.15">1,15</li>
+                            <li role="option" data-value="1.5">1,5</li>
+                            <li role="option" data-value="2">2</li>
+                        </ul></div>
+                    </div>
                 </div>
             </div>
 
@@ -727,11 +739,14 @@
                 <div class="field"><label for="paLeft" data-i18n="write.paLeft"></label><input class="input" type="text" id="paLeft" inputmode="decimal" value="0"></div>
                 <div class="field"><label for="paRight" data-i18n="write.paRight"></label><input class="input" type="text" id="paRight" inputmode="decimal" value="0"></div>
                 <div class="field"><label for="paSpecial" data-i18n="write.paSpecial"></label>
-                    <select id="paSpecial">
-                        <option value="none" data-i18n="write.paSpecialNone"></option>
-                        <option value="first" data-i18n="write.paSpecialFirst"></option>
-                        <option value="hanging" data-i18n="write.paSpecialHanging"></option>
-                    </select>
+                    <div class="picker" id="paSpecial">
+                        <input type="hidden" value="none">
+                        <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                            <li role="option" data-value="none" data-i18n="write.paSpecialNone"></li>
+                            <li role="option" data-value="first" data-i18n="write.paSpecialFirst"></li>
+                            <li role="option" data-value="hanging" data-i18n="write.paSpecialHanging"></li>
+                        </ul></div>
+                    </div>
                 </div>
                 <div class="field" id="paSpecialByField" hidden><label for="paSpecialBy" data-i18n="write.paSpecialBy"></label><input class="input" type="text" id="paSpecialBy" inputmode="decimal" value="1,25"></div>
             </div>
@@ -743,16 +758,28 @@
             <div class="section-label" data-i18n="write.paListLabel"></div>
             <div class="field-row">
                 <div class="field"><label for="paListLevel" data-i18n="write.paListLevel"></label>
-                    <select id="paListLevel"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+                    <div class="picker" id="paListLevel">
+                        <input type="hidden" value="1">
+                        <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                            <li role="option" data-value="1">1</li>
+                            <li role="option" data-value="2">2</li>
+                            <li role="option" data-value="3">3</li>
+                            <li role="option" data-value="4">4</li>
+                            <li role="option" data-value="5">5</li>
+                        </ul></div>
+                    </div>
                 </div>
                 <div class="field"><label for="paListFormat" data-i18n="write.paListFormat"></label>
-                    <select id="paListFormat">
-                        <option value="decimal">1, 2, 3</option>
-                        <option value="lowerLetter">a, b, c</option>
-                        <option value="upperLetter">A, B, C</option>
-                        <option value="lowerRoman">i, ii, iii</option>
-                        <option value="upperRoman">I, II, III</option>
-                    </select>
+                    <div class="picker" id="paListFormat">
+                        <input type="hidden" value="decimal">
+                        <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                            <li role="option" data-value="decimal">1, 2, 3</li>
+                            <li role="option" data-value="lowerLetter">a, b, c</li>
+                            <li role="option" data-value="upperLetter">A, B, C</li>
+                            <li role="option" data-value="lowerRoman">i, ii, iii</li>
+                            <li role="option" data-value="upperRoman">I, II, III</li>
+                        </ul></div>
+                    </div>
                 </div>
             </div>
             <p id="paListNote" class="text st-note" data-i18n="write.paListNote" hidden></p>
@@ -761,12 +788,15 @@
             <div class="field-row">
                 <div class="field"><label for="paTabPos" data-i18n="write.paTabPos"></label><input class="input" type="text" id="paTabPos" inputmode="decimal" value="0"></div>
                 <div class="field"><label for="paTabAlign" data-i18n="write.paTabAlign"></label>
-                    <select id="paTabAlign">
-                        <option value="left" data-i18n="write.sc.alignLeft"></option>
-                        <option value="center" data-i18n="write.sc.alignCenter"></option>
-                        <option value="right" data-i18n="write.sc.alignRight"></option>
-                        <option value="decimal" data-i18n="write.paTabDecimal"></option>
-                    </select>
+                    <div class="picker" id="paTabAlign">
+                        <input type="hidden" value="left">
+                        <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                            <li role="option" data-value="left" data-i18n="write.sc.alignLeft"></li>
+                            <li role="option" data-value="center" data-i18n="write.sc.alignCenter"></li>
+                            <li role="option" data-value="right" data-i18n="write.sc.alignRight"></li>
+                            <li role="option" data-value="decimal" data-i18n="write.paTabDecimal"></li>
+                        </ul></div>
+                    </div>
                 </div>
             </div>
             <p class="text st-note" data-i18n="write.paTouchNote"></p>
@@ -784,18 +814,21 @@
         </header>
         <div class="body">
             <div class="field"><label for="stStyle" data-i18n="write.stStyle"></label>
-                <select id="stStyle">
-                    <option value="Normal" data-i18n="write.sc.normal"></option>
-                    <option value="Heading1" data-i18n="write.sc.heading1"></option>
-                    <option value="Heading2" data-i18n="write.sc.heading2"></option>
-                    <option value="Heading3" data-i18n="write.sc.heading3"></option>
-                </select>
+                <div class="picker" id="stStyle">
+                    <input type="hidden" value="Normal">
+                    <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                        <li role="option" data-value="Normal" data-i18n="write.sc.normal"></li>
+                        <li role="option" data-value="Heading1" data-i18n="write.sc.heading1"></li>
+                        <li role="option" data-value="Heading2" data-i18n="write.sc.heading2"></li>
+                        <li role="option" data-value="Heading3" data-i18n="write.sc.heading3"></li>
+                    </ul></div>
+                </div>
             </div>
 
             <div class="field-row">
-                <div class="field"><label for="stFont" data-i18n="write.tb.fontFamily"></label><select id="stFont"></select></div>
-                <div class="field"><label for="stSize" data-i18n="write.tb.fontSize"></label><select id="stSize"></select></div>
-                <div class="field"><label for="stColor" data-i18n="write.tb.color"></label><select id="stColor"></select></div>
+                <div class="field"><label for="stFont" data-i18n="write.tb.fontFamily"></label><div class="picker" id="stFont"></div></div>
+                <div class="field"><label for="stSize" data-i18n="write.tb.fontSize"></label><div class="picker" id="stSize"></div></div>
+                <div class="field"><label for="stColor" data-i18n="write.tb.color"></label><div class="picker" id="stColor"></div></div>
             </div>
             <div class="field"><label class="check switch end"><span data-i18n="write.tb.bold"></span><input role="switch" type="checkbox" id="stBold"></label></div>
             <div class="field"><label class="check switch end"><span data-i18n="write.tb.italic"></span><input role="switch" type="checkbox" id="stItalic"></label></div>
@@ -838,7 +871,7 @@
 
     <!-- Símbolos: an anchored popup off the toolbar's Ω button. -->
     <div id="symPopup" class="panel popup tb-popup sym-popup" popover="manual" role="group" data-i18n-attr="aria-label:write.symbols">
-        <div id="symTabs" class="sym-tabs"></div>
+        <div id="symTabs" role="tablist" data-i18n-attr="aria-label:write.symbols"></div>
         <div id="symGrid" class="sym-grid"></div>
     </div>
 

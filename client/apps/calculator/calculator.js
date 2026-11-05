@@ -301,15 +301,10 @@ function renderFx()
 function fillCurrencies()
 {
     const list = NayiveFx.CODES.slice().sort( function( a, b ) { return NayiveFx.name( a ).localeCompare( NayiveFx.name( b ), LOCALE ); } );
+    // Ayni filtered lists: type to narrow, only a currency of the list is taken; the closed field shows the code
     [ 'fxFrom', 'fxTo' ].forEach( function( id )
     {
-        $( id ).replaceChildren.apply( $( id ), list.map( function( c )
-        {
-            const o = document.createElement( 'option' );
-            o.value = c;
-            o.textContent = c + ' · ' + NayiveFx.name( c );
-            return o;
-        } ) );
+        Ayni.picker( $( id ), { mode: 'filter', options: list.map( function( c ) { return { value: c, text: c + ' · ' + NayiveFx.name( c ), short: c }; } ) } );
     } );
 }
 
@@ -317,10 +312,32 @@ function setCurrencies( f, t )
 {
     if( NayiveFx.CODES.includes( f ) ) from = f;
     if( NayiveFx.CODES.includes( t ) ) to   = t;
-    $( 'fxFrom' ).value = from;
-    $( 'fxTo'   ).value = to;
+    Ayni.picker( $( 'fxFrom' ) ).set( from );
+    Ayni.picker( $( 'fxTo'   ) ).set( to );
     savePrefs();
     render();
+}
+
+// A desktop window hugs the panel, in both modes: no empty space around it. The
+// desktop says no while the window is maximised, tiled or scaled; the panel then
+// follows the window as usual.
+function hugWindow()
+{
+    let ask = null;
+    try { ask = window.parent !== window && window.parent.nayiveFitWindow; } catch( e ) {}
+    if( typeof ask !== 'function' ) return;
+    const root = document.documentElement, panel = $( 'calc' ), page = panel.parentElement;
+    const seen = new ResizeObserver( function()
+    {
+        root.classList.add( 'hug-window' );
+        const pad = getComputedStyle( page ), w = parseFloat( getComputedStyle( panel ).getPropertyValue( '--panel-w' ) );
+        const fits = ask( window,
+            Math.ceil( w + parseFloat( pad.paddingLeft ) + parseFloat( pad.paddingRight ) ),
+            Math.ceil( page.getBoundingClientRect().top + panel.offsetHeight + parseFloat( pad.paddingTop ) + parseFloat( pad.paddingBottom ) ) );
+        if( ! fits ) root.classList.remove( 'hug-window' );
+    } );
+    seen.observe( panel );
+    seen.observe( page.previousElementSibling );      // the header
 }
 
 function setMode( m )
@@ -449,6 +466,55 @@ function leave()
 //------------------------------------------------------------------------//
 // WIRING
 
+// The "?" card. Only the rows with a real tour step stay in the tour: a row with
+// tour: false borrows a control's look and name for its glyph, nothing more.
+function helpRows()
+{
+    const part = function( sel, text, name, extra ) { return Object.assign( { sel: sel, tour: false, text: text, name: name }, extra ); };
+    const key  = function( k, text, name, extra ) { return part( '#keys [data-k="' + k + '"]', text, name, extra ); };
+    const note = function( icon, name, text ) { return { icon: icon, name: T( name ), text: T( text ) }; };
+    const kb   = function( k, name, text ) { return key( k, text ? T( text ) : '', T( name ) ); };
+
+    const rows = [
+        part( '#modeSwitch', T( 'calculator.helpModesText' ), T( 'calculator.helpModes' ) ),
+        { sel: '#histBtn', text: T( 'calculator.introHistory' ) },
+        part( '#histClearBtn', T( 'calculator.helpHistClear' ) ),
+
+        { section: T( 'calculator.helpKeys' ) },
+        key( 'clear',   T( 'calculator.helpClear' ) ),
+        key( 'back',    T( 'calculator.helpBack' ) ),
+        key( 'percent', T( 'calculator.helpPercent' ) ),
+        key( 'sign',    T( 'calculator.helpSign' ), undefined, { svg: '±' } ),
+        key( 'dot',     T( 'calculator.helpDecimal' ) ),
+        key( '=',       T( 'calculator.helpEquals' ) ),
+
+        { section: T( 'calculator.helpRules' ) },
+        kb( '*', 'calculator.helpOrder', 'calculator.helpOrderText' ),
+        kb( '=', 'calculator.helpAfter', 'calculator.helpAfterText' ),
+        kb( '9', 'calculator.helpSize',  'calculator.helpSizeText' ),
+        note( 'warn', 'calculator.error', 'calculator.helpErrorText' ),
+
+        { section: T( 'calculator.helpFx' ) },
+        part( '#modeSwitch [data-mode="fx"]', T( 'calculator.helpPickText' ), T( 'calculator.helpPick' ) ),
+        part( '#fxSwap', T( 'calculator.helpSwapText' ) ),
+        kb( '1', 'calculator.helpLines', 'calculator.helpLinesText' ),
+        note( 'info',  'calculator.fxCheck',     'calculator.helpCheck' ),
+        note( 'ok',    'calculator.helpSources', 'calculator.helpSourcesText' ),
+        note( 'clock', 'calculator.helpOffline', 'calculator.helpOfflineText' ),
+        note( 'apps',  'calculator.helpTrips',   'calculator.helpTripsText' ),
+
+        { section: T( 'calculator.helpKb' ) },
+        kb( '7',     'calculator.helpKbDigits', 'calculator.helpKbDigitsText' ),
+        kb( '+',     'calculator.helpKbOps',    'calculator.helpKbOpsText' ),
+        key( 'sign',  '', T( 'calculator.helpKbSign' ), { svg: '±' } ),
+        kb( '=',     'calculator.helpKbEnter',  'calculator.helpKbEnterText' ),
+        kb( 'back',  'calculator.helpKbBack' ),
+        kb( 'clear', 'calculator.helpKbEsc' ) ];
+
+    if( ! $( 'backBtn' ).hidden ) rows.unshift( { sel: '#backBtn', icon: 'back', text: T( 'calculator.introBack' ) } );
+    return rows;
+}
+
 function flash( k )
 {
     const b = document.querySelector( '#keys [data-k="' + CSS.escape( k ) + '"]' );
@@ -468,8 +534,8 @@ Ayni.i18n.ready.then( function()
 
     fillCurrencies();
     const opened = loadPrefs();
-    $( 'fxFrom' ).value = from;
-    $( 'fxTo'   ).value = to;
+    Ayni.picker( $( 'fxFrom' ) ).set( from );
+    Ayni.picker( $( 'fxTo'   ) ).set( to );
     $( 'backBtn' ).hidden = ! opened || NayiveUI.windowed;
 
     $( 'keys' ).addEventListener( 'click', function( e ) { const b = e.target.closest( '.key' ); if( b ) press( b.dataset.k ); } );
@@ -477,7 +543,7 @@ Ayni.i18n.ready.then( function()
     document.addEventListener( 'keydown', function( e )
     {
         if( e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey ) return;
-        if( e.target.closest && e.target.closest( 'input, select, textarea, dialog' ) ) return;
+        if( e.target.closest && e.target.closest( 'input, .picker, textarea, dialog' ) ) return;
         if( document.querySelector( 'dialog.panel[open]' ) ) return;
         const k = /^\d$/.test( e.key ) ? e.key : KEYMAP[ e.key ];
         if( ! k ) return;
@@ -490,8 +556,8 @@ Ayni.i18n.ready.then( function()
     // The mode switch (Ayni's .switch-pair): an icon, the track or Left / Right pick a side.
     $( 'modeSwitch' ).addEventListener( 'change', function( e ) { setMode( e.target.value ); } );
 
-    $( 'fxFrom' ).addEventListener( 'change', function() { guessPlace = ''; setCurrencies( this.value, to ); } );
-    $( 'fxTo'   ).addEventListener( 'change', function() { guessPlace = ''; setCurrencies( from, this.value ); } );
+    $( 'fxFrom' ).addEventListener( 'ayni:change', function( e ) { guessPlace = ''; setCurrencies( e.detail.value, to ); } );
+    $( 'fxTo'   ).addEventListener( 'ayni:change', function( e ) { guessPlace = ''; setCurrencies( from, e.detail.value ); } );
     $( 'fxSwap' ).addEventListener( 'click',  function() { setCurrencies( to, from ); } );
     $( 'fxNote' ).addEventListener( 'click',  function() { renderCheck(); document.getElementById( 'fxCheckBackdrop' ).showModal(); } );
     NayiveFx.onChange( function() { render(); if( $( 'fxCheckBackdrop' ).open ) renderCheck(); } );
@@ -510,10 +576,9 @@ Ayni.i18n.ready.then( function()
     window.addEventListener( 'resize', fit );
 
     setMode( mode );
+    hugWindow();
 
-    const rows = [ { sel: '#histBtn', text: T( 'calculator.introHistory' ) } ];
-    if( ! $( 'backBtn' ).hidden ) rows.unshift( { sel: '#backBtn', icon: 'back', text: T( 'calculator.introBack' ) } );
-    Ayni.help( { title: 'Calculator', lead: T( 'calculator.introLead' ), rows: rows,
+    Ayni.help( { title: 'Calculator', lead: T( 'calculator.introLead' ), rows: helpRows(),
         // The guided tour: the two modes, the keypad, then the currency parts.
         tour: [ 'rows',
                 { sel: '#modeSwitch', text: T( 'calculator.tourModes' ) },

@@ -140,7 +140,7 @@ function sbFilterCount( d )
 
 // ---- the dialog ------------------------------------------------------------
 
-// A row of shared .pill buttons: `on(id)` says which are lit, `pick(id)`
+// A choice row: `on(id)` says which are lit, `pick(id)`
 // changes the draft.
 function sbPills( hostId, ids, label, on, pick )
 {
@@ -150,7 +150,7 @@ function sbPills( hostId, ids, label, on, pick )
     {
         const b = document.createElement( 'button' );
         b.type        = 'button';
-        b.className   = 'pill' + ( on( id ) ? ' is-active' : '' );
+        b.className   = 'btn text sm bordered';
         b.textContent = label( id );
         b.setAttribute( 'aria-pressed', on( id ) ? 'true' : 'false' );
         b.addEventListener( 'click', function() { pick( id ); sbRender(); } );
@@ -164,16 +164,10 @@ function sbRuleRow( rule, i )
     const row = document.createElement( 'div' );
     row.className = 'sb-rule';
 
-    const sel = document.createElement( 'select' );
+    // The condition: an Ayni list picker
+    const sel = document.createElement( 'div' );
     sel.setAttribute( 'aria-label', T( 'drive.sbName' ) );
-    SB_OPS.forEach( function( op )
-    {
-        const o = document.createElement( 'option' );
-        o.value       = op;
-        o.textContent = T( 'drive.op.' + op );
-        sel.appendChild( o );
-    });
-    sel.value = rule.op;
+    Ayni.picker( sel, { options: SB_OPS.map( function( op ) { return { value: op, text: T( 'drive.op.' + op ) }; } ), value: rule.op } );
 
     const inp = document.createElement( 'input' );
     inp.className    = 'input';
@@ -191,7 +185,7 @@ function sbRuleRow( rule, i )
     del.setAttribute( 'aria-label', T( 'drive.sbRemoveRule' ) );
     del.innerHTML = Ayni.icon( 'close' );
 
-    sel.addEventListener( 'change', function() { rule.op = sel.value; inp.placeholder = T( 'drive.opPh.' + rule.op ); sbChanged(); } );
+    sel.addEventListener( 'ayni:change', function( e ) { rule.op = e.detail.value; inp.placeholder = T( 'drive.opPh.' + rule.op ); sbChanged(); } );
     inp.addEventListener( 'input',  function() { rule.text = inp.value; sbChanged(); } );
     inp.addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) { e.preventDefault(); applySearchBuilder(); } } );
     del.addEventListener( 'click', function()
@@ -315,14 +309,14 @@ function openSearchBuilder()
     sbPreview = null;
     sbRender();
     setBackdrop( 'searchBuilderBackdrop', true );
-    document.querySelector( '#sbRules input' ).focus();
+    document.querySelector( '#sbRules .sb-rule > input.input' ).focus();
 }
 
 function addBuilderRule()
 {
     sbDraft.rules.push( { op: 'has', text: '' } );
     sbRender();
-    const inputs = document.querySelectorAll( '#sbRules input' );
+    const inputs = document.querySelectorAll( '#sbRules .sb-rule > input.input' );
     inputs[ inputs.length - 1 ].focus();
 }
 
@@ -398,7 +392,7 @@ function advSearchCrumbs( host, info )
 
     const out = document.createElement( 'button' );
     out.type        = 'button';
-    out.className   = 'pill crumb-clear';
+    out.className   = 'btn text sm bordered crumb-clear';
     out.textContent = T( 'drive.sbClearFilters' );
     out.addEventListener( 'click', endAdvSearch );
     host.appendChild( out );
