@@ -37,6 +37,8 @@
   "ayni.delete": "Supprimer",
   "ayni.desk.edge": "Position de la barre des tâches",
   "ayni.desk.edge.bottom": "Barre des tâches en bas",
+  "ayni.desk.edge.left": "Barre des tâches à gauche",
+  "ayni.desk.edge.right": "Barre des tâches à droite",
   "ayni.desk.edge.top": "Barre des tâches en haut",
   "ayni.desk.taskbar": "Barre des tâches",
   "ayni.dismiss": "Fermer",
@@ -155,7 +157,6 @@
   "ayni.whatIsThis": "Qu'est-ce que c'est ?",
   "ayni.win.maximise": "Agrandir",
   "ayni.win.minimise": "Réduire",
-  "ayni.win.more": "Plus d’outils",
   "ayni.win.name": "Fenêtre",
   "ayni.win.restore": "Restaurer"
 }

@@ -23,7 +23,7 @@
  * rename; Text never writes one it could not reopen).
  *
  * Paired CSS: the OFFICE CHROME block in shared/app.css (.file-label,
- * .open-crumb, .open-list, .folder-pick) and the "MORE" MENU block (.top-menu).
+ * .open-crumb, .open-list, .folder-pick).
  */
 ( function ()
 {

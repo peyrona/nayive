@@ -37,6 +37,8 @@
   "ayni.delete": "Löschen",
   "ayni.desk.edge": "Position der Taskleiste",
   "ayni.desk.edge.bottom": "Taskleiste unten",
+  "ayni.desk.edge.left": "Taskleiste links",
+  "ayni.desk.edge.right": "Taskleiste rechts",
   "ayni.desk.edge.top": "Taskleiste oben",
   "ayni.desk.taskbar": "Taskleiste",
   "ayni.dismiss": "Schließen",
@@ -155,7 +157,6 @@
   "ayni.whatIsThis": "Was ist das?",
   "ayni.win.maximise": "Maximieren",
   "ayni.win.minimise": "Minimieren",
-  "ayni.win.more": "Weitere Werkzeuge",
   "ayni.win.name": "Fenster",
   "ayni.win.restore": "Wiederherstellen"
 }

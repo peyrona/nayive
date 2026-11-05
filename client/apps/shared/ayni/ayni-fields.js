@@ -163,10 +163,17 @@ const parseDT = (str) => {
   const d = parseIso(m[1]), h = +m[2], mi = +m[3]; if (!d || h > 23 || mi > 59) return null;
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, mi);
 };
+/* The ISO week of a day: week 1 holds the year's first Thursday */
+const isoWeek = (d) => {
+  const thu = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  return 1 + Math.floor(Math.round((thu - new Date(thu.getFullYear(), 0, 1)) / 864e5) / 7);
+};
 /* Ayni.calendar(root, onPick) draws a calendar in root and returns { set(date), focus() }.
-   Optional limits come from data-min / data-max (YYYY-MM-DD) on the calendar root.
+   Optional limits come from data-min / data-max (YYYY-MM-DD) on the calendar root; data-weeks starts each row with its
+   ISO week number. Without onPick it is view only: days take no press and no focus, the rest still moves it.
    The title switches days -> months -> years; picking a month or a year returns to the days. */
 const makeCalendar = (root, onPick) => {
+  const viewOnly = typeof onPick !== 'function', weeks = () => 'weeks' in root.dataset;
   const min = parseIso(root.dataset.min || ''), max = parseIso(root.dataset.max || '');
   let sel = day0(new Date()), cur = day0(new Date()), view = 'days';
   const dayOk = (d) => !(min && d < min) && !(max && d > max);
@@ -183,16 +190,18 @@ const makeCalendar = (root, onPick) => {
       let rows = '';
       for (let w = 0; w < 6; w++) {
         rows += '<tr>';
+        if (weeks()) rows += `<th scope="row" class="cal-wk">${isoWeek(new Date(start.getFullYear(), start.getMonth(), start.getDate() + w * 7))}</th>`;
         for (let d = 0; d < 7; d++) {
           const day = new Date(start.getFullYear(), start.getMonth(), start.getDate() + w * 7 + d);
           const cls = [day.getMonth() !== m ? 'out' : '', sameDay(day, today) ? 'today' : ''].join(' ').trim();
+          if (viewOnly) { rows += `<td><span class="${cls}">${day.getDate()}</span></td>`; continue; }
           rows += `<td><button type="button" data-d="${iso(day)}" class="${cls}" tabindex="${sameDay(day, cur) ? 0 : -1}" aria-selected="${sameDay(day, sel)}" aria-label="${dayOk(day) ? fmtLong.format(day) : txf('cal.dayOff', { date: fmtLong.format(day) })}"${off(dayOk(day))}>${day.getDate()}</button></td>`;
         }
         rows += '</tr>';
       }
       title = fmtMonLong.format(cur); unit = 'month';
       prevOk = monthOk(y, m - 1); nextOk = monthOk(y, m + 1);
-      body = `<table role="grid" aria-label="${title}"><thead><tr>${dayHeads().map((x) => `<th scope="col">${x}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>`;
+      body = `<table role="grid" aria-label="${title}"><thead><tr>${weeks() ? '<th scope="col" class="cal-wk"></th>' : ''}${dayHeads().map((x) => `<th scope="col">${x}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>`;
     } else if (view === 'months') {
       title = String(y); unit = 'year';
       prevOk = yearOk(y - 1); nextOk = yearOk(y + 1);
@@ -217,7 +226,7 @@ const makeCalendar = (root, onPick) => {
       <div class="cal-body">${body}</div>
       <div class="cal-foot"><button type="button" class="btn" data-today aria-label="${tx('cal.today')}" data-tip="${dayOk(today) ? txf('cal.todayIs', { date: fmtLong.format(today) }) : tx('cal.todayOff')}"${off(dayOk(today))}>${icon('today')}</button></div>`;
     if (focus === 'title') $('.cal-title', root).focus?.({ preventScroll: true });
-    else if (focus) $('.cal-body [tabindex="0"]', root).focus({ preventScroll: true });
+    else if (focus) ($('.cal-body [tabindex="0"]', root) || $('.cal-title', root)).focus?.({ preventScroll: true });
   };
   const pick = (d) => { sel = cur = d; view = 'days'; render(true); onPick(sel); };
   root.addEventListener('click', (e) => {
@@ -227,10 +236,11 @@ const makeCalendar = (root, onPick) => {
     else if (t.dataset.mo) { moveMonth(+t.dataset.mo - cur.getMonth()); cur = clamp(cur); view = 'days'; render(true); }
     else if (t.dataset.yr) { moveMonth((+t.dataset.yr - cur.getFullYear()) * 12); cur = clamp(cur); view = 'days'; render(true); }
     else if (t.dataset.d) pick(parseIso(t.dataset.d));
-    else if ('today' in t.dataset) pick(day0(new Date()));
+    else if ('today' in t.dataset) { if (viewOnly) { cur = day0(new Date()); view = 'days'; render(false); } else pick(day0(new Date())); }
   });
   root.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && view !== 'days') { e.preventDefault(); e.stopPropagation(); view = 'days'; render(true); return; }
+    if (viewOnly && view === 'days') { if (e.key !== 'PageUp' && e.key !== 'PageDown') return; moveMonth(e.key === 'PageUp' ? -1 : 1); e.preventDefault(); render('title'); return; }
     if (!e.target.closest('.cal-body button')) return;
     if (view === 'days') {
       const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];

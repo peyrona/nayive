@@ -1,0 +1,106 @@
+/* Ayni library 0.1.0, desktop family: the taskbar, its chips and gadgets, windows, the applications launcher. Plain CSS,
+   no build step, evergreen browsers 2024+. Load it after ayni-menus.css. The behaviour is in ayni-desktop.js; the rules
+   are chapter 17 of the guidelines. */
+
+/* .desktop fills the screen: the window area plus the taskbar, which the user puts on any edge (data-edge). Windows
+   live in .area and never cover the taskbar; a maximised window fills .area. The bar's size is --bar-h (its width on
+   a side edge), set by the app, at least 56 px on touch. */
+.desktop, .taskbar, .chips, .chip, .chip-main, .widget { box-sizing: border-box; }
+.desktop { position: fixed; inset: 0; display: grid; background: var(--bg); --taskbar: var(--bar-h, 48px); }
+html.touch .desktop { --taskbar: max(56px, var(--bar-h, 48px)); }
+/* RULE: by default there is no desktop mode below 1024 px wide. There the desktop is hidden and the app shows its
+   normal screens; .no-desktop marks what only shows below 1024 px. data-mode="app": the app has its own rule */
+@media (max-width: 1023.98px) { .desktop:not([data-mode="app"]) { display: none; } }
+@media (min-width: 1024px) { .no-desktop { display: none !important; } }
+.desktop, .desktop[data-edge="bottom"] { grid-template: "area" minmax(0, 1fr) "bar" var(--taskbar) / minmax(0, 1fr); }
+.desktop[data-edge="top"] { grid-template: "bar" var(--taskbar) "area" minmax(0, 1fr) / minmax(0, 1fr); }
+.desktop[data-edge="left"] { grid-template: "bar area" minmax(0, 1fr) / var(--taskbar) minmax(0, 1fr); }
+.desktop[data-edge="right"] { grid-template: "area bar" minmax(0, 1fr) / minmax(0, 1fr) var(--taskbar); }
+.desktop > .area { grid-area: area; position: relative; overflow: hidden; min-width: 0; min-height: 0; }
+.desktop > .taskbar { grid-area: bar; display: flex; align-items: center; gap: 8px; padding: 0 8px; min-width: 0; min-height: 0;
+  background: var(--panel-head-bg); border-top: var(--panel-border); }
+.desktop[data-edge="top"] > .taskbar { border-top: 0; border-bottom: var(--panel-border); }
+.desktop[data-edge="left"] > .taskbar, .desktop[data-edge="right"] > .taskbar { flex-direction: column; padding: 8px 0; gap: 6px; border-top: 0; }
+.desktop[data-edge="left"] > .taskbar { border-right: var(--panel-border); }
+.desktop[data-edge="right"] > .taskbar { border-left: var(--panel-border); }
+.taskbar > .btn { --btn: min(36px, calc(var(--taskbar) - 8px)); }
+/* Window selector: one chip per open window, in a row that scrolls when there are too many */
+.taskbar > .chips { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 0; overflow: auto; padding: 2px;
+  border: 0; background: none; border-radius: 0; flex-wrap: nowrap; scrollbar-width: thin; }
+.taskbar > .widgets { flex: none; display: flex; align-items: center; gap: 4px; }
+.desktop:is([data-edge="left"], [data-edge="right"]) .taskbar > :is(.chips, .widgets) { flex-direction: column; width: 100%; }
+/* A scrollbar has no room in a bar that narrow: it would push the chips off it. The wheel or a finger moves the column */
+.desktop:is([data-edge="left"], [data-edge="right"]) .taskbar > .chips { scrollbar-width: none; }
+/* A chip per window. Only the selected window's chip shows the name of what it shows and the window's controls
+   (minimise, maximise or restore, close, and any of the app's); every other chip shows just the app's icon, with the
+   name in its tooltip. On a side edge no chip shows a name, and the selected one stacks its controls under the icon.
+   Windows have no controls of their own */
+.chip { flex: none; display: flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid transparent; border-radius: 22px; }
+.chip:hover { background: var(--card-head); }
+.chip > .chip-main { font: 500 .85rem var(--font-sans); color: var(--text); background: none; border: 0; border-radius: 18px; cursor: pointer;
+  position: relative; display: flex; align-items: center; gap: 8px; height: calc(var(--taskbar) - 14px); padding: 0 10px; max-width: 200px; }
+.chip > .chip-main > span:not(.icon) { display: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip[aria-current="true"] > .chip-main > span:not(.icon) { display: inline; }
+.chip:not([aria-current="true"]) > .chip-main { padding: 0 9px; }
+.chip > .chip-main .icon { --icon: 18px; }
+.chip.min > .chip-main { color: var(--text-dim); }
+.chip[aria-current="true"] { background: var(--card); border-color: var(--line); box-shadow: inset 0 -3px 0 var(--accent); }
+.chip > .chip-ctl { display: none; gap: 2px; }
+.chip[aria-current="true"] > .chip-ctl { display: flex; }
+.chip-ctl .btn { --btn: min(30px, calc(var(--taskbar) - 14px)); } .chip-ctl .btn .icon { --icon: 15px; }
+html.touch .chip > .chip-ctl { gap: 8px; } html.touch .chip-ctl .btn { --btn: 36px; }
+/* The selected chip's Accent edge is on the side of the screen */
+.desktop[data-edge="top"] .chip[aria-current="true"] { box-shadow: inset 0 3px 0 var(--accent); }
+.desktop[data-edge="left"] .chip[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); }
+.desktop[data-edge="right"] .chip[aria-current="true"] { box-shadow: inset -3px 0 0 var(--accent); }
+.desktop:is([data-edge="left"], [data-edge="right"]) .chip { flex-direction: column; width: calc(var(--taskbar) - 8px); border-radius: 12px; }
+.desktop:is([data-edge="left"], [data-edge="right"]) .chip > .chip-main { width: 100%; justify-content: center; padding: 0; }
+.desktop:is([data-edge="left"], [data-edge="right"]) .chip[aria-current="true"] > .chip-main > span:not(.icon) { display: none; }
+.desktop:is([data-edge="left"], [data-edge="right"]) .chip > .chip-ctl { flex-direction: column; }
+/* Gadgets (.widget): the clock at the end of the taskbar; an app adds more on either side of it. A gadget may be a
+   button. On a side edge it stacks its parts */
+.widget { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: var(--ctl-radius); font-size: .85rem; color: var(--text); white-space: nowrap; }
+.widget .icon { --icon: 18px; }
+button.widget { font-family: inherit; background: none; border: 0; cursor: pointer; }
+button.widget:hover { background: var(--card-head); }
+.desktop:is([data-edge="left"], [data-edge="right"]) .widget { flex-direction: column; gap: 2px; max-width: 100%; padding: 4px 2px; font-size: .75rem; white-space: normal; text-align: center; overflow-wrap: anywhere; }
+.widget.clock { flex-direction: column; gap: 0; font: 500 .85rem var(--font-mono); font-variant-numeric: tabular-nums; line-height: 1.25; text-align: center; }
+.widget.clock small { font: .8rem var(--font-sans); color: var(--text-dim); }
+/* Launcher: the applications popup, with a search field and the apps, most used first */
+.panel.popup.launcher { width: min(300px, calc(100vw - 16px)); max-height: min(440px, calc(100dvh - 16px)); padding: 8px; gap: 6px; }
+.panel.popup.launcher:not(:popover-open) { display: none; }
+.launcher .apps { display: flex; flex-direction: column; overflow: auto; min-height: 0; }
+.launcher .apps > button { font: inherit; color: var(--text); text-align: left; background: none; border: 0; border-radius: 4px; cursor: pointer;
+  display: flex; align-items: center; gap: 10px; padding: 7px 10px; flex: none; }
+.launcher .apps > button .icon { --icon: 18px; color: var(--text-dim); }
+.launcher .apps > button:is(:hover, :focus) { background: var(--accent); color: var(--on-accent); outline: none; }
+.launcher .apps > button:is(:hover, :focus) .icon { color: inherit; }
+.launcher .empty { margin: 0; padding: 10px; color: var(--text-dim); text-align: center; }
+html.touch .launcher .apps > button { min-height: var(--touch); }
+/* A window is a Panel: a title row (app icon and name at the left, then the app's toolbar) and the content below.
+   Moved by its title row, resized from any edge or corner, and it scrolls only when its content does not fit */
+.panel.window { position: absolute; min-width: 260px; min-height: 160px; max-width: 100%; max-height: 100%; }
+/* Resize grips: invisible strips along the edges and squares at the corners, added by ayni-desktop.js */
+.win-grip { position: absolute; z-index: 1; touch-action: none; --g: 6px; }
+html.touch .win-grip { --g: 12px; }
+.win-grip[data-dir="n"], .win-grip[data-dir="s"] { left: var(--g); right: var(--g); height: var(--g); cursor: ns-resize; }
+.win-grip[data-dir="e"], .win-grip[data-dir="w"] { top: var(--g); bottom: var(--g); width: var(--g); cursor: ew-resize; }
+.win-grip[data-dir="n"] { top: 0; } .win-grip[data-dir="s"] { bottom: 0; } .win-grip[data-dir="e"] { right: 0; } .win-grip[data-dir="w"] { left: 0; }
+.win-grip:is([data-dir="ne"], [data-dir="nw"], [data-dir="se"], [data-dir="sw"]) { width: calc(var(--g) * 2); height: calc(var(--g) * 2); }
+.win-grip[data-dir="nw"] { top: 0; left: 0; cursor: nwse-resize; } .win-grip[data-dir="se"] { bottom: 0; right: 0; cursor: nwse-resize; }
+.win-grip[data-dir="ne"] { top: 0; right: 0; cursor: nesw-resize; } .win-grip[data-dir="sw"] { bottom: 0; left: 0; cursor: nesw-resize; }
+.panel.window.max > .win-grip { display: none; }
+.panel.window > header { gap: 10px; padding: 4px 8px 4px 12px; user-select: none; touch-action: none; }
+.panel.window > header > .app { flex: none; display: flex; align-items: center; gap: 8px; }
+.panel.window > header > .app .icon { --icon: 18px; color: var(--accent); }
+.panel.window > header h2 { margin: 0; white-space: nowrap; }
+.panel.window > header > [role="toolbar"] { flex: 1; min-width: 0; overflow: hidden; flex-wrap: nowrap; padding: 2px; border: 0; background: none; border-radius: 0; }
+.panel.window > header > [role="toolbar"] > .tb-sys { margin-left: auto; }
+.panel.window > header > [role="toolbar"] .btn { --btn: 32px; }
+.panel.window:not(.active) > header { background: var(--panel-bg); }
+.panel.window:not(.active) > header > .app .icon { color: var(--text-dim); }
+.panel.window.max { inset: 0 !important; width: auto !important; height: auto !important; border: 0; border-radius: 0; }
+.panel.window.min { display: none; }
+/* A modeless dialog owned by a window floats above it inside the area (placed by ayni-desktop.js) */
+.desktop > .area > dialog.panel.owned:not(:modal) { position: absolute; inset: auto; margin: 0; }
+.desktop > .area > dialog.panel.owned > header { touch-action: none; user-select: none; }

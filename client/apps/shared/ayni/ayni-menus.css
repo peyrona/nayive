@@ -63,6 +63,8 @@ header [role="toolbar"], [role="toolbar"].tall { background: none; border: 0; bo
 .panel.popup:not(:popover-open) { display: none; }
 .panel.popup.controls { width: min(300px, calc(100vw - 16px)); max-height: min(320px, calc(100dvh - 16px)); padding: 12px; gap: 12px; display: flex; flex-direction: column; }
 .panel.popup.controls:not(:popover-open) { display: none; }
+/* A popup of settings may grow to the height of the screen; it scrolls past that */
+.panel.popup.controls.tall { max-height: calc(100dvh - 16px); overflow: auto; }
 .panel.popup.controls h4 { margin: 0; font-size: .72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); }
 /* Tool group: the real tools of a group, in a row under the one button that stands for them */
 .panel.popup.tools { padding: 6px; display: flex; flex-direction: column; gap: 2px; }

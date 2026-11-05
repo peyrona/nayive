@@ -68,6 +68,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-fields.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-desktop.css">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
@@ -100,7 +101,7 @@
 
         :root { --bar-h: 48px; }
 
-        .desktop { display: flex; flex-direction: column; height: 100%; color: var(--text); }
+        .desktop { color: var(--text); }
 
         /* THE DESKTOP'S COLOURS - never chosen: worked out from the account's
            active scheme (My account -> Colour schemes), so they flip with the apps,
@@ -135,7 +136,6 @@
            its centre, the same groove + lit edge as behind the launcher tiles. */
         .desk
         {
-            position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden;
             isolation: isolate;          /* window z-indexes stay under the dialogs */
             background: var(--desk-bg);
             --engrave-groove: color-mix(in srgb, var(--desk-bg) 55%, #000);
@@ -157,6 +157,8 @@
         }
         .desk::before { background: var(--engrave-lit); transform: translateY(1px); }
         .desk::after  { background: var(--engrave-groove); }
+        /* An empty spot of the desk: what a right-click or a long press finds there (see THE MENU). */
+        .desk-empty   { position: absolute; inset: 0; }
 
         /* While a window is dragged or resized the frames must not swallow the pointer. */
         .desk.busy iframe { pointer-events: none; }
@@ -250,30 +252,25 @@
         body.touch .grip.ne { right: calc(-12 * var(--win-px)); top: calc(-12 * var(--win-px)); }
         body.touch .grip.sw { left: calc(-12 * var(--win-px));  bottom: calc(-12 * var(--win-px)); }
 
-        /* THE BAR - its place and height come from the settings (the "⋮" menu). */
-        .bar
-        {
-            display: flex; align-items: center; gap: 6px; flex: 0 0 auto;
-            height: var(--bar-h); padding: 0 8px;
-            border-top: 1px solid var(--desk-edge); background: var(--desk-bar);
-            font-family: var(--font-sans);
-        }
-        .bar button { font-family: inherit; position: relative; }   /* position: holds the Chat and eMail dots */
+        /* THE BAR - Ayni's taskbar (shared/ayni/ayni-desktop.css): on the desk's colours; its place
+           and size come from the settings (the "⋮" menu; data-edge, --bar-h). */
+        #bar          { background: var(--desk-bar); border-color: var(--desk-edge); color: var(--text); font-family: var(--font-sans); }
+        #bar button   { font-family: inherit; position: relative; }   /* position: holds the Chat and eMail dots */
         /* Unread Chat (red) and eMail (blue), see CHAT and EMAIL below. On the
            menu button: a plain dot, Chat top-right, eMail top-left. On the app's
-           own bar button: a disc with the count on the app icon, so it never
-           takes room from the name or covers the close (x). */
-        .bar .chat-dot           { top: 3px; right: 3px; width: 8px; height: 8px; box-shadow: 0 0 0 1.5px var(--bg); }
-        .bar .chat-dot.mail-dot  { right: auto; left: 3px; background: var(--busy); }
-        .bar .chat-dot.has-count
+           own chip: a disc with the count on the app icon, so it never takes
+           room from the name or covers the close (x). */
+        #bar .chat-dot           { top: 3px; right: 3px; width: 8px; height: 8px; box-shadow: 0 0 0 1.5px var(--bg); }
+        #bar .chat-dot.mail-dot  { right: auto; left: 3px; background: var(--busy); }
+        #bar .chat-dot.has-count
         {
             top: 0; right: 0; left: auto;
             width: auto; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; box-sizing: border-box;
             display: flex; align-items: center; justify-content: center;
             font-size: 10px; font-weight: 700; line-height: 1; color: #fff;
         }
-        .bar .task > .chat-dot.has-count { top: 1px; right: auto; left: 3px; }   /* over the app icon */
-        .bar .chat-dot[hidden]   { display: none; }   /* .has-count's flex would beat app.css's */
+        #bar .chip-main > .chat-dot.has-count { top: 1px; right: auto; left: 3px; }   /* over the app icon */
+        #bar .chat-dot[hidden]   { display: none; }   /* .has-count's flex would beat app.css's */
 
         /* The menu button carries the Nayive logo, sized to the bar. */
         #menuBtn       { width: calc(var(--bar-h) - 8px); height: calc(var(--bar-h) - 8px); }
@@ -281,91 +278,55 @@
         /* Desktop-only state: while the menu is open its button keeps the hover wash. */
         #menuBtn.open  { background: color-mix(in srgb, var(--text) 14%, transparent); }
 
-        .tasks { display: flex; align-items: center; gap: 4px; flex: 1 1 auto; min-width: 0; height: 100%; overflow: hidden; }
-
-        /* A window's button: the shared quiet .btn.text.bordered, narrowed to fit a bar.
-           Only the app's icon - no name; the tooltip says the app and its document. */
-        .task { flex: 0 0 auto; width: calc(var(--bar-h) - 8px); min-width: 0; height: calc(var(--bar-h) - 14px);
-                justify-content: center; padding: 0; font-weight: 500; }
-        .task > span:first-of-type { display: none; }
-        .task svg { color: var(--accent); }
-        /* Desktop-only state: the window in front gets an accent border; one behind
-           keeps the plain solid --line; a minimised one fades behind a dashed border. */
-        .task.front { color: var(--text); border-color: var(--accent);
-                      background: color-mix(in srgb, var(--accent) 12%, transparent); }
-        .task.min   { opacity: 0.6; border-style: dashed; border-color: var(--text-dim); }
+        /* A window's chip (Ayni's, written in openApp): the app's icon in the accent. */
+        .chip-main > svg      { width: 18px; height: 18px; flex: 0 0 auto; color: var(--accent); }
+        .chip.min > .chip-main > svg { color: inherit; }
         /* A window behind others (or minimised) with a dialog open: an amber dot at
            the icon's foot, clear of the unread disc on top. See DIALOG MARK. */
-        .task.has-dialog::after { content: ''; position: absolute; bottom: 3px; left: 3px; width: 8px; height: 8px;
+        .chip.has-dialog > .chip-main::after { content: ''; position: absolute; bottom: 3px; left: 3px; width: 8px; height: 8px;
                                   border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 1.5px var(--bg); }
-        /* THE WINDOW'S BUTTONS - Scale / Resize, minimise, maximise, close - at the
-           right end of the bar button of the window IN FRONT only (the others show
-           just their icon): small .btn's sized to the bar, each in the
-           colour the old title-bar dots had, Scale / Resize in blue (--win-scale). */
-        /* The one in front grows to its icon, 1rem, then its buttons. */
-        .task.front     { width: auto; padding: 0 3px 0 10px; }
-        .task.front > svg { margin-right: calc(1rem - 6px); }   /* + .btn.text's 6px gap = 1rem */
-        .task > .task-ctl { display: flex; flex: 0 0 auto; margin-left: auto; overflow: visible; }
-        .task:not(.front) > .task-ctl { display: none; }
-        .task-ctl > .task-x, #cds > .cd-chip > .task-x { width: 22px; height: 22px; margin-left: auto; overflow: visible; color: var(--text-dim); }
-        .task-ctl > .task-x   { margin-left: 0; }
-        .task-ctl > .task-x svg { width: 14px; height: 14px; color: inherit; }
-        .task-ctl > [data-win="scale"] { color: var(--win-scale); }
-        .task-ctl > [data-win="min"]   { color: var(--warn); }
-        .task-ctl > [data-win="max"]   { color: var(--ok); }
-        .task-ctl > [data-win="close"] { color: var(--danger); }
-        #cds > .cd-chip > .task-x svg   { width: 12px; height: 12px; color: inherit; }
-        #cds > .cd-chip > .task-x:hover { color: var(--text); }
-        body.touch .task-ctl > .task-x, body.touch #cds > .cd-chip > .task-x { width: 36px; height: 36px; }
-        body.touch .task-ctl > .task-x svg { width: 18px; height: 18px; }
-        body.touch #cds > .cd-chip > .task-x svg   { width: 16px; height: 16px; }
+        /* THE WINDOW'S BUTTONS - Scale / Resize, minimise, maximise, close - on the
+           chip of the window IN FRONT only, each in the colour the old title-bar
+           dots had, Scale / Resize in blue (--win-scale). */
+        .chip-ctl > .btn svg  { width: 14px; height: 14px; color: inherit; }
+        .chip-ctl > [data-win="scale"] { color: var(--win-scale); }
+        .chip-ctl > [data-win="min"]   { color: var(--warn); }
+        .chip-ctl > [data-win="max"]   { color: var(--ok); }
+        .chip-ctl > [data-win="close"] { color: var(--danger); }
+        body.touch .chip-ctl  { gap: 8px; }
+        body.touch .chip-ctl > .btn { --btn: 36px; }
+        body.touch .chip-ctl > .btn svg { width: 18px; height: 18px; }
 
-        /* The "⋮" sits closer to its neighbours: half the room a plain .btn
-           leaves on each side (his call for the "?" it replaced, 2026-09-28).
-           Margins only - the button is the shared .btn. */
-        #moreBtn { margin: 0 -4px 0 -13px; }
-        /* The "?" after it (back on the bar, 2026-09-28): the same tight room. It
-           ends the bar: the sync plug floats off it as a chip (theme.css). */
-        #helpBtn { margin: 0 -8px 0 -4px; }
-        #moreBtn[aria-expanded="true"] { background: color-mix(in srgb, var(--text) 14%, transparent); }
-        /* Its menu: the shared .top-menu, above the windows; the Free/Tile switch
-           is a row of it, as tall as a .menu-item. */
-        #moreMenu { z-index: 100000; }
-        .tour-overlay { z-index: 200000; }   /* the guided tour over the bar's menus and pop-ups */
-        #moreMenu .tile-sw { padding: 8px 12px; }
-        /* Sticky windows, the clock and the bar: rows of the menu with the shared
-           .switch, a list picker or the height slider at their end. */
-        #moreMenu .menu-item > .switch,
-        #moreMenu .menu-item > .picker { margin-left: auto; }
-        #moreMenu .menu-item > .picker { min-width: 130px; }
-        #moreMenu .slider-row         { margin-left: auto; width: 150px; }
+        /* Its popup: Ayni's .panel.popup.controls.tall: groups under a small heading,
+           rows with the shared .switch, a list picker or the height slider at their end. */
+        #moreMenu             { width: min(372px, calc(100vw - 16px)); gap: 8px; }
+        #moreMenu > *         { flex: none; }
+        #moreMenu .switch > svg { width: 18px; height: 18px; flex: 0 0 auto; color: var(--text-dim); }
+        #moreMenu .switch[disabled] { cursor: default; }
+        #moreMenu .switch[disabled] > svg,
+        #moreMenu .switch[disabled] > [data-i18n] { opacity: 0.42; }
+        #moreMenu > .btn.text { justify-content: flex-start; width: 100%; }
+        .set-row              { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+        .set-row > label, .set-row > span:first-child { flex: 1 1 auto; }
+        .set-row > .picker    { flex: 0 0 auto; min-width: 150px; }
+        .set-row > .slider-row { flex: 0 0 180px; min-width: 0; }
+        .set-row > .slider-row > input { flex: 1 1 0; min-width: 0; }
+        .set-row:has(> .lock-min) > .picker { flex: 1 1 0; min-width: 96px; }
         /* The screen locker: its list first, the minutes at the end; the
            clock's text row hides unless the clock is picked. */
-        #moreMenu .lock-row > .picker { margin-left: 0; min-width: 150px; }
-        #moreMenu .lock-min           { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); }
-        #moreMenu #lockMinSpin        { display: inline-flex; width: 116px; vertical-align: middle; }
-        #moreMenu #lockText           { margin-left: auto; width: 150px; }
-        #moreMenu .menu-item[hidden]  { display: none; }
-        /* The (i) of the menu: its popup must sit above it. */
-        .info-pop { z-index: 100001; }
+        .lock-min             { flex: 0 0 auto; margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); }
+        #lockMinSpin          { display: inline-flex; width: 116px; vertical-align: middle; }
+        #lockTextWrap .input  { flex: 0 0 150px; }
 
-        /* THE TILE SWITCH (see TILE / UNTILE): "Free ()== Tile" - the shared .switch
-           between two words. A word picks its side, the switch flips; the side in
-           force reads bold; the word Tile while tiled tiles again. Greyed while
-           there is no window on the desk. */
-        .tile-sw      { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; padding: 0 4px; }
-        .tile-word    { font-size: 0.85rem; font-weight: 500; color: var(--text-dim); cursor: pointer; user-select: none; white-space: nowrap; }
-        .tile-sw:not(.on) .tile-word[data-tile="off"],
-        .tile-sw.on .tile-word[data-tile="on"] { color: var(--text); font-weight: 600; }
-        .tile-sw.idle { opacity: 0.5; }
-        .tile-sw.idle .tile-word { cursor: default; }
-        .tile-sw.idle .switch input:disabled { opacity: 1; }   /* the row is dimmed already */
+        /* THE TILE SWITCH (see TILE / UNTILE): "Free ()== Tile", Ayni's .switch-pair.
+           Greyed while there is no window on the desk. */
+        #tileSw.idle { opacity: 0.5; }
 
         /* WEATHER - the bar's sky icon and its popup: the hour, the sky, the
            temperature, 5 times side by side. The sun and the bolt amber, rain blue. */
-        #wxBtn[aria-expanded="true"] { background: color-mix(in srgb, var(--text) 14%, transparent); }
+        #wxBtn      { padding: 4px; }
         #wxBtn svg  { width: 22px; height: 22px; }
-        #wxPop      { z-index: 100000; min-width: 0; padding: 10px 12px 12px; gap: 8px; }
+        #wxPop      { width: auto; max-height: none; gap: 8px; }
         .wx-head    { font-size: 0.8rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 330px; }
         /* the sliding bar until the forecast comes; with less motion asked, a still striped fill */
         .wx-busy    { display: block; width: 300px; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
@@ -412,21 +373,8 @@
         #clock2 i   { font-style: normal; margin-left: 3px; font-size: 0.7rem; }
         #clock2 i:empty { display: none; }
 
-        /* THE MONTH - the date's popup: ← "October [2026]" → on top, then the days,
-           Monday first, always 6 rows so it never jumps; today in the accent, the
-           days of the months beside it faint; each row's week number on its left. */
-        #calPop       { z-index: 100000; min-width: 0; padding: 8px 10px 10px; gap: 6px; }
-        .cal-head     { display: flex; align-items: center; gap: 4px; }
-        .cal-title    { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 8px; }
-        .cal-title b  { font-weight: 600; }
-        #calYear      { width: calc(4.5em + 10px); padding: 4px 6px; text-align: center; font-variant-numeric: tabular-nums; }
-        .cal-grid     { display: grid; grid-template-columns: 26px repeat(7, 34px); gap: 2px; }
-        .cal-grid > span        { height: 30px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-s);
-                                  font-size: 0.9rem; font-variant-numeric: tabular-nums; cursor: default; }
-        .cal-grid > .cal-wd     { height: 22px; font-size: 0.75rem; font-weight: 600; color: var(--text-dim); }
-        .cal-grid > .cal-wk     { font-size: 0.75rem; color: var(--text-dim); }
-        .cal-grid > .cal-out    { color: var(--text-dim); opacity: 0.55; }
-        .cal-grid > .cal-today  { background: var(--accent); color: var(--on-accent); font-weight: 600; opacity: 1; }
+        /* THE MONTH - the date's popup: Ayni's calendar, view only, with week numbers. */
+        #calPop       { width: auto; max-height: none; padding: 0; }
 
         /* The battery: an icon filled to its level and "80%" (red when low, green
            while charging). Shows only: no press. Greyed menu row with no battery. */
@@ -437,29 +385,28 @@
         #batt b     { font-weight: 500; font-variant-numeric: tabular-nums; }
         #batt.low   { color: var(--danger); }
         #batt.chg .batt-fill { fill: #2e9d4f; }
-        #moreMenu .menu-item[disabled] { cursor: default; }
-        #moreMenu .menu-item[disabled]:hover { background: none; }
-        #moreMenu .menu-item[disabled] > svg,
-        #moreMenu .menu-item[disabled] > [data-i18n] { opacity: 0.42; }
-
         /* The running countdowns, just before the clock, one chip each (oldest first):
            its time left, in the accent (its text shows only once time is up). A press
            on it (not on its small buttons) opens the dialog to change that one. */
         #cds          { display: contents; }
-        #cds > .cd-chip       { gap: 6px; height: calc(var(--bar-h) - 14px); max-width: 300px; padding: 0 3px 0 10px; flex: 0 1 auto; min-width: 0;
-                        color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); white-space: nowrap; }
-        #cds > .cd-chip b     { font-weight: 600; font-variant-numeric: tabular-nums; }
-        #cds > .cd-chip > .cd-text { overflow: hidden; text-overflow: ellipsis; color: var(--text-dim); font-weight: 500; }
-        #cds > .cd-chip > .cd-text:empty { display: none; }
-        #cds > .cd-chip.paused b { opacity: 0.55; }
-        /* Its small buttons at the right end (the window buttons' x look): Pause / Play
-           and Stop while it runs; time's up: the chip stays, with the text (or 0:00),
-           and only an x to take it away. */
-        #cds > .cd-chip > .task-x + .task-x { margin-left: 0; }
-        #cds > .cd-chip > .cd-stop, #cds > .cd-chip > .cd-stop:hover { color: var(--danger); }
+        #cds > .cd-chip       { gap: 0; height: calc(var(--bar-h) - 14px); max-width: 300px; padding: 0 3px 0 0; flex: 0 1 auto; min-width: 0;
+                        color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: var(--radius-s); white-space: nowrap; }
+        .cd-main      { display: flex; align-items: center; gap: 6px; height: 100%; min-width: 0; padding: 0 6px 0 10px; border: 0; background: none;
+                        color: inherit; font: inherit; font-weight: 500; cursor: pointer; }
+        .cd-main b    { font-weight: 600; font-variant-numeric: tabular-nums; }
+        .cd-main > .cd-text { overflow: hidden; text-overflow: ellipsis; color: var(--text-dim); }
+        .cd-main > .cd-text:empty, .cd-main > b:empty { display: none; }
+        .cd-chip.paused b { opacity: 0.55; }
+        /* Its small buttons at the right end: Pause / Play and Stop while it runs;
+           time's up: the chip stays, with the text (or 0:00), and only an x to take it away. */
+        .cd-chip > .btn       { --btn: 22px; color: var(--text-dim); }
+        .cd-chip > .btn svg   { width: 12px; height: 12px; color: inherit; }
+        .cd-chip > .btn:hover { color: var(--text); }
+        .cd-chip > .cd-stop, .cd-chip > .cd-stop:hover { color: var(--danger); }
         #cds > .cd-chip.done  { background: color-mix(in srgb, var(--accent) 14%, transparent); }
-        #cds > .cd-chip.done > .cd-text { color: var(--text); font-weight: 600; }
-        #cds > .cd-chip b:empty, #cds > .cd-chip .task-x[hidden] { display: none; }
+        .cd-chip.done .cd-text { color: var(--text); font-weight: 600; }
+        body.touch .cd-chip > .btn { --btn: 36px; }
+        body.touch .cd-chip > .btn svg { width: 16px; height: 16px; }
 
         /* THE COUNTDOWN DIALOG - hours / minutes / seconds side by side, the text below.
            Not centred: it opens by the clock (or its chip), like the month (cdOpen). */
@@ -482,31 +429,15 @@
         .menu.full { top: 0; left: 0; right: 0; bottom: 0; width: auto !important; height: auto !important; max-height: none;
                      border: 0; border-radius: 0; box-shadow: none; background: transparent; }
 
-        /* Bar on top (settings): the column flips, the border moves, the menu drops
-           down, and the shared notices (update bar, "space almost full") keep clear of it. */
-        body.bar-top .desktop { flex-direction: column-reverse; }
-        body.bar-top .bar     { border-top: 0; border-bottom: 1px solid var(--desk-edge); }
+        /* Bar on top (settings): the menu drops down, and the shared notices (update
+           bar, "space almost full") keep clear of it. */
         body.bar-top .menu    { bottom: auto; top: calc(var(--bar-h) + 8px); }
         body.bar-top .menu.full { top: 0; bottom: 0; }     /* a launcher dialog still gets the whole screen */
         body.bar-top .session-bar          { top: var(--bar-h); }
         body.bar-bottom .quota-card        { bottom: calc(var(--bar-h) + 16px); }
 
-        /* Bar on the left or right (bar-side): a column --bar-h wide. Window buttons
-           show only their icon - the one in front its window buttons under it -, the
-           clock and the countdown stack their parts. The menu pops out beside it. */
-        body.bar-left  .desktop { flex-direction: row-reverse; }
-        body.bar-right .desktop { flex-direction: row; }
-        body.bar-side  .desk    { min-width: 0; }
-        body.bar-side  .bar     { flex-direction: column; width: var(--bar-h); height: auto; padding: 8px 0; border-top: 0; }
-        body.bar-left  .bar     { border-right: 1px solid var(--desk-edge); }
-        body.bar-right .bar     { border-left: 1px solid var(--desk-edge); }
-        body.bar-side  .tasks   { flex-direction: column; width: 100%; height: auto; min-height: 0; }
-        body.bar-side  .task,
-        body.bar-side  .task.front { flex: 0 0 auto; width: calc(var(--bar-h) - 8px); min-width: 0; max-width: none;
-                                     height: calc(var(--bar-h) - 14px); justify-content: center; padding: 0; }
-        body.bar-side  .task.front { flex-direction: column; height: auto; padding: 6px 0; gap: 4px; }
-        body.bar-side  .task.front > svg { margin: 0; }
-        body.bar-side  .task > .task-ctl { flex-direction: column; margin: 0; }
+        /* Bar on the left or right (bar-side): a column --bar-h wide (Ayni's); the clock
+           and the countdown stack their parts. The menu pops out beside it. */
         body.bar-side  #batt    { flex-direction: column; gap: 0; padding: 4px 0; font-size: 0.75rem; }
         body.bar-side  #clock,
         body.bar-side  #cds > .cd-chip  { flex-direction: column; width: calc(var(--bar-h) - 4px); max-width: none; height: auto;
@@ -516,10 +447,8 @@
         body.bar-side  #clock2 { width: calc(var(--bar-h) - 4px); padding: 4px 2px;
                                  white-space: normal; text-align: center; font-size: 0.7rem; line-height: 1.2; overflow-wrap: anywhere; }
         body.bar-side  #clock > span, body.bar-side  #clock > b { justify-content: center; padding: 2px; }
-        body.bar-side  #cds > .cd-chip > .cd-text { display: none; }
-        body.bar-side  #cds > .cd-chip > .task-x  { margin: 0; }
-        body.bar-side  #moreBtn,
-        body.bar-side  #helpBtn { margin: 0; }
+        body.bar-side  .cd-main { flex-direction: column; padding: 0; gap: 2px; width: 100%; height: auto; }
+        body.bar-side  .cd-text { display: none; }
         body.bar-left  .menu    { left: calc(var(--bar-h) + 8px); bottom: 8px; max-height: calc(100dvh - 16px); }
         body.bar-right .menu    { left: auto; right: calc(var(--bar-h) + 8px); bottom: 8px; max-height: calc(100dvh - 16px); }
         body.bar-side  .menu.full { left: 0; right: 0; }
@@ -551,108 +480,94 @@
     </style>
 </head>
 <body>
-    <div class="desktop" id="desktop">
-        <div class="desk" id="desk"><div class="snap-ghost" id="snapGhost" hidden></div></div>
+    <div class="desktop" id="desktop" data-edge="bottom" data-mode="app">
+        <main class="area desk" id="desk"><div class="desk-empty"></div><div class="snap-ghost" id="snapGhost" hidden></div></main>
 
-        <div class="bar" id="bar">
+        <nav class="taskbar" id="bar" data-i18n-attr="aria-label:ayni.desk.taskbar">
             <button class="btn" id="menuBtn" data-i18n-attr="data-tip:ui.toApps" data-tip="Apps"><img src="../icons/icon-192.png" alt=""></button>
-            <div class="tasks" id="tasks"></div>
+            <div class="chips" id="tasks" role="group" data-i18n-attr="aria-label:desktop.switchWin"></div>
+            <div class="widgets">
             <!-- COUNTDOWNS - one chip each (see THE COUNTDOWNS), cloned from cdTpl. -->
             <span id="cds"></span>
-            <template id="cdTpl"><button class="btn text bordered cd-chip" type="button"><b></b><span class="cd-text"></span><span class="btn task-x cd-pp" role="button" data-cd="pp"></span><span class="btn task-x cd-stop" role="button" data-cd="stop"></span><span class="btn task-x cd-x" role="button" data-cd="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></span></button></template>
+            <template id="cdTpl"><div class="widget cd-chip" role="group"><button class="cd-main" type="button"><b></b><span class="cd-text"></span></button><button class="btn cd-pp" type="button" data-cd="pp"></button><button class="btn cd-stop" type="button" data-cd="stop"></button><button class="btn cd-x" type="button" data-cd="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button></div></template>
             <!-- WEATHER - the sky now (set.weatherBar, see WEATHER below); a press shows today's forecast. -->
-            <button id="wxBtn" class="btn" type="button" aria-expanded="false" hidden data-i18n-attr="aria-label:desktop.weather"></button>
+            <button id="wxBtn" class="widget" type="button" popovertarget="wxPop" hidden data-i18n-attr="aria-label:desktop.weather, data-tip:desktop.weather"></button>
             <!-- BATTERY - its level (set.battBar, see BATTERY below); shows only, no press. -->
-            <span id="batt" role="img" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"/><line x1="22" y1="11" x2="22" y2="13"/><rect class="batt-fill" x="4" y="9" width="14" height="6" rx="1" stroke="none" fill="currentColor"/></svg><b></b></span>
+            <span id="batt" class="widget" role="img" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"/><line x1="22" y1="11" x2="22" y2="13"/><rect class="batt-fill" x="4" y="9" width="14" height="6" rx="1" stroke="none" fill="currentColor"/></svg><b></b></span>
             <!-- SECOND CLOCK - another time zone (set.tz2, see THE SECOND CLOCK); shows only, no press. -->
-            <span id="clock2" hidden><span></span><b></b><i></i></span>
-            <button id="clock" class="btn text bordered" type="button"><span></span><b></b></button>
+            <span id="clock2" class="widget" hidden><span></span><b></b><i></i></span>
+            <button id="clock" class="widget" type="button"><span></span><b></b></button>
             <!-- MORE (2026-09-28) - the "⋮" after the clock: what used to sit on the
                  bar (Free/Tile) and what has no room there (Lock now, the clock, the bar).
                  More rows will come; see MORE below. -->
-            <button id="moreBtn" class="btn" type="button" aria-expanded="false" data-i18n-attr="data-tip:ui.moreOptions, aria-label:ui.moreOptions"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="12" cy="19" r="1.8"></circle></svg></button>
+            <button id="moreBtn" class="btn" type="button" popovertarget="moreMenu" data-i18n-attr="data-tip:ui.moreOptions, aria-label:ui.moreOptions"><span class="icon" data-icon="more"></span></button>
             <!-- HELP - the shared help card (Ayni.help, see HELP below). -->
-            <button id="helpBtn" class="btn" data-help-open type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></button>
+            <button id="helpBtn" class="btn" data-help-open type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help"><span class="icon" data-icon="help"></span></button>
             <!-- ONE connection status for every window (see SYNC below); hidden until one has its own. -->
             <button id="syncIndicator" class="sync-indicator" type="button" hidden data-i18n-attr="data-tip:ui.synced"></button>
-        </div>
+            </div>
+        </nav>
 
         <div class="menu" id="menu" hidden></div>
 
-        <div class="top-menu" id="moreMenu" role="menu" hidden>
+        <!-- MORE - the "⋮": Ayni's popup with controls. Every change applies at once and leaves it
+             open; only the two buttons at its end close it. -->
+        <div class="panel popup controls tall" id="moreMenu" popover data-i18n-attr="aria-label:ui.moreOptions">
             <!-- BATTERY ON THE BAR - set.battBar (2026-10-04): the #batt on the bar (see
                  BATTERY). Always the first row; greyed with no battery or no browser API. -->
-            <label class="menu-item switch end" id="battRow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line><line x1="6" y1="11" x2="6" y2="13"></line><line x1="10" y1="11" x2="10" y2="13"></line></svg><span data-i18n="desktop.battBar"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.battBarInfo"></span><input role="switch" type="checkbox" id="battBarChk" disabled></label>
-            <!-- WEATHER ON THE BAR - set.weatherBar (2026-10-02): the #wxBtn on the bar
-                 (see WEATHER). A label, so flipping it leaves the menu open. -->
-            <label class="menu-item switch end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path></svg><span data-i18n="desktop.weatherBar"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.weatherBarInfo"></span><input role="switch" type="checkbox" id="weatherBarChk"></label>
+            <label class="switch end" id="battRow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line><line x1="6" y1="11" x2="6" y2="13"></line><line x1="10" y1="11" x2="10" y2="13"></line></svg><span data-i18n="desktop.battBar"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.battBarInfo"></span><input role="switch" type="checkbox" id="battBarChk" disabled></label>
+            <!-- WEATHER ON THE BAR - set.weatherBar (2026-10-02): the #wxBtn on the bar (see WEATHER). -->
+            <label class="switch end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path></svg><span data-i18n="desktop.weatherBar"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.weatherBarInfo"></span><input role="switch" type="checkbox" id="weatherBarChk"></label>
             <!-- WINDOWS - how the windows behave on the desk. -->
-            <div class="menu-sep"></div>
-            <div class="menu-label" data-i18n="desktop.windowsLabel"></div>
-            <!-- TILE - one switch for the whole desk (see TILE / UNTILE): Free <-> Tile.
-                 Not a button, so flipping it leaves the menu open. -->
-            <div class="tile-sw" id="tileSw" data-i18n-attr="title:desktop.tileTip">
-                <span class="tile-word" data-tile="off" data-i18n="desktop.tileFree"></span>
-                <label class="switch"><input role="switch" type="checkbox" id="tileChk" data-i18n-attr="aria-label:desktop.tileTip"></label>
-                <span class="tile-word" data-tile="on" data-i18n="desktop.tileOn"></span>
+            <h4 data-i18n="desktop.windowsLabel"></h4>
+            <!-- TILE - one switch for the whole desk (see TILE / UNTILE): Free <-> Tile. -->
+            <div class="switch-pair" role="radiogroup" id="tileSw" data-i18n-attr="aria-label:desktop.tileTip, data-tip:desktop.tileTip">
+                <label><input type="radio" name="tileSw" id="tileOff" checked><span data-i18n="desktop.tileFree"></span></label>
+                <span class="track" aria-hidden="true"></span>
+                <label><input type="radio" name="tileSw" id="tileOn"><span data-i18n="desktop.tileOn"></span></label>
             </div>
-            <!-- STICKY WINDOWS - on: a window dropped on an edge of the desk takes that
-                 half (see drag). A label, not a button, so flipping it leaves the menu open. -->
-            <label class="menu-item switch end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="12" y1="4" x2="12" y2="20"></line></svg><span data-i18n="desktop.sticky"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.stickyInfo"></span><input role="switch" type="checkbox" id="stickyChk"></label>
-            <!-- SCALE ON OPEN - new windows start with Scale on (set.scaleNew; see SCALE).
-                 The (i) is a span, not a button: a button would close the menu. -->
-            <label class="menu-item switch end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 11 5 5 11 5"></polyline><polyline points="19 13 19 19 13 19"></polyline><line x1="5" y1="5" x2="19" y2="19"></line></svg><span data-i18n="desktop.scaleNew"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.scaleNewInfo"></span><input role="switch" type="checkbox" id="scaleNewChk"></label>
-            <!-- THE CLOCK - what it shows beside the time (see THE CLOCK). Rows, not
-                 buttons, so a change leaves the menu open; the lists are Ayni's list
-                 pickers (a row holding one is a div: a label around it would click
-                 its field again after a pick). -->
-            <div class="menu-sep"></div>
-            <div class="menu-label" data-i18n="desktop.tabClock"></div>
-            <div class="menu-item"><label for="setDow" data-i18n="desktop.weekday"></label>
+            <!-- STICKY WINDOWS - on: a window dropped on an edge of the desk takes that half (see drag). -->
+            <label class="switch end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="12" y1="4" x2="12" y2="20"></line></svg><span data-i18n="desktop.sticky"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.stickyInfo"></span><input role="switch" type="checkbox" id="stickyChk"></label>
+            <!-- SCALE ON OPEN - new windows start with Scale on (set.scaleNew; see SCALE). -->
+            <label class="switch end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 11 5 5 11 5"></polyline><polyline points="19 13 19 19 13 19"></polyline><line x1="5" y1="5" x2="19" y2="19"></line></svg><span data-i18n="desktop.scaleNew"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.scaleNewInfo"></span><input role="switch" type="checkbox" id="scaleNewChk"></label>
+            <!-- THE CLOCK - what it shows beside the time (see THE CLOCK). -->
+            <h4 data-i18n="desktop.tabClock"></h4>
+            <div class="set-row"><label for="setDow" data-i18n="desktop.weekday"></label>
                 <div class="picker" id="setDow"><input type="hidden" value="none"><div class="panel popup picker-pop" popover="manual"><ul role="listbox"><li role="option" data-value="none" data-i18n="desktop.weekdayNone"></li><li role="option" data-value="short" data-i18n="desktop.weekdayShort"></li><li role="option" data-value="long" data-i18n="desktop.weekdayLong"></li></ul></div></div></div>
-            <label class="menu-item switch end"><span data-i18n="desktop.showDate"></span><input role="switch" type="checkbox" id="setDate"></label>
-            <label class="menu-item switch end"><span data-i18n="desktop.showSeconds"></span><input role="switch" type="checkbox" id="setSecs"></label>
+            <label class="switch end"><span data-i18n="desktop.showDate"></span><input role="switch" type="checkbox" id="setDate"></label>
+            <label class="switch end"><span data-i18n="desktop.showSeconds"></span><input role="switch" type="checkbox" id="setSecs"></label>
             <!-- SECOND CLOCK - on: its zone's list below (filled at each menu open, see THE CLOCK AND THE BAR). -->
-            <label class="menu-item switch end"><span data-i18n="desktop.clock2"></span><input role="switch" type="checkbox" id="setTz2On"></label>
-            <div class="menu-item" id="tz2Wrap" hidden><label for="setTz2" data-i18n="desktop.clock2Zone"></label>
+            <label class="switch end"><span data-i18n="desktop.clock2"></span><input role="switch" type="checkbox" id="setTz2On"></label>
+            <div class="set-row" id="tz2Wrap" hidden><label for="setTz2" data-i18n="desktop.clock2Zone"></label>
                 <div class="picker" id="setTz2" data-picker="filter"></div></div>
             <!-- THE BAR - its side of the screen and its height (its width when at a side). -->
-            <div class="menu-sep"></div>
-            <div class="menu-label" data-i18n="desktop.tabDesktop"></div>
-            <div class="menu-item"><label for="setBar" data-i18n="desktop.barPos"></label>
+            <h4 data-i18n="desktop.tabDesktop"></h4>
+            <div class="set-row"><label for="setBar" data-i18n="desktop.barPos"></label>
                 <div class="picker" id="setBar"><input type="hidden" value="bottom"><div class="panel popup picker-pop" popover="manual"><ul role="listbox"><li role="option" data-value="top" data-i18n="desktop.barTop"></li><li role="option" data-value="bottom" data-i18n="desktop.barBottom"></li><li role="option" data-value="left" data-i18n="desktop.barLeft"></li><li role="option" data-value="right" data-i18n="desktop.barRight"></li></ul></div></div></div>
-            <label class="menu-item"><span data-i18n="desktop.barHeight"></span>
-                <span class="slider-row"><input type="range" id="setBarH" min="36" max="72" step="2"><output id="setBarHOut" for="setBarH"></output></span></label>
+            <div class="set-row"><label for="setBarH" data-i18n="desktop.barHeight"></label>
+                <span class="slider-row"><input type="range" id="setBarH" min="36" max="72" step="2"><output id="setBarHOut" for="setBarH"></output></span></div>
             <!-- SCREEN LOCKER (shared/locker.js): which one + after how many idle
                  minutes (ONE value for every locker, his rule 2026-09-30); the clock's own line of text only shows with the clock.
                  DEVICE state (localStorage "nayive-locker"); moved here from My account 2026-09-28. -->
-            <div class="menu-sep"></div>
-            <div class="menu-label" data-i18n="acct.locker"></div>
-            <div class="menu-item lock-row">
+            <h4 data-i18n="acct.locker"></h4>
+            <div class="set-row">
                 <div class="picker" id="lockSel" data-i18n-attr="aria-label:acct.locker"></div>
                 <span class="lock-min"><span class="input-group spin" id="lockMinSpin"><input class="input" id="lockMin" type="number" min="0" max="999" step="1" inputmode="numeric"
                        data-i18n-attr="title:acct.lockerMin, aria-label:acct.lockerMin"></span> <span data-i18n="acct.lockerUnit"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:acct.lockerOff"></span></span></div>
-            <label class="menu-item" id="lockTextWrap" hidden><span data-i18n="acct.lockerText"></span>
-                <input class="input" id="lockText" type="text" maxlength="60" spellcheck="false"></label>
+            <div class="set-row" id="lockTextWrap" hidden><label for="lockText" data-i18n="acct.lockerText"></label>
+                <input class="input" id="lockText" type="text" maxlength="60" spellcheck="false"></div>
             <!-- Bellas artes' or Science's own settings (shared/lockers/culture-settings.js): per USER. -->
-            <button class="menu-item" id="salonBtn" type="button" role="menuitem" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg><span data-i18n="salon.settings"></span></button>
-            <button class="menu-item" id="lockNowBtn" type="button" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><span data-i18n="desktop.lockNow"></span></button>
+            <button class="btn text" id="salonBtn" type="button" hidden><span class="icon" data-icon="settings"></span><span data-i18n="salon.settings"></span></button>
+            <button class="btn text" id="lockNowBtn" type="button"><span class="icon" data-icon="lock"></span><span data-i18n="desktop.lockNow"></span></button>
         </div>
 
         <!-- TODAY'S WEATHER - opened by #wxBtn, beside it on the desk side of the bar
              (see WEATHER): a sliding bar until the forecast comes, then 5 hours. -->
-        <div class="top-menu" id="wxPop" role="dialog" hidden data-i18n-attr="aria-label:desktop.weather"></div>
+        <div class="panel popup controls" id="wxPop" popover data-i18n-attr="aria-label:desktop.weather"></div>
 
-        <!-- THE MONTH - opened by the clock's weekday / date (see THE MONTH): ← and →
-             step a month, the year box in the middle jumps to any year. -->
-        <div class="top-menu" id="calPop" role="dialog" hidden data-i18n-attr="aria-label:desktop.calendar">
-            <div class="cal-head">
-                <button class="btn" id="calPrev" type="button" data-i18n-attr="data-tip:desktop.prevMonth, aria-label:desktop.prevMonth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg></button>
-                <span class="cal-title"><b id="calMonth"></b><input id="calYear" class="input" type="number" min="1" max="9999" step="1" inputmode="numeric" data-i18n-attr="title:calendar.year, aria-label:calendar.year"></span>
-                <button class="btn" id="calNext" type="button" data-i18n-attr="data-tip:desktop.nextMonth, aria-label:desktop.nextMonth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></button>
-            </div>
-            <div class="cal-grid" id="calGrid"></div>
-        </div>
+        <!-- THE MONTH - opened by the clock's weekday / date (see THE MONTH): Ayni's calendar,
+             view only, with week numbers. -->
+        <div class="panel popup controls" id="calPop" popover data-i18n-attr="aria-label:desktop.calendar"><div class="cal" id="calView" data-weeks></div></div>
 
         <!-- WINDOW SWITCHER - Alt pressed and let go on its own (see SWITCHER). -->
         <div class="switcher" id="switcher" role="listbox" hidden data-i18n-attr="aria-label:desktop.switchWin"></div>
@@ -742,6 +657,7 @@
     {
         [ 'top', 'bottom', 'left', 'right' ].forEach( function ( p ) { document.body.classList.toggle( 'bar-' + p, set.bar === p ); } );
         document.body.classList.toggle( 'bar-side', set.bar === 'left' || set.bar === 'right' );
+        desktop.dataset.edge = set.bar;     // Ayni's taskbar goes by it; the page's own rules by the body classes
         document.body.classList.toggle( 'touch', coarse.matches );
         var h = Math.max( 36, Math.min( 72, +set.barH || 48 ) );
         document.documentElement.style.setProperty( '--bar-h', ( coarse.matches ? Math.max( TOUCH_BAR_H, h ) : h ) + 'px' );
@@ -848,26 +764,31 @@
             g = { l: Math.max( 0, Math.round( ( r.w - W ) / 2 ) - 80 + n * 32 ), t: Math.max( 0, 24 + n * 32 ), w: W, h: H };
         }
 
-        var btn = document.createElement( 'button' );
-        btn.className = 'btn text bordered task';
-        btn.innerHTML = info.svg + '<span></span><span class="task-ctl">' +
-            CTL.map( function ( d ) { return '<span class="btn task-x" role="button" data-win="' + d[ 0 ] + '">' + d[ 3 ] + '</span>'; } ).join( '' ) +
+        // Its chip on the bar (Ayni's markup; see ayni-desktop.css). The window's buttons
+        // show on the chip of the window in front only.
+        var chip = document.createElement( 'div' );
+        chip.className = 'chip';
+        chip.setAttribute( 'role', 'group' );
+        chip.setAttribute( 'aria-label', info.name );
+        chip.innerHTML = '<button class="chip-main" type="button">' + info.svg + '<span></span></button><span class="chip-ctl">' +
+            CTL.map( function ( d ) { return '<button class="btn" type="button" data-win="' + d[ 0 ] + '">' + d[ 3 ] + '</button>'; } ).join( '' ) +
             '</span>';
-        btn.querySelector( 'span' ).textContent = info.name;
-        setTip( btn, info.name );
+        var main = chip.querySelector( '.chip-main' );
+        main.querySelector( 'span' ).textContent = info.name;
+        setTip( main, info.name );
         CTL.forEach( function ( d )
         {
             if( ! d[ 1 ] ) return;              // Scale / Resize: see paintScale
-            var b = btn.querySelector( '[data-win="' + d[ 0 ] + '"]' );
+            var b = chip.querySelector( '[data-win="' + d[ 0 ] + '"]' );
             setTip( b, t( d[ 1 ], d[ 2 ] ) );
             b.setAttribute( 'aria-label', b.dataset.tip );
         } );
 
-        w.el = el; w.btn = btn; w.frame = el.querySelector( 'iframe' );
+        w.el = el; w.chip = chip; w.main = main; w.frame = el.querySelector( 'iframe' );
         wins.push( w );
         desk.appendChild( el );
         place( w, g );
-        tasks.appendChild( btn );
+        tasks.appendChild( chip );
 
         wire( w );
         if( url ) w.frame.src = url;
@@ -901,8 +822,9 @@
     function setTitle( w, text, tip )
     {
         w.el.querySelector( '.win-title' ).textContent = text;
-        w.btn.querySelector( 'span' ).textContent = text;
-        setTip( w.btn, tip || text );
+        w.main.querySelector( 'span' ).textContent = text;
+        w.chip.setAttribute( 'aria-label', text );
+        setTip( w.main, tip || text );
     }
 
     function focus( w )
@@ -913,6 +835,7 @@
         var was = front;
         front = w;
         paint();
+        w.chip.scrollIntoView( { block: 'nearest', inline: 'nearest' } );     // many windows: the row or column of chips scrolls
         saveWins();
         if( back ) { queueMeasure( w ); retile(); }
         if( was && was !== w && was.app === 'chat' ) pokeUnread();
@@ -949,7 +872,7 @@
         if( wins.indexOf( w ) < 0 ) return;     // gone already
         keepLast( w );
         if( kbWin === w ) kbWin = null;
-        w.el.remove(); w.btn.remove();
+        w.el.remove(); w.chip.remove();
         wins.splice( wins.indexOf( w ), 1 );
         if( front === w ) front = topmost();
         paint();
@@ -978,9 +901,9 @@
             // the app's own title row (chromeless) softens too - an attribute, not a
             // class: Scale's watcher re-measures on class changes
             try { w.frame.contentDocument.documentElement.toggleAttribute( 'data-win-behind', ! isFront ); } catch( e ) {}
-            w.btn.classList.toggle( 'front', isFront );
-            w.btn.classList.toggle( 'min', w.el.hidden );
-            w.btn.classList.toggle( 'has-dialog', !! w.dialog && ! isFront );
+            if( isFront ) w.chip.setAttribute( 'aria-current', 'true' ); else w.chip.removeAttribute( 'aria-current' );
+            w.chip.classList.toggle( 'min', w.el.hidden );
+            w.chip.classList.toggle( 'has-dialog', !! w.dialog && ! isFront );
             paintScale( w );
         } );
         paintTile();
@@ -998,9 +921,9 @@
     {
         var el = w.el;
 
-        // The bar button: bring forward - or, when already in front, minimise. Its
+        // The chip: bring forward - or, when already in front, minimise. Its
         // window's buttons (in front only) do their own job.
-        w.btn.addEventListener( 'click', function ( e )
+        w.chip.addEventListener( 'click', function ( e )
         {
             var b = e.target.closest( '[data-win]' );
             if( b ) { act( w, b.getAttribute( 'data-win' ) ); return; }
@@ -1275,7 +1198,7 @@
 
     //------------------------------------------------------------------------//
     // THE WINDOW'S BUTTONS live on the bar, on the bar button of the window in
-    // front (see .task-ctl): Scale / Resize, minimise, maximise, close. Scale /
+    // front (see .chip-ctl): Scale / Resize, minimise, maximise, close. Scale /
     // Resize is two-state: its icon and tooltip say which way the window is now.
     var SVG_OPEN     = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">';
     var ICON_SCALE   = SVG_OPEN + '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M14 15H9v-5"/><path d="M16 3h5v5"/><path d="M21 3 9 15"/></svg>';
@@ -1283,14 +1206,14 @@
     var ICON_TILE    = SVG_OPEN + '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="12" y1="12" x2="21" y2="12"/></svg>';
     var CTL = [
         [ 'scale', '',                 '',         ICON_RESIZE ],
-        [ 'min',   'desktop.minimise', 'Minimise', SVG_OPEN + '<line x1="5" y1="12" x2="19" y2="12"/></svg>' ],
-        [ 'max',   'desktop.maximise', 'Maximise', SVG_OPEN + '<rect x="5" y="5" width="14" height="14" rx="2"/></svg>' ],
+        [ 'min',   'ayni.win.minimise', 'Minimise', SVG_OPEN + '<line x1="5" y1="12" x2="19" y2="12"/></svg>' ],
+        [ 'max',   'ayni.win.maximise', 'Maximise', SVG_OPEN + '<rect x="5" y="5" width="14" height="14" rx="2"/></svg>' ],
         [ 'close', 'ui.close',         'Close',    SVG_OPEN + '<line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>' ]
     ];
 
     function paintScale( w )
     {
-        var b = w.btn.querySelector( '[data-win="scale"]' ), on = !! w.scale;
+        var b = w.chip.querySelector( '[data-win="scale"]' ), on = !! w.scale;
         if( ! b || b.getAttribute( 'aria-pressed' ) === String( on ) ) return;
         b.setAttribute( 'aria-pressed', String( on ) );
         b.innerHTML = on ? ICON_SCALE : ICON_RESIZE;
@@ -1770,82 +1693,48 @@
     }
     if( coarse.addEventListener ) coarse.addEventListener( 'change', upright );
 
-    // THE SWITCH on the bar: "Free ()== Tile". A word picks its side, the switch
+    // THE SWITCH in the "⋮": "Free ()== Tile". A word picks its side, the switch
     // flips. The word Tile while tiled deals the desk out again - after windows
     // were moved or maximised by hand, say.
-    var tileSw = document.getElementById( 'tileSw' ), tileChk = document.getElementById( 'tileChk' );
+    var tileSw = document.getElementById( 'tileSw' ), tileOn = document.getElementById( 'tileOn' ),
+        tileOff = document.getElementById( 'tileOff' );
 
     function paintTile()
     {
         var idle = ! tiled && ! wins.some( function ( w ) { return ! w.el.hidden; } );
-        tileChk.checked  = !! tiled;
-        tileChk.disabled = idle;
-        tileSw.classList.toggle( 'on', !! tiled );
+        tileOn.checked  = !! tiled;
+        tileOff.checked = ! tiled;
+        tileOn.disabled = tileOff.disabled = idle;
         tileSw.classList.toggle( 'idle', idle );
     }
 
-    tileChk.addEventListener( 'change', function () { if( tileChk.checked ) tile(); else untile(); paintTile(); } );
-    tileSw.addEventListener( 'click', function ( e )
-    {
-        var word = e.target.closest( '.tile-word' );
-        if( ! word || tileChk.disabled ) return;
-        if( word.getAttribute( 'data-tile' ) === 'on' ) tile(); else untile();
-        paintTile();
-    } );
+    tileOn.addEventListener( 'change', function () { tile(); paintTile(); } );
+    tileOff.addEventListener( 'change', function () { untile(); paintTile(); } );
+    tileOn.addEventListener( 'click', function () { if( tiled ) { tile(); paintTile(); } } );     // already on: no change event
     paintTile();
 
     //------------------------------------------------------------------------//
-    // MORE - the "⋮" after the clock (2026-09-28): the shared .top-menu
-    // (NayiveUI.wireMenu), set just off the bar's edge: above it, below it when
-    // the bar is at the top, beside it when the bar is at a side.
-    // Holds the Free/Tile switch, Sticky windows, Lock now, the clock, the bar
-    // and the screen locker.
+    // MORE - the "⋮" after the clock (2026-09-28): Ayni's popup with controls
+    // (opened by its button, or by openMoreHere). Holds the Free/Tile switch,
+    // Sticky windows, the clock, the bar, the screen locker and Lock now. Open
+    // popups close on their own with a press elsewhere, Escape, a resize, or when
+    // a frame takes the focus; a press in a frame that does not take it: closeMore.
 
     var moreBtn = document.getElementById( 'moreBtn' ), moreMenu = document.getElementById( 'moreMenu' );
-    var more = null;
 
-    document.addEventListener( 'DOMContentLoaded', function ()     // ui.js is deferred
+    function placeMore() { if( moreMenu.matches( ':popover-open' ) ) Ayni.place( moreMenu, moreBtn ); }
+
+    // The bar's popups (the "⋮", the weather, the month), closed from code.
+    function closeMore()
     {
-        if( ! window.NayiveUI ) return;
-        more = NayiveUI.wireMenu( { btn: moreBtn, menu: moreMenu, onPick: function ( b )
-        {
-            if( b.id === 'lockNowBtn' && window.NayiveLock ) NayiveLock.lock();
-        } } );
-        moreBtn.addEventListener( 'click', placeMore );            // after wireMenu's own: it placed it under the button
-    } );
-
-    function placeMore() { placeBy( moreBtn, moreMenu ); }
-
-    // A popup of the bar's (`pop`, opened by `btn`) just off the bar, on the
-    // desk's side: its right edge at the button's, beside the button when the bar is at a side.
-    function placeBy( btn, pop )
-    {
-        if( pop.hidden ) return;
-        var r = bar.getBoundingClientRect(), s = pop.style;
-        // ui.js's fitMenu measured it where wireMenu first put it (under the
-        // button: off the screen with the bar at the bottom) and capped it; so
-        // the cap goes, and is set again here for where it really opens.
-        s.maxHeight = '';
-        if( set.bar === 'left' || set.bar === 'right' )
-        {
-            var b = btn.getBoundingClientRect();
-            if( pop.offsetHeight > window.innerHeight - 12 ) s.maxHeight = ( window.innerHeight - 12 ) + 'px';
-            s.top = Math.max( 6, Math.min( b.top, window.innerHeight - 6 - pop.offsetHeight ) ) + 'px';
-            if( set.bar === 'left' ) { s.left = ( r.right + 6 ) + 'px'; s.right = 'auto'; }
-            else                     { s.left = 'auto'; s.right = ( window.innerWidth - r.left + 6 ) + 'px'; }
-            return;
-        }
-        var m = btn.getBoundingClientRect();
-        var room = set.bar === 'top' ? window.innerHeight - r.bottom - 12 : r.top - 12;
-        if( pop.offsetHeight > room ) s.maxHeight = Math.max( 120, room ) + 'px';
-        s.left = 'auto'; s.right = Math.max( 6, window.innerWidth - m.right ) + 'px';
-        s.top  = ( set.bar === 'top' ? r.bottom + 6 : Math.max( 6, r.top - 6 - pop.offsetHeight ) ) + 'px';
+        [ moreMenu, wxPop, calPop ].forEach( function ( p ) { if( p.matches( ':popover-open' ) ) p.hidePopover(); } );
     }
 
-    // A press inside a window's frame never reaches this document (see the
-    // frames' pointerdown); a frame we cannot hook still takes the focus.
-    function closeMore() { if( more ) more.close(); }
-    window.addEventListener( 'blur', closeMore );
+    document.getElementById( 'lockNowBtn' ).addEventListener( 'click', function ()
+    {
+        closeMore();
+        if( window.NayiveLock ) NayiveLock.lock();
+    } );
 
     // STICKY WINDOWS - this device's choice (set.sticky); see drag.
     var stickyChk = document.getElementById( 'stickyChk' );
@@ -1961,7 +1850,7 @@
         lockMin.value  = s.min;
         lockText.value = s.text;
         document.getElementById( 'lockTextWrap' ).hidden = s.id !== 'clock';
-        var sb = document.getElementById( 'salonBtn' ), sbl = sb.querySelector( 'span' );
+        var sb = document.getElementById( 'salonBtn' ), sbl = sb.querySelector( '[data-i18n]' );
         sb.hidden = s.id !== 'culture' && s.id !== 'science';
         sbl.setAttribute( 'data-i18n', s.id === 'science' ? 'sci.settings' : 'salon.settings' );
         sbl.textContent = t( sbl.getAttribute( 'data-i18n' ) );
@@ -2010,7 +1899,7 @@
 
     var wxBtn = document.getElementById( 'wxBtn' ), wxPop = document.getElementById( 'wxPop' ),
         wxChk = document.getElementById( 'weatherBarChk' );
-    var wxTimer = 0, wxGen = 0, wxPopGen = 0, wxMenu = null, wxCached = null;
+    var wxTimer = 0, wxGen = 0, wxPopGen = 0, wxCached = null;
     var WX_EVERY = 30 * 60000;
 
     // One icon per sky of the engine's skyOf (clear, partly cloudy, cloudy, fog,
@@ -2125,7 +2014,7 @@
         var busy = wxEl( 'span', 'wx-busy', null, wxPop );
         busy.setAttribute( 'role', 'progressbar' );
         wxEl( 'span', null, null, busy );
-        placeBy( wxBtn, wxPop );
+        Ayni.place( wxPop, wxBtn );
         wxGet( true ).then( function ( d )
         {
             if( set.weatherBar ) wxPaint( d );
@@ -2144,12 +2033,12 @@
             }
             if( ! cols.childNodes.length ) throw new Error( 'no hours' );
             wxPop.replaceChild( cols, busy );
-            placeBy( wxBtn, wxPop );
+            Ayni.place( wxPop, wxBtn );
         } ).catch( function ()
         {
             if( g !== wxPopGen || ! busy.parentNode ) return;
             wxPop.replaceChild( wxEl( 'div', 'wx-fail', t( 'ui.loadFailed' ) ), busy );
-            placeBy( wxBtn, wxPop );
+            Ayni.place( wxPop, wxBtn );
         } );
     }
 
@@ -2165,22 +2054,12 @@
         }
         clearTimeout( wxTimer );
         wxGen++; wxPopGen++;
-        if( wxMenu ) wxMenu.close();
+        if( wxPop.matches( ':popover-open' ) ) wxPop.hidePopover();
     }
     wxChk.addEventListener( 'change', function () { set.weatherBar = wxChk.checked; saveSet(); wxApply(); placeMore(); } );
     wxApply();
 
-    document.addEventListener( 'DOMContentLoaded', function ()     // ui.js is deferred
-    {
-        if( ! window.NayiveUI ) return;
-        wxMenu = NayiveUI.wireMenu( { btn: wxBtn, menu: wxPop } );
-        // After wireMenu's own click (it toggles the popup and stops the click, so
-        // the "⋮" menu would stay open: closed here, and this popup by the "⋮").
-        wxBtn.addEventListener( 'click', function () { closeMore(); if( ! wxPop.hidden ) wxOpen(); else wxPopGen++; } );
-        moreBtn.addEventListener( 'click', function () { if( wxMenu ) wxMenu.close(); } );
-    } );
-    // A press inside a window's frame never reaches this document: it takes the focus.
-    window.addEventListener( 'blur', function () { if( wxMenu ) wxMenu.close(); } );
+    wxPop.addEventListener( 'toggle', function ( e ) { if( e.newState === 'open' ) wxOpen(); else wxPopGen++; } );
 
     //------------------------------------------------------------------------//
     // BATTERY - this device's choice (set.battBar, the first row of the "⋮"
@@ -2360,38 +2239,26 @@
     } );
     function openMoreHere()
     {
-        if( ! menuWasOpen && more && ! more.isOpen() ) { more.open(); placeMore(); }
+        if( ! menuWasOpen && ! moreMenu.matches( ':popover-open' ) ) Ayni.showPopup( moreMenu, moreBtn );
     }
     desk.addEventListener( 'contextmenu', function ( e )
     {
-        if( e.target !== desk ) return;
+        if( ! e.target.closest( '.desk-empty' ) ) return;
         e.preventDefault();
         openMoreHere();
     } );
-    // A finger's right-click: a long press (half a second, still) on an empty
-    // spot of the desk. Android sends its own contextmenu too; iPad does not.
-    // The click a browser may send when the finger lifts must not close the menu again.
-    var LONG_MS = 550;
-    desk.addEventListener( 'pointerdown', function ( e )
+    // A finger's right-click: a long press on an empty spot of the desk. And the
+    // wheel moves a row of chips along the bar (a column scrolls by itself).
+    document.addEventListener( 'DOMContentLoaded', function () { if( window.Ayni ) Ayni.ready.then( function ()
     {
-        if( e.target !== desk || e.pointerType === 'mouse' ) return;
-        var x0 = e.clientX, y0 = e.clientY, id = e.pointerId, fired = false;
-        var timer = setTimeout( function () { fired = true; openMoreHere(); }, LONG_MS );
-        function eat( c ) { c.stopPropagation(); c.preventDefault(); }
-        function move( ev ) { if( ev.pointerId === id && ! fired && Math.abs( ev.clientX - x0 ) + Math.abs( ev.clientY - y0 ) > 10 ) done(); }
-        // The finger lifts: a click the browser sends now is eaten, until the next tick.
-        function lift() { if( fired ) { document.addEventListener( 'click', eat, true ); setTimeout( function () { document.removeEventListener( 'click', eat, true ); }, 0 ); } done(); }
-        function done()
-        {
-            clearTimeout( timer );
-            document.removeEventListener( 'pointermove', move, true );
-            document.removeEventListener( 'pointerup', lift, true );
-            document.removeEventListener( 'pointercancel', done, true );
-        }
-        document.addEventListener( 'pointermove', move, true );
-        document.addEventListener( 'pointerup', lift, true );
-        document.addEventListener( 'pointercancel', done, true );
-    } );
+        Ayni.longTap( desk, '.desk-empty', openMoreHere );
+    } ); } );
+    tasks.addEventListener( 'wheel', function ( e )
+    {
+        if( set.bar === 'left' || set.bar === 'right' || tasks.scrollWidth <= tasks.clientWidth || ! e.deltaY ) return;
+        e.preventDefault();
+        tasks.scrollLeft += e.deltaY;
+    }, { passive: false } );
 
     //------------------------------------------------------------------------//
     // SWITCHER - Alt pressed and let go on its own (no other key, no press in
@@ -2448,8 +2315,8 @@
             b.className = 'btn text bordered sw-item' + ( w.el.hidden ? ' min' : '' );
             b.setAttribute( 'role', 'option' );
             b.innerHTML = w.svg + '<span></span>';
-            b.querySelector( 'span' ).textContent = w.btn.querySelector( 'span' ).textContent;
-            setTip( b, w.btn.dataset.tip );
+            b.querySelector( 'span' ).textContent = w.main.querySelector( 'span' ).textContent;
+            setTip( b, w.main.dataset.tip );
             b.swWin = w;
             switcher.appendChild( b );
         } );
@@ -2590,92 +2457,21 @@
     //------------------------------------------------------------------------//
     // THE MONTH (2026-10-08) - a press on the clock's weekday / date (only when
     // shown) opens a month's calendar beside the bar, like many Linux desktops:
-    // ← and → step a month, the year box jumps to any year. It always opens on
-    // today's month. Each row starts with its ISO week number (week 1 holds the
-    // year's first Thursday). Shows only: a day has no press.
+    // Ayni's calendar, view only: a day has no press. It always opens on today's
+    // month, and each row starts with its ISO week number.
 
-    var calPop = document.getElementById( 'calPop' ), calGrid = document.getElementById( 'calGrid' );
-    var calYear = document.getElementById( 'calYear' ), calMonth = document.getElementById( 'calMonth' );
-    var calY = 0, calM = 0;
-
-    function calCell( text, cls )
-    {
-        var c = document.createElement( 'span' );
-        c.textContent = text;
-        if( cls ) c.className = cls;
-        calGrid.appendChild( c );
-    }
-
-    function calPaint()
-    {
-        calMonth.textContent = window.Ayni ? Ayni.i18n.month( calM ) : String( calM + 1 );
-        if( +calYear.value !== calY ) calYear.value = calY;          // not while it is being typed
-        calGrid.textContent = '';
-        calCell( '', 'cal-wd' );                                      // over the week numbers
-        for( var i = 1; i <= 7; i++ )
-            calCell( window.Ayni ? Ayni.i18n.weekday( i, 'narrow' ) : String( i ), 'cal-wd' );
-        var d = new Date( 2000, 0, 1 ), now = new Date();
-        d.setFullYear( calY, calM, 1 );                               // years below 100 too
-        d.setDate( 1 - ( d.getDay() + 6 ) % 7 );                      // back to its Monday
-        for( i = 0; i < 42; i++ )
-        {
-            if( i % 7 === 0 ) calCell( calWeek( d ), 'cal-wk' );
-            var cls = d.getMonth() !== calM ? 'cal-out' : '';
-            if( d.toDateString() === now.toDateString() ) cls += ' cal-today';
-            calCell( d.getDate(), cls.trim() );
-            d.setDate( d.getDate() + 1 );
-        }
-    }
-
-    // ISO week of the Monday `mon`: its Thursday's year, counted from 1 January.
-    function calWeek( mon )
-    {
-        var thu = new Date( mon ), jan1 = new Date( 2000, 0, 1 );
-        thu.setDate( thu.getDate() + 3 );
-        jan1.setFullYear( thu.getFullYear(), 0, 1 );
-        return 1 + Math.floor( Math.round( ( thu - jan1 ) / 86400000 ) / 7 );   // round: a summer-time day is 23 h
-    }
-
-    function calStep( n )
-    {
-        calM += n;
-        if( calM < 0 )  { calM = 11; calY--; }
-        if( calM > 11 ) { calM = 0;  calY++; }
-        calY = Math.max( 1, Math.min( 9999, calY ) );
-        calPaint();
-    }
+    var calPop = document.getElementById( 'calPop' ), calView = null, calWasOpen = false;
 
     function calOpen()
     {
-        closeMenu(); closeMore();
-        if( wxMenu ) wxMenu.close();
-        var now = new Date();
-        calY = now.getFullYear(); calM = now.getMonth();
-        calPaint();
-        calPop.hidden = false;
-        placeBy( clock, calPop );
+        closeMenu();
+        calView = calView || Ayni.calendar( document.getElementById( 'calView' ) );
+        calView.set( new Date() );
+        Ayni.showPopup( calPop, clock );
     }
-    function calClose() { calPop.hidden = true; }
-
-    document.getElementById( 'calPrev' ).addEventListener( 'click', function () { calStep( -1 ); } );
-    document.getElementById( 'calNext' ).addEventListener( 'click', function () { calStep( 1 ); } );
-    calYear.addEventListener( 'input', function ()
-    {
-        var y = Math.floor( +calYear.value );
-        if( y >= 1 && y <= 9999 && y !== calY ) { calY = y; calPaint(); }
-    } );
-    calYear.addEventListener( 'change', function () { calYear.value = calY; } );    // a wrong year shows the right one again
-    // Closed by a press anywhere else, Escape, a resize or a press in a window;
-    // the "⋮" and the weather stop their press, so they close it themselves.
-    document.addEventListener( 'click', function ( e )
-    {
-        if( ! calPop.hidden && ! calPop.contains( e.target ) && ! clock.contains( e.target ) ) calClose();
-    } );
-    document.addEventListener( 'keydown', function ( e ) { if( e.key === 'Escape' ) calClose(); } );
-    window.addEventListener( 'resize', calClose );
-    window.addEventListener( 'blur', calClose );
-    moreBtn.addEventListener( 'click', calClose );
-    wxBtn.addEventListener( 'click', calClose );
+    // A press on the clock closes an open popup before its click comes: noted first,
+    // so a second press on the date closes the month, and does not open it again.
+    clock.addEventListener( 'pointerdown', function () { calWasOpen = calPop.matches( ':popover-open' ); }, true );
 
     //------------------------------------------------------------------------//
     // THE COUNTDOWNS - as many as wanted at once, on this device (localStorage),
@@ -2743,7 +2539,7 @@
         el.classList.toggle( 'done', done );
         el.querySelector( 'b' ).textContent = on ? cdFmt( cdMs( c ) ) : done && ! c.text ? cdFmt( 0 ) : '';
         el.querySelector( '.cd-text' ).textContent = done ? c.text : '';   // the text only once time is up
-        setTip( el, done ? t( 'desktop.cdDone' ) : t( 'desktop.countdown' ) + ( c.text ? ' - ' + c.text : '' ) );
+        setTip( el.querySelector( '.cd-main' ), done ? t( 'desktop.cdDone' ) : t( 'desktop.countdown' ) + ( c.text ? ' - ' + c.text : '' ) );
         pp.hidden = stop.hidden = ! on;
         x.hidden = ! done;
         var icon = c.end ? 'pause' : 'play';
@@ -2841,11 +2637,11 @@
         cdNote.hidden = !! c;
         cdBack.showModal();
         cdBy = by || clock;
-        placeBy( cdBy, cdBack );
+        Ayni.place( cdBack, cdBy );
     }
     window.addEventListener( 'resize', function ()
     {
-        if( cdBack.open ) placeBy( cdBy.isConnected ? cdBy : clock, cdBack );
+        if( cdBack.open ) Ayni.place( cdBack, cdBy.isConnected ? cdBy : clock );
     } );
 
     function num( el, max ) { var n = Math.floor( +el.value ); return n > 0 ? Math.min( n, max ) : 0; }
@@ -2873,8 +2669,7 @@
     clock.addEventListener( 'click', function ( e )
     {
         var head = clock.querySelector( 'span' );
-        if( ! head.hidden && head.contains( e.target ) ) { if( calPop.hidden ) calOpen(); else calClose(); return; }
-        calClose();
+        if( ! head.hidden && head.contains( e.target ) ) { if( ! calWasOpen ) calOpen(); return; }
         cdOpen( clock );
     } );
     cdPlay.addEventListener( 'click', cdStart );
@@ -2942,7 +2737,7 @@
     {
         if( ! ( unread > 0 ) ) { unreadDot.hidden = true; return; }
         var chat = wins.filter( function ( w ) { return w.app === 'chat'; } )[ 0 ];
-        showDot( unreadDot, chat ? chat.btn : menuBtn, unread );
+        showDot( unreadDot, chat ? chat.main : menuBtn, unread );
     }
     // On an app's bar button the dot carries the count; on the menu button it is plain.
     function showDot( dot, host, n )
@@ -2987,7 +2782,7 @@
     {
         if( ! ( mailN > 0 ) ) { mailDot.hidden = true; return; }
         var em = wins.filter( function ( w ) { return w.app === 'email'; } )[ 0 ];
-        showDot( mailDot, em ? em.btn : menuBtn, mailN );
+        showDot( mailDot, em ? em.main : menuBtn, mailN );
     }
     function askMail()
     {
@@ -3203,7 +2998,7 @@
         {
             return wins.map( function ( w )
             {
-                return { app: w.app, name: w.btn.querySelector( 'span' ).textContent, scale: !! w.scale, factor: w.s,
+                return { app: w.app, name: w.main.querySelector( 'span' ).textContent, scale: !! w.scale, factor: w.s,
                          max: isMax( w ), min: !! w.el.hidden, box: { l: w.g.l, t: w.g.t, w: w.g.w, h: w.g.h },
                          nat: w.nat, tiled: !! tiled && tiled.snaps.has( w ) };
             } );

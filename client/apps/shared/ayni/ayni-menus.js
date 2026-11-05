@@ -22,9 +22,23 @@ const buzz = () => { if (navigator.userActivation?.hasBeenActive !== false) navi
 let invoker = null, ctxPoint = null, ctxName = null, ctxReturn = null, ctxMenu = null, byKeys = false;
 
 /* Ayni.place(popup, at): below its button (above when there is no room), or at the pointer for a pop-up menu, kept on
-   screen. at (optional) is the element or rectangle to hang it from, or a point { x, y } */
-const place = (menu, at) => {
+   screen. at (optional) is the element or rectangle to hang it from, or a point { x, y }.
+   RULE: what opens from the taskbar opens off it, on the desktop's side (17.1): one taller than the room it has scrolls */
+const offBar = (menu, r, from) => {
+  const bar = from?.closest?.('.taskbar'), edge = bar?.closest('.desktop')?.dataset.edge || 'bottom';
+  if (!bar) return null;
+  const b = bar.getBoundingClientRect();
+  /* The room it has limits it; it never lifts the popup's own cap */
+  menu.style.maxHeight = '';
+  const cap = parseFloat(getComputedStyle(menu).maxHeight) || Infinity;
+  menu.style.maxHeight = Math.min(cap, Math.max(120, edge === 'top' ? innerHeight - b.bottom - 12 : edge === 'bottom' ? b.top - 12 : innerHeight - 16)) + 'px';
   const m = menu.getBoundingClientRect();
+  if (edge === 'left') return { x: b.right + 4, y: r.top };
+  if (edge === 'right') return { x: b.left - m.width - 4, y: r.top };
+  return { x: r.left + r.width / 2 > innerWidth / 2 ? r.right - m.width : r.left, y: edge === 'top' ? b.bottom + 4 : b.top - m.height - 4 };
+};
+const place = (menu, at) => {
+  let m = menu.getBoundingClientRect();
   let x, y;
   const pt = at ? ('getBoundingClientRect' in at || 'bottom' in at ? null : at) : ctxPoint;
   if (pt) { x = pt.x; y = pt.y; }
@@ -32,8 +46,12 @@ const place = (menu, at) => {
     /* RULE: a popup lines up with the edge of its button on the side the button sits: a button in the right half of
        the screen (a title row's More) gets a popup that ends where the button ends */
     const r = at ? (at.getBoundingClientRect?.() || at) : invoker.getBoundingClientRect();
-    x = r.left + r.width / 2 > innerWidth / 2 ? r.right - m.width : r.left;
-    y = r.bottom + 4; if (y + m.height > innerHeight) y = r.top - m.height - 4;
+    const off = offBar(menu, r, at?.getBoundingClientRect ? at : invoker);
+    if (off) { ({ x, y } = off); m = menu.getBoundingClientRect(); }
+    else {
+      x = r.left + r.width / 2 > innerWidth / 2 ? r.right - m.width : r.left;
+      y = r.bottom + 4; if (y + m.height > innerHeight) y = r.top - m.height - 4;
+    }
   }
   const edge = innerWidth < 360 ? 4 : 8; // very narrow phones: popups may come closer to the edge
   menu.style.left = Math.max(edge, Math.min(x, innerWidth - m.width - edge)) + 'px';
@@ -65,6 +83,15 @@ const host = (pop) => {
 const inBar = (b) => b?.parentElement?.getAttribute('role') === 'menubar';
 const barItemsOf = (b) => $$(':scope > button', b.parentElement).filter((x) => x.getClientRects().length);
 const openMenu = (btn) => { invoker = btn; ctxPoint = null; host($('#' + btn.getAttribute('popovertarget'))).showPopover(); };
+/* Ayni.showPopup(popup, button): opens a popup from code as its button would: placed by it, the focus coming back to it.
+   Called while a button or a finger is down (a long tap), it opens on release, or that release would close it as an
+   outside click; a phone's own long-press gesture may cancel the pointer instead */
+const showPopup = (pop, btn) => {
+  const show = () => { invoker = btn; ctxPoint = null; ctxName = null; host(pop).showPopover(); };
+  if (!down) { show(); return; }
+  const go = () => { removeEventListener('pointerup', go, true); removeEventListener('pointercancel', go, true); setTimeout(show); };
+  addEventListener('pointerup', go, true); addEventListener('pointercancel', go, true);
+};
 const ownItems = (menu) => $$('[role^="menuitem"]', menu).filter((x) => x.closest('.panel.menu') === menu);
 const subOf = (it) => it?.dataset.submenu && document.getElementById(it.dataset.submenu);
 const rootOf = (menu) => { let m = menu; while (m.parentElement?.closest('.panel.menu')) m = m.parentElement.closest('.panel.menu'); return m; };
@@ -553,7 +580,10 @@ const fitBar = (header, opts = {}) => {
 /* Popup with controls (.panel.popup.controls): placed next to its button, the focus goes to its first control and
    comes back to the button when it closes */
 const initControlsPopup = (pop) => pop.addEventListener('toggle', (e) => {
-  if (e.newState === 'open') { place(pop); $('input:not([type="hidden"]), select, textarea, [tabindex="0"]', pop)?.focus(); } else invoker?.focus();
+  if (e.newState === 'open') { place(pop); $('input:not([type="hidden"]), select, textarea, [tabindex="0"]', pop)?.focus(); return; }
+  /* It went because the focus went elsewhere (another field, a frame): the focus stays there */
+  const now = document.activeElement;
+  if (!now || now === document.body || pop.contains(now)) invoker?.focus();
 });
 /* Tool group (.panel.popup.tools): the real tools of a group, under the one button that stands for them. Pressing a
    tool (a button, or a link) runs it and closes the popup; a press inside never takes the page's focus. The button names, in data-lit-by,
@@ -641,7 +671,7 @@ const init = (root) => {
 
 Ayni.core.menus = { initMenu, initToolbar, contextMenu, place, iconHtml, invoker: () => invoker };
 Object.assign(Ayni, {
-  place, menuAt, fillMenu: fillPage, keyLabel, contextMenu, longTap, fitBar,
+  place, showPopup, menuAt, fillMenu: fillPage, keyLabel, contextMenu, longTap, fitBar,
   toolbar: (el) => { if (once('toolbar', el)) initToolbar(el); },
 });
 Ayni.core.family({ setup, init });

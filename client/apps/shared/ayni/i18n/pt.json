@@ -37,6 +37,8 @@
   "ayni.delete": "Eliminar",
   "ayni.desk.edge": "Posição da barra de tarefas",
   "ayni.desk.edge.bottom": "Barra de tarefas em baixo",
+  "ayni.desk.edge.left": "Barra de tarefas à esquerda",
+  "ayni.desk.edge.right": "Barra de tarefas à direita",
   "ayni.desk.edge.top": "Barra de tarefas em cima",
   "ayni.desk.taskbar": "Barra de tarefas",
   "ayni.dismiss": "Dispensar",
@@ -155,7 +157,6 @@
   "ayni.whatIsThis": "O que é isto?",
   "ayni.win.maximise": "Maximizar",
   "ayni.win.minimise": "Minimizar",
-  "ayni.win.more": "Mais ferramentas",
   "ayni.win.name": "Janela",
   "ayni.win.restore": "Restaurar"
 }

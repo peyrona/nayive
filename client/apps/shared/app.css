@@ -756,17 +756,14 @@ input[type="file"] { accent-color: var(--accent); }
    Menus too: a long-press opens a menu under the finger and, if the finger stays
    down, iOS goes on and selects the word under it ("Responder" painted blue). */
 button,
-.top-menu,
-.popup,
-.menu-item
+.popup
 {
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     user-select: none;
 }
 /* A field inside a menu or popup still takes typing and selection (iOS). */
-.top-menu :is(input, textarea),
-.popup    :is(input, textarea)
+.popup :is(input, textarea)
 {
     -webkit-user-select: text;
     user-select: text;
@@ -1002,7 +999,6 @@ button,
 /* Location sending not set up: the (i) sits right after "not set up", the "+" stays right. */
 .share-link-app .info-tip                { margin-right: auto; }
 /* A menu row already spaces its items: no extra margin before its (i). */
-.menu-item > .info-tip                   { margin-left: 0; }
 
 
 /* -----------------------------------------------------------------------------
@@ -1091,63 +1087,6 @@ button,
 
 .btn.pop-btn             { --btn: 32px; }
 
-
-/* -----------------------------------------------------------------------------
- * "MORE" MENU  (.top-menu > .menu-item)  -  NayiveUI.wireMenu
- *
- * Only the desktop's own bar popups (desktop/index.html, until the desktop
- * family moves to Ayni) and Chat's hold-on-a-message layer (.ctx) still use
- * it; every other menu is an Ayni menu (shared/ayni/ayni-menus.css).
- * position: fixed and anchored under its button by shared/ui.js, so a .topbar
- * with overflow never clips it. One action per row: an 18px glyph + a label.
- * `.mi-check` marks the current choice in a radio-style menu; `.menu-sep` is a
- * hairline between groups, `.menu-label` a small heading over one; `.danger` is a destructive row.
- * ---------------------------------------------------------------------------*/
-.top-menu
-{
-    position: fixed;
-    z-index: 150;
-    min-width: 210px;
-    padding: 6px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-m);
-    box-shadow: var(--elev-dialog);
-    /* Too many rows for the screen: it scrolls, with a scrollbar. ui.js
-       (fitMenu) caps the height at the screen edge the menu would cross. */
-    max-height: calc(100dvh - 16px);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-}
-.top-menu > *            { flex-shrink: 0; }   /* rows keep their height; the menu scrolls instead */
-.menu-item
-{
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 11px 12px;
-    border: none;
-    border-radius: var(--radius-s);
-    background: none;
-    color: var(--text);
-    font: inherit;
-    font-size: 0.95rem;
-    text-align: left;
-    cursor: pointer;
-}
-.menu-item svg           { width: 18px; height: 18px; flex: 0 0 auto; color: var(--text-dim); }
-.menu-item:hover         { background: color-mix(in srgb, var(--text) 9%, transparent); }
-.menu-item:active        { background: color-mix(in srgb, var(--text) 14%, transparent); }
-.menu-item .mi-check     { width: 15px; flex: 0 0 auto; color: var(--accent); visibility: hidden; }
-.menu-item.is-active .mi-check { visibility: visible; }
-.menu-item.danger,
-.menu-item.danger svg    { color: var(--danger); }
-.menu-sep                { height: 1px; margin: 4px 6px; background: var(--line); }
-.menu-label              { padding: 6px 12px 2px; font-size: 0.75rem; font-weight: 600; color: var(--text-dim); }
 
 /* A row for a button that IS on the bar on a PC and only disappears on a
    phone (Write's print, page setup, comments...). The menu carries it for

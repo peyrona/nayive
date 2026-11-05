@@ -160,28 +160,28 @@ try
            await ev( `${frameDoc( 2 )}.scrollHeight > ${frameDoc( 2 )}.clientHeight` ), w[ 2 ] );
 
     // ----- 1b. The window's buttons: on the bar button of the window in front, not in title bars
-    const frontBtn = what => `document.querySelector( '#tasks .task.front [data-win="${what}"]' )`;
+    const frontBtn = what => `document.querySelector( '#tasks .chip[aria-current=true] [data-win="${what}"]' )`;
     async function press( expr ) { const r = await rectOf( expr ); await click( r.left + r.width / 2, r.top + r.height / 2 ); }
     // The Free/Tile switch lives in the "⋮" menu: opened first when shut.
-    async function pressTile( expr ) { if( await ev( "document.getElementById( 'moreMenu' ).hidden" ) ) await press( "document.getElementById( 'moreBtn' )" ); await press( expr ); }
+    async function pressTile( expr ) { if( await ev( "! document.getElementById( 'moreMenu' ).matches( ':popover-open' )" ) ) await press( "document.getElementById( 'moreBtn' )" ); await press( expr ); }
     check( "no dots left in any title bar", await ev( `! document.querySelector( '.win-dots' ) && [].every.call( document.querySelectorAll( '#desk iframe' ),
            function ( f ) { return ! f.contentDocument.querySelector( '.win-dots' ); } )` ) === true );
-    check( "only the bar button in front shows its buttons", await ev( `[].filter.call( document.querySelectorAll( '#tasks .task-ctl' ),
-           function ( c ) { return c.offsetParent !== null; } ).length === 1 && !! document.querySelector( '#tasks .task.front .task-ctl' ).offsetParent` ) === true );
-    check( "its buttons: Scale / Resize, minimise, maximise, close", await ev( `[].map.call( document.querySelectorAll( '#tasks .task.front .task-ctl > [data-win]' ),
+    check( "only the bar button in front shows its buttons", await ev( `[].filter.call( document.querySelectorAll( '#tasks .chip-ctl' ),
+           function ( c ) { return c.offsetParent !== null; } ).length === 1 && !! document.querySelector( '#tasks .chip[aria-current=true] .chip-ctl' ).offsetParent` ) === true );
+    check( "its buttons: Scale / Resize, minimise, maximise, close", await ev( `[].map.call( document.querySelectorAll( '#tasks .chip[aria-current=true] .chip-ctl > [data-win]' ),
            function ( b ) { return b.getAttribute( 'data-win' ); } ).join()` ) === "scale,min,max,close" );
-    const colours = JSON.parse( await ev( `( function () { var cs = getComputedStyle( document.getElementById( 'desktop' ) ), c = function ( w ) { return getComputedStyle( document.querySelector( '#tasks .task.front [data-win="' + w + '"] svg' ) ).color; };
+    const colours = JSON.parse( await ev( `( function () { var cs = getComputedStyle( document.getElementById( 'desktop' ) ), c = function ( w ) { return getComputedStyle( document.querySelector( '#tasks .chip[aria-current=true] [data-win="' + w + '"] svg' ) ).color; };
         var probe = document.createElement( 'i' ); document.body.appendChild( probe ); var tok = function ( v ) { probe.style.color = cs.getPropertyValue( v ).trim(); return getComputedStyle( probe ).color; };
         var out = { scale: [ c( 'scale' ), tok( '--win-scale' ) ], min: [ c( 'min' ), tok( '--warn' ) ], max: [ c( 'max' ), tok( '--ok' ) ], close: [ c( 'close' ), tok( '--danger' ) ] }; probe.remove(); return JSON.stringify( out ); } )()` ) );
     check( "colours: blue Scale / Resize, then the old dots' warn / ok / danger", Object.values( colours ).every( ( [ a, z ] ) => a === z ) && /rgb\(\s*(24, 115, 204|30, 144, 255)/.test( colours.scale[ 0 ] ), colours );
-    const fi = await ev( "NayiveDesktop.windows().findIndex( function ( x ) { return x.name === document.querySelector( '#tasks .task.front span' ).textContent; } )" );
+    const fi = await ev( "NayiveDesktop.windows().findIndex( function ( x ) { return x.name === document.querySelector( '#tasks .chip[aria-current=true] .chip-main span' ).textContent; } )" );
     const sc0 = JSON.parse( await ev( `JSON.stringify( [ NayiveDesktop.windows()[ ${fi} ].scale, ${frontBtn( "scale" )}.dataset.tip, ${frontBtn( "scale" )}.innerHTML.length, ${frontBtn( "scale" )}.getAttribute( 'aria-pressed' ) ] )` ) );
     await press( frontBtn( "scale" ) );
     const sc1 = JSON.parse( await ev( `JSON.stringify( [ NayiveDesktop.windows()[ ${fi} ].scale, ${frontBtn( "scale" )}.dataset.tip, ${frontBtn( "scale" )}.innerHTML.length, ${frontBtn( "scale" )}.getAttribute( 'aria-pressed' ) ] )` ) );
     check( "Scale / Resize button: flips the mode, its icon and its tooltip", sc0[ 0 ] !== sc1[ 0 ] && sc0[ 1 ] !== sc1[ 1 ] && sc0[ 2 ] !== sc1[ 2 ] && sc1[ 3 ] === String( sc1[ 0 ] ) && /^(Scale|Resize)/.test( sc1[ 1 ] ), { sc0, sc1 } );
     await press( frontBtn( "scale" ) );
     check( "Scale / Resize button: and back", await ev( `NayiveDesktop.windows()[ ${fi} ].scale` ) === sc0[ 0 ] );
-    check( "Tile switch: off", await ev( "! document.getElementById( 'tileChk' ).checked && ! document.getElementById( 'tileSw' ).classList.contains( 'idle' )" ) === true );
+    check( "Tile switch: off", await ev( "! document.getElementById( 'tileOn' ).checked && ! document.getElementById( 'tileSw' ).classList.contains( 'idle' )" ) === true );
 
     // A dragged far smaller: stops at the old smallest window, as today.
     await dragMouse( 20 + 700 - 3, 20 + 450 - 3, 20 + 100, 20 + 50 );
@@ -235,7 +235,7 @@ try
 
     // ----- 3. Maximise is always 1:1; restored, it shrinks again
     const f0 = w[ 1 ].factor;
-    check( "B is in front", await ev( "document.querySelector( '#tasks .task.front span' ).textContent" ) === "Box B" );
+    check( "B is in front", await ev( "document.querySelector( '#tasks .chip[aria-current=true] .chip-main span' ).textContent" ) === "Box B" );
     await press( frontBtn( "max" ) );
     w = await wins();
     r = await rectOf( winEl( 1 ) );
@@ -264,11 +264,11 @@ try
 
     // ----- 5. Tile
     // B maximised first, to see Untile give that back.
-    await press( "document.querySelectorAll( '#tasks .task' )[ 1 ]" );          // B's bar button: B to the front
+    await press( "document.querySelectorAll( '#tasks .chip-main' )[ 1 ]" );          // B's bar button: B to the front
     await press( frontBtn( "max" ) );
     const before = await wins();
-    await pressTile( "document.querySelector( '#tileChk' )" );               // the switch: Free -> Tile
-    check( "Tile switch: on, bold Tile", await ev( "document.getElementById( 'tileChk' ).checked && document.getElementById( 'tileSw' ).classList.contains( 'on' )" ) === true );
+    await pressTile( "document.querySelector( '#tileSw .track' )" );               // the switch: Free -> Tile
+    check( "Tile switch: on, bold Tile", await ev( "document.getElementById( 'tileOn' ).checked" ) === true );
     await settle();
     w = await wins();
     const want = JSON.parse( await ev( `JSON.stringify( NayiveTiling.tile( 3, ${D.w}, ${D.h}, { minW: 320, minH: 200 } ) )` ) );
@@ -294,14 +294,14 @@ try
     await dragMouse( want[ 0 ].l + 200, want[ 0 ].t + 22, want[ 0 ].l + 140, want[ 0 ].t + 62 );
     w = await wins();
     check( "Tiled: a window moved by hand stays moved", w[ 0 ].box.t === 40, w[ 0 ].box );
-    await pressTile( "document.querySelector( '#tileSw .tile-word[data-tile=\"on\"]' )" );
+    await pressTile( "document.querySelector( '#tileSw label:last-of-type' )" );
     w = await wins();
     check( "The word Tile, while tiled: tiles again", near( w[ 0 ].box.l, want[ 0 ].l, 0.01 ) && near( w[ 0 ].box.t, want[ 0 ].t, 0.01 ), w[ 0 ].box );
     // ...and a manual move again, to be dropped by Untile.
     await dragMouse( want[ 0 ].l + 200, want[ 0 ].t + 22, want[ 0 ].l + 140, want[ 0 ].t + 62 );
 
     // Minimise C while tiled: the desk is dealt out again, to A and B.
-    await press( "document.querySelectorAll( '#tasks .task' )[ 2 ]" );          // C's bar button: C to the front
+    await press( "document.querySelectorAll( '#tasks .chip-main' )[ 2 ]" );          // C's bar button: C to the front
     await press( frontBtn( "min" ) );
     await settle();
     w = await wins();
@@ -326,8 +326,8 @@ try
 
     // ----- 6. Untile: exactly as before. (A reload puts the bar in stacking
     // order - as it always has - so windows are matched by name from here on.)
-    check( "Reload while tiled: the switch says Tile", await ev( "document.getElementById( 'tileChk' ).checked" ) === true );
-    await pressTile( "document.querySelector( '#tileSw .tile-word[data-tile=\"off\"]' )" );   // the word "Free"
+    check( "Reload while tiled: the switch says Tile", await ev( "document.getElementById( 'tileOn' ).checked" ) === true );
+    await pressTile( "document.querySelector( '#tileSw label:first-of-type' )" );   // the word "Free"
     await settle(); await settle();
     w = await wins();
     const at = name => w.findIndex( x => x.name === name );
@@ -367,7 +367,7 @@ try
     await settle();
     check( "Every window closed while tiled: tiling ends", await ev( "NayiveDesktop.windows().length === 0 && ! NayiveDesktop.isTiled()" ) === true );
     check( "Tile on an empty desk: false, stays off", await ev( "NayiveDesktop.tile()" ) === false && await ev( "NayiveDesktop.isTiled()" ) === false );
-    check( "Empty desk: the switch is greyed and off", await ev( "document.getElementById( 'tileChk' ).disabled && document.getElementById( 'tileSw' ).classList.contains( 'idle' ) && ! document.getElementById( 'tileChk' ).checked" ) === true );
+    check( "Empty desk: the switch is greyed and off", await ev( "document.getElementById( 'tileOn' ).disabled && document.getElementById( 'tileSw' ).classList.contains( 'idle' ) && ! document.getElementById( 'tileOn' ).checked" ) === true );
 
     // ----- 9. A press inside a frame INSIDE the window's page (Planner) brings it forward
     await go( "/nayive/fixture/box.html" );                 // off the desk first: it saves its windows on the way out
@@ -380,7 +380,7 @@ try
     const boxAt  = "[].filter.call( document.querySelectorAll( '#desk > .win' ), function ( w ) { return /n=F/.test( w.querySelector( 'iframe' ).src ); } )[ 0 ]";
     await waitFor( `( function () { try { return /^Box Inner/.test( ${nestAt}.querySelector( 'iframe' ).contentDocument.getElementById( 'inner' ).contentDocument.title ); } catch( e ) { return false; } } )()`, 10000, "inner frame loaded" );
     await settle();
-    const frontName = () => ev( "document.querySelector( '#tasks .task.front span' ).textContent" );
+    const frontName = () => ev( "document.querySelector( '#tasks .chip[aria-current=true] .chip-main span' ).textContent" );
     const fRect = await rectOf( boxAt ), nRect = await rectOf( nestAt );
     await click( fRect.left + fRect.width / 2, fRect.top + fRect.height - 30 );
     const f1 = await frontName();
@@ -457,15 +457,15 @@ try
 
     // Off: no area, the window stays where it is dropped.
     await ev( "document.getElementById( 'moreBtn' ).click(); true" ); await settle();
-    check( "More menu: Sticky windows row shows", await ev( "! document.getElementById( 'moreMenu' ).hidden && document.getElementById( 'stickyChk' ).closest( 'label' ).offsetHeight > 0" ) === true );
+    check( "More menu: Sticky windows row shows", await ev( "!! document.getElementById( 'moreMenu' ).matches( ':popover-open' ) && document.getElementById( 'stickyChk' ).closest( 'label' ).offsetHeight > 0" ) === true );
     const sr = await rectOf( "document.getElementById( 'stickyChk' ).closest( 'label' )" );
     await click( sr.left + 20, sr.top + sr.height / 2 );
-    check( "Sticky windows: a click turns it off, the menu stays open", await ev( "! document.getElementById( 'stickyChk' ).checked && ! document.getElementById( 'moreMenu' ).hidden" ) === true );
+    check( "Sticky windows: a click turns it off, the menu stays open", await ev( "! document.getElementById( 'stickyChk' ).checked && !! document.getElementById( 'moreMenu' ).matches( ':popover-open' )" ) === true );
     check( "Sticky windows: stored for this device", await ev( "JSON.parse( localStorage.getItem( 'balata-desktop' ) ).sticky" ) === false );
     // A press inside a window's page closes the menu.
     const fr2 = await rectOf( boxAt );
     await click( fr2.left + fr2.width / 2, fr2.top + fr2.height - 30 );
-    check( "More menu: a press inside a window hides it", await ev( "document.getElementById( 'moreMenu' ).hidden" ) === true );
+    check( "More menu: a press inside a window hides it", await ev( "! document.getElementById( 'moreMenu' ).matches( ':popover-open' )" ) === true );
     {
         const r0 = await rectOf( boxAt ), x0 = r0.left + 200, y0 = r0.top + 22;
         await mouse( "mouseMoved", x0, y0 ); await mouse( "mousePressed", x0, y0, 1 );
@@ -477,8 +477,9 @@ try
         check( "Sticky off: the window keeps its size", ! near( wb.h, DH, 2 ), wb );
     }
     await ev( "document.getElementById( 'moreBtn' ).click(); true" ); await settle();
-    await ev( "document.getElementById( 'desk' ).dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) ); true" );
-    check( "More menu: a click on the desk hides it", await ev( "document.getElementById( 'moreMenu' ).hidden" ) === true );
+    const tb = await rectOf( "document.getElementById( 'tasks' )" );
+    await click( tb.right - 10, tb.top + tb.height / 2 );
+    check( "More menu: a press outside it hides it", await ev( "! document.getElementById( 'moreMenu' ).matches( ':popover-open' )" ) === true );
 
     // "?" sits on the bar right after the "⋮" (the settings dialog is gone: its rows are in the menu).
     check( "Help: on the bar, right after the dots", await ev( "document.getElementById( 'moreBtn' ).nextElementSibling === document.getElementById( 'helpBtn' ) && document.getElementById( 'helpBtn' ).offsetWidth > 0" ) === true );

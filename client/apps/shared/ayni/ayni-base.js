@@ -4,7 +4,7 @@
      <script src="ayni-i18n.js"></script>
      <script src="ayni-icons.js" defer></script>
      <script src="ayni-base.js" defer></script>
-     <script src="ayni.js" defer></script>            (the controls; later one file per family)
+     <script src="ayni-buttons.js" defer></script>    (and the other families, one file each)
    RULE: a family file (ayni-<family>.js) takes the shared helpers from Ayni.core and hands its start-up to
    Ayni.core.family({ setup, init }): setup runs once, init on the page and on every Ayni.init(root). */
 (() => {
@@ -169,7 +169,7 @@ const applyTheme = () => {
    Light once the sun is LIGHT_AT degrees up, dark once it is DARK_AT degrees down: plain sunrise and sunset are too
    early both ways. The place comes from the page (Ayni.theme.setPlace), rounded to ~10 km and kept on this device:
    it is a fact about where the device is, not about its user. Without one, the main city of the device's time zone
-   (tz-geo.json beside ayni.js); only a zone that table lacks falls back to FALLBACK_RISE to FALLBACK_SET. */
+   (tz-geo.json beside ayni-base.js); only a zone that table lacks falls back to FALLBACK_RISE to FALLBACK_SET. */
 const RAD = Math.PI / 180, LIGHT_AT = 5, DARK_AT = -4, FALLBACK_RISE = 7, FALLBACK_SET = 19, MAX_WAIT = 6 * 3600e3;
 const TZ_URL = document.currentScript?.src ? new URL('tz-geo.json', document.currentScript.src).href : null;
 let sunTimer = null, tzTable = null, tzLoading = false;

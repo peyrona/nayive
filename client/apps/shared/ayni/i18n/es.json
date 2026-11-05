@@ -37,6 +37,8 @@
   "ayni.delete": "Eliminar",
   "ayni.desk.edge": "Posición de la barra de tareas",
   "ayni.desk.edge.bottom": "Barra de tareas abajo",
+  "ayni.desk.edge.left": "Barra de tareas a la izquierda",
+  "ayni.desk.edge.right": "Barra de tareas a la derecha",
   "ayni.desk.edge.top": "Barra de tareas arriba",
   "ayni.desk.taskbar": "Barra de tareas",
   "ayni.dismiss": "Descartar",
@@ -155,7 +157,6 @@
   "ayni.whatIsThis": "¿Qué es esto?",
   "ayni.win.maximise": "Maximizar",
   "ayni.win.minimise": "Minimizar",
-  "ayni.win.more": "Más herramientas",
   "ayni.win.name": "Ventana",
   "ayni.win.restore": "Restaurar"
 }

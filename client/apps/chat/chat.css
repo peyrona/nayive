@@ -655,6 +655,50 @@ dialog.later-sheet      { max-width: min(280px, calc(100vw - 32px)); }
     color: var(--text-dim); background: var(--card2); border-radius: 50%;
 }
 .reacts .more svg  { width: 18px; height: 18px; }
+/* The menu of the hold-on-a-message layer: one action per row, an 18px glyph + a label. */
+.top-menu,
+.menu-item { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.top-menu
+{
+    position: fixed;
+    z-index: 150;
+    min-width: 210px;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    box-shadow: var(--elev-dialog);
+    /* Too many rows for the screen: it scrolls, with a scrollbar. */
+    max-height: calc(100dvh - 16px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.top-menu > *            { flex-shrink: 0; }   /* rows keep their height; the menu scrolls instead */
+.menu-item
+{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 11px 12px;
+    border: none;
+    border-radius: var(--radius-s);
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.95rem;
+    text-align: left;
+    cursor: pointer;
+}
+.menu-item svg           { width: 18px; height: 18px; flex: 0 0 auto; color: var(--text-dim); }
+.menu-item:hover         { background: color-mix(in srgb, var(--text) 9%, transparent); }
+.menu-item:active        { background: color-mix(in srgb, var(--text) 14%, transparent); }
+.menu-item.danger,
+.menu-item.danger svg    { color: var(--danger); }
+.menu-sep                { height: 1px; margin: 4px 6px; background: var(--line); }
 .ctx .top-menu     { position: static; width: 240px; min-width: 0; background: var(--head); }
 .ctx .menu-item    { padding: 9px 12px; }
 .ctx .emojis       { position: static; width: min(340px, 92vw); }

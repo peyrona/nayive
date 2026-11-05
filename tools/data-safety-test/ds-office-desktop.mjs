@@ -21,7 +21,7 @@ const WINS  = "document.querySelectorAll('#desk > .win').length";
 const LAST  = "( function () { var ws = document.querySelectorAll('#desk > .win'); return ws[ ws.length - 1 ]; } )()";
 const FRAME = `${LAST}.querySelector('iframe').contentWindow`;
 const CM    = `${FRAME}.document.querySelector('.CodeMirror').CodeMirror`;
-const closeFront = "document.querySelector('#tasks .task.front [data-win=\"close\"]').click(), true";
+const closeFront = "document.querySelector('#tasks .chip[aria-current=true] [data-win=\"close\"]').click(), true";
 
 // A Text window on `url`, its page up (the document on screen).
 async function textWindow( url, want )

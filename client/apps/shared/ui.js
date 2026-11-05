@@ -501,7 +501,7 @@
     // Just outside the bar's end, where the plug used to sit.
     function placeSyncChip( el )
     {
-        var bar = el.closest( ".topbar, .header, .bar, .trip-header, header" ) || el.parentElement;
+        var bar = el.closest( ".topbar, .header, .bar, .taskbar, .trip-header, header" ) || el.parentElement;
         if( ! bar ) return;
 
         var r = bar.getBoundingClientRect(), W = window.innerWidth, H = window.innerHeight, gap = 6;
@@ -3535,111 +3535,6 @@
     }
 
     //------------------------------------------------------------------------//
-    // "MORE" MENU  -  the desktop's own bar popups only (its ⋮, the weather;
-    // desktop/index.html), until the desktop family moves to Ayni. Every other
-    // menu is an Ayni menu (shared/ayni/ayni-menus.js). The menu is a
-    // `.top-menu` (shared/app.css: position fixed) anchored under its button;
-    // a click on an item, outside, Escape, or a resize closes it.
-    //
-    //   var menu = NayiveUI.wireMenu( { btn: "moreBtn", menu: "topMenu",
-    //                                   onPick: function ( item ) { ... } } );
-    //   menu.open() / menu.close() / menu.isOpen()
-    function wireMenu( opts )
-    {
-        var btn  = typeof opts.btn  === "string" ? byId( opts.btn )  : opts.btn;
-        var menu = typeof opts.menu === "string" ? byId( opts.menu ) : opts.menu;
-        if( ! btn || ! menu ) return null;
-
-        function place()
-        {
-            var r = btn.getBoundingClientRect();
-            menu.style.top   = ( r.bottom + 4 ) + "px";
-            menu.style.left  = "auto";
-            menu.style.right = Math.max( 6, window.innerWidth - r.right ) + "px";
-        }
-
-        // Right-aligned under its button is right for a header "..." at the end
-        // of the row; a trigger sitting near the LEFT edge (Text's "?" on a
-        // phone) would push the card off screen instead. Measured once it is
-        // shown, and only then flipped to hang off its left edge.
-        function keepInside()
-        {
-            var r = menu.getBoundingClientRect();
-            if( r.left >= 6 ) return;
-            menu.style.right = "auto";
-            menu.style.left  = "6px";
-        }
-        function isOpen() { return ! menu.hidden; }
-        function open()
-        {
-            place();
-            menu.hidden = false;
-            keepInside();
-            btn.setAttribute( "aria-expanded", "true" );
-        }
-        function close()
-        {
-            if( menu.hidden ) return;
-            menu.hidden = true;
-            btn.setAttribute( "aria-expanded", "false" );
-        }
-
-        btn.addEventListener( "click", function ( e )
-        {
-            e.stopPropagation();                  // or the document handler below closes it again
-            if( isOpen() ) close(); else open();
-        } );
-        menu.addEventListener( "click", function ( e )
-        {
-            var item = e.target.closest( "button" );
-            if( ! item ) return;
-            close();
-            if( opts.onPick ) opts.onPick( item );
-        } );
-        document.addEventListener( "click", function ( e )
-        {
-            if( isOpen() && ! menu.contains( e.target ) && ! btn.contains( e.target ) ) close();
-        } );
-        document.addEventListener( "keydown", function ( e )
-        {
-            if( e.key === "Escape" && isOpen() ) { e.preventDefault(); close(); }
-        } );
-        window.addEventListener( "resize", close );
-
-        return { open: open, close: close, isOpen: isOpen };
-    }
-
-    // A popup menu taller than the room it has scrolls (app.css: .top-menu
-    // overflow-y auto) instead of running off the screen. Every app places its
-    // menus its own way, so this watches them all: when a .top-menu shows (its
-    // `hidden` goes, or it is added), its height is capped at the edge it
-    // would cross - the bottom for one hung under its button, the top for one
-    // that rises above it (Chat's send menu, the desktop bar at the bottom).
-    function fitMenu( m )
-    {
-        m.style.maxHeight = "";
-        if( m.hidden || ! m.isConnected ) return;
-        var r = m.getBoundingClientRect(), vh = window.innerHeight, pad = 8;
-        if( r.bottom > vh - pad && r.top >= pad )
-            m.style.maxHeight = Math.max( 120, vh - pad - r.top ) + "px";
-        else if( r.top < pad && r.bottom <= vh - pad )
-            m.style.maxHeight = Math.max( 120, r.bottom - pad ) + "px";
-    }
-    function isMenu( n ) { return n.nodeType === 1 && n.classList.contains( "top-menu" ); }
-    new MutationObserver( function ( recs )
-    {
-        var seen = [];
-        recs.forEach( function ( rec )
-        {
-            var list = rec.type === "attributes" ? [ rec.target ] : rec.addedNodes;
-            for( var i = 0; i < list.length; i++ )
-                if( isMenu( list[ i ] ) && seen.indexOf( list[ i ] ) < 0 ) seen.push( list[ i ] );
-        } );
-        seen.forEach( fitMenu );
-    } ).observe( document.documentElement, { subtree: true, childList: true,
-                                             attributes: true, attributeFilter: [ "hidden" ] } );
-
-    //------------------------------------------------------------------------//
     // CLOSE-ONLY DIALOGS  -  the GNOME way (docs/audit/dialogs.md): a settings
     // dialog has only its ×, and every change is kept. × = Escape = close =
     // KEEP. Ayni.autoSave( field, save, o ) saves one field on its own; the
@@ -3759,7 +3654,6 @@
         syncIndicator:  syncIndicator,    // a ready store.onState listener for #syncIndicator
         bootWithStore:  bootWithStore,    // the access probe + "open from cache" fallback
         wireRefresh:    wireRefresh,      // visibilitychange / focus / plug-click re-read
-        wireMenu:       wireMenu,         // the header "..." popup menu
         h:                 h,             // build DOM: h( "div", { class, text, on, attrs, data }, kids… )
         attachPanel:       attachPanel,   // the clip's round-button panel (Chat, eMail)
         applySheetButtons: applySheetButtons,

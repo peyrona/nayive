@@ -82,8 +82,8 @@ const RULES = `( async () => { const o = [];
             if( i.closest( OWN ) || i.matches( OWN ) || i.closest( '#ayni-iconset' ) ) continue;
             const t = i.type;
             if( /^(date|time|datetime-local|month|week)$/.test( t ) ) o.push( 'browser date box: ' + name( i ) );
-            if( t === 'number' && i.id !== 'calYear' ) o.push( 'number box outside a .spin: ' + name( i ) );
-            if( /^(text|password|email|url|tel|search|textarea)$/.test( t ) && ! i.classList.contains( 'input' ) && i.id !== 'calYear' ) o.push( 'not an Ayni .input: ' + name( i ) );
+            if( t === 'number' ) o.push( 'number box outside a .spin: ' + name( i ) );
+            if( /^(text|password|email|url|tel|search|textarea)$/.test( t ) && ! i.classList.contains( 'input' ) ) o.push( 'not an Ayni .input: ' + name( i ) );
             if( i.checkVisibility() && i.type !== 'hidden' && i.type !== 'file' )
             {
                 const r = i.getBoundingClientRect();

@@ -208,6 +208,7 @@ var PRECACHE_SHELL = [
     "shared/ayni/ayni-menus.js",
     "shared/ayni/ayni-pickers.css",
     "shared/ayni/ayni-pickers.js",
+    "shared/ayni/ayni-desktop.css",
     "shared/ayni/ayni-layout.css",
     "shared/ayni/ayni-layout.js",
     "shared/ayni/ayni-search.css",

@@ -37,6 +37,8 @@
   "ayni.delete": "Delete",
   "ayni.desk.edge": "Taskbar position",
   "ayni.desk.edge.bottom": "Taskbar at the bottom",
+  "ayni.desk.edge.left": "Taskbar on the left",
+  "ayni.desk.edge.right": "Taskbar on the right",
   "ayni.desk.edge.top": "Taskbar at the top",
   "ayni.desk.taskbar": "Taskbar",
   "ayni.dismiss": "Dismiss",
@@ -155,7 +157,6 @@
   "ayni.whatIsThis": "What is this?",
   "ayni.win.maximise": "Maximise",
   "ayni.win.minimise": "Minimise",
-  "ayni.win.more": "More tools",
   "ayni.win.name": "Window",
   "ayni.win.restore": "Restore"
 }

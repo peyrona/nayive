@@ -295,11 +295,11 @@ try
         // Desktop: the bar's side, from a row of the ⋮ menu
         await open( "desktop", 1280, 900 );
         await press( "#moreBtn" );
-        ok( await until( "! document.getElementById('moreMenu').hidden", 2000 ), "Desktop: the ⋮ menu" );
+        ok( await until( "! ! document.getElementById('moreMenu').matches(':popover-open')", 2000 ), "Desktop: the ⋮ menu" );
         await press( fieldOf( "setBar" ) );
         ok( await isOpen( "setBar" ), "…the bar's side opens its list over the menu" );
         await pickItem( "setBar", "top" );
-        ok( await ev( "! document.getElementById('moreMenu').hidden && ( JSON.parse( localStorage.getItem('balata-desktop') ) || {} ).bar === 'top'" ), "…a pick moves the bar to the top and leaves the menu open" );
+        ok( await ev( "! ! document.getElementById('moreMenu').matches(':popover-open') && ( JSON.parse( localStorage.getItem('balata-desktop') ) || {} ).bar === 'top'" ), "…a pick moves the bar to the top and leaves the menu open" );
         await shot( "desktop-menu-row" );
         await press( fieldOf( "setBar" ) );
         await pickItem( "setBar", "bottom" );

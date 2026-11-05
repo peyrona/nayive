@@ -336,29 +336,33 @@ try
     await deskReady( 1 ); await settle();
     check( "Touch screen: body.touch", await ev( "document.body.classList.contains( 'touch' )" ) === true );
     check( "Touch screen: the bar is at least 56px", await ev( "document.getElementById( 'bar' ).offsetHeight" ) >= 56 );
-    check( "Touch screen: the window's buttons are 36px", await ev( "document.querySelector( '.task.front .task-x' ).offsetWidth" ) === 36 );
+    check( "Touch screen: the window's buttons are 36px", await ev( "document.querySelector( '.chip[aria-current=true] .chip-ctl .btn' ).offsetWidth" ) === 36 );
     check( "Touch screen: the resize edge is 20px", await ev( "document.querySelector( '.grip.e' ).offsetWidth" ) === 20 );
     await waitFor( "document.querySelector( '#desk > .win' ).classList.contains( 'chromeless' )", 5000, "app row adopted" );
     check( "Touch: the app's own top row takes no scroll (a finger drags the window)",
            await ev( "document.querySelector( '#desk > .win iframe' ).contentDocument.querySelector( '.topbar' ).style.touchAction" ) === "none" );
     check( "Touch: our own title bar and edges take no scroll", await ev( "getComputedStyle( document.querySelector( '.win-bar' ) ).touchAction === 'none' && getComputedStyle( document.querySelector( '.grip' ) ).touchAction === 'none'" ) === true );
     await shot( "touch-bar" );
-    // Long press on an empty spot of the desk = right-click.
-    const press = ( type, kind ) => `document.getElementById( 'desk' ).dispatchEvent( new PointerEvent( '${type}', { bubbles: true, pointerType: '${kind}', pointerId: 7, clientX: 1000, clientY: 600, button: 0 } ) )`;
-    await ev( press( "pointerdown", "touch" ) ); await sleep( 200 ); await ev( press( "pointerup", "touch" ) ); await sleep( 600 );
-    check( "A short tap: no menu", await ev( "document.getElementById( 'moreMenu' ).hidden" ) === true );
-    await ev( press( "pointerdown", "touch" ) ); await sleep( 750 );
-    check( "A long press: the ⋮ menu opens", await ev( "document.getElementById( 'moreMenu' ).hidden" ) === false );
-    await ev( press( "pointerup", "touch" ) + "; document.getElementById( 'desk' ).dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) ); true" );
-    check( "...and the lift's click does not close it again", await ev( "document.getElementById( 'moreMenu' ).hidden" ) === false );
-    await sleep( 50 );
-    await ev( "document.getElementById( 'desk' ).dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) ); true" );
-    check( "A later click closes it, as always", await ev( "document.getElementById( 'moreMenu' ).hidden" ) === true );
-    await ev( press( "pointerdown", "mouse" ) ); await sleep( 750 ); await ev( press( "pointerup", "mouse" ) );
-    check( "A mouse held down: no menu (it has its right button)", await ev( "document.getElementById( 'moreMenu' ).hidden" ) === true );
+    // Long press on an empty spot of the desk = right-click (Ayni.longTap, real touches).
+    const finger = ( type ) => c.send( "Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [ { x: 1000, y: 600 } ] } );
+    const shut = "! document.getElementById( 'moreMenu' ).matches( ':popover-open' )";
+    await finger( "touchStart" ); await sleep( 200 ); await finger( "touchEnd" ); await sleep( 600 );
+    check( "A short tap: no menu", await ev( shut ) === true );
+    await finger( "touchStart" ); await sleep( 750 );
+    check( "A long press: nothing yet while the finger is down", await ev( shut ) === true );
+    await finger( "touchEnd" ); await sleep( 400 );
+    check( "...the ⋮ menu opens as it lifts, and stays", await ev( shut ) === false );
+    await sleep( 400 );      // (the popup hangs over 1000, 600 now)
+    await c.send( "Input.dispatchMouseEvent", { type: "mousePressed", x: 300, y: 20, button: "left", buttons: 1, clickCount: 1 } );
+    await c.send( "Input.dispatchMouseEvent", { type: "mouseReleased", x: 300, y: 20, button: "left", clickCount: 1 } ); await sleep( 150 );
+    check( "A later press outside closes it, as always", await ev( shut ) === true );
+    await c.send( "Input.dispatchMouseEvent", { type: "mouseMoved", x: 1000, y: 600 } );
+    await c.send( "Input.dispatchMouseEvent", { type: "mousePressed", x: 1000, y: 600, button: "left", buttons: 1, clickCount: 1 } ); await sleep( 750 );
+    await c.send( "Input.dispatchMouseEvent", { type: "mouseReleased", x: 1000, y: 600, button: "left", clickCount: 1 } );
+    check( "A mouse held down: no menu (it has its right button)", await ev( shut ) === true );
     await ev( "__setPtr( true, false ); true" ); await settle();
     check( "No touch screen (a PC): no body.touch, the bar as set", await ev( "! document.body.classList.contains( 'touch' ) && document.getElementById( 'bar' ).offsetHeight" ) === 48 );
-    check( "No touch screen: the window's buttons as before (22px)", await ev( "document.querySelector( '.task.front .task-x' ).offsetWidth" ) === 22 );
+    check( "No touch screen: the window's buttons are 30px", await ev( "document.querySelector( '.chip[aria-current=true] .chip-ctl .btn' ).offsetWidth" ) === 30 );
 
     // ===== 5. THE ON-SCREEN KEYBOARD =====
     const W1 = { url: "/nayive/fixture/box.html?n=K", l: "100px", t: "100px", w: "600px", h: "600px" };
@@ -390,13 +394,13 @@ try
     check( "...and goes back where it was", near( kr.top, before.top, 1 ) && near( kr.height, before.height, 1 ), kr );
     // Another window comes to the front while the keyboard is up.
     await ev( "__kb( 350 ); true" ); await settle();
-    await ev( "document.querySelectorAll( '#tasks .task' )[ 0 ].click(); true" ); await settle();
+    await ev( "document.querySelectorAll( '#tasks .chip-main' )[ 0 ].click(); true" ); await settle();
     check( "Front changes: the old one gets its size back", near( ( await winRect( 1 ) ).height, 600, 1 ) );
     check( "Front changes: the new one is clear of the keyboard (it already was)", ( await winRect( 0 ) ).bottom <= edge + 1 );
     await ev( "__kb( 0 ); true" ); await settle();
     // Maximised.
-    await ev( "document.querySelectorAll( '#tasks .task' )[ 1 ].click(); true" ); await settle();
-    await ev( "document.querySelector( '.task.front [data-win=\"max\"]' ).click(); true" ); await settle();
+    await ev( "document.querySelectorAll( '#tasks .chip-main' )[ 1 ].click(); true" ); await settle();
+    await ev( "document.querySelector( '.chip[aria-current=true] [data-win=\"max\"]' ).click(); true" ); await settle();
     await ev( "__kb( 350 ); true" ); await settle();
     kr = await winRect( 1 );
     check( "Maximised, keyboard up: it ends at the keyboard's edge", near( kr.bottom, edge, 2 ) && near( kr.top, deskTop, 1 ), kr );
@@ -404,7 +408,7 @@ try
     const deskH = await ev( "document.getElementById( 'desk' ).clientHeight" );
     kr = await winRect( 1 );
     check( "Maximised, keyboard gone: the whole desk again", near( kr.height, deskH, 1 ), { kr, deskH } );
-    await ev( "document.querySelector( '.task.front [data-win=\"max\"]' ).click(); true" ); await settle();
+    await ev( "document.querySelector( '.chip[aria-current=true] [data-win=\"max\"]' ).click(); true" ); await settle();
     // Scale on, shrunk: still ends at the edge.
     await ev( "NayiveDesktop.scale( 1, true ); true" ); await settle();
     const wsS = await wins();

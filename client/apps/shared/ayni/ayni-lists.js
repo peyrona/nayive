@@ -2,7 +2,7 @@
    the picked items' group in the title row), drag and drop onto rows (Ayni.dropZone), the tree view (editable, or
    navigation beside a list) and Move to… (Ayni.pickNode). Shared with the list picker: type-ahead (Ayni.makeTypeAhead).
    Plain JavaScript, no build step, evergreen browsers 2024+. Load it after ayni-menus.js (menus, long tap, fitBar) and
-   ayni-dialogs.js (Move to…), before ayni.js:
+   ayni-dialogs.js (Move to…):
      <script src="ayni-menus.js" defer></script>
      <script src="ayni-dialogs.js" defer></script>
      <script src="ayni-lists.js" defer></script>
