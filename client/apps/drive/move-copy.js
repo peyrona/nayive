@@ -214,7 +214,7 @@ async function undoMoves( steps, failKey )
         {
             try { await withBusy( AyniNet.rename( s.to, s.from ) ); }
             catch( e ) { err = err || e; continue; }
-            back.push( [ s.to, s.from ] );
+            back.push( [ s.to, s.from, !! s.bin ] );     // [2]: followFolders, media.js
         }
         if( s.bin ) ids.push.apply( ids, s.bin );
     }

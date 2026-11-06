@@ -106,7 +106,7 @@
                 { svg: Ayni.icon( 'link', '', 19 ), name: Ayni.t( 'drive.copyLink' ),   text: Ayni.t( 'drive.introLink' ), tour: { sel: '.sel-group [data-sel-act="link"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
                 { svg: Ayni.icon( 'share', '', 19 ), name: Ayni.t( 'ui.share' ),         text: Ayni.t( 'drive.introShare' ), tour: { sel: '.sel-group [data-sel-act="share"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
                 { svg: Ayni.icon( 'zip', '', 19 ), name: Ayni.t( 'drive.compress' ),   text: Ayni.t( 'drive.introCompress' ), tour: { sel: '.sel-group [data-sel-act="compress"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
-                { svg: Ayni.icon( 'move-to', '', 19 ), name: Ayni.t( 'drive.properties' ), text: Ayni.t( 'drive.introProps' ), tour: { sel: '.sel-group [data-sel-act="props"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
+                { sel: '#propsBtn', text: Ayni.t( 'drive.introProps' ) },
                 { svg: Ayni.icon( 'trash', '', 19 ), name: Ayni.t( 'ui.toTrash' ),       text: Ayni.t( 'drive.introTrash' ), tour: { sel: '.sel-group [data-sel-act="bin"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
                 // Fixed names: both tooltips turn into "Back to Drive" while
                 // their view is open (render in tree.js).
@@ -114,7 +114,9 @@
                   text: Ayni.t( 'drive.introBigFiles' ) },
                 { sel: '#trashViewBtn', name: Ayni.t( 'acct.trash' ),
                   text: Ayni.t( 'drive.introOpenTrash' ) },
-                { sel: '#moreBtn',         text: Ayni.t( 'drive.introMore' ) }
+                { sel: '#settingsBtn',     text: Ayni.t( 'drive.introSettings' ) },
+                { sel: '#moreBtn',         text: Ayni.t( 'drive.introMore' ) },
+                { icon: 'folder', name: Ayni.t( 'drive.folder' ), text: Ayni.t( 'drive.introMarks' ), tour: false }
             ],
             // The guided tour ("Ver el tour" in the card): the folders, the card's
             // rows - the selection's ones with the first row picked (`picked`),
@@ -206,6 +208,13 @@
                          hidden while everything fits. -->
                     <button id="moreBtn" class="btn" type="button" hidden aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:ui.moreOptions, aria-label:ui.moreOptions">
                         <span class="icon" data-icon="more"></span>
+                    </button>
+                    <button id="settingsBtn" class="btn" type="button" data-rank="30" data-i18n-attr="data-tip:ui.settings, aria-label:ui.settings">
+                        <span class="icon" data-icon="settings" style="--icon:18px"></span>
+                    </button>
+                    <!-- What is picked, or else the open folder. -->
+                    <button id="propsBtn" class="btn" type="button" data-rank="0.5" data-i18n-attr="data-tip:drive.properties, aria-label:drive.properties">
+                        <span class="icon" data-icon="info" style="--icon:18px"></span>
                     </button>
                     <button class="btn" data-help-open data-rank="31" type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help">
                         <span class="icon" data-icon="help" style="--icon:18px"></span>
@@ -363,6 +372,73 @@
         </div>
     </dialog>
 
+    <!-- Settings (settings.js): close-only, each field is kept as it changes. -->
+    <dialog id="settingsBackdrop" class="panel">
+        <header>
+            <h2 data-i18n="ui.settings"></h2>
+            <button class="btn" id="settingsCloseBtn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
+            <div class="field">
+                <label><span data-i18n="drive.setFolders"></span> <button class="info-tip" type="button" data-i18n-attr="data-help:drive.setFoldersInfo"></button></label>
+                <div id="setFolders"></div>
+            </div>
+
+            <div class="field">
+                <label for="setSort" data-i18n="drive.setSort"></label>
+                <div class="picker" id="setSort">
+                    <input type="hidden" value="name">
+                    <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                        <li role="option" data-value="name" data-i18n="drive.sortName"></li>
+                        <li role="option" data-value="date" data-i18n="drive.sortDate"></li>
+                        <li role="option" data-value="size" data-i18n="drive.sortSize"></li>
+                        <li role="option" data-value="type" data-i18n="drive.sortType"></li>
+                    </ul></div>
+                </div>
+            </div>
+
+            <div class="set-switch">
+                <span data-i18n="drive.setThumbs"></span> <button class="info-tip" type="button" data-i18n-attr="data-help:drive.setThumbsInfo"></button>
+                <label class="switch"><input role="switch" type="checkbox" id="setThumbs" data-i18n-attr="aria-label:drive.setThumbs"></label>
+            </div>
+
+            <div class="field">
+                <label for="setConvert"><span data-i18n="drive.setConvert"></span> <button class="info-tip" type="button" data-i18n-attr="data-help:drive.setConvertInfo"></button></label>
+                <div class="picker" id="setConvert">
+                    <input type="hidden" value="ask">
+                    <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                        <li role="option" data-value="ask" data-i18n="drive.askEachTime"></li>
+                        <li role="option" data-value="always" data-i18n="drive.convertYes"></li>
+                        <li role="option" data-value="never" data-i18n="drive.convertNo"></li>
+                    </ul></div>
+                </div>
+            </div>
+
+            <div class="set-switch">
+                <span data-i18n="drive.setTwin"></span> <button class="info-tip" type="button" data-i18n-attr="data-help:drive.setTwinInfo"></button>
+                <label class="switch"><input role="switch" type="checkbox" id="setTwin" data-i18n-attr="aria-label:drive.setTwin"></label>
+            </div>
+
+            <div class="field">
+                <label for="setClash"><span data-i18n="drive.setClash"></span> <button class="info-tip" type="button" data-i18n-attr="data-help:drive.setClashInfo"></button></label>
+                <div class="picker" id="setClash">
+                    <input type="hidden" value="ask">
+                    <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                        <li role="option" data-value="ask" data-i18n="drive.askEachTime"></li>
+                        <li role="option" data-value="keep" data-i18n="drive.keepBoth"></li>
+                    </ul></div>
+                </div>
+            </div>
+
+            <div class="field" id="setDaysField" hidden>
+                <label for="setDays"><span data-i18n="drive.setDays"></span> <button class="info-tip" type="button" data-i18n-attr="data-help:drive.trashDaysInfo"></button></label>
+                <span class="input-group spin"><input class="input" type="number" id="setDays" min="1" max="90"></span>
+            </div>
+
+            <p id="setMsg" class="form-error" hidden></p>
+        </div>
+    </dialog>
+
     <!-- Upload: warn before overwriting files that already exist at the destination -->
     <dialog id="replaceBackdrop" class="panel">
         <header>
@@ -499,5 +575,6 @@
     <script src="actions.js" defer></script>
     <script src="move-copy.js" defer></script>
     <script src="zip.js" defer></script>
+    <script src="settings.js" defer></script>
 </body>
 </html>

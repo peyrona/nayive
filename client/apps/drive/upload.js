@@ -204,8 +204,11 @@ let convertResolver = null;
 // server has no ffmpeg: then there is nothing to offer.
 async function askConvert( videos )
 {
+    if( drivePrefs.convert === 'never' ) return 'plain';        // Settings
+
     const st = await getJson( '/api/convert' );
     if( ! st || ! st.available ) return 'plain';
+    if( drivePrefs.convert === 'always' ) return 'convert';     // Settings
 
     // "te avisaremos" must not be a lie: warn when NO device of this
     // user has notifications on (per user - a phone may have them).
@@ -839,6 +842,9 @@ async function filesThere( items, dest )
     return there;
 }
 
+// The twin an upload makes: none when Settings turned them off.
+function uploadTwinRel( relPath ) { return drivePrefs.officeTwin ? officeTwinRel( relPath ) : ''; }
+
 // What an upload item would land on at the destination: the file itself,
 // and - for a LibreOffice document - its twin. Each is a clash of its own:
 // the question lists both (a .docx edited in Write since must be seen to be
@@ -846,7 +852,7 @@ async function filesThere( items, dest )
 // to list, [] when nothing clashes.
 function markClash( it, there )
 {
-    const twin = officeTwinRel( it.relPath );
+    const twin = uploadTwinRel( it.relPath );
     it.fileThere = there.has( it.relPath );
     it.twinThere = !! twin && there.has( twin );
     const names = [];
@@ -962,7 +968,24 @@ async function uploadItems( items )
         return names.length > 0;
     } );
 
-    if( collisions.length )
+    // Settings said "Keep both": each clashing file takes a free name and no
+    // question is asked. Nothing is replaced: it goes up create-only (sendNew)
+    // and a twin that is there is left as it is.
+    if( collisions.length && drivePrefs.clash === 'keep' )
+    {
+        const taken = new Set();
+        try
+        {
+            for( const it of collisions )
+            {
+                if( ! it.fileThere ) continue;
+                it.relPath = await freeRel( dest, it.relPath, taken );
+                taken.add( it.relPath );
+            }
+        }
+        catch( _ ) { setStatus( '' ); Ayni.toast( 'err', T( 'drive.checkDestFailed' ) ); return; }
+    }
+    else if( collisions.length )
     {
         const choice = await askReplace( clashNames, collisions.length === items.length );
 
@@ -1004,7 +1027,7 @@ async function uploadItems( items )
     {
         need += it.file.size;
         if( toConvert.has( it ) ) need += it.file.size;   // the mp4 sits beside it until done
-        if( officeTwinRel( it.relPath ) ) need += it.file.size;   // its twin, about as big
+        if( uploadTwinRel( it.relPath ) ) need += it.file.size;   // its twin, about as big
         if( it.replaceFile ) need -= there.get( it.relPath ) || 0;   // overwrite frees the old bytes
     }
     if( ! await NayiveUI.ensureRoom( need ) ) { setStatus( '' ); return; }
@@ -1076,7 +1099,7 @@ async function uploadItems( items )
             }
             if( conv ) converting++;
             // Its twin replaces one only when "Replace" was said to it too.
-            if( officeTwinRel( relPath ) )
+            if( uploadTwinRel( relPath ) )
                 toOffice.push( { path: joinPath( dest, relPath ), name: relPath.split( '/' ).pop(),
                                  replace: !! it.replaceTwin && relPath === it.relPath } );
         }

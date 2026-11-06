@@ -26,9 +26,11 @@ async function _tryAutoAccess_()
         // A regular user's "Home" IS their files/ folder.
         computeFsRoot();
         currentFolder   = FS_ROOT;
+        await loadDrivePrefs();                             // Settings: the listing's order, the previews
 
         document.getElementById( 'app' ).style.display = '';
         await loadListing( FS_ROOT );                       // fills the listing + renders
+        loadFolderMarks();                                  // the folders' badges, when they come
         await applyDeepLink();
         pollConvert();   // a conversion may still be running from an earlier upload
         refreshDiskGauge();                                 // fill the server-HD bar under the title
@@ -63,6 +65,10 @@ function wireStaticUI()
     AyniNet.onFilesChanged( onFilesNews );                         // another app saved here (toolbar.js)
     listenStoreSaves();                                           // Write/Calc/Text saves (toolbar.js)
     document.addEventListener( 'visibilitychange', catchUpNews );
+    document.getElementById( 'propsBtn'          ).addEventListener( 'click', function()
+    {
+        openProperties( selectedPaths.size ? Array.from( selectedPaths ) : [ currentFolder ] );
+    } );
     document.getElementById( 'trashViewBtn'      ).addEventListener( 'click', function() { trashMode ? closeTrash() : openTrash(); } );
     document.getElementById( 'bigFilesBtn'       ).addEventListener( 'click', function() { bigMode ? endAdvSearch() : openBigFiles(); } );
 
@@ -207,4 +213,5 @@ function wireStaticUI()
 
     wireBrowser();      // picking, the actions, the menu and the drops (menus.js)
     wireZip();          // the .zip list and "Extract here" (zip.js)
+    wireSettings();     // the Settings dialog (settings.js)
 }

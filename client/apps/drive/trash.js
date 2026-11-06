@@ -13,8 +13,6 @@ async function openTrash()
     try
     {
         trashItems = shownTrash( await withBusy( AyniNet.trashList() ) );
-        try { trashDays = ( await AyniNet.trashDays() ).days; }
-        catch( _e ) { trashDays = null; }
         trashMode  = true;
         clearSel();
         clearSearch();
@@ -65,53 +63,6 @@ function renderTrashBar()
         held.className   = 'trash-held';
         held.textContent = fmtSize( binHeld( trashItems ) );
         bar.appendChild( held );
-    }
-
-    if( trashDays != null )
-    {
-        const dwrap = document.createElement( 'label' );
-        dwrap.className   = 'trash-days';
-        const before = document.createElement( 'span' );   // on a phone only the number and the (i) stay
-        before.className   = 'trash-words';
-        before.textContent = T( 'drive.deleteAfter' );
-        dwrap.appendChild( before );
-
-        const dinput = document.createElement( 'input' );
-        dinput.className = 'input';
-        dinput.type  = 'number';
-        dinput.min   = '1';
-        dinput.max   = '90';
-        dinput.value = trashDays;
-        dinput.addEventListener( 'change', async function()
-        {
-            let v = parseInt( dinput.value, 10 );
-            if( ! Number.isFinite( v ) ) { dinput.value = trashDays; return; }
-            v = Math.max( 1, Math.min( 90, v ) );
-            try
-            {
-                const res = await AyniNet.setTrashDays( v );
-                trashDays = res.days;
-                dinput.value = trashDays;
-                flashStatus( TF( 'drive.deleteAfterMsg', { n: trashDays } ) );
-            }
-            catch( _ ) { dinput.value = trashDays; setStatus( T( 'drive.saveFailedShort' ) ); }
-        } );
-        const dspin = document.createElement( 'span' );
-        dspin.className = 'input-group spin';
-        dspin.appendChild( dinput );
-        dwrap.appendChild( dspin );
-        const after = document.createElement( 'span' );
-        after.className   = 'trash-words';
-        after.textContent = T( 'acct.days' );
-        dwrap.appendChild( after );
-
-        const dinfo = document.createElement( 'button' );
-        dinfo.className = 'info-tip';
-        dinfo.setAttribute( 'data-help', T( 'drive.trashDaysInfo' ) );
-        dwrap.appendChild( dinfo );
-        Ayni.init( dwrap );
-
-        bar.appendChild( dwrap );
     }
 
     const empty = document.createElement( 'button' );

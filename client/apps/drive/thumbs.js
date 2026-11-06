@@ -44,7 +44,7 @@ function thumbUrl( path ) { return AyniNet.fileUrl( path ) + '&immutable=1'; }  
 // glyph stays underneath, shown again if no preview can be had.
 function addThumb( row, node )
 {
-    if( ! thumbable( node ) ) return;
+    if( ! drivePrefs.thumbs || ! thumbable( node ) ) return;    // Settings: previews off
 
     const path = AyniPhoto.thumbPath( node.size, node.mtime );
     const st   = thumbState.get( path );

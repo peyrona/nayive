@@ -84,6 +84,7 @@ function render()
     binBtn.ayniFitPin = trashMode;
     Ayni.setTip( binBtn, T( trashMode ? 'drive.backToDrive' : 'acct.trash' ) );
     document.getElementById( 'trashTools' ).hidden = ! trashMode;
+    document.getElementById( 'propsBtn' ).hidden   = trashMode;
     // "Biggest files" is the same kind of switch.
     const bigBtn = document.getElementById( 'bigFilesBtn' );
     bigBtn.setAttribute( 'aria-pressed', bigMode );

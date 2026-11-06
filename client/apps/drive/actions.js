@@ -152,9 +152,9 @@ async function confirmRename()
 
 let propsToken = 0;   // bumped on each open; a walk that lands late and no longer matches is dropped
 
-function openProperties()
+function openProperties( paths )
 {
-    const nodes = actionTargets().map( propsNode ).filter( Boolean );
+    const nodes = ( paths || actionTargets() ).map( propsNode ).filter( Boolean );
     if( ! nodes.length ) return;
 
     const token = ++propsToken;
@@ -172,12 +172,13 @@ function openProperties()
         const node = nodes[0];
         const dir  = isDir( node );
 
-        propRow( dl, T( 'drive.propName'     ), displayName( node ) );
+        const atHome = node.path === FS_ROOT;     // Home is nowhere: no location, and its own name
+        propRow( dl, T( 'drive.propName'     ), atHome ? homeName() : displayName( node ) );
         propRow( dl, T( 'drive.propType'     ), dir ? T( 'drive.folder' )
                                               : linkBroken( node ) ? T( 'drive.shortcutBroken' )
                                               : isLink( node ) ? TF( 'drive.shortcutTo', { path: fsRel( node.link.to ) || homeName() } )
                                               : fileKind( node ) );
-        propRow( dl, T( 'drive.propLocation' ), parentLabel( node.path ) );
+        if( ! atHome ) propRow( dl, T( 'drive.propLocation' ), parentLabel( node.path ) );
 
         if( dir )
         {
@@ -192,6 +193,8 @@ function openProperties()
 
         if( node.mtime )                    propRow( dl, T( 'drive.propModified' ), fmtDateTime( node.mtime ) );
         if( node.shared && node.shared.by ) propRow( dl, T( 'drive.propShared'   ), node.shared.by );
+        const sharedWith = sharedWithLabel( node.path );
+        if( sharedWith )                    propRow( dl, T( 'drive.propSharedWith' ), sharedWith );
     }
     else
     {

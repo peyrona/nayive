@@ -137,6 +137,7 @@ try
     ok( panel && panel.n === 3 && panel.labels.join( "|" ) === "Doc. local|Doc. de Nayive|Galería", "the panel: this device, Nayive, gallery", panel );
     ok( panel && panel.display === "grid" && panel.cols === 3 && panel.ai === "54px x 54px".replace( / x /, "x" ) && panel.round === "50%", "Chat's look: 3 columns, round 54px buttons", panel );
     ok( panel && new Set( panel.colors ).size === 3, "each choice its own colour", panel && panel.colors );
+    ok( await c.evaluate( "!! document.querySelector( '#i-nayive image' ) && !! document.querySelector( '.attach .att[data-c=\"0\"] .ai use' )" ), "the Nayive tile draws the real logo" );
     ok( panel && panel.under && panel.inside, "under the clip, on screen", panel );
     await shot( c, "02-clip-panel" );
     await c.evaluate( "document.body.click(); true" );

@@ -110,7 +110,7 @@ function sharedEntry()
     row.setAttribute( 'role', 'link' );
 
     const ic = document.createElement( 'span' );
-    ic.className = 'row-ic ic-shared';
+    ic.className = 'row-ic ic-folder ic-shared';
     ic.innerHTML = SVG_SHARED;
     const label = document.createElement( 'span' );
     label.className   = 'row-name';
@@ -208,7 +208,8 @@ function renderListing()
     {
         const da = dirLike( a ), db = dirLike( b );
         if( da !== db ) return da ? -1 : 1;                 // folders first
-        return displayName( a ).localeCompare( displayName( b ), Ayni.i18n.lang(), { sensitivity: 'base', numeric: true } );
+        return bySortPref( a, b ) ||
+               displayName( a ).localeCompare( displayName( b ), Ayni.i18n.lang(), { sensitivity: 'base', numeric: true } );
     });
 
     const shared = showsSharedEntry();
@@ -354,7 +355,7 @@ function listIcon( node )
 {
     // A shortcut wears what it leads to (its arrow: buildListRow).
     if( isLink( node ) && ! linkBroken( node ) ) return listIcon( linkTarget( node ) );
-    if( isLink( node ) ) return node.link.dir ? { cls: '', svg: SVG_FOLDER } : { cls: '', svg: SVG_FILE };
+    if( isLink( node ) ) return node.link.dir ? { cls: ' ic-folder', svg: SVG_FOLDER } : { cls: '', svg: SVG_FILE };
 
     // A shared album / trip shows ITS app's glyph, not a plain folder.
     const app = sharedApp( node );
@@ -362,7 +363,7 @@ function listIcon( node )
     if( app === 'trips'  ) return { cls: ' ic-trips',  svg: SVG_TRIPS  };
     if( app === 'split'  ) return { cls: ' ic-trips',  svg: SVG_SPLIT  };   // a shared expenses group, opens in Split
 
-    if( isDir( node ) ) return { cls: '', svg: SVG_FOLDER };
+    if( isDir( node ) ) return { cls: ' ic-folder', svg: SVG_FOLDER };
 
     const ext = typeExt( node );
 
@@ -376,6 +377,104 @@ function listIcon( node )
     if( AUDIO_VIEW.includes( ext )   ) return { cls: ' ic-media', svg: SVG_AUDIO };
 
     return { cls: '', svg: SVG_FILE };
+}
+
+// The badges on a folder: which app keeps it (data/<app>/config.json) and who
+// it is shared with (/api/shares, the user's own grants). Read at start-up and
+// on every reload(), and they repaint the rows in place: a listing never waits
+// for them, and a failed read only means no badge.
+const FOLDER_MARKS = {
+    photos:  { cls: 'mark-photos', icon: 'image', tip: 'drive.markPhotos' },
+    music:   { cls: 'mark-media',  icon: 'music', tip: 'drive.markMusic'  },
+    movies:  { cls: 'mark-media',  icon: 'film',  tip: 'drive.markMovies' },
+    shared:  { cls: 'mark-shared', icon: 'users', tip: 'drive.markShared' },
+    public:  { cls: 'mark-public', icon: 'globe', tip: 'drive.markPublic' }
+};
+let folderMarks = new Map();                       // path -> { app, share }
+let myShares    = [];                              // the grants that are alive
+let folderMarksSeq = 0;
+
+function markPath( p ) { return String( p || '' ).replace( /\/+$/, '' ); }
+
+async function loadFolderMarks()
+{
+    const seq   = ++folderMarksSeq;
+    const marks = new Map();
+    const entry = function( p )
+    {
+        const key = markPath( p );
+        if( ! marks.has( key ) ) marks.set( key, {} );
+        return marks.get( key );
+    };
+
+    const [ configs, grants ] = await Promise.all( [
+        // In this order: when two apps keep one folder, the first one shows.
+        Promise.all( [ 'photos', 'music', 'movies' ].map( function( app )
+        {
+            return AyniNet.readJson( 'data/' + app + '/config.json' )
+                .then( function( cfg ) { return { app: app, folder: cfg && cfg.folder }; },
+                       function()      { return { app: app, folder: '' }; } );
+        } ) ),
+        fetch( window.location.origin + '/api/shares' )
+            .then( function( r ) { return r.ok ? r.json() : {}; } )
+            .then( function( j ) { return j.mine || []; } )
+            .catch( function() { return []; } )
+    ] );
+
+    if( seq !== folderMarksSeq ) return;           // a newer read is on its way
+
+    configs.forEach( function( c )
+    {
+        if( typeof c.folder !== 'string' || ! c.folder ) return;
+        const m = entry( c.folder );
+        if( ! m.app ) m.app = c.app;
+    } );
+
+    myShares = grants.filter( function( g ) { return ! g.token && ! g.gone; } );
+    myShares.forEach( function( g )
+    {
+        if( g.app !== 'folder' && g.app !== 'photos' ) return;
+        const m = entry( g.root );
+        m.share = ( g.to === '*' || m.share === 'public' ) ? 'public' : 'shared';
+    } );
+
+    folderMarks = marks;
+    document.querySelectorAll( '#listing .row[data-dir]' ).forEach( function( row )
+    {
+        const ic = row.querySelector( '.row-ic' );
+        if( ic ) paintFolderMarks( row, ic );
+    } );
+}
+
+// Who this item is shared with, for Properties: every name, or "all", or ''.
+function sharedWithLabel( path )
+{
+    const key = markPath( path );
+    const to  = myShares.filter( function( g ) { return markPath( g.root ) === key; } )
+                        .map( function( g ) { return g.to; } );
+    if( to.includes( '*' ) ) return T( 'drive.propSharedAll' );
+    return to.sort( function( a, b ) { return a.localeCompare( b, Ayni.i18n.lang() ); } ).join( ', ' );
+}
+
+// `row` and its icon `ic`: put the folder's badges on, or take them off. A
+// shortcut keeps its arrow only: the badge belongs to the real folder.
+function paintFolderMarks( row, ic )
+{
+    ic.querySelectorAll( '.folder-mark' ).forEach( function( el ) { el.remove(); } );
+
+    const m    = row.classList.contains( 'is-link' ) ? null : folderMarks.get( markPath( row.dataset.path ) );
+    const list = m ? [ m.app, m.share ].filter( Boolean ) : [];
+    row.classList.toggle( 'has-mark', list.length > 0 );
+
+    list.forEach( function( key )
+    {
+        const def  = FOLDER_MARKS[ key ];
+        const mark = document.createElement( 'span' );
+        mark.className = 'folder-mark ' + def.cls + ( key === m.app ? ' mark-logo' : ' mark-chip' );
+        mark.title     = T( def.tip );
+        mark.innerHTML = Ayni.icon( def.icon );
+        ic.appendChild( mark );
+    } );
 }
 
 function buildListRow( node, showPath )
@@ -409,6 +508,7 @@ function buildListRow( node, showPath )
     }
     if( node.shared )
         ic.title = node.shared.by ? TF( 'drive.sharedByWho', { who: node.shared.by } ) : T( 'drive.sharedWithYou' );
+    if( dir ) paintFolderMarks( row, ic );
 
     const label = document.createElement( 'span' );
     label.className   = 'row-name';

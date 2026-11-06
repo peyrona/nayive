@@ -312,6 +312,11 @@
     // one file ({ version, watched: {}, resume: {} }).
     var MOVIES_PROGRESS = "data/movies/progress.json";
 
+    // The folder each of these apps shows ({ folder } in its config.json): a
+    // path too, so a rename or a move of it, or of a folder above it, must not
+    // leave the app pointing at nothing.
+    var FOLDER_CONFIGS = [ "data/photos/config.json", "data/music/config.json", "data/movies/config.json" ];
+
     // The comment map, read afresh on every call - never cached: a Drive left
     // open all day would otherwise write its old copy back and wipe the notes
     // Photos added meanwhile, so every read-modify-write starts from the file.
@@ -567,6 +572,25 @@
             var b = !! prog.resume  && typeof prog.resume  === "object" && rekey( prog.resume,  pairs, false );
             return a || b;
         } );
+        await followFolders( pairs );
+    }
+
+    // The apps' folders follow a move. Only `folder` changes. A pair marked
+    // `stays` is an Undo taking away what replaced a folder: the path is the
+    // binned original's, which comes back to it.
+    async function followFolders( pairs )
+    {
+        pairs = pairs.filter( function ( p ) { return ! p[ 2 ]; } );
+        for( var i = 0; i < FOLDER_CONFIGS.length; i++ )
+            await editSidecar( FOLDER_CONFIGS[ i ], function ( cfg )
+            {
+                if( typeof cfg.folder !== "string" || ! cfg.folder ) return false;
+                var one = {};
+                one[ cfg.folder.replace( /\/+$/, "" ) ] = true;
+                if( ! rekey( one, pairs, false ) ) return false;
+                cfg.folder = Object.keys( one )[ 0 ];
+                return true;
+            } );
     }
 
     // A copy: the note is worth copying with the photo, the scan entry is not -

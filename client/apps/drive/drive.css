@@ -137,6 +137,25 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
     position: absolute; left: -3px; bottom: -2px; width: 11px; height: 11px;
     fill: var(--bg); stroke: var(--text); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round;
 }
+/* A folder's badges (listing.js paintFolderMarks): the app that keeps it is a
+   logo in the middle of the folder, who it is shared with a chip top right. */
+.row.has-mark .row-ic { position: relative; }
+.row .folder-mark { position: absolute; display: flex; align-items: center; justify-content: center; }
+.row .folder-mark.mark-logo { z-index: 1; left: 50%; top: 11px; transform: translate(-50%, -50%); }
+.row .row-ic .folder-mark.mark-logo svg { width: 8px; height: 8px; stroke-width: 3; }
+.row .folder-mark.mark-chip
+{
+    right: -4px; top: -5px; width: 13px; height: 13px; border-radius: 50%;
+    background: var(--bg); box-shadow: 0 0 0 1px currentColor;
+}
+.row .row-ic .folder-mark.mark-chip svg { width: 9px; height: 9px; stroke-width: 2.4; }
+.row .folder-mark.mark-photos { color: #d16ba5; }
+.row .folder-mark.mark-media  { color: #4bb8a9; }
+.row .folder-mark.mark-shared { color: var(--accent); }
+.row .folder-mark.mark-public { color: #5b8def; }
+:root[data-theme="light"] .row .folder-mark.mark-photos { color: #8A3466; }
+:root[data-theme="light"] .row .folder-mark.mark-media  { color: #1F6F63; }
+:root[data-theme="light"] .row .folder-mark.mark-public { color: #1E4A85; }
 .row.is-broken .row-ic, .row.is-broken .row-name { opacity: 0.5; }
 .row.is-broken .link-arrow { stroke: var(--danger); }
 .row .row-name { flex: 0 0 auto; white-space: nowrap; font-size: 0.92rem; }
@@ -168,6 +187,10 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
 .list-rows.is-grid .row > .pick-tick { position: absolute; top: 6px; left: 6px; z-index: 1; background: var(--bg); }
 .list-rows.is-grid .row[aria-selected="true"] > .pick-tick { background: var(--accent); }
 .list-rows.is-grid .row-ic svg { width: 46px; height: 46px; stroke-width: 1.5; }
+/* A folder's drawing is wide and low, so at the same size it looks smaller
+   than a page: scaled up in the same box, keeping the line width. */
+.list-rows.is-grid .row-ic.ic-folder > .icon > svg,
+.list-rows.is-grid .row-ic.ic-folder > svg:not(.link-arrow) { transform: scale(1.3); stroke-width: 1.15; }
 .list-rows.is-grid .row .row-name
 {
     flex: 0 0 auto; max-width: 100%; font-size: 0.85rem; line-height: 1.3;
@@ -177,6 +200,10 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
 .list-rows.is-grid .row .row-meta { display: none; }
 .list-rows.is-grid .row .row-meta:has(.row-convert) { display: block; margin: 0; padding: 0; white-space: normal; }
 .list-rows.is-grid .row .link-arrow { width: 16px; height: 16px; left: -2px; bottom: 0; }
+.list-rows.is-grid .row .folder-mark.mark-logo { top: 27px; }
+.list-rows.is-grid .row .row-ic .folder-mark.mark-logo svg { width: 19px; height: 19px; stroke-width: 2.4; }
+.list-rows.is-grid .row .folder-mark.mark-chip { width: 20px; height: 20px; right: -11px; top: -2px; }
+.list-rows.is-grid .row .row-ic .folder-mark.mark-chip svg { width: 13px; height: 13px; stroke-width: 2.2; }
 /* A picture's own preview (thumbs.js) over its file-type glyph: the glyph
    shows only until the preview is in, or when there is none. */
 .list-rows.is-grid .row-ic.has-thumb { position: relative; display: flex; align-items: center; justify-content: center;
@@ -356,9 +383,6 @@ body.trash-mode #breadcrumb { display: none; }
 
 #trashTools { gap: 8px; font-weight: 400; color: var(--text); white-space: nowrap; }
 .trash-held { font-size: .9em; }
-#trashTools .trash-days { display: flex; align-items: center; gap: 6px; color: var(--muted, var(--text)); font-size: .9em; }
-/* 5em, not 3.5em: the shared 10px side padding plus the spinner arrows ate
-   all but one digit, so "30" read as "3" */
 /* Every button in the bar is a shared one: "←" an .btn, "Vaciar
    papelera" a .btn.text.bordered.danger, the days hint an .info-tip (its size
    lives in app.css, so every (i) looks like this one). */
@@ -386,9 +410,6 @@ body.trash-mode #breadcrumb { display: none; }
     /* B4 — the view switch leaves the header for its ⋮ (menus.js viewMenuItems). */
     .tb-modes { display: none; }
 
-    /* The bin's tools share the title row: the number alone says it, with its (i). */
-    .trash-words { display: none; }
-
     /* B6 — the header keeps what fits; the rest is in its ⋮ (NayiveUI.fitBar). */
 
     /* B7 — roomier rows, no size/date column */
@@ -408,4 +429,13 @@ body.trash-mode #breadcrumb { display: none; }
     .list-rows.is-grid { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 4px; padding: 6px; }
     .list-rows.is-grid .row { padding: 12px 4px 8px; gap: 6px; }
     .list-rows.is-grid .row-ic svg { width: 40px; height: 40px; }
+    .list-rows.is-grid .row .folder-mark.mark-logo { top: 23px; }
+    .list-rows.is-grid .row .row-ic .folder-mark.mark-logo svg { width: 17px; height: 17px; }
 }
+
+/* The Settings dialog (settings.js): a special folder's row, an on / off row. */
+.set-folder { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.set-folder .set-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.set-folder .set-path { color: var(--text-dim); font-size: .85em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-switch { display: flex; align-items: center; gap: 6px; }
+.set-switch > .switch { margin-left: auto; }

@@ -77,7 +77,6 @@ let driveSearch     = null;          // the header search field: { open, close, 
 let bigMode         = false;         // the "Biggest files" list is on screen (listing.js, openBigFiles)
 let trashMode       = false;         // the "Papelera" view is open instead of the folder
 let trashItems      = [];            // entries from AyniNet.trashList() while trashMode is on
-let trashDays       = null;          // auto-delete period (days) shown in the Papelera bar
 
 // How the listing shows: 'grid' (icons, the default) or 'list' (rows with
 // size and date). Kept per device; the bin and "Biggest files" are always a

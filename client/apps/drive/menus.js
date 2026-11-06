@@ -53,7 +53,7 @@ function sharePaths( paths )
         app:    (node && isDir( node )) ? 'folder' : 'file',
         title:  paths[ 0 ].split( '/' ).pop(),
         canAdd: !! (node && isDir( node ))   // only a folder can be added to
-    } );
+    } ).then( loadFolderMarks );             // its badge comes or goes at once
 }
 
 // Each action states once when it works: the header button, the menu row
@@ -90,7 +90,8 @@ function driveActions()
         { id: 'share', label: T( 'ui.share' ), icon: 'share', rank: 3, group: 2, when: canShare, run: sharePaths },
         { id: 'compress', label: T( 'drive.compress' ), icon: SVG_ZIP, rank: 10, group: 2,
           when: function( p ) { return rw( p ) && ! anyLink( p ); }, run: act( compressSelection ) },
-        { id: 'props', label: T( 'drive.properties' ), icon: 'info', key: 'Alt+Enter', rank: 7, group: 2, run: act( openProperties ) },
+        // No bar button: its (i) waits in the header, before the (?) (#propsBtn).
+        { id: 'props', label: T( 'drive.properties' ), icon: 'info', key: 'Alt+Enter', noBar: true, group: 2, run: act( openProperties ) },
         // Never a bare Backspace on a Mac: it is the key a stray press in a
         // box that just lost focus sends. ⌘⌫, as in Finder.
         { id: 'bin', label: T( 'ui.toTrash' ), icon: 'trash', key: IS_MAC ? [ 'Del', 'Ctrl+Backspace' ] : 'Del', rank: 1, group: 3,

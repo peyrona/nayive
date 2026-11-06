@@ -30,7 +30,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-49434811d0c8";
+var CACHE_VERSION = "nayive-069c4d70396d";
 /* @end */
 
 /* @generated:precache */
@@ -97,6 +97,7 @@ var PRECACHE_SHELL = [
     "drive/move-copy.js",
     "drive/navigate.js",
     "drive/open.js",
+    "drive/settings.js",
     "drive/state.js",
     "drive/thumbs.js",
     "drive/toolbar.js",

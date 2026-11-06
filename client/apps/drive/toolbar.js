@@ -125,6 +125,7 @@ function withBusy( promise )
 async function reload()
 {
     setStatus( T( 'ui.loading' ) );
+    loadFolderMarks();                           // a rename may have moved a shared folder
 
     try
     {

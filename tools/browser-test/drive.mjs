@@ -57,7 +57,7 @@ await key( c, "Escape" );
 ok( await c.evaluate( "( ! document.querySelector('#ayni-menu')?.matches(':popover-open') )" ), "Esc closes the menu" );
 ok( await c.evaluate( "! document.querySelector('#listing [data-more], #selActions [data-pick=menu]')" ), "no row ⋮, no ⋮ in the selection group" );
 let fs = await fitState( c );
-ok( fs.acts.join() === "download,move,copyTo,rename,link,share,compress,props,bin" && ! fs.out.length && ! fs.more && ! fs.crowded,
+ok( fs.acts.join() === "download,move,copyTo,rename,link,share,compress,bin" && ! fs.out.length && ! fs.more && ! fs.crowded,
     "wide: every action is a button, in menu order (no cut / copy, no Extract on a .txt); no ⋮", fs );
 await c.evaluate( "browse.clear(); true" );
 await mouse( c, "#listing", { dx: 40, button: "right" } );
@@ -182,7 +182,7 @@ ok( await c.until( "browse.ids().join() === 'files/Docs/Work'" ) && await c.eval
 fs = await fitState( c );
 ok( ! fs.crowded && fs.more && [ "move", "share", "bin" ].every( a => fs.acts.includes( a ) ) && ! fs.tools.includes( "trashViewBtn" ),
     "phone header: one row; the top ranks stay, the tools leave first, the ⋮ shows", fs );
-ok( fs.rows.filter( r => r !== "all" && r !== "trashViewBtn" ).slice( 0, fs.out.length ).join() === fs.out.join() && fs.out.join() === [ "download", "copyTo", "rename", "link", "share", "compress", "props" ].filter( a => fs.out.includes( a ) ).join(),
+ok( fs.rows.filter( r => r !== "all" && r !== "trashViewBtn" ).slice( 0, fs.out.length ).join() === fs.out.join() && fs.out.join() === [ "download", "copyTo", "rename", "link", "share", "compress" ].filter( a => fs.out.includes( a ) ).join(),
     "…its ⋮ lists the hidden actions in toolbar order (Select all first, when hidden), then the hidden tools", fs );
 await mouse( c, "#moreBtn" );
 let mrows = await menuRows( c );
@@ -214,7 +214,7 @@ ok( ! fs.out.length && ! fs.more && fs.tools.includes( "trashViewBtn" ), "back t
 section( "DRIVE · THE BIN'S HEADER" );
 const binState = () => c.evaluate( `( () => { const b = document.getElementById('trashViewBtn'), t = document.getElementById('trashTools'), h = document.querySelector('.topbar');
     return { after: document.querySelector('.topbar > .tb-modes').nextElementSibling === b, back: !! b.querySelector('[data-icon=back]'), tip: b.dataset.tip,
-             seen: b.getClientRects().length > 0 && ! b.classList.contains('fit-out'), tools: t.getClientRects().length > 0 && !! t.querySelector('input') && !! t.querySelector('.btn.danger'),
+             seen: b.getClientRects().length > 0 && ! b.classList.contains('fit-out'), tools: t.getClientRects().length > 0 && !! t.querySelector('.btn.danger'),
              crumbs: document.getElementById('breadcrumb').getClientRects().length > 0, spills: h.scrollWidth > h.clientWidth, oneRow: h.ayniFitBar ? ! h.ayniFitBar.crowded() : null }; } )()` );
 await c.evaluate( "if( browse.ids().length ) browse.clear(); true" );
 let bs = await binState();
