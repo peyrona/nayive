@@ -12,7 +12,7 @@ function openImageViewer( path )
     const name = path.split( '/' ).pop();
     const img  = document.getElementById( 'viewerImg' );
 
-    img.src = GumApi.fileUrl( path );
+    img.src = AyniNet.fileUrl( path );
     img.alt = name;
     document.getElementById( 'viewerName' ).textContent = name;
 
@@ -31,7 +31,7 @@ function closeImageViewer()
 function openMediaViewer( path, kind )
 {
     const name  = path.split( '/' ).pop();
-    const url   = GumApi.fileUrl( path );
+    const url   = AyniNet.fileUrl( path );
     const video = document.getElementById( 'mediaVideo' );
     const audio = document.getElementById( 'mediaAudio' );
 

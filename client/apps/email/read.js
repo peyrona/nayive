@@ -159,7 +159,7 @@
 
     function syncSplit()
     {
-        var on = !! NayiveUI.windowed && wide.matches;
+        var on = !! Ayni.frame.windowed && wide.matches;
         if( on === E.split ) return;
         E.split = on;
         var view = E.$( "readView" );
@@ -214,7 +214,7 @@
                                       attrs: { type: "button", title: E.T( "mail.saveToDrive" ) + ": " + p.name },
                                       on: { click: function () { saveToDrive( p, url, chip ); } } },
                           h( "span", { text: p.name } ),
-                          p.size ? h( "small", { text: NayiveUI.fmtBytes( p.size ) } ) : null );
+                          p.size ? h( "small", { text: Ayni.fmtBytes( p.size ) } ) : null );
             chip.insertAdjacentHTML( "beforeend", E.icon( "nayive", "mail-part-save" ) );
             box.appendChild( chip );
         } );
@@ -234,21 +234,21 @@
     async function freeName( dir, name, also )
     {
         var taken = {};
-        try { ( await GumApi.namesIn( dir ) ).forEach( function ( n ) { taken[ n.toLowerCase() ] = true; } ); }
+        try { ( await AyniNet.namesIn( dir ) ).forEach( function ( n ) { taken[ n.toLowerCase() ] = true; } ); }
         catch( e ) { if( ! e || e.status !== 404 ) throw e; }
         ( also || [] ).forEach( function ( n ) { taken[ n.toLowerCase() ] = true; } );
-        return GumApi.uniqueName( name, { has: function ( n ) { return !! taken[ n.toLowerCase() ]; } } );
+        return AyniNet.uniqueName( name, { has: function ( n ) { return !! taken[ n.toLowerCase() ]; } } );
     }
 
     // The attachment goes up as a NEW file only (create-only PUT): a name
     // another device took after the listing answers 412 and the next free one
     // is used, never written over. (A 412 that is this very save's first try,
     // landed before a dropped connection made the PUT go again, is a success
-    // already: GumApi's "our own first try".) 50 names in a row taken: an error.
+    // already: AyniNet's "our own first try".) 50 names in a row taken: an error.
     function saveNew( dir, want, bytes )
     {
         var also = [];
-        return GumApi.createFresh( dir, async function ()
+        return AyniNet.createFresh( dir, async function ()
         {
             var name = await freeName( dir, want, also );
             also.push( name );
@@ -260,7 +260,7 @@
     {
         var dir = await NayiveUI.pickFolder( { title: E.T( "mail.saveToDrive" ), allowRoot: true, rootLabel: E.T( "ui.filesRoot" ) } );
         if( ! dir ) return;
-        Ayni.setBusy( btn, E.T( "ui.sync.saving" ) );
+        Ayni.setBusy( btn, E.T( "ayni.sync.saving" ) );
         E.plug( "saving" );
         E.busy( true );
         try

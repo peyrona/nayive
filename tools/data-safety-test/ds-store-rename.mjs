@@ -19,7 +19,7 @@ stPage( s );
 const A = await browser( s, { user: "ana" } );
 const login = ( c, user, password ) => c.evaluate( `fetch( '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify( { user: ${JSON.stringify( user )}, password: ${JSON.stringify( password )} } ) } ).then( r => r.status )` );
-// A device draft of an office editor (shared/office.js "nayive-drafts").
+// A device draft of an office editor (shared/ayni/ayni-doc.js "nayive-drafts").
 const DRAFT = ( app, who ) => `new Promise( function ( res ) { var q = indexedDB.open( 'nayive-drafts', 1 );
     q.onupgradeneeded = function () { q.result.createObjectStore( 'drafts', { keyPath: 'app' } ); };
     q.onsuccess = function () { var tx = q.result.transaction( 'drafts', 'readwrite' );
@@ -35,7 +35,7 @@ section( "L3 · AN ADMIN RENAME: THE SAVES WAITING HERE BECOME THE NEW NAME'S" )
 {
     const F = "data/t/l3.json";
     await A.open( "/nayive/st.html" );
-    ok( await A.evaluate( "NayiveStore.me" ) === "user:ana", "the page is ana's" );
+    ok( await A.evaluate( "AyniStore.me" ) === "user:ana", "the page is ana's" );
     const q = JSON.parse( await A.evaluate( `( offline( true ), J( SM.write( '${F}', JSON.stringify( [ { id: 'queued-as-ana' } ] ) ) ) )` ) );
     ok( q.offline, "ana's save waits here (offline)", q );
     await A.evaluate( DRAFT( "text:old-tab", "user:ana" ) );
@@ -50,7 +50,7 @@ section( "L3 · AN ADMIN RENAME: THE SAVES WAITING HERE BECOME THE NEW NAME'S" )
 
     const B = await A.tab();
     await B.open( "/nayive/st.html" );
-    ok( await B.evaluate( "NayiveStore.me" ) === "user:ana2", "a new page is ana2's" );
+    ok( await B.evaluate( "AyniStore.me" ) === "user:ana2", "a new page is ana2's" );
     ok( await untilNode( async () => ( ( await B.evaluate( `idb( 'outbox', '${F}' )` ) ) || {} ).who === "user:ana2" ), "her waiting save is re-tagged to ana2",
         await B.evaluate( `idb( 'outbox', '${F}' )` ) );
     ok( ( await B.evaluate( DRAFTS ) ).some( d => d.app === "text:old-tab" && d.who === "user:ana2" ), "...and so is her device draft", await B.evaluate( DRAFTS ) );
@@ -76,7 +76,7 @@ section( "L3 · NEVER FOR ANOTHER ACCOUNT" );
     await A.evaluate( "document.cookie = 'nayive_was=user:ana2/user:zoe; path=/'; true" );
     const C = await A.tab();
     await C.open( "/nayive/st.html" );
-    ok( await C.evaluate( "NayiveStore.me" ) === "user:beto", "the page is beto's" );
+    ok( await C.evaluate( "AyniStore.me" ) === "user:beto", "the page is beto's" );
     await C.evaluate( "SM.flush().then( () => true )" );
     const e = await C.evaluate( `idb( 'outbox', '${F}' )` );
     ok( e && e.who === "user:zoe", "a cookie that does not start with this page's owner re-tags nothing", e );
@@ -103,7 +103,7 @@ section( "L6 · SIGN-OUT WITH A LIST SAVE ONLY ITS APP CAN MERGE" );
 
     const L = await A.tab();
     await L.open( "/nayive/" );
-    ok( await L.until( "window.NayiveStore && window.NayiveUI && document.getElementById( 'logoutBtn' )" ), "the launcher is up (online)" );
+    ok( await L.until( "window.AyniStore && window.NayiveUI && document.getElementById( 'logoutBtn' )" ), "the launcher is up (online)" );
     await L.evaluate( "window.asks = []; Ayni.confirm = o => new Promise( r => asks.push( { body: o.body, r } ) ); true" );
     await L.evaluate( "document.getElementById( 'logoutBtn' ).click(), true" );
     ok( await L.until( "asks.length === 1", 20000 ), "Sign out asks about the save still here" );

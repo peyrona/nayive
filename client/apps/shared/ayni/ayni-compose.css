@@ -1,0 +1,16 @@
+/* Ayni library 0.2.0, writing: the emoji panel of Ayni.emojiPanel. Plain CSS, no build step, evergreen browsers 2024+. Optional. */
+
+/* the emoji panel (writing, or "+" in the reactions) */
+.emojis
+{
+    position: absolute; left: 8px; bottom: calc(100% + 4px); z-index: 6;
+    width: min(340px, calc(100vw - 16px)); max-height: 260px; overflow-y: auto;
+    display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px;
+    padding: 8px; border-radius: var(--radius-l);
+    background: var(--head, var(--card)); box-shadow: var(--elev-dialog);
+}
+.emojis button
+{
+    padding: 4px 0; border: none; border-radius: 50%;
+    font-size: 1.45rem; line-height: 1.2; cursor: pointer;
+}

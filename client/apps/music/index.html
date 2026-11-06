@@ -10,9 +10,9 @@
      header re-opens that picker to change folder. Only if the visitor cancels
      the picker (or isn't signed in) does the "open me from Drive" hint show.
 
-     Real folders only: the file list comes from GumApi.listDirRecursive(dir)
+     Real folders only: the file list comes from AyniNet.listDirRecursive(dir)
      (GET /api/files?dir=&recursive=1 - the whole subtree in one call), each
-     song plays straight from GumApi.fileUrl(path) through a real <audio>
+     song plays straight from AyniNet.fileUrl(path) through a real <audio>
      element (the server already streams that with Range support - the same
      endpoint Drive's own built-in A/V player uses). Title/artist/album come
      from the file's ID3v2 tags when it is an .mp3 (a small Range read, same
@@ -43,6 +43,7 @@
          every inline script below may call Ayni.t(). -->
     <script src="../shared/i18n.js"></script>
     <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
+    <script src="../shared/ayni/ayni-util.js"></script>
     <title>Music</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18V5l12-2v13'/%3E%3Ccircle cx='6' cy='18' r='3'/%3E%3Ccircle cx='18' cy='16' r='3'/%3E%3C/svg%3E">
 
@@ -59,10 +60,26 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-share.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pwa.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-locker.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-status.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-shell.css">
     <link rel="stylesheet" href="../shared/app.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-doc.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-media.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-image.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-map.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-icons-more.js" defer></script>
+    <script src="../shared/ayni/ayni-shell.js" defer></script>
+    <script src="../shared/ayni/ayni-status.js" defer></script>
+    <script src="../shared/ayni/ayni-share.js" defer></script>
+    <script src="../shared/ayni/ayni-upload.js" defer></script>
+    <script src="../shared/ayni/ayni-pwa.js" defer></script>
+    <script src="../shared/ayni/ayni-boot.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
@@ -74,7 +91,8 @@
     <script src="../shared/ayni/ayni-pickers.js" defer></script>
     <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
-    <script src="../shared/gum-api.js" defer></script>
+    <script src="../shared/ayni/ayni-locker.js"></script>
+    <script src="../shared/ayni/ayni-net.js" defer></script>
     <script src="../shared/ui.js" defer></script>
     <script>
     Ayni.i18n.ready.then( function () {
@@ -83,7 +101,7 @@
             title: 'Music',
             lead:  Ayni.t( 'music.introLead' ),
             rows: [
-                { sel: '#folderInfoBtn', text: Ayni.t( 'music.introFolder' ) },
+                { sel: '#folderInfoBtn', text: Ayni.t( 'music.introFolder' ), tour: false },   // last in the tour
                 { sel: '#searchToggle', text: Ayni.t( 'music.introSearch' ) },
                 { sel: '#reloadBtn',   text: Ayni.t( 'music.introRescan' ) },
                 { icon: 'folder',       name: Ayni.t( 'music.library' ), text: Ayni.t( 'music.introTree' ), tour: { sel: '#treePane, #treeBtn' } },
@@ -95,7 +113,8 @@
             // The guided tour ("Ver el tour" in the card): the card's rows, picking
             // songs (the shared item list), the player.
             tour: [ 'rows', { use: 'pick', ghost: '#libContent' }, { use: 'picked', ghost: '#libContent' },
-                    { sel: '#playerBar', text: Ayni.t( 'music.tourPlayer' ) } ]
+                    { sel: '#playerBar', text: Ayni.t( 'music.tourPlayer' ) },
+                    { sel: '#folderInfoBtn', text: Ayni.t( 'music.introFolder' ), optional: true } ]
         } );
     } );
     </script>
@@ -255,10 +274,6 @@
         <h1>Music</h1>
         <!-- The toolbar, shown once a folder is open (display: contents). -->
         <div class="tb-tools" id="tools" hidden>
-            <button class="btn" id="folderInfoBtn" type="button" data-rank="22" popovertarget="folderMenu" data-i18n-attr="data-tip:ui.folderInfo, aria-label:ui.folderInfo">
-                <span class="icon" data-icon="folder-info"></span>
-            </button>
-
             <!-- Phones only (<= 640 px): the tree (library + playlists) slides in. -->
             <button class="btn" id="treeBtn" type="button" data-rank="23" data-i18n-attr="data-tip:music.library, aria-label:music.library">
                 <span class="icon" data-icon="sidebar"></span>
@@ -277,18 +292,21 @@
                 </button>
                 <!-- Phones only (<= 760 px): the queue has no pane there, it opens as a sheet. -->
                 <button class="btn queue-open-btn" id="queueBtn" type="button" data-rank="24" data-i18n-attr="data-tip:music.openQueue, aria-label:music.openQueue">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="15" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="11" y2="18"/><path d="M17 18V9l4-1"/><circle cx="15.5" cy="18" r="1.5"/></svg>
+                    <span class="icon" data-icon="queue-list" style="--icon:18px"></span>
                 </button>
                 <button class="btn" id="reloadBtn" data-rank="25" data-i18n-attr="data-tip:ui.rescanFolder, aria-label:ui.rescanFolder">
                     <span class="icon" data-icon="refresh"></span>
                 </button>
             </div>
             <div class="tb-group tb-sys" data-tools hidden>
+                <button class="btn" id="folderInfoBtn" type="button" data-rank="22" popovertarget="folderMenu" data-i18n-attr="data-tip:ui.folderInfo, aria-label:ui.folderInfo">
+                    <span class="icon" data-icon="info"></span>
+                </button>
                 <button class="btn" data-help-open data-rank="31" type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help">
                     <span class="icon" data-icon="help"></span>
                 </button>
             </div>
-            <div class="sync-indicator synced" data-i18n-attr="title:ui.sync.synced"></div>
+            <div class="sync-indicator synced" data-i18n-attr="title:ayni.sync.synced"></div>
         </div>
     </header>
 
@@ -315,19 +333,19 @@
                 <div class="queue-mode-row">
                     <div class="mode-pills">
                         <button class="btn" id="seqBtn" data-i18n-attr="data-tip:music.playSeq, aria-label:music.playSeq" aria-pressed="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>
+                            <span class="icon" data-icon="play-seq" style="--icon:18px"></span>
                         </button>
                         <button class="btn" id="shuffleBtn" data-i18n-attr="data-tip:music.playShuffle, aria-label:music.playShuffle">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+                            <span class="icon" data-icon="shuffle" style="--icon:18px"></span>
                         </button>
                         <!-- Off: the queue stops after its last song. On: it starts again. -->
                         <button class="btn" id="repeatBtn" type="button" aria-pressed="false" data-i18n-attr="data-tip:music.repeat, aria-label:music.repeat">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                            <span class="icon" data-icon="repeat" style="--icon:18px"></span>
                         </button>
                     </div>
                     <div class="queue-actions">
                         <button class="btn" id="saveListBtn" aria-disabled="true" data-i18n-attr="data-tip:music.saveQueue, aria-label:music.saveQueue">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h11l3 3v11H5V5Z"/><path d="M8 5v5h7V5"/><path d="M8 14h8"/></svg>
+                            <span class="icon" data-icon="save-queue" style="--icon:18px"></span>
                         </button>
                         <button class="btn danger" id="clearQueueBtn" aria-disabled="true" data-i18n-attr="data-tip:music.clearQueue, aria-label:music.clearQueue">
                             <span class="icon" data-icon="trash"></span>
@@ -359,13 +377,13 @@
 
         <div class="transport">
             <button class="btn transport-btn" id="prevBtn" aria-disabled="true" data-i18n-attr="data-tip:ui.prev, aria-label:ui.prev">
-                <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M19 20 9 12l10-8v16Z"/><rect x="4.5" y="4" width="2" height="16" rx="1"/></svg>
+                <span class="icon" data-icon="skip-prev" style="--icon:18px"></span>
             </button>
             <button class="btn primary transport-btn play-btn" id="playBtn" data-i18n-attr="data-tip:media.play, aria-label:media.play" aria-disabled="true">
                 <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" id="playIcon"><path d="M8 5v14l11-7-11-7Z"/></svg>
             </button>
             <button class="btn transport-btn" id="nextBtn" aria-disabled="true" data-i18n-attr="data-tip:ui.next, aria-label:ui.next">
-                <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M5 4l10 8-10 8V4Z"/><rect x="17.5" y="4" width="2" height="16" rx="1"/></svg>
+                <span class="icon" data-icon="skip-next" style="--icon:18px"></span>
             </button>
         </div>
 
@@ -419,8 +437,9 @@
 
 </div>
 
+<script src="../shared/ayni/ayni-media.js"></script>
 <script src="../shared/media.js"></script>
-<script src="../shared/play-on.js"></script>
+<script src="../shared/ayni/ayni-playon.js"></script>
 <script>
 "use strict";
 
@@ -438,9 +457,9 @@ var SCAN_PATH      = "data/music/scan-cache.json";
 var AUDIO_EXT = [ "mp3", "m4a", "aac", "ogg", "oga", "opus", "wav", "flac", "weba" ];
 
 // The helpers shared with Photos / Movies live in shared/media.js (one copy).
-var esc = NayiveMedia.esc, cssEsc = NayiveMedia.cssEsc, extOf = NayiveMedia.extOf, colorFor = NayiveMedia.colorFor,
-    stripExt = NayiveMedia.stripExt,
-    fmtClock = NayiveMedia.fmtClock, FOLDER_SVG = NayiveMedia.ICONS.folder;
+var esc = Ayni.esc, cssEsc = Ayni.cssEsc, extOf = Ayni.extOf, colorFor = Ayni.colorFor,
+    stripExt = Ayni.stripExt,
+    fmtClock = Ayni.fmtClock, FOLDER_SVG = Ayni.media.ICONS.folder;
 
 /* ---------------------------------------------------------------------------
  * STATE
@@ -770,7 +789,7 @@ async function refineTags( gen )
             var song = mp3s[ next++ ];
             try
             {
-                var tag = await readId3( GumApi.fileUrl( song.path ) );
+                var tag = await readId3( AyniNet.fileUrl( song.path ) );
                 if( tag )
                 {
                     if( tag.title  ) song.title  = tag.title;
@@ -837,10 +856,10 @@ async function loadDurations( gen )
 {
     var pending = st.songs.filter( function ( s ) { return s.duration == null; } );
     if( ! pending.length ) return;
-    await NayiveMedia.pool( pending, 4, async function ( song )
+    await Ayni.pool( pending, 4, async function ( song )
     {
         if( gen !== scanGen ) return;               // a Rescan replaced this pass
-        var d = await NayiveMedia.probeDuration( "audio", GumApi.fileUrl( song.path ) );
+        var d = await Ayni.media.probeDuration( "audio", AyniNet.fileUrl( song.path ) );
         if( d == null || gen !== scanGen ) return;
         song.duration = d;
         SCAN_CACHE.set( song, { duration: d } );
@@ -894,8 +913,8 @@ function computeArtists( songs )
 /* ---------------------------------------------------------------------------
  * RENDER - LIBRARY
  * -------------------------------------------------------------------------*/
-var MUSIC_NOTE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
-var GRIP_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg>';
+var MUSIC_NOTE_SVG = Ayni.icon( 'music' );
+var GRIP_SVG = Ayni.icon( 'grip-lines' );
 
 // One song: a row of the shared item list (BROWSER below), which adds
 // the tick before it. `s.missing`: a playlist's song that
@@ -926,7 +945,7 @@ function songListHtml( list, windowed )
     return list.map( songRowHtml ).join( "" );
 }
 
-var scopeBarHtml = NayiveMedia.scopeBarHtml;
+var scopeBarHtml = Ayni.media.scopeBarHtml;
 
 function renderCollectionSummary()
 {
@@ -992,7 +1011,7 @@ function renderLibrary()
             var songs2 = pool.filter( function ( s ) { return ( s.artist || Ayni.t( 'music.unknownArtist' ) ) === st.selectedArtist; } );
             html += scopeBarHtml( st.selectedArtist ) + songListHtml( songs2, true );
         }
-        else html += '<div class="empty-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg><p data-i18n="music.pickArtist"></p></div>';
+        else html += '<div class="empty-hint">' + Ayni.icon( 'person' ) + '<p data-i18n="music.pickArtist"></p></div>';
     }
     else if( st.filter === "playlist" )
     {
@@ -1099,7 +1118,7 @@ function playlistSongs( pl )
     {
         if( seen.has( p ) ) return;
         seen.add( p );
-        out.push( findSong( p ) || { path: p, title: stripExt( NayiveMedia.baseName( p ) ),
+        out.push( findSong( p ) || { path: p, title: stripExt( Ayni.baseName( p ) ),
                                      color: "", duration: null, missing: true } );
     } );
     return out;
@@ -1123,7 +1142,7 @@ function queueRowHtml( entry, index )
         '</span>' +
         '<span class="queue-dur">' + ( song.duration != null ? fmtClock( song.duration ) : "…" ) + '</span>' +
         '<button class="btn sm danger" data-remove="' + index + '" data-i18n-attr="data-tip:music.removeFromQueue, aria-label:music.removeFromQueue">' +
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>' +
+            Ayni.icon( 'x-thin' ) +
         '</button>' +
     '</div>';
 }
@@ -1334,7 +1353,7 @@ function restoreQueue( snap, drop )
         {
             // a song that can no longer play just stays picked, as before
             st.playingIndex = snap.index;
-            audio.src = GumApi.fileUrl( entry.song.path );
+            audio.src = AyniNet.fileUrl( entry.song.path );
             st.seekOnLoad = snap.time;
             if( snap.playing ) audio.play().catch( function () {} );
             updateMediaSession( entry.song );
@@ -1358,7 +1377,7 @@ function playIndex( index )
     st.playingIndex = index;
     st.seekOnLoad = 0;                      // an Undo's resume point was for the song before
     var song = st.queue[ index ].song;
-    audio.src = GumApi.fileUrl( song.path );
+    audio.src = AyniNet.fileUrl( song.path );
     audio.play().catch( function () {} );   // autoplay may be blocked - controls still work
     renderQueueList();
     renderLibrary();
@@ -1468,7 +1487,7 @@ function updatePlayerBar()
 function updateMediaSession( song )
 {
     if( ! song ) return;
-    NayiveMedia.mediaSession(
+    Ayni.media.mediaSession(
         { title: song.title, artist: song.artist || Ayni.t( 'music.unknownArtist' ), album: song.album || "" },
         {
             play:          function () { audio.play().catch( function () {} ); },
@@ -1490,7 +1509,7 @@ function updateMediaSession( song )
 async function readPlaylists()
 {
     var list, why = "";
-    try { list = await GumApi.readJson( PLAYLISTS_PATH ); }
+    try { list = await AyniNet.readJson( PLAYLISTS_PATH ); }
     catch( e ) { why = e instanceof SyntaxError ? "bad" : "unread"; }
     if( ! why && list !== null && ! Array.isArray( list ) ) why = "bad";
     if( why )
@@ -1514,7 +1533,7 @@ async function loadPlaylists()
 // lists too, so a change never writes the list this page read at start-up:
 // it reads the file again, `apply` makes just its own change to that fresh
 // list (by id), and that is written - a list saved elsewhere meanwhile stays.
-// Version-checked (GumApi.updateJson): a list saved between that read and
+// Version-checked (AyniNet.updateJson): a list saved between that read and
 // this write makes it read again and `apply` again, never written over.
 // One change at a time (a delete and its Undo must not cross). A file that
 // cannot be read now is not written (thrown with e.read, after a toast that
@@ -1529,7 +1548,7 @@ function changePlaylists( apply )
         var list;
         try
         {
-            list = await GumApi.updateJson( PLAYLISTS_PATH, function ( raw )
+            list = await AyniNet.updateJson( PLAYLISTS_PATH, function ( raw )
             {
                 if( raw !== null && ! Array.isArray( raw ) ) { var bad = new Error( "playlists not a list" ); bad.read = "bad"; throw bad; }
                 var fresh = raw || [];
@@ -1676,12 +1695,12 @@ var treeView = null;
 var treeOpen = { lib: true, pls: true };       // the open rows, this visit
 
 var ICON = {
-    library: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"/><path d="M8 19V5"/><path d="M12 19 15 5"/><path d="m16 19 3-14"/></svg>',
-    albums:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>',
-    artists: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>',
-    list:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="15" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="11" y2="18"/><path d="M17 18V9l4-1"/><circle cx="15.5" cy="18" r="1.5"/></svg>',
-    shuffle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>',
-    next:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 5 14 12 5 19 5 5"/><line x1="18" y1="5" x2="18" y2="19"/></svg>'
+    library: Ayni.icon( 'library' ),
+    albums:  Ayni.icon( 'albums' ),
+    artists: Ayni.icon( 'person' ),
+    list:    Ayni.icon( 'queue-list' ),
+    shuffle: Ayni.icon( 'shuffle' ),
+    next:    Ayni.icon( 'next-mini' )
 };
 
 function playlistNodes()
@@ -2119,16 +2138,16 @@ function wireStaticUI()
 
     // The seek / volume / time / play icon wiring (shared/media.js); the lock
     // screen's progress bar follows the element.
-    NayiveMedia.wirePlayer( audio, {
+    Ayni.media.wirePlayer( audio, {
         loaded: function ()
         {
             if( st.seekOnLoad ) { try { audio.currentTime = st.seekOnLoad; } catch( e ) {} st.seekOnLoad = 0; }
-            NayiveMedia.positionState( audio );
+            Ayni.media.positionState( audio );
         },
-        play:  function () { NayiveMedia.positionState( audio ); },
-        pause: function () { NayiveMedia.positionState( audio ); }
+        play:  function () { Ayni.media.positionState( audio ); },
+        pause: function () { Ayni.media.positionState( audio ); }
     } );
-    audio.addEventListener( "seeked", function () { NayiveMedia.positionState( audio ); } );
+    audio.addEventListener( "seeked", function () { Ayni.media.positionState( audio ); } );
     audio.addEventListener( "ended", function () { autoNext(); } );
 
     // A song that cannot play (gone since the scan, a format the browser lacks)
@@ -2154,7 +2173,7 @@ function wireStaticUI()
 async function boot()
 {
     wireStaticUI();
-    NayivePlayOn.wire( audio, $( "#outBtn" ) );
+    AyniPlayOn.wire( audio, $( "#outBtn" ) );
 
     DIR = await NayiveMedia.openLibrary( DIR, { app: "music", title: Ayni.t( "music.whereFolder" ), note: Ayni.t( "music.whereFolderNote" ) } );
     if( ! DIR ) return;

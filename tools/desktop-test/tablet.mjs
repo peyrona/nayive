@@ -183,9 +183,9 @@ try
             ${tile ? `localStorage.setItem( 'balata-desktop-tile', ${JSON.stringify( JSON.stringify( tile ) )} );` : "localStorage.removeItem( 'balata-desktop-tile' );"}
             return true; } )()` );
     }
-    const wins = () => ev( "JSON.stringify( NayiveDesktop.windows() )" ).then( JSON.parse );
+    const wins = () => ev( "JSON.stringify( AyniDesk.windows() )" ).then( JSON.parse );
     const winRect = i => ev( `JSON.stringify( document.querySelectorAll( '#desk > .win' )[ ${i} ].getBoundingClientRect() )` ).then( JSON.parse );
-    const deskReady = n => waitFor( `window.NayiveDesktop && NayiveDesktop.windows && NayiveDesktop.windows().length === ${n}`, 10000, n + " windows" );
+    const deskReady = n => waitFor( `window.AyniDesk && AyniDesk.windows && AyniDesk.windows().length === ${n}`, 10000, n + " windows" );
 
     await view( 1194, 834 );
     await go( "/nayive/fixture/box.html" );
@@ -235,7 +235,7 @@ try
     // In the desktop's own menu the row shows (the only place for it); a change
     // there is stored, and the menu's page does not turn into a desktop.
     await deskReady( 0 );
-    await ev( "NayiveDesktop.menu(); true" );
+    await ev( "AyniDesk.menu(); true" );
     const md = "document.querySelector( '.menu iframe' ).contentDocument";
     await waitFor( `( function () { try { return ${md}.documentElement.classList.contains( 'in-desktop' ) && !! ${md}.defaultView.NayiveUI; } catch( e ) { return false; } } )()`, 10000, "launcher in the menu" );
     await ev( `${md}.getElementById( 'accountBtn' ).click(); true` );
@@ -279,55 +279,55 @@ try
     check( "Mouse taken away (Always): no chip", await ev( "!! document.querySelector( '#ayni-toasts > .toast' )" ) === false );
 
     // ===== 3. UPRIGHT -> TILE =====
-    const open2 = async () => { await ev( "NayiveDesktop.open( '/nayive/fixture/box.html?n=A' ); NayiveDesktop.open( '/nayive/fixture/box.html?n=B' ); true" ); await settle(); };
+    const open2 = async () => { await ev( "AyniDesk.open( '/nayive/fixture/box.html?n=A' ); AyniDesk.open( '/nayive/fixture/box.html?n=B' ); true" ); await settle(); };
     await view( 834, 1194 );
     await device( { fine: false, coarse: true, mode: "always" } );
     await go( "/nayive/desktop/index.html" );
     await deskReady( 0 );
     await settle();
-    check( "Upright, empty desk: nothing to tile yet", await ev( "NayiveDesktop.isTiled()" ) === false );
+    check( "Upright, empty desk: nothing to tile yet", await ev( "AyniDesk.isTiled()" ) === false );
     await open2();
     let ws = await wins();
-    check( "Upright: the windows are tiled by themselves", await ev( "NayiveDesktop.isTiled()" ) === true && ws.every( w => w.tiled ), ws );
+    check( "Upright: the windows are tiled by themselves", await ev( "AyniDesk.isTiled()" ) === true && ws.every( w => w.tiled ), ws );
     const r0 = await winRect( 0 ), r1 = await winRect( 1 );
     check( "Upright: side by side, not on top of each other", r0.bottom <= r1.top + 1 || r1.bottom <= r0.top + 1 || r0.right <= r1.left + 1 || r1.right <= r0.left + 1, [ r0, r1 ] );
     await shot( "upright-tiled" );
     await view( 1194, 834 ); await settle(); await settle();
-    check( "Wide again: back to Free", await ev( "NayiveDesktop.isTiled()" ) === false );
+    check( "Wide again: back to Free", await ev( "AyniDesk.isTiled()" ) === false );
     ws = await wins();
     check( "Wide again: the windows where a new window opens", ws.every( w => ! w.tiled && w.box.w > 500 ), ws );
     await view( 834, 1194 ); await settle(); await settle();
-    check( "Upright again: tiled again", await ev( "NayiveDesktop.isTiled()" ) === true );
-    await ev( "NayiveDesktop.untile(); true" ); await settle();
+    check( "Upright again: tiled again", await ev( "AyniDesk.isTiled()" ) === true );
+    await ev( "AyniDesk.untile(); true" ); await settle();
     await view( 834, 1100 ); await settle(); await settle();
-    check( "Free picked by hand while upright: stays Free", await ev( "NayiveDesktop.isTiled()" ) === false );
+    check( "Free picked by hand while upright: stays Free", await ev( "AyniDesk.isTiled()" ) === false );
     await view( 1194, 834 ); await settle(); await settle();
-    await ev( "NayiveDesktop.tile(); true" ); await settle();
+    await ev( "AyniDesk.tile(); true" ); await settle();
     await view( 834, 1194 ); await settle(); await settle();
-    check( "Tiled by hand, then upright: tiled", await ev( "NayiveDesktop.isTiled()" ) === true );
+    check( "Tiled by hand, then upright: tiled", await ev( "AyniDesk.isTiled()" ) === true );
     await view( 1194, 834 ); await settle(); await settle();
-    check( "Tiled by hand: wide again, still tiled", await ev( "NayiveDesktop.isTiled()" ) === true );
-    await ev( "NayiveDesktop.untile(); true" ); await settle();
+    check( "Tiled by hand: wide again, still tiled", await ev( "AyniDesk.isTiled()" ) === true );
+    await ev( "AyniDesk.untile(); true" ); await settle();
     // Tiled upright, reloaded wide: Free.
     await view( 834, 1194 ); await settle(); await settle();
-    check( "(upright: tiled)", await ev( "NayiveDesktop.isTiled()" ) === true );
+    check( "(upright: tiled)", await ev( "AyniDesk.isTiled()" ) === true );
     await sleep( 400 );                                          // the windows are saved a moment after a change
     check( "Tiled upright: saved as done by itself", await ev( "JSON.parse( localStorage.getItem( 'balata-desktop-tile' ) ).auto" ) === true );
     await go( "/nayive/fixture/box.html" );
     await view( 1194, 834 );
     await go( "/nayive/desktop/index.html" );
     await deskReady( 2 ); await settle();
-    check( "Tiled upright, reloaded wide: Free", await ev( "NayiveDesktop.isTiled()" ) === false );
+    check( "Tiled upright, reloaded wide: Free", await ev( "AyniDesk.isTiled()" ) === false );
     // All closed while upright: the next window is tiled too.
     await view( 834, 1194 ); await settle(); await settle();
     await ev( "[].slice.call( document.querySelectorAll( '#tasks [data-win=\"close\"]' ) ).forEach( function ( x ) { x.click(); } ), true" ); await settle();
-    await ev( "NayiveDesktop.open( '/nayive/fixture/box.html?n=C' ); true" ); await settle();
-    check( "Upright, every window closed, a new one: tiled", await ev( "NayiveDesktop.isTiled()" ) === true );
+    await ev( "AyniDesk.open( '/nayive/fixture/box.html?n=C' ); true" ); await settle();
+    check( "Upright, every window closed, a new one: tiled", await ev( "AyniDesk.isTiled()" ) === true );
     // A PC (no touch screen): never.
     await view( 1194, 834 ); await settle(); await settle();
     await ev( "__setPtr( true, false ); true" ); await settle();
     await view( 834, 1194 ); await settle(); await settle();
-    check( "A PC narrower than 1024px: no tiling by itself", await ev( "NayiveDesktop.isTiled()" ) === false );
+    check( "A PC narrower than 1024px: no tiling by itself", await ev( "AyniDesk.isTiled()" ) === false );
 
     // ===== 4. TOUCH =====
     await view( 1194, 834 );
@@ -410,7 +410,7 @@ try
     check( "Maximised, keyboard gone: the whole desk again", near( kr.height, deskH, 1 ), { kr, deskH } );
     await ev( "document.querySelector( '.chip[aria-current=true] [data-win=\"max\"]' ).click(); true" ); await settle();
     // Scale on, shrunk: still ends at the edge.
-    await ev( "NayiveDesktop.scale( 1, true ); true" ); await settle();
+    await ev( "AyniDesk.scale( 1, true ); true" ); await settle();
     const wsS = await wins();
     await ev( "__kb( 350 ); true" ); await settle();
     kr = await winRect( 1 );

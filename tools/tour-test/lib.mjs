@@ -26,7 +26,7 @@ export const state = c => c.evaluate( `( () => { const o = document.querySelecto
     const rb = r.getBoundingClientRect(), bb = b.getBoundingClientRect();
     const hit = r.hidden ? null : document.elementsFromPoint( rb.left + rb.width / 2, rb.top + rb.height / 2 ).find( e => ! o.contains( e ) );
     // The lit thing and its parents up to the first button / id: their ids and classes.
-    const names = []; for( let e = hit, i = 0; e && i < 5; e = e.parentElement, i++ ) { names.push( e.id || e.dataset.menu || e.dataset.act || e.getAttribute( 'class' ) || e.tagName ); if( e.id || e.matches( 'button, [aria-selected], .nayive-home-link' ) ) break; }
+    const names = []; for( let e = hit, i = 0; e && i < 5; e = e.parentElement, i++ ) { names.push( e.id || e.dataset.menu || e.dataset.act || e.getAttribute( 'class' ) || e.tagName ); if( e.id || e.matches( 'button, [aria-selected], .home-link' ) ) break; }
     const [ a, m ] = o.querySelector( '.tour-count' ).textContent.match( /\\d+/g ).map( Number );
     return { n: a, m, text: b.querySelector( ':scope > p' ).textContent, note: n.hidden ? '' : n.textContent,
              title: o.querySelector( '.tour-head b' ).textContent,

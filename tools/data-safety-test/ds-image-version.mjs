@@ -20,7 +20,7 @@ const binList = async () => JSON.parse( ( await phone.call( "GET", "/api/files?t
 
 // The offline copy: the service worker answers a file GET from its cache,
 // marked, when the network fails. Stood in for here (the tests bypass the
-// worker): GumApi's reads of o.png come back marked.
+// worker): AyniNet's reads of o.png come back marked.
 await c.send( "Page.addScriptToEvaluateOnNewDocument", { source: `( () => { const f = window.fetch;
     window.fetch = async function ( u, o ) {
         if( String( u ).indexOf( 'file=' + encodeURIComponent( 'files/o.png' ) ) === -1 || ( o && o.method && o.method !== 'GET' ) ) return f.apply( this, arguments );

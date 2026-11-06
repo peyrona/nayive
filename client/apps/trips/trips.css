@@ -380,4 +380,3 @@ input:disabled { opacity: 0.5; cursor: not-allowed; }
               color: var(--text); }
 .loc-master.on { border-color: var(--accent); }
 .loc-master + .loc-app { margin-top: 16px; }
-.field:has( > .spin #tripDaysSet ) > .spin { width: 120px; }

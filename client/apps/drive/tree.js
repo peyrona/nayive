@@ -59,7 +59,7 @@ function displayName( node )
 
 // A shortcut (server/go/links.go): a small "<name>.nayive-link" file whose
 // `link` says where it leads - { to, dir } - or { broken: true }. Drive
-// alone lists them (GumApi.listDir( path, true )); the name shown drops the
+// alone lists them (AyniNet.listDir( path, true )); the name shown drops the
 // ending.
 const LINK_EXT = '.nayive-link';
 function isLink( node )     { return !! ( node && node.link ); }
@@ -77,11 +77,13 @@ function linkTarget( node )
 function render()
 {
     document.body.classList.toggle( 'trash-mode', trashMode );
-    // The bin is the Papelera's on/off switch: lit while it is open, and
-    // then its tooltip says where a tap takes you - back to Drive.
+    // The bin is the Papelera's on/off switch: while it is open it is an
+    // arrow back to Drive, and it never leaves the bar for the ⋮.
     const binBtn = document.getElementById( 'trashViewBtn' );
-    binBtn.setAttribute( 'aria-pressed', trashMode );
+    binBtn.innerHTML = Ayni.icon( trashMode ? 'back' : 'trash' );
+    binBtn.ayniFitPin = trashMode;
     Ayni.setTip( binBtn, T( trashMode ? 'drive.backToDrive' : 'acct.trash' ) );
+    document.getElementById( 'trashTools' ).hidden = ! trashMode;
     // "Biggest files" is the same kind of switch.
     const bigBtn = document.getElementById( 'bigFilesBtn' );
     bigBtn.setAttribute( 'aria-pressed', bigMode );

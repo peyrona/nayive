@@ -166,7 +166,7 @@
     {
         if( ! S.user )
         {
-            try { var w = await GumApi.probeAccess(); S.user = ( w && w.user ) || ""; } catch( e ) {}
+            try { var w = await AyniNet.probeAccess(); S.user = ( w && w.user ) || ""; } catch( e ) {}
         }
         return S.user;
     };
@@ -175,7 +175,7 @@
     {
         Ayni.i18n.ready.then( function ()
         {
-            NayiveUI.bootWithStore( null, function ( who ) { S.user = ( who && who.user ) || ""; return E.start(); } );
+            AyniBoot.boot( null, function ( who ) { S.user = ( who && who.user ) || ""; return E.start(); } );
         } );
     } );
 } )();

@@ -198,10 +198,10 @@ function reminderSection()
         input.disabled = true;
         try
         {
-            // Through GumApi: it names the page's owner (X-Nayive-User), so an
+            // Through AyniNet: it names the page's owner (X-Nayive-User), so an
             // old tab of another account is refused (423), not saved (AB3).
             const q = new URLSearchParams( { tripdays: '1', value: String( v ) } ).toString();
-            const text = await GumApi.fetchText( '/api/files?' + q, { method: 'POST' } );
+            const text = await AyniNet.fetchText( '/api/files?' + q, { method: 'POST' } );
             let d = {};
             try { d = JSON.parse( text ) || {}; } catch( _ ) {}
             saved = d.days; input.value = d.days;

@@ -3,7 +3,7 @@
  * half-width katakana and digits fall in columns, each column its own speed,
  * the head bright and the trail fading into the black.
  */
-NayiveLock.define( "matrix", function ( host )
+AyniLocker.define( "matrix", function ( host )
 {
     "use strict";
 

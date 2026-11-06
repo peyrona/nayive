@@ -1,4 +1,4 @@
-/* Ayni library 0.1.0, pickers family: the list picker (drop-down list, filtered list and combo box, one component). Plain JavaScript,
+/* Ayni library 0.2.0, pickers family: the list picker (drop-down list, filtered list and combo box, one component). Plain JavaScript,
    no build step, evergreen browsers 2024+. Load it after ayni-base.js, ayni-menus.js (placing) and ayni-lists.js
    (type-ahead), and after ayni-fields.js for the filtered list's "!":
      <script src="ayni-base.js" defer></script>
@@ -14,13 +14,12 @@
    user picks or types a value (never when the page sets one). */
 (() => {
 'use strict';
-const { $, $$ } = Ayni;
+const { $, $$, esc } = Ayni;
 const { fire, once, isRO, isTouch, tx, fold } = Ayni.core;
 /* Type-ahead comes from ayni-lists.js, which loads before this file */
 const { makeTypeAhead } = Ayni.core.lists;
 
 let seq = 0;
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /* An item of the list: { value, text, short, disabled } (a plain string is value and text), or a heading { heading }.
    A disabled item shows, faded, but cannot be picked; the keys pass over it */

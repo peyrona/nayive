@@ -30,10 +30,11 @@ function t( k ) { return window.Ayni ? Ayni.t( k ) : k; }
 
 function el( tag, cls, text, parent ) { return S.engine.el( tag, cls, text, parent ); }   // only once open() has S
 
-// Layout only: every control is a shared one (Ayni list picker, input, .switch,
-// .btn, the browser's own tick-box).
+// Layout only: every control is a shared one (Ayni list picker, input, .btn,
+// the browser's own tick-box). Every on/off here is a tick-box, all one size.
 var STYLE =
 ".salon-pane { min-height: 330px; }" +
+"#salonSettings input[type=checkbox] { width: 16px; height: 16px; margin: 0; }" +
 ".salon-h { margin: 14px 0 6px; font-size: 0.8rem; color: var(--text-dim); }" +
 ".salon-h:first-child { margin-top: 0; }" +
 ".salon-note { margin: 6px 0 0; font-size: 0.8rem; color: var(--text-dim); line-height: 1.4; }" +
@@ -131,12 +132,10 @@ function open( kind )
     function toggle( parent, label, checked, onChange )
     {
         var r = el( "label", "salon-row", null, parent );
-        el( "span", "grow", label, r );
-        var sw = el( "span", "switch", null, r );
-        var i = el( "input", null, null, sw );
+        var i = el( "input", null, null, r );
         i.type = "checkbox";
-        i.setAttribute( "role", "switch" );
         i.checked = !! checked;
+        el( "span", "grow", label, r );
         i.addEventListener( "change", function () { onChange( i.checked ); } );
         return i;
     }

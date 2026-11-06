@@ -273,7 +273,7 @@ function renderContent()
 function buildListView()
 {
     const wrap  = document.createElement( 'div' );
-    const today = NayiveUI.todayIso();
+    const today = Ayni.dates.today();
 
     const upcoming = trips.filter( function( t ) { return t.endDate >= today; } ).sort( function( a, b ) { return a.startDate.localeCompare( b.startDate, Ayni.i18n.lang() ); } );
     const past     = trips.filter( function( t ) { return t.endDate < today; } ).sort( function( a, b ) { return b.startDate.localeCompare( a.startDate, Ayni.i18n.lang() ); } );
@@ -314,7 +314,7 @@ function sectionLabel( sText, bSpaced )
 function daysUntil( isoDate )
 {
     if( ! isoDate ) return null;
-    const ms = new Date( isoDate + 'T00:00:00' ) - new Date( NayiveUI.todayIso() + 'T00:00:00' );
+    const ms = new Date( isoDate + 'T00:00:00' ) - new Date( Ayni.dates.today() + 'T00:00:00' );
     return isNaN( ms ) ? null : Math.round( ms / 86400000 );
 }
 
@@ -556,7 +556,7 @@ async function photosLibraryDir()
 {
     try
     {
-        const cfg = await GumApi.readJson( 'data/photos/config.json' );
+        const cfg = await AyniNet.readJson( 'data/photos/config.json' );
         const f   = cfg && typeof cfg.folder === 'string' ? cfg.folder.replace( /\/+$/, '' ) : '';
         return f || null;
     }
@@ -590,8 +590,8 @@ async function pickTripPhotoFolder( trip )
         {
             try
             {
-                if( ! ( await GumApi.namesIn( lib ) ).has( sub ) ) await GumApi.makeDir( lib, sub );
-                if( ! ( await GumApi.namesIn( lib + '/' + sub ) ).has( name ) ) await GumApi.makeDir( lib + '/' + sub, name );
+                if( ! ( await AyniNet.namesIn( lib ) ).has( sub ) ) await AyniNet.makeDir( lib, sub );
+                if( ! ( await AyniNet.namesIn( lib + '/' + sub ) ).has( name ) ) await AyniNet.makeDir( lib + '/' + sub, name );
             }
             catch( e ) { Ayni.toast( 'err', T( 'ui.saveFailed' ) ); return; }
             sPath = want;

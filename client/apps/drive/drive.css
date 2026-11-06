@@ -344,26 +344,21 @@ dialog.panel .body p { font-size: 0.9rem; color: var(--text-dim); margin: 0 0 14
 
 /* Properties dialog: .props in app.css. */
 
-/* Trash view ("Papelera"). A flat listing of trashed items; the file-tree
-   toolbar buttons are hidden while it is open. */
-body.trash-mode .search-field,
-body.trash-mode #searchToggleBtn,
-body.trash-mode #newFolderBtn, body.trash-mode #uploadBtn,
-body.trash-mode #renameBtn,  body.trash-mode #moveToBtn,
-body.trash-mode #copyToBtn,  body.trash-mode #copyLinkBtn,
-body.trash-mode #compressBtn, body.trash-mode #propsBtn,
-body.trash-mode #downloadBtn, body.trash-mode #deleteBtn,
-body.trash-mode #shareBtn,   body.trash-mode #bigFilesBtn,
-body.trash-mode #selActions,
-body.trash-mode #driveTools::before,
-body.trash-mode .tb-modes { display: none; }
+/* Trash view ("Papelera"). A flat listing of trashed items; the file tools
+   and the breadcrumb make way for the bin's own tools in the header. */
+.topbar .tb-modes:has(+ #trashViewBtn) { margin-right: 0; }
+#trashViewBtn { margin-right: 6px; }
 
-.trash-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.trash-bar .trash-title { font-weight: 600; margin-right: auto; }
-.trash-bar .trash-days { display: flex; align-items: center; gap: 6px; color: var(--muted, var(--text)); font-size: .9em; }
+body.trash-mode #driveTools,
+body.trash-mode #selActions,
+body.trash-mode .tb-modes,
+body.trash-mode #breadcrumb { display: none; }
+
+#trashTools { gap: 8px; font-weight: 400; color: var(--text); white-space: nowrap; }
+.trash-held { font-size: .9em; }
+#trashTools .trash-days { display: flex; align-items: center; gap: 6px; color: var(--muted, var(--text)); font-size: .9em; }
 /* 5em, not 3.5em: the shared 10px side padding plus the spinner arrows ate
    all but one digit, so "30" read as "3" */
-.trash-bar .trash-days .spin { width: 112px; }
 /* Every button in the bar is a shared one: "←" an .btn, "Vaciar
    papelera" a .btn.text.bordered.danger, the days hint an .info-tip (its size
    lives in app.css, so every (i) looks like this one). */
@@ -376,9 +371,8 @@ body.trash-mode .tb-modes { display: none; }
 
 @media (max-width: 640px)
 {
-    /* B1 — keep the app name (it is how you know where you are, and
-       tapping it goes home); hide only the HD gauge and tighten the bar.
-       The name is a touch smaller here so the button row still fits. */
+    /* B1 — hide the HD gauge and tighten the bar. On a phone the shared rule
+       hides the name; this size is for a desktop window as narrow as one. */
     .topbar h1 { font-size: 1rem; margin-right: 6px; white-space: nowrap; }
     .brand { margin-right: 2px; }
     .disk-bar { display: none; }
@@ -391,6 +385,9 @@ body.trash-mode .tb-modes { display: none; }
 
     /* B4 — the view switch leaves the header for its ⋮ (menus.js viewMenuItems). */
     .tb-modes { display: none; }
+
+    /* The bin's tools share the title row: the number alone says it, with its (i). */
+    .trash-words { display: none; }
 
     /* B6 — the header keeps what fits; the rest is in its ⋮ (NayiveUI.fitBar). */
 

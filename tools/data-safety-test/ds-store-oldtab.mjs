@@ -20,7 +20,7 @@ const s = await server( { ana: "aaa", beto: "bbb" } );
 stPage( s );
 fs.copyFileSync( path.join( HERE, "fixtures/store-before-c4a.js" ), `${s.run}/apps/shared/store-old.js` );
 fs.writeFileSync( `${s.run}/apps/old.html`, fs.readFileSync( `${s.run}/apps/st.html`, "utf8" )
-    .replace( "shared/store.js", "shared/store-old.js" ).replace( "<title>st</title>", "<title>old</title>" ) );
+    .replace( "shared/ayni/ayni-store.js", "shared/store-old.js" ).replace( "<title>st</title>", "<title>old</title>" ) );
 const ana  = await s.client( "ana" );
 const beto = await s.client( "beto" );
 const A = await browser( s, { user: "ana" } );
@@ -54,7 +54,7 @@ section( "L4 · ANOTHER ACCOUNT'S SAVE KEPT BESIDE, AND AN OLD TAB" );
         onDisk( s, F, "beto" ) );
     for( const c of [ B, O ] ) await c.send( "Page.navigate", { url: "about:blank" } );
     await B.open( "/nayive/st.html" );
-    await B.evaluate( "NayiveStore.localCount().then( () => NayiveStore.clearLocal() ).then( () => true )" );
+    await B.evaluate( "AyniStore.localCount().then( () => AyniStore.clearLocal() ).then( () => true )" );
     await login( A, "ana", "aaa" );
 }
 

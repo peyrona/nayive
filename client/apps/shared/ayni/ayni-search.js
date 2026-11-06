@@ -1,4 +1,4 @@
-/* Ayni library 0.1.0, search family: the one search field (.input-group.search-field), folded behind its Search
+/* Ayni library 0.2.0, search family: the one search field (.input-group.search-field), folded behind its Search
    button in a title row (.fold), with its count, filter button and up / down pair. The search rule itself
    (Ayni.matcher, Ayni.fold) is in ayni-base.js: lists and pickers use it too.
    Plain JavaScript, no build step, evergreen browsers 2024+. Load it after ayni-base.js and ayni-buttons.js:

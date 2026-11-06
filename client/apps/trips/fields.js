@@ -294,7 +294,7 @@ function docAttachSet( sIconPaths, sLabel, sTag, fnPick )
 function docOpenInTab( d, sFolder )
 {
     const url = d._pending ? URL.createObjectURL( d._pending )
-                           : GumApi.fileUrl( docPath( sFolder, d ) );
+                           : AyniNet.fileUrl( docPath( sFolder, d ) );
 
     if( url )
         window.open( url, '_blank', 'noopener' );

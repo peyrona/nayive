@@ -1,4 +1,4 @@
-/* Ayni library 0.1.0, help family: the Help button (?) and its card, the guided tour, first-visit marks and the
+/* Ayni library 0.2.0, help family: the Help button (?) and its card, the guided tour, first-visit marks and the
    info label ("i"). Plain JavaScript, no build step, evergreen browsers 2024+. Load it after ayni-base.js,
    ayni-buttons.js and ayni-dialogs.js:
      <script src="ayni-base.js" defer></script>

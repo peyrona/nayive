@@ -90,7 +90,7 @@ try
         saved.font === "clear" && saved.size === "l" && saved.contrast === "high", "saved on the server, per user" );
 
     // Lock: the locker uses them.
-    await p.evaluate( "NayiveLock.lock();1" );
+    await p.evaluate( "AyniLocker.lock();1" );
     let st = null;
     for( let i = 0; i < 60; i++ )
     {

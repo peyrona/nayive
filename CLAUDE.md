@@ -2,8 +2,10 @@
 
 ## Sealed CRUD code (data safety)
 
-Every file that writes, moves or deletes user data starts with a `SEALED` line
-(`grep -rl "SEALED - a user-data write path" server client` lists them; the
+Every file that writes, moves or deletes user data starts with a `SEALED` line,
+or a `DATA:` line in `client/apps/shared/ayni/` (Ayni is public: ayni-net.js, ayni-store.js, ayni-doc.js
+and formats/ical.js are sealed code too)
+(`grep -rlE "SEALED - a user-data write path|^// DATA:" server client` lists them; the
 full list with functions and tests is docs/sealed-crud.md, kept local).
 
 The seal guards the DATA CODE inside the file, not every line of it. Many
@@ -35,5 +37,5 @@ For a data change:
 4. Several data changes in one task: tell him once, at the end.
 
 New code that writes user data goes through the sealed helpers
-(shared/store.js, shared/gum-api.js, shared/office.js; server upload.go,
+(shared/ayni/ayni-store.js, shared/ayni/ayni-net.js, shared/ayni/ayni-doc.js; server upload.go,
 trash.go, sandbox.go), never around them, and gets a `ds-*` test.

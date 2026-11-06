@@ -1,0 +1,381 @@
+/* Ayni library 0.2.0, a desktop of whole pages (Ayni.deskPage). Plain CSS, no build step, evergreen browsers 2024+. Optional. */
+
+html, body { height: 100%; overflow: hidden; }
+
+:root { --bar-h: 48px; }
+
+.desktop { color: var(--text); }
+
+/* THE DESKTOP'S COLOURS - never chosen: worked out from the account's
+   active scheme (My account -> Colour schemes), so they flip with the apps,
+   by hand or at dusk and dawn. A STEP is 12%. The rules:
+     desk      dark:  --bg 2 steps toward black, with 6% of --accent in it
+               light: --bg 2 steps toward --line (the scheme's own hue, not grey)
+     bar       dark:  the desk, 1 step darker again
+               light: the desk, 2 steps toward --line again - the darkest part
+     edges     --line, softened 3 steps toward --bg (a full --line is heavy on light)
+     focused   the front window's edge: --line with 4 steps of --accent
+     shadow    dark: deep black; light: --line's hue, never grey
+   The desk is always darker than --bg, so a window (--bg / --card inside)
+   stands off it. New names, not --bg: a token cannot use itself. */
+.desktop
+{
+    --desk-bg:     color-mix(in srgb, color-mix(in oklab, var(--bg) 76%, #000), var(--accent) 6%);
+    --desk-bar:    color-mix(in oklab, var(--desk-bg) 88%, #000);
+    --desk-edge:   color-mix(in srgb, var(--line) 64%, var(--bg));
+    --desk-focus:  color-mix(in srgb, var(--line) 52%, var(--accent));
+    --desk-shadow: rgba(0, 0, 0, 0.55);
+    --win-scale:   #1E90FF;     /* the Scale / Resize button (DodgerBlue); the other window buttons use --warn / --ok / --danger */
+}
+:root[data-theme="light"] .desktop
+{
+    --desk-bg:     color-mix(in oklab, var(--bg) 76%, var(--line));
+    --desk-bar:    color-mix(in oklab, var(--desk-bg) 76%, var(--line));
+    --desk-shadow: color-mix(in srgb, var(--line) 38%, transparent);
+    --win-scale:   #1873CC;     /* DodgerBlue, one step darker for a light bar */
+}
+
+/* THE DESK - where the windows live. The the app logo sits engraved in
+   its centre, the same groove + lit edge as behind the launcher tiles. */
+.desk
+{
+    isolation: isolate;          /* window z-indexes stay under the dialogs */
+    background: var(--desk-bg);
+    --engrave-groove: color-mix(in srgb, var(--desk-bg) 55%, #000);
+    --engrave-lit:    color-mix(in srgb, var(--desk-bg) 88%, #fff);
+}
+:root[data-theme="light"] .desk
+{
+    --engrave-groove: color-mix(in srgb, var(--desk-bg) 87%, #000);
+    --engrave-lit:    color-mix(in srgb, var(--desk-bg) 40%, #fff);
+}
+.desk::before,
+.desk::after
+{
+    content: ""; position: absolute; left: 50%; top: 50%;
+    width: min(38vw, 38vh); aspect-ratio: 1; translate: -50% -50%;
+    pointer-events: none;
+    -webkit-mask: url(../icons/logo-lines.svg) center / contain no-repeat;
+            mask: url(../icons/logo-lines.svg) center / contain no-repeat;
+}
+.desk::before { background: var(--engrave-lit); transform: translateY(1px); }
+.desk::after  { background: var(--engrave-groove); }
+/* An empty spot of the desk: what a right-click or a long press finds there (see THE MENU). */
+.desk-empty   { position: absolute; inset: 0; }
+
+/* While a window is dragged or resized the frames must not swallow the pointer. */
+.desk.busy iframe { pointer-events: none; }
+.desk.busy-frame .win:not(.dragging) iframe { pointer-events: none; }
+body.busy         { user-select: none; }
+/* A press on a title bar shows the grabbing hand until let go (grabCursor). */
+html.win-grab, html.win-grab * { cursor: grabbing !important; }
+
+/* Where a dragged window will land when let go at an edge. */
+.snap-ghost
+{
+    position: absolute; z-index: 99999; pointer-events: none;
+    border: 3px dotted var(--accent); border-radius: var(--radius-m);
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.snap-ghost[hidden] { display: none; }
+
+/* A WINDOW */
+.win
+{
+    position: absolute; z-index: 1; display: flex; flex-direction: column;
+    min-width: 320px; min-height: 200px;
+    border: 2px solid var(--desk-edge); border-radius: var(--radius-m);
+    background: var(--card); box-shadow: 0 12px 32px var(--desk-shadow);
+    transform-origin: 0 0;      /* Scale (see SCALE): a shrunk window is drawn from its top-left corner */
+}
+.win.focused { border-color: var(--desk-focus); box-shadow: 0 20px 52px var(--desk-shadow); }
+.win.dragging { opacity: 0.9; }   /* moving or resizing: a hint see-through */
+.win.max { left: 0 !important; top: 0 !important; width: 100% !important; height: 100% !important;
+           border-radius: 0; border-width: 0; box-shadow: none; transform: none !important; }   /* maximised: always 1:1 */
+
+.win-bar
+{
+    display: flex; align-items: center; gap: 8px; flex: 0 0 auto;
+    height: 44px; padding: 0 12px; cursor: default; user-select: none;
+    border-bottom: 1px solid var(--line);
+}
+.win-bar > svg { width: 18px; height: 18px; flex: 0 0 auto; color: var(--accent); }
+.win-title
+{
+    flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 0.9rem; font-weight: 600; color: var(--text);
+}
+/* A window behind: its icon + name keep their colour, softer. The app's own
+   title row gets the same (html[data-win-behind], see paint + app.css). */
+.win:not(.focused) .win-bar > svg,
+.win:not(.focused) .win-title { opacity: 0.55; }
+.win-frame { flex: 1 1 auto; width: 100%; border: 0; background: var(--bg);
+             border-radius: 0 0 var(--radius-m) var(--radius-m); }
+.win.max .win-frame { border-radius: 0; }
+
+/* The app's own top row is the title bar (see adoptHead): no bar of ours. */
+.win.chromeless .win-bar   { display: none; }
+.win.chromeless .win-frame { border-radius: var(--radius-m); }
+.win.chromeless.max .win-frame { border-radius: 0; }
+
+/* Resize grips: four edges + four corners, invisible, just past the border.
+   Sized in --win-px, one SCREEN pixel: a window shrunk by Scale keeps
+   full-size grips, so even a tiny one can always be pulled bigger again. */
+.win  { --win-px: calc(1px / var(--win-s, 1)); }
+.grip { position: absolute; z-index: 2; }
+.grip.n, .grip.s { left: calc(8 * var(--win-px)); right: calc(8 * var(--win-px)); height: calc(8 * var(--win-px)); cursor: ns-resize; }
+.grip.e, .grip.w { top: calc(8 * var(--win-px)); bottom: calc(8 * var(--win-px)); width: calc(8 * var(--win-px)); cursor: ew-resize; }
+.grip.n { top: calc(-4 * var(--win-px)); }    .grip.s { bottom: calc(-4 * var(--win-px)); }
+.grip.e { right: calc(-4 * var(--win-px)); }  .grip.w { left: calc(-4 * var(--win-px)); }
+.grip.ne, .grip.nw, .grip.se, .grip.sw { width: calc(14 * var(--win-px)); height: calc(14 * var(--win-px)); }
+.grip.nw { left: calc(-4 * var(--win-px));  top: calc(-4 * var(--win-px));    cursor: nwse-resize; }
+.grip.se { right: calc(-4 * var(--win-px)); bottom: calc(-4 * var(--win-px)); cursor: nwse-resize; }
+.grip.ne { right: calc(-4 * var(--win-px)); top: calc(-4 * var(--win-px));    cursor: nesw-resize; }
+.grip.sw { left: calc(-4 * var(--win-px));  bottom: calc(-4 * var(--win-px)); cursor: nesw-resize; }
+.win.max .grip { display: none; }
+/* A finger drags these: the browser must not take the press for a scroll. */
+.win-bar, .grip { touch-action: none; }
+
+/* ON-SCREEN KEYBOARD (see KEYBOARD): the window in front, made shorter
+   down to the keyboard's edge - also when that is under 200px or the
+   window is maximised. */
+.win.kb       { min-height: 0; }
+.win.max.kb   { height: var(--kb-h) !important; }
+
+/* TOUCH (a touch screen: a tablet; see TOUCH) - finger-sized resize
+   edges, window buttons and countdown buttons; the bar's own floor is in
+   applyLayout. A PC with no touch screen never gets body.touch. */
+body.touch .grip.n, body.touch .grip.s { left: calc(16 * var(--win-px)); right: calc(16 * var(--win-px)); height: calc(20 * var(--win-px)); }
+body.touch .grip.e, body.touch .grip.w { top: calc(16 * var(--win-px)); bottom: calc(16 * var(--win-px)); width: calc(20 * var(--win-px)); }
+body.touch .grip.n  { top: calc(-10 * var(--win-px)); }    body.touch .grip.s  { bottom: calc(-10 * var(--win-px)); }
+body.touch .grip.e  { right: calc(-10 * var(--win-px)); }  body.touch .grip.w  { left: calc(-10 * var(--win-px)); }
+body.touch .grip.ne, body.touch .grip.nw, body.touch .grip.se, body.touch .grip.sw { width: calc(32 * var(--win-px)); height: calc(32 * var(--win-px)); }
+body.touch .grip.nw { left: calc(-12 * var(--win-px));  top: calc(-12 * var(--win-px)); }
+body.touch .grip.se { right: calc(-12 * var(--win-px)); bottom: calc(-12 * var(--win-px)); }
+body.touch .grip.ne { right: calc(-12 * var(--win-px)); top: calc(-12 * var(--win-px)); }
+body.touch .grip.sw { left: calc(-12 * var(--win-px));  bottom: calc(-12 * var(--win-px)); }
+
+/* THE BAR - Ayni's taskbar (shared/ayni/ayni-desktop.css): on the desk's colours; its place
+   and size come from the settings (the "⋮" menu; data-edge, --bar-h). */
+#bar          { background: var(--desk-bar); border-color: var(--desk-edge); color: var(--text); font-family: var(--font-sans); }
+#bar button   { font-family: inherit; position: relative; }   /* position: holds the Chat and eMail dots */
+/* Unread Chat (red) and eMail (blue), see CHAT and EMAIL below. On the
+   menu button: a plain dot, Chat top-right, eMail top-left. On the app's
+   own chip: a disc with the count on the app icon, so it never takes
+   room from the name or covers the close (x). */
+#bar .icon-badge           { top: 3px; right: 3px; width: 8px; height: 8px; box-shadow: 0 0 0 1.5px var(--bg); }
+#bar .icon-badge.mail-dot  { right: auto; left: 3px; background: var(--busy); }
+#bar .icon-badge.has-count
+{
+    top: 0; right: 0; left: auto;
+    width: auto; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; box-sizing: border-box;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; line-height: 1; color: #fff;
+}
+#bar .chip-main > .icon-badge.has-count { top: 1px; right: auto; left: 3px; }   /* over the app icon */
+#bar .icon-badge[hidden]   { display: none; }   /* .has-count's flex would beat app.css's */
+
+/* The menu button carries the the app logo, sized to the bar. */
+#menuBtn       { width: calc(var(--bar-h) - 8px); height: calc(var(--bar-h) - 8px); }
+#menuBtn img   { width: calc(var(--bar-h) * 0.58); height: calc(var(--bar-h) * 0.58); display: block; }
+/* Desktop-only state: while the menu is open its button keeps the hover wash. */
+#menuBtn.open  { background: color-mix(in srgb, var(--text) 14%, transparent); }
+
+/* A window's chip (Ayni's, written in openApp): the app's icon in the accent. */
+.chip-main > svg      { width: 18px; height: 18px; flex: 0 0 auto; color: var(--accent); }
+.chip.min > .chip-main > svg { color: inherit; }
+/* A window behind others (or minimised) with a dialog open: an amber dot at
+   the icon's foot, clear of the unread disc on top. See DIALOG MARK. */
+.chip.has-dialog > .chip-main::after { content: ''; position: absolute; bottom: 3px; left: 3px; width: 8px; height: 8px;
+                          border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 1.5px var(--bg); }
+/* THE WINDOW'S BUTTONS - Scale / Resize, minimise, maximise, close - on the
+   chip of the window IN FRONT only, each in the colour the old title-bar
+   dots had, Scale / Resize in blue (--win-scale). */
+.chip-ctl > .btn svg  { width: 14px; height: 14px; color: inherit; }
+.chip-ctl > [data-win="scale"] { color: var(--win-scale); }
+.chip-ctl > [data-win="min"]   { color: var(--warn); }
+.chip-ctl > [data-win="max"]   { color: var(--ok); }
+.chip-ctl > [data-win="close"] { color: var(--danger); }
+body.touch .chip-ctl  { gap: 8px; }
+body.touch .chip-ctl > .btn { --btn: 36px; }
+body.touch .chip-ctl > .btn svg { width: 18px; height: 18px; }
+
+/* Its popup: Ayni's .panel.popup.controls.tall: groups under a small heading,
+   rows with the shared .switch, a list picker or the height slider at their end. */
+#moreMenu             { width: min(372px, calc(100vw - 16px)); gap: 8px; }
+#moreMenu > *         { flex: none; }
+#moreMenu .switch > :is(svg, .icon) { --icon: 18px; width: 18px; height: 18px; flex: 0 0 auto; color: var(--text-dim); }
+#moreMenu .switch[disabled] { cursor: default; }
+#moreMenu .switch[disabled] > :is(svg, .icon),
+#moreMenu .switch[disabled] > [data-i18n] { opacity: 0.42; }
+#moreMenu > .btn.text { justify-content: flex-start; width: 100%; }
+.set-row              { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+.set-row > label, .set-row > span:first-child { flex: 1 1 auto; }
+.set-row > .picker    { flex: 0 0 auto; min-width: 150px; }
+.set-row > .slider-row { flex: 0 0 180px; min-width: 0; }
+.set-row > .slider-row > input { flex: 1 1 0; min-width: 0; }
+.set-row:has(> .lock-min) > .picker { flex: 1 1 0; min-width: 96px; }
+/* The screen locker: its list first, the minutes at the end; the
+   clock's text row hides unless the clock is picked. */
+.lock-min             { flex: 0 0 auto; margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); }
+#lockMinSpin          { display: inline-flex; vertical-align: middle; }
+#lockTextWrap .input  { flex: 0 0 150px; }
+
+/* THE TILE SWITCH (see TILE / UNTILE): "Free ()== Tile", Ayni's .switch-pair.
+   Greyed while there is no window on the desk. */
+#tileSw.idle { opacity: 0.5; }
+
+/* WEATHER - the bar's sky icon and its popup: the hour, the sky, the
+   temperature, 5 times side by side. The sun and the bolt amber, rain blue. */
+#wxBtn      { padding: 4px; }
+#wxBtn svg  { width: 22px; height: 22px; }
+#wxPop      { width: auto; max-height: none; gap: 8px; }
+.wx-head    { font-size: 0.8rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 330px; }
+/* the sliding bar until the forecast comes; with less motion asked, a still striped fill */
+.wx-busy    { display: block; width: 300px; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
+.wx-busy > span { display: block; height: 100%; width: 30%; background: var(--accent); animation: wx-slide 1.2s ease-in-out infinite; }
+@keyframes wx-slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce)
+{
+    .wx-busy > span { width: 100%; animation: none;
+        background: repeating-linear-gradient(-45deg, var(--accent) 0 6px, color-mix(in srgb, var(--accent) 35%, transparent) 6px 12px); }
+}
+.wx-cols    { display: flex; gap: 4px; }
+.wx-col     { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 60px; }
+.wx-col > span { font-size: 0.8rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.wx-col > svg  { width: 30px; height: 30px; }
+.wx-col > b    { font-weight: 600; font-variant-numeric: tabular-nums; }
+.wx-fail    { width: 300px; color: var(--text-dim); font-size: 0.9rem; }
+/* The sun's disc is filled; on the light theme's beige the amber lines go
+   darker (#e9a10d there is almost invisible). */
+.wx-ico     { --wx-sun: #e9a10d; --wx-rain: #3b8fd9; }
+:root[data-theme="light"] .wx-ico { --wx-sun: #b86e00; --wx-rain: #1f6db5; }   /* rain: one step darker too */
+.wx-ico .s  { stroke: var(--wx-sun); }
+.wx-ico .sd { fill: #f2b632; }
+.wx-ico .r  { stroke: var(--wx-rain); }
+
+/* The clock: "<weekday> <date> <time>", each part optional but the time. A quiet
+   .btn.text.bordered with no border: a press on the time opens the countdown
+   dialog, on the weekday / date the month (#calPop). Two places to press, so
+   two hover chips: the button itself never lights, each part does. */
+#clock      { gap: 2px; height: calc(var(--bar-h) - 14px); padding: 0; border-color: transparent;
+              font-size: 0.9rem; font-weight: 500; white-space: nowrap; }
+#clock:hover { background: transparent; }
+#clock b    { font-weight: 500; font-variant-numeric: tabular-nums; }
+#clock > span, #clock > b { display: flex; align-items: center; align-self: stretch; padding: 0 8px;
+                            border-radius: var(--radius-s); transition: background-color var(--tr-fast); }
+#clock > span:hover, #clock > b:hover { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+/* The second clock (set.tz2): "<time> [+1]" with its city on a row below,
+   before the clock, paler and a bit smaller; shows only. */
+#clock2     { display: grid; grid-template-columns: auto auto; justify-content: center; align-content: center; row-gap: 2px;
+              flex: 0 0 auto; padding: 0 6px; line-height: 1;
+              font-size: 0.8rem; color: var(--text-dim); white-space: nowrap; cursor: default; }
+#clock2[hidden] { display: none; }
+#clock2 > span { grid-row: 2; grid-column: 1 / -1; text-align: center; font-size: 0.7rem; }
+#clock2 b   { font-weight: 500; font-variant-numeric: tabular-nums; }
+#clock2 i   { font-style: normal; margin-left: 3px; font-size: 0.7rem; }
+#clock2 i:empty { display: none; }
+
+/* THE MONTH - the date's popup: Ayni's calendar, view only, with week numbers. */
+#calPop       { width: auto; max-height: none; padding: 0; }
+
+/* The battery: an icon filled to its level and "80%" (red when low, green
+   while charging). Shows only: no press. Greyed menu row with no battery. */
+#batt       { display: inline-flex; align-items: center; gap: 4px; padding: 0 4px; flex: 0 0 auto;
+              font-size: 0.9rem; font-weight: 500; white-space: nowrap; cursor: default; }
+#batt[hidden] { display: none; }
+#batt svg   { width: 22px; height: 22px; }
+#batt b     { font-weight: 500; font-variant-numeric: tabular-nums; }
+#batt.low   { color: var(--danger); }
+#batt.chg .batt-fill { fill: #2e9d4f; }
+/* The running countdowns, just before the clock, one chip each (oldest first):
+   its time left, in the accent (its text shows only once time is up). A press
+   on it (not on its small buttons) opens the dialog to change that one. */
+#cds          { display: contents; }
+#cds > .cd-chip       { gap: 0; height: calc(var(--bar-h) - 14px); max-width: 300px; padding: 0 3px 0 0; flex: 0 1 auto; min-width: 0;
+                color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: var(--radius-s); white-space: nowrap; }
+.cd-main      { display: flex; align-items: center; gap: 6px; height: 100%; min-width: 0; padding: 0 6px 0 10px; border: 0; background: none;
+                color: inherit; font: inherit; font-weight: 500; cursor: pointer; }
+.cd-main b    { font-weight: 600; font-variant-numeric: tabular-nums; }
+.cd-main > .cd-text { overflow: hidden; text-overflow: ellipsis; color: var(--text-dim); }
+.cd-main > .cd-text:empty, .cd-main > b:empty { display: none; }
+.cd-chip.paused b { opacity: 0.55; }
+/* Its small buttons at the right end: Pause / Play and Stop while it runs;
+   time's up: the chip stays, with the text (or 0:00), and only an x to take it away. */
+.cd-chip > .btn       { --btn: 22px; color: var(--text-dim); }
+.cd-chip > .btn svg   { width: 12px; height: 12px; color: inherit; }
+.cd-chip > .btn:hover { color: var(--text); }
+.cd-chip > .cd-stop, .cd-chip > .cd-stop:hover { color: var(--danger); }
+#cds > .cd-chip.done  { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.cd-chip.done .cd-text { color: var(--text); font-weight: 600; }
+body.touch .cd-chip > .btn { --btn: 36px; }
+body.touch .cd-chip > .btn svg { width: 16px; height: 16px; }
+
+/* THE COUNTDOWN DIALOG - hours / minutes / seconds side by side, the text below.
+   Not centred: it opens by the clock (or its chip), like the month (cdOpen). */
+#cdBackdrop:modal { position: fixed; inset: auto; margin: 0; }
+.cd-nums      { flex-wrap: nowrap; }   /* three of Ayni's number fields (− 12 +) side by side: the dialog takes their room */
+.cd-nums .field { flex: 1 1 0; }
+
+/* THE MENU - the real launcher in a frame, popped up over the bar's left end. */
+.menu
+{
+    position: fixed; left: 8px; bottom: calc(var(--bar-h) + 8px); z-index: 100000;
+    width: 440px; max-height: calc(100dvh - var(--bar-h) - 24px); height: 640px;   /* both follow the panel (onMenuLoad) */
+    border: 1px solid var(--desk-edge); border-radius: 22px; overflow: hidden;
+    background: var(--card); box-shadow: 0 20px 52px var(--desk-shadow);
+}
+.menu iframe { width: 100%; height: 100%; border: 0; }
+/* A dialog of the launcher's (My account, a new user's first password...)
+   gets the whole screen, not the menu's corner (see menuSheets). */
+.menu.full { top: 0; left: 0; right: 0; bottom: 0; width: auto !important; height: auto !important; max-height: none;
+             border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+
+/* Bar on top (settings): the menu drops down, and the shared notices (update
+   bar, "space almost full") keep clear of it. */
+body.bar-top .menu    { bottom: auto; top: calc(var(--bar-h) + 8px); }
+body.bar-top .menu.full { top: 0; bottom: 0; }     /* a launcher dialog still gets the whole screen */
+body.bar-top .session-bar          { top: var(--bar-h); }
+body.bar-bottom .quota-card        { bottom: calc(var(--bar-h) + 16px); }
+
+/* Bar on the left or right (bar-side): a column --bar-h wide (Ayni's); the clock
+   and the countdown stack their parts. The menu pops out beside it. */
+body.bar-side  #batt    { flex-direction: column; gap: 0; padding: 4px 0; font-size: 0.75rem; }
+body.bar-side  #clock,
+body.bar-side  #cds > .cd-chip  { flex-direction: column; width: calc(var(--bar-h) - 4px); max-width: none; height: auto;
+                          padding: 6px 2px; gap: 2px; white-space: normal; text-align: center;
+                          font-size: 0.75rem; line-height: 1.2; overflow-wrap: anywhere; }
+body.bar-side  #clock  { padding: 4px 2px; }
+body.bar-side  #clock2 { width: calc(var(--bar-h) - 4px); padding: 4px 2px;
+                         white-space: normal; text-align: center; font-size: 0.7rem; overflow-wrap: anywhere; }
+body.bar-side  #clock > span, body.bar-side  #clock > b { justify-content: center; padding: 2px; }
+body.bar-side  .cd-main { flex-direction: column; padding: 0; gap: 2px; width: 100%; height: auto; }
+body.bar-side  .cd-text { display: none; }
+body.bar-left  .menu    { left: calc(var(--bar-h) + 8px); bottom: 8px; max-height: calc(100dvh - 16px); }
+body.bar-right .menu    { left: auto; right: calc(var(--bar-h) + 8px); bottom: 8px; max-height: calc(100dvh - 16px); }
+body.bar-side  .menu.full { left: 0; right: 0; }
+
+/* THE WINDOW SWITCHER - Alt pressed and let go on its own (see SWITCHER): one
+   tile per window, the last used first, in the middle of the screen. */
+.switcher
+{
+    position: fixed; left: 50%; top: 50%; translate: -50% -50%; z-index: 100001;
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+    width: max-content; max-width: min(90vw, 760px); padding: 14px;
+    border: 1px solid var(--desk-edge); border-radius: var(--radius-l);
+    background: var(--card); box-shadow: 0 20px 52px var(--desk-shadow);
+    font-family: var(--font-sans);
+}
+/* A tile: the shared .btn.large.bordered - the app's icon over the window's name.
+   Wide enough for the whole name. The chosen one gets the bar's "in front" look. */
+.btn.sw-item        { justify-content: center; width: auto; min-width: 132px; max-width: 100%; height: 108px;
+                      padding: 10px 16px; font-weight: 600; }
+.sw-item svg        { width: 40px; height: 40px; color: var(--accent); }
+.sw-item > span     { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; }
+.sw-item.min        { opacity: 0.6; }
+.btn.sw-item.sel    { opacity: 1; color: var(--text); border-color: var(--accent);
+                      background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.sw-item:focus-visible { outline: none; }      /* .sel already shows it */
+
+/* The bar-height slider (the "⋮" menu). */
+

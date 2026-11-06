@@ -4,10 +4,10 @@
  * (data/contacts.vcf): Contacts, which owns it, Chat's card picker, Tasks'
  * birthdays and Drive's .vcf import. Plain classic script, one global:
  *
- *     NayiveVCard.contentLines( text )        physical lines -> content lines
- *     NayiveVCard.read( text )                every card, the light way (see read)
- *     NayiveVCard.cards( text )               every card as the text it is in the file
- *     NayiveVCard.write( { name, tels, emails } )   one small card's text (Chat)
+ *     AyniVCard.contentLines( text )        physical lines -> content lines
+ *     AyniVCard.read( text )                every card, the light way (see read)
+ *     AyniVCard.cards( text )               every card as the text it is in the file
+ *     AyniVCard.write( { name, tels, emails } )   one small card's text (Chat)
  *     ... and the pieces they are made of: splitOnce, splitOutsideQuotes,
  *     splitEscaped, parseParams, decodeValue, isQuotedPrintable, unescapeText,
  *     escapeText, foldLine, photoOf.
@@ -338,7 +338,7 @@
         return out;
     }
 
-    window.NayiveVCard = {
+    window.AyniVCard = {
         contentLines      : contentLines,
         read              : read,
         cards             : vcfCards,

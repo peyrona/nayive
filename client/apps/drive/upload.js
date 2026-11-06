@@ -25,7 +25,7 @@ async function confirmNewFolder()
 
     try
     {
-        await withBusy( GumApi.makeDir( currentFolder, name ) );
+        await withBusy( AyniNet.makeDir( currentFolder, name ) );
         await reload();
     }
     catch( _ )
@@ -194,7 +194,7 @@ function isConvertible( path )
 
 async function getJson( url )
 {
-    try { return JSON.parse( await GumApi.fetchText( url ) ); }
+    try { return JSON.parse( await AyniNet.fetchText( url ) ); }
     catch( _ ) { return null; }
 }
 
@@ -325,8 +325,8 @@ let importing    = null;    // the change being written: { path, bodies: Set of 
 
 function appStore()
 {
-    return appFileStore || ( appFileStore = NayiveStore.createStore( {
-        apiBase: GumApi.API_FILES, conflicts: true,
+    return appFileStore || ( appFileStore = AyniStore.createStore( {
+        apiBase: AyniNet.API_FILES, conflicts: true,
         merge: function( path, base, mine, theirs )
         {
             if( ! importing || importing.path !== path || ! importing.bodies.has( mine ) ) return null;
@@ -461,7 +461,7 @@ function stampKey( v )
 // The dropped copy of an event is NEWER than the one in the calendar: a
 // higher SEQUENCE (an organiser's new version of an invitation), else at the
 // same SEQUENCE a later LAST-MODIFIED - or DTSTAMP, which Calendar moves on
-// at each edit (shared/ical.js stampOf: the rule its merge uses). The same
+// at each edit (shared/ayni/formats/ical.js stampOf: the rule its merge uses). The same
 // or unknown is not newer: the calendar's stays (C2).
 function eventNewer( dropped, have )
 {
@@ -474,7 +474,7 @@ function eventNewer( dropped, have )
 // A card's REV, as Contacts reads it (contact/index.html revOf / revKey).
 function cardRev( c ) { return stampKey( c.rev ); }
 
-// The cards are told apart as Contacts tells them (shared/vcard.js): each is
+// The cards are told apart as Contacts tells them (shared/ayni/formats/vcard.js): each is
 // kept as the text it is in the file. A card dropped again (same UID) takes
 // its old one's place only when it is NEWER - a later REV, as Contacts' own
 // import: an old export dropped again never takes back the edits made since
@@ -482,7 +482,7 @@ function cardRev( c ) { return stampKey( c.rev ); }
 // -> { text, changed, added: [ { uid, text } ], replaced: [ { uid, was, now } ], kept }
 function addCards( book, incoming )
 {
-    const have = String( book || '' ).trim() ? NayiveVCard.cards( book ) : [];
+    const have = String( book || '' ).trim() ? AyniVCard.cards( book ) : [];
     if( ! have ) throw new Error( T( 'ui.store.badFile' ) );       // text with no card in it: never written over
 
     const blocks = have.map( function( c ) { return c.text; } );
@@ -531,7 +531,7 @@ function addCards( book, incoming )
 // what the import wrote (edited since in Contacts: left as it is).
 function revertCards( book, job )
 {
-    const have = String( book || '' ).trim() ? NayiveVCard.cards( book ) : [];
+    const have = String( book || '' ).trim() ? AyniVCard.cards( book ) : [];
     if( ! have ) throw new Error( T( 'ui.store.badFile' ) );
     let blocks = have.map( function( c ) { return c.text; } );
     const uids = have.map( function( c ) { return c.uid; } );
@@ -553,7 +553,7 @@ function revertCards( book, job )
 
 async function mergeIntoContacts( incomingText )
 {
-    const incoming = NayiveVCard.cards( incomingText ) || [];
+    const incoming = AyniVCard.cards( incomingText ) || [];
     if( ! incoming.length ) throw new Error( T( 'drive.noContactsInFile' ) );
 
     const path = 'data/contacts.vcf';
@@ -796,10 +796,10 @@ function renameTo( relPath, name, used, there )
 {
     const i    = relPath.lastIndexOf( '/' );
     const dir  = i < 0 ? '' : relPath.slice( 0, i + 1 );
-    // GumApi.uniqueName() only ever calls taken.has(), so a small object with
+    // AyniNet.uniqueName() only ever calls taken.has(), so a small object with
     // that one method does the job of a Set here.
     const taken = { has: n => there.has( dir + n ) || used.has( dir + n ) };
-    return dir + GumApi.uniqueName( name, taken, T( 'drive.copyWord' ) );
+    return dir + AyniNet.uniqueName( name, taken, T( 'drive.copyWord' ) );
 }
 
 // THE FILES AT THE DESTINATION, AS THE SERVER HAS THEM NOW (D1, D3 -
@@ -828,10 +828,10 @@ async function filesThere( items, dest )
 
     try
     {
-        add( ( await withBusy( GumApi.listDir( dest ) ) ).nodes );     // one level: its sub-folders come back empty
+        add( ( await withBusy( AyniNet.listDir( dest ) ) ).nodes );     // one level: its sub-folders come back empty
         for( const top of tops )
         {
-            try { add( ( await withBusy( GumApi.listDirRecursive( joinPath( dest, top ) ) ) ).nodes ); }
+            try { add( ( await withBusy( AyniNet.listDirRecursive( joinPath( dest, top ) ) ) ).nodes ); }
             catch( err ) { if( ! err || err.status !== 404 ) throw err; }
         }
     }
@@ -858,11 +858,11 @@ function markClash( it, there )
 // createFileBytes with Drive's "&convert=mp4": the same create-only PUT
 // (If-None-Match: *, a 412 when the name is taken), plus the query. A 412
 // that is this upload's own first try (sent again after a dropped
-// connection, its first try landed) is a success already: GumApi's "our own
+// connection, its first try landed) is a success already: AyniNet's "our own
 // first try" reads the file back and finds these bytes.
 function createUpload( path, blob, conv )
 {
-    return GumApi.createFileBytes( path, blob, conv ? { convert: 'mp4' } : null );
+    return AyniNet.createFileBytes( path, blob, conv ? { convert: 'mp4' } : null );
 }
 
 // A name free in relPath's folder (under `dest`) NOW - a fresh listing - and
@@ -872,8 +872,8 @@ async function freeRel( dest, relPath, used )
     const i      = relPath.lastIndexOf( '/' );
     const dir    = i < 0 ? '' : relPath.slice( 0, i + 1 );
     const parent = dir ? joinPath( dest, dir.slice( 0, -1 ) ) : dest;
-    const names  = await withBusy( GumApi.namesIn( parent ) );
-    return dir + GumApi.uniqueName( relPath.slice( i + 1 ), { has: n => names.has( n ) || used.has( dir + n ) }, T( 'drive.copyWord' ) );
+    const names  = await withBusy( AyniNet.namesIn( parent ) );
+    return dir + AyniNet.uniqueName( relPath.slice( i + 1 ), { has: n => names.has( n ) || used.has( dir + n ) }, T( 'drive.copyWord' ) );
 }
 
 // Sends a file the user did NOT say "Replace" to, into `dest`: it may only
@@ -909,7 +909,7 @@ async function sendNew( dest, relPath, blob, conv, used )
             if( choice === false ) return null;
             if( choice === true )
             {
-                await withBusy( GumApi.writeFileBytes( path, blob, conv ? { convert: 'mp4' } : null ) );
+                await withBusy( AyniNet.writeFileBytes( path, blob, conv ? { convert: 'mp4' } : null ) );
                 return relPath;
             }
         }
@@ -1011,7 +1011,7 @@ async function uploadItems( items )
 
     // If this user has a max photo size, images are shrunk to it and
     // turned into JPEG here, in the browser, before being sent.
-    const maxPx = await NayivePhoto.limit();
+    const maxPx = await AyniPhoto.limit();
     const used  = new Set();          // paths already written by this batch
 
     // Create every directory that appears in the item paths, shallow first.
@@ -1035,7 +1035,7 @@ async function uploadItems( items )
         const name   = segs.pop();
         const parent = joinPath( dest, segs.join( '/' ) );
         setStatus( T( 'drive.creatingFolders' ) );
-        try { await withBusy( GumApi.makeDir( parent, name ) ); }
+        try { await withBusy( AyniNet.makeDir( parent, name ) ); }
         catch( _ ) { /* already exists — fine */ }
     }
 
@@ -1047,7 +1047,7 @@ async function uploadItems( items )
         try
         {
             // No limit, or not a photo -> ready.blob IS it.file.
-            const ready   = await NayivePhoto.prepare( it.file, maxPx );
+            const ready   = await AyniPhoto.prepare( it.file, maxPx );
             let   relPath = ready.changed && ready.name !== it.file.name
                           ? renameTo( it.relPath, ready.name, used, there )
                           : it.relPath;
@@ -1061,7 +1061,7 @@ async function uploadItems( items )
             const conv    = toConvert.has( it );
             const replace = it.replaceFile && relPath === it.relPath;
             if( replace )
-                await withBusy( GumApi.writeFileBytes( joinPath( dest, relPath ), ready.blob, conv ? { convert: 'mp4' } : null ) );
+                await withBusy( AyniNet.writeFileBytes( joinPath( dest, relPath ), ready.blob, conv ? { convert: 'mp4' } : null ) );
             else
             {
                 const got = await sendNew( dest, relPath, ready.blob, conv, used );

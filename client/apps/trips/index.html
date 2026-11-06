@@ -9,6 +9,7 @@
          every inline script below may call Ayni.t(). -->
     <script src="../shared/i18n.js"></script>
     <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
+    <script src="../shared/ayni/ayni-util.js"></script>
     <title>Trips</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cellipse cx='5.5' cy='9' rx='2' ry='2.5'%3E%3C/ellipse%3E%3Cellipse cx='12' cy='6' rx='2.1' ry='2.6'%3E%3C/ellipse%3E%3Cellipse cx='18.5' cy='9' rx='2' ry='2.5'%3E%3C/ellipse%3E%3Cpath d='M12 12c-4.5 0-7.8 2-7.8 4.4 0 2 2.55 3.3 5.4 2.9 1.35-.2 1.5-.7 2.4-.7s1.05.5 2.4.7c2.85.4 5.4-.9 5.4-2.9C19.8 14 16.5 12 12 12z'%3E%3C/path%3E%3C/svg%3E">
 
@@ -26,10 +27,26 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-share.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pwa.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-locker.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-status.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-shell.css">
     <link rel="stylesheet" href="../shared/app.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-doc.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-media.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-image.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-map.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-icons-more.js" defer></script>
+    <script src="../shared/ayni/ayni-shell.js" defer></script>
+    <script src="../shared/ayni/ayni-status.js" defer></script>
+    <script src="../shared/ayni/ayni-share.js" defer></script>
+    <script src="../shared/ayni/ayni-upload.js" defer></script>
+    <script src="../shared/ayni/ayni-pwa.js" defer></script>
+    <script src="../shared/ayni/ayni-boot.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
@@ -41,6 +58,7 @@
     <script src="../shared/ayni/ayni-pickers.js" defer></script>
     <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
+    <script src="../shared/ayni/ayni-locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
     <link rel="manifest" href="manifest.json">
@@ -58,21 +76,21 @@
     <script src="lib/leaflet_v1.9.4/leaflet.js"></script>
     <script>if( window.L ) L.Icon.Default.imagePath = 'lib/leaflet_v1.9.4/images/';</script>
     <!-- MapLibre GL + its Leaflet bridge draw the base map from vector tiles, so place
-         names can follow the UI language (see shared/basemap.js). Deferred, and BEFORE the
+         names can follow the UI language (see shared/ayni/ayni-map.js). Deferred, and BEFORE the
          other deferred scripts, so all three exist by the time the app boots. -->
     <link rel="stylesheet" href="lib/maplibre-gl_v5.24.0/maplibre-gl.css">
     <script src="lib/maplibre-gl_v5.24.0/maplibre-gl.js" defer></script>
     <script src="lib/maplibre-gl-leaflet_v0.1.4/leaflet-maplibre-gl.js" defer></script>
-    <script src="../shared/basemap.js" defer></script>
+    <script src="../shared/ayni/ayni-map.js" defer></script>
 
     <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
-    <script src="../shared/gum-api.js" defer></script>
+    <script src="../shared/ayni/ayni-net.js" defer></script>
     <!-- Small shared UI helpers: backdrop open/close, toast, viewerTz. -->
     <script src="../shared/ui.js" defer></script>
     <script src="intro.js"></script>
 
     <!-- Offline-capable persistence: local last-known-good cache + write-behind sync. -->
-    <script src="../shared/store.js" defer></script>
+    <script src="../shared/ayni/ayni-store.js" defer></script>
 
     <link rel="stylesheet" href="trips.css">
 </head>

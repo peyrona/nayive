@@ -1,37 +1,37 @@
-// SEALED - a user-data write path (docs/sealed-crud.md): announce a change, keep it minimal, then `node tools/data-safety-test/run.mjs` must be ALL GREEN.
+// DATA: this code decides what reaches the disk. Change it with care, and run your data tests.
 /*
- * gum-api.js - Talking to the nayive file API, shared by every Nayive single-page app.
+ * gum-api.js - Talking to the the server file API, shared by every the app single-page app.
  *
  * (The name is historical: the apps were first served by the Gum server. The
  * HMAC request-signing that Gum needed is gone - this is now a thin wrapper
- * over the nayive server's /api/* endpoints.)
+ * over the the server server's /api/* endpoints.)
  *
  * Every app used to carry its own copy of fetch-with-retry + the file helpers;
  * this module is the single copy. It is a plain classic script exposing one
- * global, loaded BEFORE the app's own script (and before shared/store.js, which
+ * global, loaded BEFORE the app's own script (and before ayni-store.js, which
  * is independent of it):
  *
- *     <script src="../shared/gum-api.js"></script>
+ *     <script src="../ayni-net.js"></script>
  *
  * It has no dependencies at all.
  *
  * ---------------------------------------------------------------------------
  * AUTH MODEL
  *
- * All endpoints under /api/ are authenticated by the nayive_session cookie
+ * All endpoints under /api/ are authenticated by the ayni_session cookie
  * only - a same-origin fetch() sends it automatically, so nothing here adds
  * anything extra.
  *
  * probeAccess() is the initial "am I signed in?" check: GET /api/whoami. The
  * server answers it from its in-memory session table (no disk access at all)
  * and 401s an anonymous visitor. The apps use that to decide "open the app" vs
- * "bounce to /nayive/login.html".
+ * "bounce to /login.html".
  *
  * WHOSE PAGE (L5). Every request that changes files - a PUT, and every
  * DELETE / POST (delete, move, bin restore, new folder, zip...) - carries
- * X-Nayive-User: the account this page belongs to (the "nayive_who" cookie
- * as it was when the page loaded - the name shared/store.js tags its saves
- * with, NayiveStore.me). A tab left open after another account signed in on
+ * X-Ayni-User: the account this page belongs to (the "ayni_who" cookie
+ * as it was when the page loaded - the name ayni-store.js tags its saves
+ * with, AyniStore.me). A tab left open after another account signed in on
  * this browser gets 423 instead of writing into that other person's home
  * (server/go/store_owner.go).
  *
@@ -47,8 +47,10 @@
 {
     "use strict";
 
-    var API_FILES  = window.location.origin + "/api/files";
-    var API_WHOAMI = window.location.origin + "/api/whoami";
+    var NAMES = window.AyniNames || {}, KEYS = NAMES.key || "ayni-", COOKIE = NAMES.cookie || "ayni_", API = NAMES.api || "/api/", HDR = NAMES.header || "X-Ayni-";
+
+    var API_FILES  = window.location.origin + API + "files";
+    var API_WHOAMI = window.location.origin + API + "whoami";
 
     var MAX_RETRIES = 2;
     var BASE_DELAY  = 500;   // ms; doubles each retry (500, 1000)
@@ -56,11 +58,11 @@
     // Who this page belongs to (WHOSE PAGE above): read ONCE, as the page
     // loads - never again, so a tab left open across another account's
     // sign-in still names its own. "" = unknown: no header, taken as before.
-    var ME_AT_LOAD = ( window.NayiveWho && NayiveWho.atLoad ) || "";   // shared/i18n.js WHOSE PAGE
+    var ME_AT_LOAD = ( window.AyniWho && AyniWho.atLoad ) || "";   // the app WHOSE PAGE
 
     function owner()
     {
-        var me = window.NayiveStore && NayiveStore.me;
+        var me = window.AyniStore && AyniStore.me;
         return typeof me === "string" && me ? me : ME_AT_LOAD;
     }
 
@@ -69,7 +71,7 @@
     {
         var h = {};
         for( var k in ( extra || {} ) ) h[ k ] = extra[ k ];
-        if( owner() ) h[ "X-Nayive-User" ] = owner();
+        if( owner() ) h[ HDR + "User" ] = owner();
         return h;
     }
 
@@ -148,8 +150,8 @@
     function authLost( res )
     {
         if( res.status !== 401 ) return;
-        if( String( res.url || "" ).indexOf( "/api/whoami" ) !== -1 ) return;
-        if( window.NayiveUI && NayiveUI.sessionExpired ) NayiveUI.sessionExpired();
+        if( String( res.url || "" ).indexOf( API + "whoami" ) !== -1 ) return;
+        if( window.Ayni && Ayni.pwa && Ayni.pwa.sessionExpired ) Ayni.pwa.sessionExpired();
     }
 
     function assertOk( res )
@@ -193,12 +195,12 @@
     // PUT raw bytes (a Uint8Array or a Blob). Resolves { tag }: the new file's
     // version (its ETag; null from a server that sends none). Rejects on a
     // non-2xx or a drop that outlasts the retries. Sent with the page's owner
-    // (X-Nayive-User, WHOSE PAGE above).
+    // (X-Ayni-User, WHOSE PAGE above).
     //
     // XMLHttpRequest rather than fetch(), because only XHR reports UPLOAD
-    // progress. Every attempt is announced as "nayive:upload" events on the
+    // progress. Every attempt is announced as "the server:upload" events on the
     // document - { id, loaded, total } while it runs, { id, done: true } when it
-    // ends, however it ends - and shared/ui.js draws the progress bar from them.
+    // ends, however it ends - and the app draws the progress bar from them.
     // Nothing here depends on ui.js: with no listener the events go nowhere.
     //
     // The two contracts fetch() had are kept exactly: a non-2xx goes through
@@ -209,7 +211,7 @@
 
     function announceUpload( detail )
     {
-        try { document.dispatchEvent( new CustomEvent( "nayive:upload", { detail: detail } ) ); }
+        try { document.dispatchEvent( new CustomEvent( "the server:upload", { detail: detail } ) ); }
         catch ( e ) {}
     }
 
@@ -268,7 +270,7 @@
     // folders:true when the folder tree may have changed too (new folder,
     // rename, delete). A page never hears its own news.
     var newsChannel = null;
-    try { newsChannel = new BroadcastChannel( "nayive-files" ); } catch ( e ) {}
+    try { newsChannel = new BroadcastChannel( KEYS + "files" ); } catch ( e ) {}
 
     // A .then() step: announce, then pass the result through untouched.
     function changed( paths, folders )
@@ -307,7 +309,7 @@
     // A file WITH its version: { body, tag, offline } - body as text, or a
     // Uint8Array with opts.bytes; tag = its strong ETag (null when none came);
     // offline = the service worker answered from its offline copy (a trip's
-    // document with no network, "X-Nayive-Copy: offline"): an OLD copy, never
+    // document with no network, "X-Ayni-Copy: offline"): an OLD copy, never
     // the file's current version - nothing may be written from it as if it
     // were. Throws like readFile (err.status 404: no file). The browser checks
     // its cached copy with the server first (no-cache): the tag is the bytes'.
@@ -319,7 +321,7 @@
             return fetch( fileUrl( path ), { cache: "no-cache" } ).then( assertOk ).then( function ( r )
             {
                 var tag     = strongTag( r.headers.get( "ETag" ) );
-                var offline = !! r.headers.get( "X-Nayive-Copy" );
+                var offline = !! r.headers.get( HDR + "Copy" );
                 return ( bytes ? r.arrayBuffer().then( function ( b ) { return new Uint8Array( b ); } ) : r.text() )
                        .then( function ( body ) { return { body: body, tag: tag, offline: offline }; } );
             } );
@@ -444,7 +446,7 @@
     // A name `taken` (anything with .has) does not hold: `name` itself, else
     // "foto (2).jpg", "foto (3).jpg"... - or, given a `word` ("copia", in the
     // user's language), "foto (copia).jpg", "foto (copia 2).jpg"... The
-    // caller adds what it uses to `taken`. (NayiveUI.uniqueName is the same
+    // caller adds what it uses to `taken`. (Ayni.uniqueName is the same
     // rule with no word, for the pages that load no gum-api.js.)
     function uniqueName( name, taken, word )
     {
@@ -552,11 +554,11 @@
     // The names (no folder part) of what is directly inside `dir`, files and
     // sub-folders: a Set. Throws as listDir does - a 404 is no such folder -
     // and the caller says what a failure means (no names, or stop). Read
-    // through window.GumApi.listDir: a page (or a test) that swaps the
+    // through window.AyniNet.listDir: a page (or a test) that swaps the
     // listing swaps this too.
     async function namesIn( dir )
     {
-        var r = await window.GumApi.listDir( dir );
+        var r = await window.AyniNet.listDir( dir );
         return new Set( ( ( r && r.nodes ) || [] ).map( function ( n ) { return String( n.path ).split( "/" ).pop(); } ) );
     }
 
@@ -757,7 +759,7 @@
     // ON THIS DEVICE  -  an IndexedDB database with one object store, and the
     // Web Locks that tell a tab's writer is still alive.
     //
-    //   var db = GumApi.sideDb( "nayive-mail-files", "files", "key" );
+    //   var db = AyniNet.sideDb( KEYS + "mail-files", "files", "key" );
     //   db.tx( "readwrite", function ( os ) { return os.put( rec ); } )
     //
     // sideDb: opened once per page, on first use; the store made by the
@@ -765,10 +767,10 @@
     // whoever opens it first makes it. open() -> the database, null when it
     // cannot be (private mode, no IndexedDB, blocked). tx( mode, fn ):
     // fn( objectStore ) -> a request; its result once the transaction is
-    // done, null on any failure (never a hang). draftsDb(): "nayive-drafts",
-    // the device drafts of Write / Calc / Text and eMail (shared/office.js),
+    // done, null on any failure (never a hang). draftsDb(): KEYS + "drafts",
+    // the device drafts of Write / Calc / Text and eMail (ayni-doc.js),
     // also Chat's outbox (chat/compose.js keeps its own opener: the guest page
-    // has no gum-api.js) - shared/store.js's sign-out counts and empties it.
+    // has no gum-api.js) - ayni-store.js's sign-out counts and empties it.
     function sideDb( name, store, keyPath )
     {
         var db = null;
@@ -810,7 +812,7 @@
         return { open: open, tx: tx };
     }
 
-    function draftsDb() { return sideDb( "nayive-drafts", "drafts", "app" ); }
+    function draftsDb() { return sideDb( KEYS + "drafts", "drafts", "app" ); }
 
     // The Web Lock `name`, held from now on: resolves its release() - call it
     // to let go; the page closing lets go too - or null when another tab or
@@ -859,16 +861,16 @@
     }
 
     // Send the browser to the sign-in page, returning here afterwards. The one
-    // copy is NayiveUI.loginRedirect (shared/ui.js, loaded by every page that
+    // copy is AyniDocHost.loginRedirect (the app, loaded by every page that
     // loads this file); called only after boot, never while scripts load.
     function loginRedirect()
     {
-        NayiveUI.loginRedirect();
+        Ayni.pwa.signIn();
     }
 
     //------------------------------------------------------------------------//
 
-    window.GumApi =
+    window.AyniNet =
     {
         API_FILES:       API_FILES,
 

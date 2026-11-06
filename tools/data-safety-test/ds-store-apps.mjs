@@ -1,5 +1,5 @@
 // ds-store-apps.mjs - the REAL apps, one file open twice on one device
-// (batch C4a: shared/store.js keeps each page's own version).
+// (batch C4a: shared/ayni/ayni-store.js keeps each page's own version).
 //
 // A1 (store-core #1, office #1): Text, one document in two tabs (Drive opens
 //     a new tab / desktop window per double-click). Tab B's autosave carried
@@ -95,7 +95,7 @@ section( "A2 · HABITS IN ITS PAGE AND IN PLANNER'S PANE" );
     // The page first re-reads (the plug's refresh): both pages start from the
     // file as it is now, so the pane's save is merged into the page's waiting
     // one and goes up as it is.
-    await H.evaluate( "window.nayiveRefresh().then( () => true )" );
+    await H.evaluate( "window.ayniRefresh().then( () => true )" );
     await H.evaluate( OFF );
     await P.evaluate( `${PW}.eval( ${JSON.stringify( OFF )} )` );
     await H.evaluate( "document.getElementById('addBtn').click(), true" );

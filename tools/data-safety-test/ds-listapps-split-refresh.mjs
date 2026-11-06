@@ -31,7 +31,7 @@ const GETLOG = `( () => { window.__gets = []; if( window.__getsOn ) return true;
         window.__gets.push( decodeURIComponent( String( u ).split( 'file=' )[ 1 ] ) ); return f.apply( this, arguments ); };
     return true; } )()`;
 const names   = "[...document.querySelectorAll('#groupList .card-row')].map( r => r.textContent ).join( '|' )";
-const refresh = async () => { await c.evaluate( GETLOG ); await c.evaluate( "window.nayiveRefresh().then( () => true )" ); return c.evaluate( "window.__gets.slice().sort()" ); };
+const refresh = async () => { await c.evaluate( GETLOG ); await c.evaluate( "window.ayniRefresh().then( () => true )" ); return c.evaluate( "window.__gets.slice().sort()" ); };
 
 await c.open( "/nayive/split/" );
 ok( await c.until( "document.querySelectorAll('#groupList .card-row').length === 3" ), "three groups listed" );
@@ -101,7 +101,7 @@ section( "B5-18 · a save waiting here is read back, never skipped" );
     await refresh();
     ok( await c.until( "document.getElementById('groupName').textContent.includes( 'Alpha local' )" ), "the local name stays on screen" );
     ok( ! /Alpha local/.test( onDisk( s, F( "g1" ) ) || "" ), "...and it really was still waiting (not on the server)" );
-    await c.evaluate( "window.__noPut = false; window.nayiveRefresh().then( () => true )" );
+    await c.evaluate( "window.__noPut = false; window.ayniRefresh().then( () => true )" );
     let up = false;
     for( const end = Date.now() + 30000; ! up && Date.now() < end; await sleep( 200 ) ) up = /Alpha local/.test( onDisk( s, F( "g1" ) ) || "" );
     ok( up, "once the connection is back the rename goes up" );

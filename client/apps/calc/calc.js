@@ -42,7 +42,7 @@ from './codec.js';
 //------------------------------------------------------------------------//
 // STATE
 
-const O = NayiveOffice;   // paths, the file label, the Open browser (../shared/office.js)
+const O = AyniDoc;   // paths, the file label, the Open browser (../shared/ayni/ayni-doc.js)
 
 // Folder for "Guardar como": Drive's ?dir=<folder>, else the files/ root.
 const APP_DIR = O.appDirFromUrl();
@@ -57,7 +57,7 @@ const NF_SAMPLE_DATE = Math.round( ( Date.UTC( 2026, 11, 31 ) - Date.UTC( 1899, 
 let borderWeight     = 'thin';   // sticky border-popup choices
 let borderColorValue = '8B8E93';
 
-// Offline-capable persistence (../shared/store.js), same as Write. Every
+// Offline-capable persistence (../shared/ayni/ayni-store.js), same as Write. Every
 // save lands in a local IndexedDB cache and a write outbox BEFORE the PUT
 // is attempted, so a caducated session or a dropped connection can no
 // longer lose the sheet: it goes up on the next flush (reconnect, tab
@@ -67,14 +67,14 @@ let borderColorValue = '8B8E93';
 const T = k => Ayni.t( k );
 
 // conflicts: a save over a sheet changed on another device since it was
-// opened is refused (shared/store.js, CONFLICTS).
-const store = NayiveStore.createStore( { apiBase: GumApi.API_FILES, binary: true, conflicts: true } );
+// opened is refused (shared/ayni/ayni-store.js, CONFLICTS).
+const store = AyniStore.createStore( { apiBase: AyniNet.API_FILES, binary: true, conflicts: true } );
 
 // The Open browser: a shared widget, this app only says what it lists.
 // The open sheet - its path, whether it is someone else's, its name, the
 // top-bar label, New / Open / Import / "Guardar como" / rename / Restore,
 // start-up, the header plug and the autosave - is the one Write and Text
-// use (shared/office.js, THE OPEN DOCUMENT). Calc only says how a sheet
+// use (shared/ayni/ayni-doc.js, THE OPEN DOCUMENT). Calc only says how a sheet
 // becomes bytes and back, which files it can open, and keeps an
 // extension on a rename.
 const session = O.session( {
@@ -91,7 +91,7 @@ const session = O.session( {
     turnAwayEnd: '.',
     emptyKey   : 'calc.noSheets',
     // A draft is always .xlsx: a .csv would lose the formatting.
-    encode     : function( path ) { return encodeFromGrid( path ? O.extOf( path ) : 'xlsx' ); },
+    encode     : function( path ) { return encodeFromGrid( path ? Ayni.extOf( path ) : 'xlsx' ); },
     load       : loadSheet,
     blank      : function() { initGrid( blankDoc() ); },     // in the font Settings picked
     renameName : keepExt,
@@ -142,7 +142,7 @@ O.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
 // itself to the space left over and re-renders on resize either way.
 const fold = O.foldingToolbar( { toolbar: 'fmtToolbar', afterChange: function() { if( table ) table.refreshDimensions(); } } );
 
-// Once at start-up and again whenever the phone is turned (shared/office.js,
+// Once at start-up and again whenever the phone is turned (shared/ayni/ayni-doc.js,
 // phoneChrome): the "?" and the File button move between the header and the
 // toolbar - the File button a .fmt-btn with the drop-down caret its neighbours
 // carry on a PC - the menus close, the toolbar unfolds on a PC. (The coach
@@ -169,7 +169,7 @@ function wireStaticUI()
     PHONE.addEventListener( 'change', applyPhoneChrome );
 
     // New, Open, Import, "Guardar como" and Restore are wired by the session
-    // (shared/office.js); the dialogs' × buttons and Escape once for every
+    // (shared/ayni/ayni-doc.js); the dialogs' × buttons and Escape once for every
     // app by shared/ui.js.
 
     // Border popup: position buttons are actions; weight/colour are sticky mode choices.
@@ -330,7 +330,7 @@ function wireStaticUI()
     {
         // For this file, until it is closed - or for the .csv it was about.
         if( gateHeld === session.path() )               doc.lossyAck = true;
-        if( gateHeld && O.extOf( gateHeld ) === 'csv' ) doc.csvOk    = gateHeld;
+        if( gateHeld && Ayni.extOf( gateHeld ) === 'csv' ) doc.csvOk    = gateHeld;
         document.getElementById( 'lossyBackdrop' ).close();
 
         // Asked from "Guardar como" (office.js asks the gate before it
@@ -517,13 +517,13 @@ function registerUiLocale()
 }
 
 //------------------------------------------------------------------------//
-// THE SHEET AS A FILE  (what the session in shared/office.js needs from Calc)
+// THE SHEET AS A FILE  (what the session in shared/ayni/ayni-doc.js needs from Calc)
 
 // A body on screen: opened, imported, the device draft (always .xlsx) or
 // the .bak copy. A file Calc cannot read throws, and the session says so.
 async function loadSheet( body, name, how )
 {
-    initGrid( await decodeToDoc( body, how === 'draft' ? 'xlsx' : O.extOf( name ) ) );
+    initGrid( await decodeToDoc( body, how === 'draft' ? 'xlsx' : Ayni.extOf( name ) ) );
 
     // A sheet the codec could not read opens EMPTY (codec.js, sh.unread), and
     // a save would write it empty over the real one. That file is read-only:
@@ -541,7 +541,7 @@ async function loadSheet( body, name, how )
 // or wrong one can't make the sheet look like another format.
 function keepExt( typed, path )
 {
-    const ext  = O.extOf( path );
+    const ext  = Ayni.extOf( path );
     const base = typed.replace( /\.[a-z0-9]+$/i, '' );
     return ext ? base + '.' + ext : base;
 }
@@ -865,17 +865,17 @@ function lossyDialogIsOpen()
     return !! el && el.open;
 }
 
-// Restore's Undo (shared/office.js) puts Calc's own copy of what was on screen
+// Restore's Undo (shared/ayni/ayni-doc.js) puts Calc's own copy of what was on screen
 // back, and saves it over the file. Only when that copy loses nothing: nothing
 // the file has that Calc cannot write (unless "Guardar igualmente" was said),
 // nothing on screen a .csv cannot hold. Otherwise Restore asks, with no Undo.
 function keepsAll( path )
 {
     if( doc.lossy.length && ! doc.lossyAck ) return false;
-    return O.extOf( path || '' ) !== 'csv' || ! csvLosses().length;
+    return Ayni.extOf( path || '' ) !== 'csv' || ! csvLosses().length;
 }
 
-// "Restaurar la copia anterior" (shared/office.js, swapFiles): true = the two
+// "Restaurar la copia anterior" (shared/ayni/ayni-doc.js, swapFiles): true = the two
 // files swap as BYTES on the server instead of going through Calc's model.
 // So when either side has what Calc cannot write - the sheet on screen (its
 // file's loss list, "Guardar igualmente" said or not, or what a .csv cannot
@@ -884,7 +884,7 @@ function keepsAll( path )
 async function restoreAsBytes( copy, path )
 {
     if( doc.lossy.length || ! keepsAll( path ) ) return true;
-    return ( await decodeToDoc( copy, O.extOf( path ) ) ).lossy.length > 0;
+    return ( await decodeToDoc( copy, Ayni.extOf( path ) ) ).lossy.length > 0;
 }
 
 // What a .csv cannot hold of what is on screen: it keeps the values of one
@@ -937,7 +937,7 @@ function lossyBlocked( path )
     // "Guardar igualmente" counts for what it was said about: the open file
     // (lossyAck), or one .csv (csvOk) - not for a .csv copy made later.
     const list = ( path === session.path() && ! doc.lossyAck ? doc.lossy : [] )
-                 .concat( O.extOf( path ) === 'csv' && doc.csvOk !== path ? csvLosses() : [] );
+                 .concat( Ayni.extOf( path ) === 'csv' && doc.csvOk !== path ? csvLosses() : [] );
 
     if( ! list.length ) return false;
 
@@ -999,17 +999,17 @@ window.addEventListener( 'ayni:theme', function()
 // the phone's "⋮" menu does it.
 //
 // The bar, the panels, the hover-to-slide behaviour and the switch itself
-// all live in shared/menubar.js - Write uses the same code. What is here
+// all live in shared/ayni/ayni-menutable.js - Write uses the same code. What is here
 // is only Calc's own table of menus.
 
-// data/calc/config.json, read-modify-write (shared/office.js, appConfig): a
+// data/calc/config.json, read-modify-write (shared/ayni/ayni-doc.js, appConfig): a
 // file that cannot be read is never written over with just the patch.
 const calcCfg = O.appConfig( 'data/calc/config.json', 'ui.settingsNotRead' );
 
 // The key combos shown on the right of an entry. Calc's shortcuts are the
 // handful wired in wireStaticUI() plus the ones Handsontable itself
 // handles (copy / cut / paste, undo / redo).
-const IS_MAC = NayiveUI.isMac;
+const IS_MAC = Ayni.isMac;
 const MOD    = IS_MAC ? '⌘' : T( 'ui.keyCtrl' ) + '+';   // "Strg+" in German
 const SC  =
 {
@@ -1127,7 +1127,7 @@ function selectItems( id )
     };
 }
 
-// The text colours are Excel's own first row (NayiveMenus.COLORS, Write's
+// The text colours are Excel's own first row (AyniMenus.COLORS, Write's
 // too); the fills are Calc's. The names are keys because no interface
 // string lives in the source (docs/i18n.md).
 const MENU_FILLS  = [ [ '#FFF2CC', 'yellow' ], [ '#E2EFDA', 'green'  ], [ '#DDF3F5', 'cyan'   ],
@@ -1168,7 +1168,7 @@ function colorItems( id, list, clearKey )
 // These three ARE Ctrl+X / Ctrl+C / Ctrl+V: the same Handsontable
 // handlers, reached the same way, so a menu paste moves exactly what a
 // Ctrl+V moves - values, formulas AND the cell's look. The mechanism is
-// shared/office.js's THE CLIPBOARD (a synthetic ClipboardEvent over the
+// shared/ayni/ayni-doc.js's THE CLIPBOARD (a synthetic ClipboardEvent over the
 // engine's own DOM listeners); what is Calc's alone is the two things
 // Handsontable demands before it will listen:
 //
@@ -1269,7 +1269,7 @@ const MENUS =
     [
         { key: 'write.newDoc',    el: 'newBtn'     },
         { key: 'ui.openDoc',      el: 'openBtn'    },
-        { key: 'ui.recent',       sub: session.recentItems },   // shared/office.js
+        { key: 'ui.recent',       sub: session.recentItems },   // shared/ayni/ayni-doc.js
         { sep: true },
         { key: 'ui.save',   run: function() { saveNow(); }, sc: 'save', icon: 'check' },
         { key: 'ui.saveAs', el:  'saveAsBtn' },
@@ -1331,7 +1331,7 @@ const MENUS =
         { key: 'calc.fontFamily', sub: selectItems( 'fmtFontFamily' ) },
         { key: 'calc.fontSize',   sub: selectItems( 'fmtFontSize'   ) },
         { sep: true },
-        { key: 'calc.fontColor', sub: colorItems( 'fmtFontColor', NayiveMenus.COLORS, 'calc.noFontColor' ), iconOf: '.fmt-color-btn:has(#fmtFontColor) svg' },
+        { key: 'calc.fontColor', sub: colorItems( 'fmtFontColor', AyniMenus.COLORS, 'calc.noFontColor' ), iconOf: '.fmt-color-btn:has(#fmtFontColor) svg' },
         { key: 'calc.fillColor', sub: colorItems( 'fmtFillColor', MENU_FILLS, 'calc.noFillColor' ), iconOf: '.fmt-color-btn:has(#fmtFillColor) svg' },
         { sep: true },
         { key: 'calc.alignment', iconOf: '#fmtAlignLeftBtn', sub:
@@ -1368,14 +1368,14 @@ const MENUS =
 }
 ];
 
-const menus = NayiveMenus.create(
+const menus = AyniMenus.create(
 {
     menus : MENUS,
     ready : function() { return !! table; },
     hint  : function( k ) { return SC[ k ] || ''; }
 } );
 
-const CHROME = NayiveMenus.chrome(
+const CHROME = AyniMenus.chrome(
 {
     key   : 'nayive-calc-chrome',
     menus : menus,
@@ -1453,7 +1453,7 @@ function wireSettings()
 
 wireStaticUI();
 
-NayiveUI.bootWithStore( store, async function()
+AyniBoot.boot( store, async function()
 {
     // The ACCOUNT's copy of "toolbar or menus" wins, so a browser that has
     // never been told about the choice still opens the way the user left

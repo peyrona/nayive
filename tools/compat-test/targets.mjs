@@ -82,7 +82,7 @@ try
                 if( ! hit ) return "miss";
                 if( hit === el || el.contains( hit ) ) return "own";
                 const other = [ hit, ...ancestors( hit ) ].find( clickable );
-                if( other && el.classList.contains( "nayive-home-link" ) && other.classList.contains( "nayive-home-link" ) ) return "own";
+                if( other && el.classList.contains( "home-link" ) && other.classList.contains( "home-link" ) ) return "own";
                 return other ? "crowded" : "miss";
             }
             function ancestors( e ) { const a = []; for( let p = e.parentElement; p && p !== document.body; p = p.parentElement ) a.push( p ); return a; }

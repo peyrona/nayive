@@ -5,7 +5,7 @@ package main
 // writes - BYDAY with an ordinal (2TU, -1FR), BYDAY on a daily or yearly rule,
 // BYMONTHDAY, BYMONTH, BYSETPOS - ring on every occurrence, on the same dates
 // the calendar's screen shows. The expected lists come from rrule.js 2.8.1
-// (the library shared/ical.js expands them with), except that a date-only
+// (the library shared/ayni/formats/ical.js expands them with), except that a date-only
 // UNTIL keeps its whole day, as the screen now does too.
 // =============================================================================
 

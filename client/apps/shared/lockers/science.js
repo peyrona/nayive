@@ -244,7 +244,7 @@ function need()
 }
 
 // The locker: the engine and the settings first, then the screen.
-NayiveLock.define( "science", function ( host )
+AyniLocker.define( "science", function ( host )
 {
     var stop = null, gone = false;
     need().then( read ).then( function ( s ) { if( ! gone ) stop = start( host, s ); }, function () {} );

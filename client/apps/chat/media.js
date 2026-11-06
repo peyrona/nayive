@@ -148,11 +148,11 @@
         el.appendChild( act );
     };
 
-    // The card as a .vcf download: shared/vcard.js writes it (public, as a
+    // The card as a .vcf download: shared/ayni/formats/vcard.js writes it (public, as a
     // person's page has no session - server/go/static.go).
     function saveVcf( c )
     {
-        NayiveUI.saveFile( NayiveVCard.write( c ), ( c.name || "contacto" ).replace( /[\\/:*?"<>|]/g, "_" ) + ".vcf", "text/vcard" );
+        Ayni.saveFile( AyniVCard.write( c ), ( c.name || "contacto" ).replace( /[\\/:*?"<>|]/g, "_" ) + ".vcf", "text/vcard" );
     }
 
     C.pollBody = function ( el, m, meta )
@@ -215,7 +215,7 @@
     C.pickFiles = function ( how )
     {
         if( ! S.open ) return;
-        if( how === "camera" && C.useOwnCamera() ) { C.openCamera(); return; }
+        if( how === "camera" && AyniPhoto.ownCamera() ) { C.openCamera(); return; }
         var input = h( "input", { attrs: { type: "file", hidden: true } } );
         if( how === "camera" ) { input.accept = "image/*"; input.setAttribute( "capture", "environment" ); }
         else if( how === "gallery" ) { input.accept = "image/*"; input.multiple = true; }
@@ -268,11 +268,11 @@
         if( files.length ) sendFiles( files );
     } );
 
-    // The owner's extras need their session: guest.html has no GumApi.
+    // The owner's extras need their session: guest.html has no AyniNet.
     // Their own files (the clip's "Nayive doc") serve in any chat; keeping or
     // editing a photo only in a chat of their own home (the server keeps it in
     // the home's owner's files).
-    C.canUseNayive  = function () { return S.mode === "owner" && !! window.GumApi; };
+    C.canUseNayive  = function () { return S.mode === "owner" && !! window.AyniNet; };
     C.canEditPhotos = function () { return C.canUseNayive() && C.owns( S.open ); };
 
     // Where a file comes from, for the owner: this device or their files in
@@ -309,8 +309,8 @@
     };
 
     // A picture made ready to send (his rule, 2026-09-27): a JPEG of 300 x
-    // 300 px at most (NayivePhoto.face), then PUT raw to `path` of my home.
-    C.facePicture = function ( blob ) { return NayivePhoto.face( blob, { jpeg: true } ); };
+    // 300 px at most (AyniPhoto.face), then PUT raw to `path` of my home.
+    C.facePicture = function ( blob ) { return AyniPhoto.face( blob, { jpeg: true } ); };
     C.putPicture = async function ( path, blob )
     {
         var res = await fetch( S.api + "/" + path, { method: "PUT", credentials: "same-origin",
@@ -358,11 +358,11 @@
     async function nayiveImage( title )
     {
         var dir = "files";
-        try { var cfg = await GumApi.readJson( "data/photos/config.json" ); if( cfg && cfg.folder ) dir = cfg.folder; } catch( _ ) {}
+        try { var cfg = await AyniNet.readJson( "data/photos/config.json" ); if( cfg && cfg.folder ) dir = cfg.folder; } catch( _ ) {}
         var f = await NayiveUI.pickFile( { title: title, dir: dir, only: function ( name ) { return IMAGE_EXT.test( name ); } } );
         if( ! f ) return null;
         if( ! IMAGE_EXT.test( f.name ) ) { C.toast( "warn", "chat.notImage" ); return null; }
-        var bytes = await GumApi.readFileBytes( f.path );
+        var bytes = await AyniNet.readFileBytes( f.path );
         return new Blob( [ bytes ] );
     }
 
@@ -382,7 +382,7 @@
         if( f.size > 2 * 1024 * 1024 ) C.toast( "info", "chat.fetchingFile" );
         try
         {
-            var bytes = await GumApi.readFileBytes( f.path );
+            var bytes = await AyniNet.readFileBytes( f.path );
             if( S.open !== conv ) return;
             var file = new File( [ bytes ], f.name );
             if( ! photo ) C.nightGate( conv, function ( silent ) { upload( file, "file", "", 0, null, silent ); } );
@@ -474,16 +474,16 @@
         {
             try
             {
-                blob = await NayivePhoto.shrinkToJpeg( file, { maxW: PHOTO_MAX, maxH: PHOTO_MAX, quality: 0.82 } );
-                name = NayivePhoto.jpegName ? NayivePhoto.jpegName( name ) : name;
+                blob = await AyniPhoto.shrinkToJpeg( file, { maxW: PHOTO_MAX, maxH: PHOTO_MAX, quality: 0.82 } );
+                name = AyniPhoto.jpegName ? AyniPhoto.jpegName( name ) : name;
             }
             catch( _ ) { kind = "file"; blob = file; }      // a picture this browser cannot draw goes as a file
         }
         var dims = kind === "photo" ? await measure( blob ) : null;
         // The canvas drops the Exif: put the original's back - its date, and
         // its position (his call: the photo keeps its GPS; Photos maps it).
-        if( kind === "photo" && dims && NayivePhoto.copyExif && NayivePhoto.isJpeg( file ) )
-            blob = await NayivePhoto.copyExif( file, blob, dims[ 0 ], dims[ 1 ] );
+        if( kind === "photo" && dims && AyniPhoto.copyExif && AyniPhoto.isJpeg( file ) )
+            blob = await AyniPhoto.copyExif( file, blob, dims[ 0 ], dims[ 1 ] );
         if( blob.size > MAX_FILE ) { C.toast( "warn", "chat.tooBig" ); return; }
 
         var cid = C.rid();
@@ -573,8 +573,8 @@
         g.drawImage( img, box.x, box.y, box.w, box.h, 0, 0, w, ht );
         var blob = await new Promise( function ( ok ) { c.toBlob( ok, "image/jpeg", 0.92 ); } );
         if( ! blob ) throw new Error( "render" );
-        if( NayivePhoto.isJpeg( file ) ) blob = await NayivePhoto.copyExif( file, blob, c.width, c.height );
-        return new File( [ blob ], NayivePhoto.jpegName( file.name || "foto" ), { type: "image/jpeg" } );
+        if( AyniPhoto.isJpeg( file ) ) blob = await AyniPhoto.copyExif( file, blob, c.width, c.height );
+        return new File( [ blob ], AyniPhoto.jpegName( file.name || "foto" ), { type: "image/jpeg" } );
     }
 
     // Recortar: the photo full screen, a box over it - a corner sizes it,
@@ -703,88 +703,17 @@
     // the camera on a computer
     // ---------------------------------------------------------------------
 
-    // A phone's file picker opens its own camera (capture="environment"); a
-    // computer's only shows files. So a computer WITH a camera gets one here:
-    // a live view and a shutter, then the usual "add a line, send" step.
-    // Without a camera, the file picker as before.
-    var hasCamera = false;
-    function lookForCamera()
-    {
-        if( ! navigator.mediaDevices || ! navigator.mediaDevices.enumerateDevices ) return;
-        navigator.mediaDevices.enumerateDevices().then( function ( list )
-        {
-            hasCamera = list.some( function ( d ) { return d.kind === "videoinput"; } );
-        }, function () {} );
-    }
-    lookForCamera();
-    if( navigator.mediaDevices && navigator.mediaDevices.addEventListener )
-        navigator.mediaDevices.addEventListener( "devicechange", lookForCamera );
-
-    // A computer: its main pointer is a mouse (a phone's or a tablet's is a finger).
-    function computer() { return ! ( window.matchMedia && matchMedia( "(pointer: coarse)" ).matches ); }
-
-    C.useOwnCamera = function ()
-    {
-        return computer() && hasCamera && !! ( navigator.mediaDevices && navigator.mediaDevices.getUserMedia );
-    };
-
+    // A phone's file picker opens its own camera; a computer with one gets
+    // Ayni's live view, then the usual "add a line, send" step.
     C.openCamera = function ()
     {
         var conv = S.open;
-        var flip = h( "button", { class: "btn on-media", attrs: { type: "button", "data-tip": T( "chat.switchCamera" ), "aria-label": T( "chat.switchCamera" ), hidden: true } },
-                      C.ic( "refresh" ) );
-        var shutter = h( "button", { class: "btn lg solid-ok", attrs: { type: "button", "data-tip": T( "chat.takePhoto" ), "aria-label": T( "chat.takePhoto" ) } },
-                         C.ic( "camera" ) );
-        var f = fullLayer( T( "chat.camera" ), flip );
-        f.layer.classList.add( "camera" );
-        var video = h( "video", { attrs: { autoplay: "", playsinline: "", muted: "" } } );
-        video.muted = true;
-        f.canvas.appendChild( video );
-        f.layer.appendChild( h( "div", { class: "cam-bar" }, shutter ) );
-
-        var stream = null, cams = [], at = 0;
-        function stop() { if( stream ) stream.getTracks().forEach( function ( t ) { t.stop(); } ); stream = null; }
-        f.layer._onClose = stop;
-
-        async function start( deviceId )
+        var cancel = AyniPhoto.camera( function ( file )
         {
-            stop();
-            shutter.ariaDisabled = true;
-            try
-            {
-                stream = await navigator.mediaDevices.getUserMedia( { audio: false,
-                    video: deviceId ? { deviceId: { exact: deviceId } } : { width: { ideal: 1920 }, height: { ideal: 1080 } } } );
-            }
-            catch( _ ) { if( f.layer.isConnected ) f.close(); C.toast( "err", "chat.noCamera" ); return; }
-            if( ! f.layer.isConnected ) { stop(); return; }                 // closed while it asked
-            video.srcObject = stream;
-            shutter.ariaDisabled = false;
-            // With the permission given, every camera is listed: more than one = a switch.
-            try { cams = ( await navigator.mediaDevices.enumerateDevices() ).filter( function ( d ) { return d.kind === "videoinput"; } ); }
-            catch( _ ) { cams = []; }
-            flip.hidden = cams.length < 2;
-            var cur = stream.getVideoTracks()[ 0 ].getSettings().deviceId;
-            at = Math.max( 0, cams.findIndex( function ( d ) { return d.deviceId === cur; } ) );
-        }
-        flip.addEventListener( "click", function () { if( cams.length > 1 ) { at = ( at + 1 ) % cams.length; start( cams[ at ].deviceId ); } } );
-
-        shutter.addEventListener( "click", function ()
-        {
-            if( ! stream || ! video.videoWidth ) return;
-            var c = document.createElement( "canvas" );
-            c.width = video.videoWidth;
-            c.height = video.videoHeight;
-            c.getContext( "2d" ).drawImage( video, 0, 0 );
-            shutter.ariaDisabled = true;
-            c.toBlob( function ( b )
-            {
-                f.close();
-                if( ! b || S.open !== conv ) return;
-                var stamp = new Date().toISOString().slice( 0, 19 ).replace( /[-:]/g, "" ).replace( "T", "_" );
-                previewPhotos( [ new File( [ b ], "foto_" + stamp + ".jpg", { type: "image/jpeg" } ) ] );
-            }, "image/jpeg", 0.92 );
+            C.popNav( "full" );
+            if( file && S.open === conv ) previewPhotos( [ file ] );
         } );
-        start( "" );
+        C.pushNav( "full", cancel );
     };
 
     C.openPhoto = function ( id )
@@ -945,13 +874,13 @@
         var stem = path.slice( dir.length + 1 ).replace( /\.[^.]*$/, "" ) + "-" + T( "ui.editedSuffix" );
         try
         {
-            return dir + "/" + await GumApi.createFresh( dir, function ( n ) { return stem + ( n ? " (" + ( n + 1 ) + ")" : "" ) + ".jpg"; },
+            return dir + "/" + await AyniNet.createFresh( dir, function ( n ) { return stem + ( n ? " (" + ( n + 1 ) + ")" : "" ) + ".jpg"; },
                                                          bytes, { tries: 998 } );
         }
         catch( e ) { if( e.status === 412 ) throw new Error( T( "chat.failed" ) ); throw e; }
     }
 
-    // Editar foto (the editor Image uses, shared/image-editor.js: shared/photo.js
+    // Editar foto (the editor Image uses, shared/ayni/ayni-image-editor.js: shared/ayni/ayni-photo.js
     // loads and builds it; its undo / redo go in this bar). The photo is kept first, so it is safe in the
     // owner's files. The edit NEVER goes over it (it may be the camera
     // original of their library): both saves write a new file beside it. The
@@ -1008,24 +937,24 @@
         C.pushNav( "photo-editor", navClose );
         closeB.addEventListener( "click", leave );
 
-        try { await NayivePhoto.loadEditor(); }
+        try { await AyniPhoto.loadEditor(); }
         catch( _ ) { C.popNav( "photo-editor" ); shut(); C.toast( "err", "chat.editorFailed" ); return; }
         if( ! layer.isConnected ) return;          // closed while the library loaded
 
-        editor = NayivePhoto.newEditor( host, GumApi.fileUrl( path ) + "&v=" + Date.now(), path.split( "/" ).pop(),
+        editor = AyniPhoto.newEditor( host, AyniNet.fileUrl( path ) + "&v=" + Date.now(), path.split( "/" ).pop(),
                                         { head: edHead, btnClass: "btn on-media" } );
         editor.on( "undoStackChanged", function ( n ) { dirty = n > 0; } );
 
         function pixels()
         {
-            try { return NayivePhoto.dataUrlBytes( editor.toDataURL( { format: "jpeg", quality: 0.92 } ) ); }
+            try { return AyniPhoto.dataUrlBytes( editor.toDataURL( { format: "jpeg", quality: 0.92 } ) ); }
             catch( _ ) { C.toast( "err", "chat.failed" ); return null; }
         }
         // The photo's own Exif (its date) put back into the export.
         function withExif( bytes )
         {
             var sz = editor.getCanvasSize();
-            return NayivePhoto.keepExif( path, bytes, sz.width, sz.height );
+            return AyniPhoto.keepExif( path, bytes, sz.width, sz.height );
         }
 
         // ✓: the edit as a new file beside the photo, then the message shows
@@ -1086,7 +1015,7 @@
     function mapsUrl( l )
     {
         var ua = navigator.userAgent;
-        if( /iphone|ipad|ipod|macintosh/i.test( ua ) && "ontouchend" in document )
+        if( Ayni.isIOS() )
             return "https://maps.apple.com/?q=" + l.lat + "," + l.lon;
         if( /android/i.test( ua ) ) return "geo:" + l.lat + "," + l.lon + "?q=" + l.lat + "," + l.lon;
         return "https://www.openstreetmap.org/?mlat=" + l.lat + "&mlon=" + l.lon + "#map=17/" + l.lat + "/" + l.lon;
@@ -1098,7 +1027,7 @@
         var map = L.map( host, { zoomControl: true, attributionControl: true } );
         map.attributionControl.setPrefix( false );
         map.setView( [ lat, lon ], zoom );
-        if( window.NayiveBaseMap ) NayiveBaseMap.add( map );
+        if( window.AyniBaseMap ) AyniBaseMap.add( map );
         else L.tileLayer( OSM, { maxZoom: 19, attribution: OSM_ATTR, referrerPolicy: "strict-origin-when-cross-origin" } ).addTo( map );
         setTimeout( function () { map.invalidateSize(); }, 60 );
         return map;
@@ -1210,7 +1139,7 @@
         book = [];
         try
         {
-            var text = await GumApi.readFile( "data/contacts.vcf" );
+            var text = await AyniNet.readFile( "data/contacts.vcf" );
             book = parseVcf( text );
         }
         catch( _ ) {}
@@ -1218,12 +1147,12 @@
     };
     C.forgetBook = function () { book = null; };
 
-    // Read as Contacts reads it (shared/vcard.js): folds, QUOTED-PRINTABLE
+    // Read as Contacts reads it (shared/ayni/formats/vcard.js): folds, QUOTED-PRINTABLE
     // names from an Android export, escapes; a PHOTO in its 3.0, 2.1 or 4.0
     // form (a link to the web: ""). A name keeps to one line.
     function parseVcf( text )
     {
-        var V = NayiveVCard, out = [];
+        var V = AyniVCard, out = [];
         V.read( text ).forEach( function ( props )
         {
             var cur = { name: "", tels: [], emails: [], uid: "", photo: "" };

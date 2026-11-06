@@ -1,4 +1,4 @@
-// ds-createonly.mjs - GumApi.createFileBytes never replaces a file (S2, G1):
+// ds-createonly.mjs - AyniNet.createFileBytes never replaces a file (S2, G1):
 // a name another device took answers 412 and the file stays; a free name saves.
 import { server, browser, ok, section, done, onDisk } from "./lib.mjs";
 
@@ -8,10 +8,10 @@ section( "CREATE-ONLY UPLOAD" );
 const phone = await s.client();
 await phone.put( "files/foto.jpg", "the phone's photo" );
 await c.open( "/nayive/drive/", "/nayive/drive/" );
-ok( await c.until( "window.GumApi && typeof GumApi.createFileBytes === 'function'" ), "GumApi.createFileBytes exists" );
+ok( await c.until( "window.AyniNet && typeof AyniNet.createFileBytes === 'function'" ), "AyniNet.createFileBytes exists" );
 
 // Inside a promise, so a missing function is a FAIL line, not a crash.
-const create = ( p, text ) => c.evaluate( `Promise.resolve().then( () => GumApi.createFileBytes( ${JSON.stringify( p )}, new TextEncoder().encode( ${JSON.stringify( text )} ) ) )
+const create = ( p, text ) => c.evaluate( `Promise.resolve().then( () => AyniNet.createFileBytes( ${JSON.stringify( p )}, new TextEncoder().encode( ${JSON.stringify( text )} ) ) )
     .then( () => 'saved', e => e && ( e.status || String( e ) ) )` );
 
 const taken = await create( "files/foto.jpg", "the PC's photo" );

@@ -135,7 +135,7 @@ function buildJourneyMap( trip, j, mapDiv, sWhich )
     const map = NayiveJourney.draw( mapDiv, { route: j.route, spots: NayiveJourney.spots( j.photos ), now: j.now }, {
         padding: 28,
         pin:     function( pin, s ) { pin.bindPopup( function() { return journeyPhotoPopup( trip, s.photos ); } ); },
-        nowTip:  function() { return NayiveUI.escapeHtml( journeyNowText( j.now ) ); }
+        nowTip:  function() { return Ayni.esc( journeyNowText( j.now ) ); }
     } ).map;
 
     map.nayiveLegs = {};       // no legs to light up: setLegActive() finds nothing

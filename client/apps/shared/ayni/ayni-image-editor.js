@@ -3,9 +3,9 @@
  * drawn by Fabric.js (shared/lib/fabric_*.min.js) under OUR bars.
  *
  * shared/photo.js loads Fabric and this file on the first edit
- * (NayivePhoto.loadEditor) and builds one (NayivePhoto.newEditor), which is
+ * (AyniPhoto.loadEditor) and builds one (AyniPhoto.newEditor), which is
  *
- *     NayiveImageEditor.create( host, url, name, opts )
+ *     AyniImageEditor.create( host, url, name, opts )
  *         opts.tools:    where the tools go (the app's header); else a bar over the picture
  *         opts.head:     where undo / redo go (the app's header); else that bar
  *         opts.btnClass: their class there ("btn" by default, Chat: "btn on-media")
@@ -39,7 +39,7 @@
 {
     "use strict";
 
-    function T( k ) { return window.NayiveUI ? Ayni.t( k ) : k; }
+    function T( k ) { return window.Ayni ? Ayni.t( k ) : k; }
 
     var PAD  = 16;           // px around the picture when it is fitted
     var STEP = 1.25;         // one press of + / -
@@ -862,7 +862,7 @@
 
             // The recipe, drawn once from the original at full size. "data:,"
             // when there is nothing to give (not loaded, a canvas too big for
-            // this device): NayivePhoto.dataUrlBytes() refuses that.
+            // this device): AyniPhoto.dataUrlBytes() refuses that.
             toDataURL: function ( o )
             {
                 if( ! src ) return "data:,";
@@ -919,5 +919,5 @@
         };
     }
 
-    window.NayiveImageEditor = { create: create };
+    window.AyniImageEditor = { create: create };
 } )();

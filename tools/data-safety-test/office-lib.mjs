@@ -142,7 +142,7 @@ export async function untilDisk( s, rel, cond, ms = 10000 )
     }
 }
 
-// The device drafts this browser keeps (shared/office.js, "nayive-drafts").
+// The device drafts this browser keeps (shared/ayni/ayni-doc.js, "nayive-drafts").
 export const DRAFTS = `new Promise( function ( res ) {
     var rq = indexedDB.open( 'nayive-drafts', 1 );
     rq.onupgradeneeded = function () { rq.result.createObjectStore( 'drafts', { keyPath: 'app' } ); };

@@ -2,7 +2,7 @@
 
 //------------------------------------------------------------------------//
 // RENDERING - MAP (side panel on wide screens, sheet on narrow ones) - a real Leaflet
-// map (OpenStreetMap data, free, no API key - see shared/basemap.js), plotting the
+// map (OpenStreetMap data, free, no API key - see shared/ayni/ayni-map.js), plotting the
 // trip's stages by their geocoded coordinates. Coordinates are never guessed: a stage
 // that hasn't been geocoded yet, or couldn't be resolved, is simply left off the map and
 // disclosed via the warning note below it - same honesty rule as timezone/currency.
@@ -104,7 +104,7 @@ function buildRealMap( trip, container, sWhich )
     // the browser cache. Swap the block for the offline note the first time it
     // can't load.
     let swapped = false;
-    NayiveBaseMap.add( map, { onFail: function()
+    AyniBaseMap.add( map, { onFail: function()
     {
         if( swapped ) return;
         swapped = true;
@@ -148,7 +148,7 @@ function buildRealMap( trip, container, sWhich )
 
         points.forEach( function( p )
         {
-            L.marker( [ p.lat, p.lon ] ).bindPopup( NayiveUI.escapeHtml( TF( 'trips.stageN', { n: p.index } ) + ': ' + p.label ) ).addTo( map );
+            L.marker( [ p.lat, p.lon ] ).bindPopup( Ayni.esc( TF( 'trips.stageN', { n: p.index } ) + ': ' + p.label ) ).addTo( map );
         });
 
         map.fitBounds( latlngs, { padding: [ 28, 28 ], maxZoom: 12 } );
@@ -158,7 +158,7 @@ function buildRealMap( trip, container, sWhich )
     else if( trip.stages.length === 0 && typeof trip.lat === 'number' && typeof trip.lon === 'number' )
     {
         map.setView( [ trip.lat, trip.lon ], 9 );
-        L.marker( [ trip.lat, trip.lon ] ).bindPopup( NayiveUI.escapeHtml( trip.destination || '' ) ).addTo( map );
+        L.marker( [ trip.lat, trip.lon ] ).bindPopup( Ayni.esc( trip.destination || '' ) ).addTo( map );
     }
     else
     {

@@ -323,7 +323,7 @@ function recoveryDone()
 
 function printRecovery( code )
 {
-    NayiveUI.printPage( '<h1>Nayive · ' + esc( T( 'passwords.recKey' ) ) + '</h1>' +
+    Ayni.printPage( '<h1>Nayive · ' + esc( T( 'passwords.recKey' ) ) + '</h1>' +
                         '<p style="font: 600 20px/1.6 monospace; letter-spacing: 1px">' + esc( code ) + '</p>' +
                         '<p>' + esc( T( 'passwords.recPrintNote' ) ) + '</p>' +
                         '<p class="pr-foot">' + esc( new Date().toLocaleDateString( Ayni.i18n.lang() ) ) + '</p>',

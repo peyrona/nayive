@@ -37,7 +37,7 @@ let keys      = null;        // { vault, item } while open; null = locked
 let items     = {};          // id -> plain entry, while open
 let parentOf  = {};          // id -> the folder it really sits in (ROOT when its own is gone or a loop)
 let damaged   = 0;           // live entries that would not open
-let store     = null;        // NayiveStore, set by boot.js
+let store     = null;        // AyniStore, set by boot.js
 let chain     = Promise.resolve();   // writes, one at a time, in order
 const opened  = new Map();   // id -> { r, c, item }: the entries already opened (a re-read skips them)
 
@@ -45,7 +45,7 @@ function T( k )     { return Ayni.t( k ); }
 function TF( k, v ) { return Ayni.tf( k, v ); }
 
 function nowIso() { return new Date().toISOString().replace( /\.\d{3}Z$/, 'Z' ); }
-function today()  { return new Date().toISOString().slice( 0, 10 ); }
+const today = Ayni.dates.today;   // the device's day
 
 function isOpen()   { return !! keys && fileState === 'ok' && !! env; }
 function item( id ) { return Object.prototype.hasOwnProperty.call( items, id ) ? items[ id ] : null; }

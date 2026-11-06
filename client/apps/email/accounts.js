@@ -210,7 +210,7 @@
         {
             var pass = input.value;
             if( ! pass.trim() ) { input.focus(); return; }
-            Ayni.setBusy( save, E.T( "ui.sync.saving" ) );
+            Ayni.setBusy( save, E.T( "ayni.sync.saving" ) );
             errBox.hidden = true;
             status.textContent = E.TF( "mail.checkingWith", { name: a.email } );
             status.hidden = false;

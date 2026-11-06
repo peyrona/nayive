@@ -47,8 +47,7 @@
     C.inCall    = function () { return !! call; };
     // tz: this page's time zone - the others are offered "without sound" when
     // it is night here (compose.js nightAsk; the server's zonesFor).
-    var myZone = "";
-    try { myZone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch( _ ) {}
+    var myZone = Ayni.dates.zone( "" );
     C.waitQuery = function ( w ) { return "&dev=" + S.dev + "&s=" + ( w || S ).sigSeen + ( myZone ? "&tz=" + encodeURIComponent( myZone ) : "" ); };
 
     // ---------------------------------------------------------------------
@@ -886,13 +885,7 @@
         if( s ) s.textContent = stateWords();
     }
 
-    function clock( ms )
-    {
-        var s = Math.max( 0, Math.floor( ms / 1000 ) );
-        var m = Math.floor( s / 60 ), hh = Math.floor( m / 60 );
-        var two = function ( n ) { return ( n < 10 ? "0" : "" ) + n; };
-        return ( hh ? hh + ":" + two( m % 60 ) : m ) + ":" + two( s % 60 );
-    }
+    function clock( ms ) { return Ayni.fmtClock( ms / 1000 ); }
 
     // ---------------------------------------------------------------------
     // GROUP CALLS: one connection to each other page (a mesh, at most four)

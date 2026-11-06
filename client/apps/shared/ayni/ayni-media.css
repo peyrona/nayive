@@ -1,0 +1,129 @@
+/* Ayni library 0.2.0: media viewers: the main row, cards, the scope chip, the player bar. Plain CSS, no build step, evergreen browsers 2024+. Optional: load it after ayni-base.css. */
+
+/* -----------------------------------------------------------------------------
+ * MEDIA VIEWER  (.main-row, .view-head, .media-card, .scope-chip, .empty-hint, .player-bar)
+ *
+ * Photos, Music and Movies are one app shape wearing three skins: a folder tree
+ * (or scope chip) on the left, a scrolling library in the middle, a transport
+ * bar at the bottom. They already share their JavaScript (ayni-media.js);
+ * these are the rules all three (or, for the player bar, the two with a
+ * transport) had pasted into their own <style> byte for byte.
+ *
+ * What stays per-app is only the sizes that genuinely differ: the poster is
+ * 34x50, the album cover 48x48; Movies' elapsed label holds "1:23:45" and needs
+ * 54px where Music's "3:21" needs 34. Those overrides sit in the app, each next
+ * to the grid it belongs to.
+ * ---------------------------------------------------------------------------*/
+.main-row          { flex: 1 1 auto; display: flex; min-height: 0; }
+
+/* A library view's heading (Music, Movies). Its bottom margin is the app's. */
+.view-head         { font-size: 0.95rem; font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
+.view-head small   { margin-left: 8px; font-size: 0.78rem; font-weight: 400; color: var(--text-dim); }
+
+/* A card in a library grid (Music's albums and artists, Movies' genres): its
+   title and the line under it. The grid, the art and any other padding are
+   the app's. */
+.media-card
+{
+    display: flex; flex-direction: column; gap: 10px; padding: 12px;
+    background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-m);
+    cursor: pointer; text-align: left; font: inherit; color: inherit;
+    transition: border-color var(--tr-fast), background-color var(--tr-fast);
+}
+.media-card:hover     { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+.media-card.is-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--card2)); }
+.media-card-title     { font-size: 0.86rem; font-weight: 600; color: var(--text);
+                        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.media-card-sub       { font-size: 0.76rem; color: var(--text-dim); }
+
+/* "You are looking at <folder> [x]" - the pill above a scoped library. */
+.scope-chip
+{
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 6px 6px 6px 12px;
+    background: var(--card2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    color: var(--text-dim);
+    font-size: 0.78rem;
+}
+.scope-chip button
+{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: background-color var(--tr-fast), color var(--tr-fast);
+}
+.scope-chip button:hover    { background: color-mix(in srgb, var(--text) 14%, transparent); color: var(--text); }
+.scope-chip button svg      { width: 12px; height: 12px; }
+
+/* The media apps' "nothing to show yet" panel. (.empty-state above is the
+   list apps' version; this one is centred in a whole pane and can carry a
+   .btn.text call to action.) */
+.empty-hint
+{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 44px 20px;
+    color: var(--text-faint);
+    text-align: center;
+}
+.empty-hint svg             { width: 32px; height: 32px; opacity: 0.5; }
+.empty-hint p               { margin: 0; font-size: 0.86rem; max-width: 320px; }
+.empty-hint .btn.text       { margin-top: 6px; }
+
+/* The transport bar pinned under the library (Music, Movies). Left: what is
+   playing. Middle: the buttons and the seek bar. Right: volume. */
+.player-bar
+{
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 12px 22px;
+    border-top: 1px solid var(--line);
+    background: var(--card);
+}
+/* Left third of the bar: the cover, then the title over the sub-line. Only the
+   COVER's box differs between the two apps (a 34x50 poster, a 48x48 sleeve) and
+   with it .player-now's width - both stay in the app. */
+.player-now                 { display: flex; align-items: center; gap: var(--space-3); flex: 0 0 auto; min-width: 0; }
+.player-art                 { display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
+                              color: rgba(255, 255, 255, 0.85); }
+.player-meta                { min-width: 0; }
+.player-title               { font-size: 0.88rem; font-weight: 600; color: var(--text);
+                              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-sub                 { font-size: 0.76rem; color: var(--text-dim);
+                              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.transport                  { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+/* The buttons are Ayni's .btn (.transport-btn only names them); play / pause
+   is the player's default button, a 44 px .btn.primary. */
+.btn.play-btn               { --btn: 44px; }
+.btn.play-btn .icon         { --icon: 20px; }
+
+.seek-block                 { flex: 1 1 auto; display: flex; align-items: center; gap: var(--space-2); min-width: 120px; }
+.time-label                 { flex: 0 0 auto; width: 34px; font-size: 0.72rem; color: var(--text-dim); font-family: var(--font-mono); }
+.time-label.end             { text-align: right; }
+.volume-block               { display: flex; align-items: center; gap: var(--space-2); flex: 0 0 auto; width: 130px; }
+.volume-block svg           { width: 17px; height: 17px; flex: 0 0 auto; color: var(--text-dim); }
+
+/* The seek + volume sliders are Ayni's (shared/ayni/ayni-fields.css). */
+
+/* On a narrow window the bar goes to two rows with the seek bar full width
+   underneath. That lives in each media app's own narrow block, not here: the two
+   drop their side pane at different widths (Music 760, Movies 820) and the bar
+   has to fold at the same moment - see TWO LAYOUT MODES at the top of this file.
+   */

@@ -183,12 +183,12 @@ function paintMirror( ta, list )
     let   html = '', at = 0;
     for( const rf of list )
     {
-        html += NayiveUI.escapeHtml( text.slice( at, rf.from ) )
-              + '<span style="color:var(--rf-' + rf.color + ')">' + NayiveUI.escapeHtml( text.slice( rf.from, rf.to ) ) + '</span>';
+        html += Ayni.esc( text.slice( at, rf.from ) )
+              + '<span style="color:var(--rf-' + rf.color + ')">' + Ayni.esc( text.slice( rf.from, rf.to ) ) + '</span>';
         at = rf.to;
     }
     // The space keeps a last empty line as tall as the textarea's.
-    m.innerHTML = html + NayiveUI.escapeHtml( text.slice( at ) ) + ' ';
+    m.innerHTML = html + Ayni.esc( text.slice( at ) ) + ' ';
     m.hidden    = false;
 
     placeMirror( ta, m );

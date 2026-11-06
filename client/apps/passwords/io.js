@@ -244,7 +244,7 @@ function stamp() { return new Date().toISOString().slice( 0, 10 ); }
 function exportEncrypted()
 {
     if( ! isOpen() ) return;
-    NayiveUI.saveFile( serialize(), 'passwords-' + stamp() + '.json', 'application/json' );
+    Ayni.saveFile( serialize(), 'passwords-' + stamp() + '.json', 'application/json' );
     document.getElementById( 'exportBackdrop' ).close();
     Ayni.toast( 'ok', T( 'passwords.exportedEnc' ) );
 }
@@ -265,7 +265,7 @@ async function exportCsv()
             n.type === 'login' ? n.pass : '', n.type === 'login' ? n.totp : ''
         ].map( csvCell ).join( ',' ) );
     }
-    NayiveUI.saveFile( lines.join( '\r\n' ) + '\r\n', 'passwords-' + stamp() + '.csv', 'text/csv' );
+    Ayni.saveFile( lines.join( '\r\n' ) + '\r\n', 'passwords-' + stamp() + '.csv', 'text/csv' );
     document.getElementById( 'exportBackdrop' ).close();
     Ayni.alert( { title: T( 'passwords.exportedCsv' ), body: T( 'passwords.deleteCsvAfter' ) } );
 }

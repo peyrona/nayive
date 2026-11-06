@@ -77,7 +77,7 @@ section( "A7 · Movies: posters and resume points saved in between are kept" );
         window.fetch = function ( u, o ) { if( String( u ).indexOf( 'api.themoviedb.org' ) !== -1 )
             return Promise.resolve( new Response( JSON.stringify( { results: [ { id: 7, poster_path: '/p.jpg', title: 'T' } ] } ), { status: 200 } ) );
             return f.apply( this, arguments ); };
-        GumApi.fetchBinary = () => Promise.reject( new TypeError( 'blocked' ) ); return true; } )()` );
+        AyniNet.fetchBinary = () => Promise.reject( new TypeError( 'blocked' ) ); return true; } )()` );
     await arm( c, POSTERS, "t => { const d = JSON.parse( t ); d.items[ 'phone|1999' ] = { tmdb: null }; return JSON.stringify( d ); }" );
     await c.evaluate( "fetchPosters().then( () => true )" );
     ok( await raced( c ), "the phone saved a poster in between" );
@@ -194,7 +194,7 @@ section( "CS7 · ONE TAB AT A TIME MAKES THE WAITING NOTE MOVES" );
 {
     // Another tab is making the list (it holds the Web Lock): this tab waits
     // for it, so a move is never made twice (the second run parked the note).
-    await c.evaluate( `( () => { const k = 'nayive-notes-moves:' + ( ( window.GumApi && GumApi.owner && GumApi.owner() ) || '' );
+    await c.evaluate( `( () => { const k = 'nayive-notes-moves:' + ( ( window.AyniNet && AyniNet.owner && AyniNet.owner() ) || '' );
         localStorage.setItem( k, JSON.stringify( [ { pairs: [ [ 'files/N/m.png', 'files/Q/m.png' ] ], keep: false } ] ) );
         window.__free = null; window.__settled = null;
         navigator.locks.request( k, () => new Promise( r => { window.__free = r; } ) );

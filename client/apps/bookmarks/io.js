@@ -170,7 +170,7 @@ async function importFromNayive()
                                         only: function( name ) { return /\.(html?|json)$/i.test( name ); } } );
     if( ! f ) return;
     let text;
-    try { text = await GumApi.readFile( f.path ); }
+    try { text = await AyniNet.readFile( f.path ); }
     catch( e ) { Ayni.toast( 'err', T( 'ui.openFailed' ) ); return; }
     await applyImport( text, f.name );
 }
@@ -214,7 +214,7 @@ async function applyImport( text, name )
     const before = snapshot();
     if( mode === 'replace' ) data = emptyData();
     const dest = mode === 'replace' ? ROOT
-               : makeFolder( TF( 'bookmarks.importedFolder', { date: NayiveUI.todayIso() } ), ROOT ).id;
+               : makeFolder( TF( 'bookmarks.importedFolder', { date: Ayni.dates.today() } ), ROOT ).id;
     addTree( tree.items, dest );
     const after = snapshot();                   // what Replace all made, for its Undo
 
@@ -328,7 +328,7 @@ function exportWhere()
 async function deliver( text, name, type )
 {
     if( exportWhere() === 'nayive' ) { if( ! await saveInNayive( text, name ) ) return; }
-    else NayiveUI.saveFile( text, name, type );
+    else Ayni.saveFile( text, name, type );
     document.getElementById( 'exportBackdrop' ).close();
 }
 
@@ -343,12 +343,12 @@ async function saveInNayive( text, name )
     const dir = await NayiveUI.pickFolder( { title: T( 'bookmarks.export' ), allowRoot: true } );
     if( ! dir ) return false;
     let taken = new Set();
-    try { taken = await GumApi.namesIn( dir ); }
+    try { taken = await AyniNet.namesIn( dir ); }
     catch( e ) {}
     let free;
     try
     {
-        free = await GumApi.createFresh( dir, function() { const n = GumApi.uniqueName( name, taken ); taken.add( n ); return n; },
+        free = await AyniNet.createFresh( dir, function() { const n = AyniNet.uniqueName( name, taken ); taken.add( n ); return n; },
                                          new TextEncoder().encode( text ), { on409: true } );
     }
     catch( e ) { Ayni.toast( 'err', T( 'ui.saveFailed' ) ); return false; }
@@ -357,8 +357,8 @@ async function saveInNayive( text, name )
     return true;
 }
 
-function exportHtml() { return deliver( toNetscape(), 'bookmarks-' + NayiveUI.todayIso() + '.html', 'text/html;charset=utf-8' ); }
-function exportJson() { return deliver( serialize(), 'bookmarks-' + NayiveUI.todayIso() + '.json', 'application/json' ); }
+function exportHtml() { return deliver( toNetscape(), 'bookmarks-' + Ayni.dates.today() + '.html', 'text/html;charset=utf-8' ); }
+function exportJson() { return deliver( serialize(), 'bookmarks-' + Ayni.dates.today() + '.json', 'application/json' ); }
 
 //------------------------------------------------------------------------//
 // DUPLICATES  -  one card per group; the radio picks the copy that stays

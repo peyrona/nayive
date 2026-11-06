@@ -1,10 +1,10 @@
 // listapps-fns.mjs - the list apps' REAL merge functions under Node, no browser
 // and no server: what the ds-listapps-*.mjs node tests run their cases on.
 //
-//   const ical = await loadIcal();                  // client/apps/shared/ical.js, as the app imports it
-//   const S    = loadStore();                       // NayiveStore (shared/store.js): mergeLists...
-//   const V    = loadVcard();                       // NayiveVCard (shared/vcard.js)
-//   const f    = appFns( "client/apps/contact/index.html", [ "mergeBook", ... ], { NayiveStore: S } );
+//   const ical = await loadIcal();                  // client/apps/shared/ayni/formats/ical.js, as the app imports it
+//   const S    = loadStore();                       // AyniStore (shared/ayni/ayni-store.js): mergeLists...
+//   const V    = loadVcard();                       // AyniVCard (shared/ayni/formats/vcard.js)
+//   const f    = appFns( "client/apps/contact/index.html", [ "mergeBook", ... ], { AyniStore: S } );
 //
 // appFns cuts each named `function name(...) {...}` out of the app's file (brace
 // matched) and runs them together in one context with the given globals, so a
@@ -21,19 +21,19 @@ export const read = rel => fs.readFileSync( path.join( REPO, rel ), "utf8" );
 
 // ical.js imports "./lib/ical_v2.2.1.esm.min.js", which Node will not load as
 // a module under a .js name: both are copied to a scratch folder as .mjs.
-// luxon and rrule are the page's classic-script globals; NayiveUI.pad2 too.
+// luxon and rrule are the page's classic-script globals; Ayni.dates too.
 export async function loadIcal()
 {
     const LIB = path.join( REPO, "client/apps/shared/lib" );
     vm.runInThisContext( fs.readFileSync( path.join( LIB, "luxon_v3.7.2.min.js" ), "utf8" ) + "\n;globalThis.luxon = luxon;" );
     globalThis.rrule    = require( path.join( LIB, "rrule_v2.8.1.min.js" ) );
-    globalThis.NayiveUI = { pad2: n => ( n < 10 ? "0" : "" ) + n };
+    globalThis.Ayni     = { dates: { pad: n => ( n < 10 ? "0" : "" ) + n, zone: () => Intl.DateTimeFormat().resolvedOptions().timeZone } };
 
     const dir = fs.mkdtempSync( path.join( os.tmpdir(), "ds-ical-" ) );
     fs.mkdirSync( path.join( dir, "lib" ) );
-    fs.copyFileSync( path.join( LIB, "ical_v2.2.1.esm.min.js" ), path.join( dir, "lib/ical_v2.2.1.esm.min.mjs" ) );
+    fs.copyFileSync( path.join( REPO, "client/apps/shared/ayni/formats/lib/ical_v2.2.1.esm.min.js" ), path.join( dir, "lib/ical_v2.2.1.esm.min.mjs" ) );
     fs.writeFileSync( path.join( dir, "ical.mjs" ),
-                      read( "client/apps/shared/ical.js" ).replace( "./lib/ical_v2.2.1.esm.min.js", "./lib/ical_v2.2.1.esm.min.mjs" ) );
+                      read( "client/apps/shared/ayni/formats/ical.js" ).replace( "./lib/ical_v2.2.1.esm.min.js", "./lib/ical_v2.2.1.esm.min.mjs" ) );
     const mod = await import( path.join( dir, "ical.mjs" ) );
     fs.rmSync( dir, { recursive: true, force: true } );
     return mod;
@@ -50,8 +50,8 @@ function classic( rel, global, extra = {} )
     return ctx[ global ];
 }
 
-export const loadStore = () => classic( "client/apps/shared/store.js", "NayiveStore" );
-export const loadVcard = () => classic( "client/apps/shared/vcard.js", "NayiveVCard" );
+export const loadStore = () => classic( "client/apps/shared/ayni/ayni-store.js", "AyniStore" );
+export const loadVcard = () => classic( "client/apps/shared/ayni/formats/vcard.js", "AyniVCard" );
 
 // The source of `function name( ... ) { ... }` in `src` (strings, template
 // literals and comments skipped while matching braces).

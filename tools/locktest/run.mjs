@@ -1,5 +1,5 @@
 /*
- * run.mjs - the locked-document tests (shared/crypt.js + office.js's padlock).
+ * run.mjs - the locked-document tests (shared/ayni/ayni-crypt.js + office.js's padlock).
  *
  *     node tools/locktest/run.mjs          # from the repo root
  *
@@ -7,7 +7,7 @@
  * (a real app origin is the only place shared/ resolves and crypto.subtle
  * exists), drives a headless Chromium, and takes the page away again.
  *
- * The page stubs GumApi and NayiveStore with an in-memory server and papelera;
+ * The page stubs AyniNet and AyniStore with an in-memory server and papelera;
  * everything else is the REAL shared module. So the assertions are about the
  * bytes that would have left the browser: what lands in the "server", in the
  * .bak beside it, in the papelera and in the device draft.
@@ -45,7 +45,7 @@ try
     for( let i = 0; i < 200; i++ )
     {
         let up = false;
-        try { up = await p.evaluate( "!!(window.NayiveOffice && window.NayiveCrypt && window.HARNESS)" ); } catch {}
+        try { up = await p.evaluate( "!!(window.AyniDoc && window.AyniCrypt && window.HARNESS)" ); } catch {}
         if( up ) break;
         await new Promise( r => setTimeout( r, 50 ) );
     }
@@ -66,7 +66,7 @@ try
     window.T = function ( k ) { return Ayni.t( k ); };` );
 
     console.log('\n--- crypto in the page ---');
-    ok('subtle available', await p.evaluate('NayiveCrypt.available()'));
+    ok('subtle available', await p.evaluate('AyniCrypt.available()'));
 
     //--------------------------------------------------------------------------
     console.log('\n--- Write/Calc: lock, save, reopen ---');
@@ -282,8 +282,8 @@ try
     const r9 = await p.evaluate(`(async()=>{
       await dropDrafts();
       SRV = {};
-      const lock = await NayiveCrypt.newLock('importada');
-      SRV['files/otro.docx'] = await NayiveCrypt.seal(lock, new TextEncoder().encode('viene de fuera'));
+      const lock = await AyniCrypt.newLock('importada');
+      SRV['files/otro.docx'] = await AyniCrypt.seal(lock, new TextEncoder().encode('viene de fuera'));
       const s = newSession('write', true);
       DOC = { body: null };
       const imp = s.boot.call(null);            // not used; import directly

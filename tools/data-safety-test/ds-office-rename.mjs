@@ -161,7 +161,7 @@ section( "D6 · SAVE AS ONTO A NAME THE PAGE COULD NOT CHECK (THE LISTING FAILED
     await c.until( "document.querySelector('.CodeMirror')", 20000 );
     await c.evaluate( ASK );
     await c.evaluate( NET );
-    await c.evaluate( "GumApi.listDir = function () { var e = new Error( 'HTTP 500' ); e.status = 500; return Promise.reject( e ); }; true" );
+    await c.evaluate( "AyniNet.listDir = function () { var e = new Error( 'HTTP 500' ); e.status = 500; return Promise.reject( e ); }; true" );
     await type( "my new note\n" );
     ok( await c.until( "document.getElementById('saveAsBackdrop').open" ), "the new note asks for its name" );
     await c.evaluate( "document.getElementById('saveName').value = 'd6.txt'; document.getElementById('saveAsConfirmBtn').click(); true" );
@@ -242,8 +242,8 @@ section( "K5 · A SAVE CLEARED BEFORE IT WAS SENT IS SAID: NOT SAVED" );
     ok( !! await untilQueued( "files/k5.txt", e => e.body === "second\nfirst\nbase\n" ), "the next one waits in the outbox" );
     const L = await first.tab();
     await L.open( "/nayive/" );
-    await L.until( "window.NayiveStore" );
-    await L.evaluate( "NayiveStore.localCount().then( () => NayiveStore.clearLocal() ).then( () => true )" );   // a sign-out's "yes", in another tab
+    await L.until( "window.AyniStore" );
+    await L.evaluate( "AyniStore.localCount().then( () => AyniStore.clearLocal() ).then( () => true )" );   // a sign-out's "yes", in another tab
     await c.front();
     await c.evaluate( "window.__gate(), true" );
     ok( await c.until( TOLD( "write.notSaved" ), 10000 ), "the cleared save says: not saved", await c.toasts() );
@@ -267,7 +267,7 @@ section( "G2 · CALC'S RESTORE WAITS ONLY FOR ITS OWN FILE'S SAVE" );
         var q = indexedDB.open( 'nube-store' ); q.onsuccess = function () {
             var tx = q.result.transaction( 'outbox', 'readwrite' );
             tx.objectStore( 'outbox' ).put( { path: 'files/other.txt', body: 'another file', queuedAt: Date.now(), conflict: false,
-                                              bin: false, ius: false, who: NayiveStore.me, ver: 1, id: 'other-1', inc: [], anc: [] } );
+                                              bin: false, ius: false, who: AyniStore.me, ver: 1, id: 'other-1', inc: [], anc: [] } );
             tx.oncomplete = function () { q.result.close(); res( true ); }; }; } )` );
     await c.evaluate( "document.getElementById('restoreBtn').click(), true" );
     ok( await c.until( `${A1} === 'OLD5'`, 15000 ), "Restore swaps (another file's waiting save does not stop it)", await c.toasts() );

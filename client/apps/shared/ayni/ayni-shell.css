@@ -1,0 +1,259 @@
+/* Ayni library 0.2.0, app shell: the page around the controls, for an app that takes its whole window. The two shells, the title
+   row, a page inside a frame, Export to PDF, finger-sized targets in the title row. Plain CSS, no build step, evergreen browsers
+   2024+. Optional: load it after ayni-base.css. The behaviour is in ayni-shell.js; the rules are chapter 18 of the guidelines.
+   Two layouts and one break between them: phones are 640 px and under. */
+
+/* The page: border-box everywhere, no sideways scroll, the font, colour and background on <body> */
+*,
+*::before,
+*::after            { box-sizing: border-box; }
+
+html               { overflow-x: hidden; overflow-y: auto; }
+
+body
+{
+    margin: 0;
+    font-family: var(--font-sans);
+    color: var(--text);
+    background: var(--bg);
+    -webkit-tap-highlight-color: transparent;
+}
+
+a                  { color: var(--link); text-decoration: none; }
+a:hover            { text-decoration: underline; opacity: 0.85; }
+
+[hidden]           { display: none !important; }
+
+/* Two shells, one per app. Tool: .app, a full-height column, the work area does its own scrolling. Card: .page > .page-inner > .card,
+   a centred sheet, edge to edge on a phone. A standalone .card keeps its box at every width */
+.app
+{
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.page
+{
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    min-height: 100vh;
+    padding: 28px 14px;
+}
+
+.page-inner        { width: 100%; max-width: 460px; }
+
+.card
+{
+    padding: 20px 16px 16px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    box-shadow: var(--elev-card);
+}
+
+@media (max-width: 480px)
+{
+    .page                        { padding: 0; }
+    .page > .page-inner          { max-width: 100%; }
+    .page > .page-inner > .card
+    {
+        min-height: 100vh;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+    }
+}
+
+/* The title row. Look on the left (back, icon, name, what is shown), act on the right (.topbar-actions). The name is never cut:
+   it wraps first. A bar that does not fit leaves by rank (Ayni.fitBar) */
+.topbar
+{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+    row-gap: 4px;
+    flex: 0 0 auto;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+    overflow-x: auto;
+}
+
+.topbar h1,
+.app-title
+{
+    flex: 0 1 auto;
+    min-width: min-content;
+    margin: 0 10px 0 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent);
+    white-space: normal;
+}
+
+.app-icon          { flex: 0 0 auto; color: var(--accent); }
+
+.topbar .app-icon  { margin-right: 6px; }
+
+.home-link                    { cursor: pointer; }
+.topbar h1.home-link:hover,
+.header h1.home-link:hover,
+.app-title.home-link:hover    { text-decoration: underline; text-underline-offset: 3px; }
+.app-icon.home-link:hover     { opacity: 0.7; }
+
+/* A pane inside another page (Ayni.frame): the host shows the name, so the page hides its own. On a wide host its icon comes back
+   as the label of the pane. In a pane or a window the card fills its frame */
+html.is-embedded .topbar > .app-icon,
+html.is-embedded .header > .app-icon,
+html.is-embedded .topbar > h1,
+html.is-embedded .header > h1              { display: none; }
+
+html.is-embedded .header                 { justify-content: flex-end; }
+
+html.is-embedded.is-embedded-wide .topbar > .app-icon,
+html.is-embedded.is-embedded-wide .header > .app-icon { display: block; }
+html.is-embedded.is-embedded-wide .header             { justify-content: flex-start; }
+
+html.is-embedded .page,
+html.is-windowed .page                       { padding: 0; }
+html.is-embedded .page > .page-inner,
+html.is-windowed .page > .page-inner         { max-width: 100%; }
+html.is-embedded .page > .page-inner > .card,
+html.is-windowed .page > .page-inner > .card
+{
+    min-height: 100vh;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+/* The trailing buttons, kept together so they wrap as one */
+.topbar-actions,
+.header-actions
+{
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+/* In a window the title row is the title bar: an empty strip after the name to grab it by. The card's title row is the same
+   bar: sticky, opaque, its height in --win-head-h for the page's own sticky heads */
+html.is-windowed .topbar h1,
+html.is-windowed .header h1,
+html.is-windowed .app-title { margin-right: 1.5rem; }
+
+.header
+{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+    row-gap: 4px;
+    margin-bottom: var(--space-4);
+}
+.page > .page-inner > .card > .header
+{
+    position: sticky; top: 0; z-index: 20;
+    margin: -20px -16px var(--space-4);
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+    border-top-left-radius: inherit;
+    border-top-right-radius: inherit;
+    background: var(--card);
+}
+.header .app-icon  { width: 20px; height: 20px; margin-right: 6px; }
+.header h1,
+.header .app-title
+{
+    flex: 1 1 auto;
+    min-width: min-content;
+    margin: 0 10px 0 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent);
+    white-space: normal;
+}
+
+/* Groups in a title row, and in a row of their own (.view-bar) */
+.topbar .tb-modes,
+.topbar .tb-actions     { margin-right: 6px; }
+.view-bar
+{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    row-gap: 2px;
+    flex: 0 0 auto;
+    padding: var(--space-2) var(--space-4);
+    border-bottom: 1px solid var(--line);
+}
+
+.view-bar .tb-sep { width: 1px; align-self: stretch; margin: 4px; background: var(--line); flex: 0 0 auto; }
+
+/* While searching the title row stops wrapping: the field squeezes, the rest goes into the ⋮ by rank */
+.header:has(.search-field.fold.is-open) h1 { flex-grow: 0; }
+
+.topbar:has(.search-field.fold.is-open),
+.header:has(.search-field.fold.is-open) { flex-wrap: nowrap; }
+
+/* Phones: fingers, not pointers. The fixed app name gives its room to the tools: the icon says where you are, and screen readers
+   still get the name. A title that says what is open (a name that is not a home link, or that holds a button) stays */
+@media (max-width: 640px)
+{
+    .btn.sm            { --btn: 36px; }
+
+    html:not(.is-windowed) :is(h1, .app-title).home-link:not(:has(button))
+    {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        min-width: 0;
+        margin: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        clip-path: inset(50%);
+    }
+}
+
+/* Export to PDF with no library: Ayni.printPage fills the hidden #printRoot and prints it. .printing stays on <html> until it is
+   done, so a plain Ctrl+P still prints the page itself */
+#printRoot { display: none; }
+
+@media print
+{
+    @page { margin: 14mm; }
+
+    .printing, .printing body { height: auto !important; overflow: visible !important; background: #fff !important; }
+    .printing #app, .printing dialog, .printing #ayni-toasts { display: none !important; }
+    .printing #printRoot { display: block !important; }
+}
+
+#printRoot { color: #111; background: #fff; font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+#printRoot .pr-empty { color: #666; font-style: italic; }
+#printRoot .pr-foot { margin-top: 24px; padding-top: 8px; border-top: 1px solid #bbb; color: #666; font-size: 10.5px; }
+
+/* Touch: what a finger aims at in the title row grows to --hit, and nothing moves. Header buttons keep 8 px apart */
+@media (pointer: coarse)
+{
+    :root { --hit: 44px; }
+
+    :where(h1.home-link, .app-title.home-link)
+    {
+        position: relative;
+    }
+    :where(h1.home-link, .app-title.home-link)::before
+    {
+        content: "";
+        position: absolute;
+        inset: min(0px, calc((100% - var(--hit)) / 2));
+    }
+    svg.app-icon.home-link             { box-sizing: content-box; padding: 12px; margin: -12px -6px -12px -12px; }
+
+    html :is(.topbar, .header, .topbar-actions, .header-actions, .tb-group, .tb-modes) { gap: 8px; }
+    html :is(.topbar-actions, .header-actions) > .tb-group::before                     { margin-inline: 0 !important; }
+}

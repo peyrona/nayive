@@ -6,7 +6,7 @@
  * launcher only leaves for the sign-in page on a 401). The windows show
  * FIXTURE pages (/nayive/fixture/box.html?w=&h=&n=): one box of a known size,
  * so what "fits" means is exact. Sizes are changed the way a person does it -
- * mouse drags on the grips - and read back through window.NayiveDesktop.
+ * mouse drags on the grips - and read back through window.AyniDesk.
  * Nothing is written into client/apps.
  */
 import http from "node:http";
@@ -100,7 +100,7 @@ try
         await c.send( "Page.navigate", { url: ORIGIN + p } );
         await waitFor( `location.pathname + '|' + document.readyState === ${JSON.stringify( p.split( "?" )[ 0 ] + "|complete" )}` );
     }
-    const wins = () => ev( "JSON.stringify( NayiveDesktop.windows() )" ).then( JSON.parse );
+    const wins = () => ev( "JSON.stringify( AyniDesk.windows() )" ).then( JSON.parse );
     const win  = i => wins().then( l => l[ i ] );
     // Two frames for the measure, and a margin.
     const settle = () => ev( "new Promise( r => requestAnimationFrame( () => requestAnimationFrame( () => requestAnimationFrame( () => setTimeout( r, 30 ) ) ) ) )" );
@@ -144,7 +144,7 @@ try
                localStorage.setItem( 'nayive-install-snooze', 'never' );
                localStorage.setItem( 'balata-desktop-wins', ${JSON.stringify( JSON.stringify( saved ) )} ); localStorage.removeItem( 'balata-desktop-tile' ); true` );
     await go( "/nayive/desktop/index.html" );
-    await waitFor( "window.NayiveDesktop && NayiveDesktop.windows && NayiveDesktop.windows().length === 4", 10000, "4 windows restored" );
+    await waitFor( "window.AyniDesk && AyniDesk.windows && AyniDesk.windows().length === 4", 10000, "4 windows restored" );
     await waitFor( "[].every.call( document.querySelectorAll( '#desk > .win iframe' ), function ( f ) { try { return /^Box /.test( f.contentDocument.title ); } catch( e ) { return false; } } )", 10000, "frames loaded" );
     await settle(); await settle();
     const desk = await rectOf( "document.getElementById( 'desk' )" );
@@ -174,13 +174,13 @@ try
         var probe = document.createElement( 'i' ); document.body.appendChild( probe ); var tok = function ( v ) { probe.style.color = cs.getPropertyValue( v ).trim(); return getComputedStyle( probe ).color; };
         var out = { scale: [ c( 'scale' ), tok( '--win-scale' ) ], min: [ c( 'min' ), tok( '--warn' ) ], max: [ c( 'max' ), tok( '--ok' ) ], close: [ c( 'close' ), tok( '--danger' ) ] }; probe.remove(); return JSON.stringify( out ); } )()` ) );
     check( "colours: blue Scale / Resize, then the old dots' warn / ok / danger", Object.values( colours ).every( ( [ a, z ] ) => a === z ) && /rgb\(\s*(24, 115, 204|30, 144, 255)/.test( colours.scale[ 0 ] ), colours );
-    const fi = await ev( "NayiveDesktop.windows().findIndex( function ( x ) { return x.name === document.querySelector( '#tasks .chip[aria-current=true] .chip-main span' ).textContent; } )" );
-    const sc0 = JSON.parse( await ev( `JSON.stringify( [ NayiveDesktop.windows()[ ${fi} ].scale, ${frontBtn( "scale" )}.dataset.tip, ${frontBtn( "scale" )}.innerHTML.length, ${frontBtn( "scale" )}.getAttribute( 'aria-pressed' ) ] )` ) );
+    const fi = await ev( "AyniDesk.windows().findIndex( function ( x ) { return x.name === document.querySelector( '#tasks .chip[aria-current=true] .chip-main span' ).textContent; } )" );
+    const sc0 = JSON.parse( await ev( `JSON.stringify( [ AyniDesk.windows()[ ${fi} ].scale, ${frontBtn( "scale" )}.dataset.tip, ${frontBtn( "scale" )}.innerHTML.length, ${frontBtn( "scale" )}.getAttribute( 'aria-pressed' ) ] )` ) );
     await press( frontBtn( "scale" ) );
-    const sc1 = JSON.parse( await ev( `JSON.stringify( [ NayiveDesktop.windows()[ ${fi} ].scale, ${frontBtn( "scale" )}.dataset.tip, ${frontBtn( "scale" )}.innerHTML.length, ${frontBtn( "scale" )}.getAttribute( 'aria-pressed' ) ] )` ) );
+    const sc1 = JSON.parse( await ev( `JSON.stringify( [ AyniDesk.windows()[ ${fi} ].scale, ${frontBtn( "scale" )}.dataset.tip, ${frontBtn( "scale" )}.innerHTML.length, ${frontBtn( "scale" )}.getAttribute( 'aria-pressed' ) ] )` ) );
     check( "Scale / Resize button: flips the mode, its icon and its tooltip", sc0[ 0 ] !== sc1[ 0 ] && sc0[ 1 ] !== sc1[ 1 ] && sc0[ 2 ] !== sc1[ 2 ] && sc1[ 3 ] === String( sc1[ 0 ] ) && /^(Scale|Resize)/.test( sc1[ 1 ] ), { sc0, sc1 } );
     await press( frontBtn( "scale" ) );
-    check( "Scale / Resize button: and back", await ev( `NayiveDesktop.windows()[ ${fi} ].scale` ) === sc0[ 0 ] );
+    check( "Scale / Resize button: and back", await ev( `AyniDesk.windows()[ ${fi} ].scale` ) === sc0[ 0 ] );
     check( "Tile switch: off", await ev( "! document.getElementById( 'tileOn' ).checked && ! document.getElementById( 'tileSw' ).classList.contains( 'idle' )" ) === true );
 
     // A dragged far smaller: stops at the old smallest window, as today.
@@ -247,20 +247,20 @@ try
     check( "B restored: shrinks again, same factor", ! w[ 1 ].max && near( w[ 1 ].factor, f0, 0.002 ), { f: w[ 1 ].factor, f0 } );
 
     // ----- 4. The switch, on and off
-    await ev( "NayiveDesktop.scale( 0, true )" ); await settle();
+    await ev( "AyniDesk.scale( 0, true )" ); await settle();
     w = await wins();
     check( "A: Scale switched on, its page fits -> still 1:1", w[ 0 ].scale && w[ 0 ].factor === 1, w[ 0 ] );
     await dragMouse( 20 + 700 - 3, 20 + 450 - 3, 20 + 350 - 3, 20 + 450 - 3 );
     await settle();
     w = await wins();
     check( "A (Scale on) at 350 wide: shrunk", w[ 0 ].factor < 1 && near( w[ 0 ].box.w, 350 ), w[ 0 ] );
-    await ev( "NayiveDesktop.scale( 0, false )" ); await settle();
+    await ev( "AyniDesk.scale( 0, false )" ); await settle();
     w = await wins();
     check( "A: Scale off again -> 1:1 at once", ! w[ 0 ].scale && w[ 0 ].factor === 1 && w[ 0 ].box.w === 350, w[ 0 ] );
-    await ev( "NayiveDesktop.scale( 0, true )" ); await settle();
+    await ev( "AyniDesk.scale( 0, true )" ); await settle();
     w = await wins();
     check( "A: Scale on for a window already too small -> shrinks at once", w[ 0 ].factor < 1, w[ 0 ] );
-    await ev( "NayiveDesktop.scale( 0, false )" ); await settle();
+    await ev( "AyniDesk.scale( 0, false )" ); await settle();
 
     // ----- 5. Tile
     // B maximised first, to see Untile give that back.
@@ -271,8 +271,8 @@ try
     check( "Tile switch: on, bold Tile", await ev( "document.getElementById( 'tileOn' ).checked" ) === true );
     await settle();
     w = await wins();
-    const want = JSON.parse( await ev( `JSON.stringify( NayiveTiling.tile( 3, ${D.w}, ${D.h}, { minW: 320, minH: 200 } ) )` ) );
-    check( "Tile: on", await ev( "NayiveDesktop.isTiled()" ) === true );
+    const want = JSON.parse( await ev( `JSON.stringify( AyniTiling.tile( 3, ${D.w}, ${D.h}, { minW: 320, minH: 200 } ) )` ) );
+    check( "Tile: on", await ev( "AyniDesk.isTiled()" ) === true );
     check( "Tile: A, B, C in bar order get the grid's boxes", [ 0, 1, 2 ].every( i =>
         near( w[ i ].box.l, want[ i ].l, 0.01 ) && near( w[ i ].box.t, want[ i ].t, 0.01 ) && near( w[ i ].box.w, want[ i ].w, 0.01 ) && near( w[ i ].box.h, want[ i ].h, 0.01 ) ),
         { got: w.slice( 0, 3 ).map( x => x.box ), want } );
@@ -305,13 +305,13 @@ try
     await press( frontBtn( "min" ) );
     await settle();
     w = await wins();
-    const two = JSON.parse( await ev( `JSON.stringify( NayiveTiling.tile( 2, ${D.w}, ${D.h}, { minW: 320, minH: 200 } ) )` ) );
+    const two = JSON.parse( await ev( `JSON.stringify( AyniTiling.tile( 2, ${D.w}, ${D.h}, { minW: 320, minH: 200 } ) )` ) );
     check( "Tiled + minimise C: A and B share the desk", w[ 2 ].min && near( w[ 0 ].box.w, two[ 0 ].w, 0.01 ) && near( w[ 1 ].box.l, two[ 1 ].l, 0.01 ) && near( w[ 0 ].box.l, 0, 0.01 ),
            w.map( x => x.box ) );
 
     // Open a window while tiled (from inside an app, as Drive does): it joins the grid.
     await ev( `${winEl( 0 )}.querySelector( 'iframe' ).contentWindow.open( '/nayive/fixture/box.html?w=300&h=200&n=E' ), true` );
-    await waitFor( "NayiveDesktop.windows().length === 5" );
+    await waitFor( "AyniDesk.windows().length === 5" );
     await settle();
     w = await wins();
     check( "Tiled + a new window: A, B, E share the desk", [ 0, 1, 4 ].every( ( k, i ) => near( w[ k ].box.w, want[ i ].w, 0.01 ) && near( w[ k ].box.l, want[ i ].l, 0.01 ) ),
@@ -320,9 +320,9 @@ try
     // Reload while tiled: still tiled, and Untile still knows the way back.
     await sleep( 400 );                                     // saveWins waits 300ms
     await go( "/nayive/desktop/index.html" );
-    await waitFor( "window.NayiveDesktop && NayiveDesktop.windows && NayiveDesktop.windows().length === 5", 10000, "5 windows after reload" );
+    await waitFor( "window.AyniDesk && AyniDesk.windows && AyniDesk.windows().length === 5", 10000, "5 windows after reload" );
     await settle();
-    check( "Reload while tiled: still tiled", await ev( "NayiveDesktop.isTiled()" ) === true );
+    check( "Reload while tiled: still tiled", await ev( "AyniDesk.isTiled()" ) === true );
 
     // ----- 6. Untile: exactly as before. (A reload puts the bar in stacking
     // order - as it always has - so windows are matched by name from here on.)
@@ -331,7 +331,7 @@ try
     await settle(); await settle();
     w = await wins();
     const at = name => w.findIndex( x => x.name === name );
-    check( "Untile: off", await ev( "NayiveDesktop.isTiled()" ) === false );
+    check( "Untile: off", await ev( "AyniDesk.isTiled()" ) === false );
     for( let i = 0; i < 4; i++ )
     {
         const a = before[ i ], z = w[ at( a.name ) ];
@@ -350,7 +350,7 @@ try
     await shot( "4-untiled" );
 
     // ----- 7. A new desk size while tiled deals the desk out again
-    await ev( "NayiveDesktop.tile()" ); await settle();
+    await ev( "AyniDesk.tile()" ); await settle();
     await c.send( "Emulation.setDeviceMetricsOverride", { width: 1500, height: 900, deviceScaleFactor: 1, mobile: false } );
     await sleep( 200 ); await settle(); await settle();
     const d2 = await rectOf( "document.getElementById( 'desk' )" );
@@ -358,15 +358,15 @@ try
     const shown = w.filter( x => ! x.min );
     const right = Math.max( ...shown.map( x => x.box.l + x.box.w ) ), bottom = Math.max( ...shown.map( x => x.box.t + x.box.h ) );
     check( "Desk resized while tiled: the tiles fill the new desk", near( right, d2.width, 0.01 ) && near( bottom, d2.height, 0.01 ), { right, bottom, d2 } );
-    await ev( "NayiveDesktop.untile()" ); await settle();
-    check( "Untile after a resize: off again", await ev( "NayiveDesktop.isTiled()" ) === false );
+    await ev( "AyniDesk.untile()" ); await settle();
+    check( "Untile after a resize: off again", await ev( "AyniDesk.isTiled()" ) === false );
 
     // ----- 8. Closing every window while tiled ends tiling; Tile on an empty desk does nothing
-    await ev( "NayiveDesktop.tile()" ); await settle();
+    await ev( "AyniDesk.tile()" ); await settle();
     await ev( "[].slice.call( document.querySelectorAll( '#tasks [data-win=\"close\"]' ) ).forEach( function ( x ) { x.click(); } ), true" );
     await settle();
-    check( "Every window closed while tiled: tiling ends", await ev( "NayiveDesktop.windows().length === 0 && ! NayiveDesktop.isTiled()" ) === true );
-    check( "Tile on an empty desk: false, stays off", await ev( "NayiveDesktop.tile()" ) === false && await ev( "NayiveDesktop.isTiled()" ) === false );
+    check( "Every window closed while tiled: tiling ends", await ev( "AyniDesk.windows().length === 0 && ! AyniDesk.isTiled()" ) === true );
+    check( "Tile on an empty desk: false, stays off", await ev( "AyniDesk.tile()" ) === false && await ev( "AyniDesk.isTiled()" ) === false );
     check( "Empty desk: the switch is greyed and off", await ev( "document.getElementById( 'tileOn' ).disabled && document.getElementById( 'tileSw' ).classList.contains( 'idle' ) && ! document.getElementById( 'tileOn' ).checked" ) === true );
 
     // ----- 9. A press inside a frame INSIDE the window's page (Planner) brings it forward
@@ -375,7 +375,7 @@ try
         { url: "/nayive/fixture/nest.html",                l: "20px",  t: "20px", w: "600px", h: "420px" },
         { url: "/nayive/fixture/box.html?w=300&h=200&n=F", l: "700px", t: "20px", w: "500px", h: "400px" } ] ) )} ); true` );
     await go( "/nayive/desktop/index.html" );
-    await waitFor( "window.NayiveDesktop && NayiveDesktop.windows && NayiveDesktop.windows().length === 2", 10000, "2 windows" );
+    await waitFor( "window.AyniDesk && AyniDesk.windows && AyniDesk.windows().length === 2", 10000, "2 windows" );
     const nestAt = "[].filter.call( document.querySelectorAll( '#desk > .win' ), function ( w ) { return /nest\\.html/.test( w.querySelector( 'iframe' ).src ); } )[ 0 ]";
     const boxAt  = "[].filter.call( document.querySelectorAll( '#desk > .win' ), function ( w ) { return /n=F/.test( w.querySelector( 'iframe' ).src ); } )[ 0 ]";
     await waitFor( `( function () { try { return /^Box Inner/.test( ${nestAt}.querySelector( 'iframe' ).contentDocument.getElementById( 'inner' ).contentDocument.title ); } catch( e ) { return false; } } )()`, 10000, "inner frame loaded" );
@@ -394,29 +394,29 @@ try
     // ----- 10. "Scale on open" (the "⋮" menu; it left My account 2026-09-28)
     await ev( "( function () { var k = document.getElementById( 'scaleNewChk' ); k.checked = true; k.dispatchEvent( new Event( 'change' ) ); return true; } )()" );
     check( "Scale on open: ticked, it is stored for this device", await ev( "JSON.parse( localStorage.getItem( 'balata-desktop' ) ).scaleNew" ) === true );
-    await ev( "NayiveDesktop.open( '/nayive/fixture/box.html?w=300&h=200&n=G' )" ); await settle();
-    let nw = await ev( "NayiveDesktop.windows()" );
+    await ev( "AyniDesk.open( '/nayive/fixture/box.html?w=300&h=200&n=G' )" ); await settle();
+    let nw = await ev( "AyniDesk.windows()" );
     check( "Scale default on: a new window starts with Scale on", nw[ nw.length - 1 ].scale === true, nw[ nw.length - 1 ] );
     check( "Scale default on: the windows restored keep their own", nw[ 0 ].scale === false && nw[ 1 ].scale === false );
     await ev( "( function () { var k = document.getElementById( 'scaleNewChk' ); k.checked = false; k.dispatchEvent( new Event( 'change' ) ); return true; } )()" );
-    await ev( "NayiveDesktop.open( '/nayive/fixture/box.html?w=300&h=200&n=H' )" ); await settle();
-    nw = await ev( "NayiveDesktop.windows()" );
+    await ev( "AyniDesk.open( '/nayive/fixture/box.html?w=300&h=200&n=H' )" ); await settle();
+    nw = await ev( "AyniDesk.windows()" );
     check( "Scale default off: a new window starts with Resize", nw[ nw.length - 1 ].scale === false, nw[ nw.length - 1 ] );
 
     // ----- 10b. A closed window leaves its place and size to the app's next one (LAST)
     {
-        const wasTiled = await ev( "NayiveDesktop.isTiled()" );
-        if( wasTiled ) { await ev( "NayiveDesktop.untile()" ); await settle(); }      // a tiled window keeps nothing
-        await ev( `( function () { var n = NayiveDesktop.windows().length; document.querySelectorAll( '#tasks [data-win="close"]' )[ n - 1 ].click(); return true; } )()` ); await settle();
+        const wasTiled = await ev( "AyniDesk.isTiled()" );
+        if( wasTiled ) { await ev( "AyniDesk.untile()" ); await settle(); }      // a tiled window keeps nothing
+        await ev( `( function () { var n = AyniDesk.windows().length; document.querySelectorAll( '#tasks [data-win="close"]' )[ n - 1 ].click(); return true; } )()` ); await settle();
         const gone = JSON.parse( await ev( "localStorage.getItem( 'balata-desktop-last' )" ) || "null" );
         check( "Last: a closed window is kept per app", gone && gone.fixture && gone.fixture.w > 0, gone );
         await ev( `( function () { var g = JSON.parse( localStorage.getItem( 'balata-desktop-last' ) ); g.fixture = { l: 111, t: 77, w: 640, h: 360, max: false };
                    localStorage.setItem( 'balata-desktop-last', JSON.stringify( g ) ); return true; } )()` );
-        await ev( "NayiveDesktop.open( '/nayive/fixture/box.html?w=300&h=200&n=H' )" ); await settle();
-        nw = await ev( "NayiveDesktop.windows()" );
+        await ev( "AyniDesk.open( '/nayive/fixture/box.html?w=300&h=200&n=H' )" ); await settle();
+        nw = await ev( "AyniDesk.windows()" );
         const b = nw[ nw.length - 1 ].box;
         check( "Last: the next window of that app opens there", b.l === 111 && b.t === 77 && b.w === 640 && b.h === 360, b );
-        if( wasTiled ) { await ev( "NayiveDesktop.tile()" ); await settle(); }
+        if( wasTiled ) { await ev( "AyniDesk.tile()" ); await settle(); }
     }
 
     // ----- 11. Sticky windows (the "⋮" menu): an edge offers that half of the desk

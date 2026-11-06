@@ -252,7 +252,7 @@ async function fetchWeather( lat, lon, sDate )
 // the place's time zone, which is what lets geocodeLocation() ask for both at once.
 function weatherUrl( lat, lon, sDate )
 {
-    const near = sDate >= addDaysIso( NayiveUI.todayIso(), -5 );
+    const near = sDate >= addDaysIso( Ayni.dates.today(), -5 );
     const base = near ? 'https://api.open-meteo.com/v1/forecast'
                       : 'https://archive-api.open-meteo.com/v1/archive';
 

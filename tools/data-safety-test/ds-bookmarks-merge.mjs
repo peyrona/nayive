@@ -86,10 +86,10 @@ section( "ITEM 8 · \"MERGED\" WAITS FOR A PENDING UNDO" );
 section( "EXPORT INTO NAYIVE WHEN THE FOLDER'S LISTING FAILS" );
 {
     ok( await reopen(), "Bookmarks is open" );
-    const name = await c.evaluate( "'bookmarks-' + NayiveUI.todayIso() + '.json'" );
+    const name = await c.evaluate( "'bookmarks-' + Ayni.dates.today() + '.json'" );
     const r = await phone.put( "files/" + name, "PRECIOUS - another file of that name" );
     ok( r.status === 200 || r.status === 201, "a file of the export's name is in Files" );
-    await c.evaluate( `GumApi.listDir = function () { var e = new Error( 'HTTP 500' ); e.status = 500; return Promise.reject( e ); };
+    await c.evaluate( `AyniNet.listDir = function () { var e = new Error( 'HTTP 500' ); e.status = 500; return Promise.reject( e ); };
         NayiveUI.pickFolder = function () { return Promise.resolve( 'files' ); };
         document.querySelector( 'input[name=exportWhere][value=nayive]' ).checked = true;
         document.getElementById( 'exportBackdrop' ).showModal(); document.getElementById( 'exportJsonBtn' ).click(); true` );

@@ -38,10 +38,10 @@ async function runSearch()
     const seq = ++searchSeq;
     try
     {
-        const r = bigMode   ? await GumApi.biggest( BIG_COUNT )
-                : advSearch ? await GumApi.search( advSearch.spec, true )
-                : asked.spec ? await GumApi.search( asked.spec, true )
-                :             await GumApi.find( asked.glob, true );
+        const r = bigMode   ? await AyniNet.biggest( BIG_COUNT )
+                : advSearch ? await AyniNet.search( advSearch.spec, true )
+                : asked.spec ? await AyniNet.search( asked.spec, true )
+                :             await AyniNet.find( asked.glob, true );
         if( seq !== searchSeq ) return;          // a newer query already went out
         searchHits      = pruneNodes( r.nodes || [] );
         searchTruncated = !! r.truncated;
@@ -58,8 +58,8 @@ async function runSearch()
 }
 
 // "Biggest files": the BIG_COUNT largest files of the whole Drive, biggest
-// first. The header's #bigFilesBtn opens and closes it, like the bin next to
-// it; the "space almost full" card (shared/ui.js) opens it too - with ?big=1,
+// first. The header's #bigFilesBtn opens and closes it, like the bin's
+// button; the "space almost full" card (shared/ui.js) opens it too - with ?big=1,
 // or with its "nayive:bigfiles" event when Drive is already open. It rides on
 // the search view: a row shows its size and folder, and the toolbar acts on
 // the ticked rows as usual.
@@ -245,24 +245,24 @@ const SVG_FOLDER = driveGlyph( Ayni.icon( 'folder' ), 18 );
 const SVG_SHARED = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><circle cx="12" cy="11.6" r="1.7"></circle><path d="M8.9 17.2a3.1 3.1 0 0 1 6.2 0"></path></svg>';
 // Trash-view action glyphs: close, restore, permanent delete.
 const SVG_RESTORE = driveGlyph( Ayni.icon( 'restore' ) );
-const SVG_TRASH   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>';
-const SVG_FILE   = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
+const SVG_TRASH   = Ayni.icon( 'trash' );
+const SVG_FILE   = Ayni.icon( 'file-plain', '', 18 );
 const SVG_DOC    = driveGlyph( Ayni.icon( 'write' ), 18 );
 const SVG_SHEET  = driveGlyph( Ayni.icon( 'calc' ), 18 );
-const SVG_PDF    = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><text x="12" y="18.5" font-size="7" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none">PDF</text></svg>';
+const SVG_PDF    = Ayni.icon( 'pdf', '', 18 );
 // An archive (ARCHIVE_EXT): the page with a zipper down it and its pull tab.
-const SVG_ZIP    = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M11 3.5h1M10 6h1M11 8.5h1M10 11h1"></path><rect x="8.5" y="13.5" width="5" height="5" rx="1"></rect></svg>';
-const SVG_CODE   = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline><line x1="14" y1="4" x2="10" y2="20"></line></svg>';
+const SVG_ZIP    = Ayni.icon( 'zip', '', 18 );
+const SVG_CODE   = Ayni.icon( 'code', '', 18 );
 const SVG_IMAGE  = driveGlyph( Ayni.icon( 'image' ), 18 );
 // A shortcut's arrow, laid over the corner of its icon (drive.css .link-arrow).
 const SVG_LINK_ARROW = '<svg class="link-arrow" viewBox="0 0 12 12" aria-hidden="true"><rect x="0.5" y="0.5" width="11" height="11" rx="2.5"></rect><path d="M4 8.5 8.5 4M5 4h3.5v3.5"></path></svg>';
-const SVG_VIDEO  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="14" height="16" rx="2"></rect><polygon points="22 7 16 11 16 13 22 17"></polygon><polygon points="7 9 11 12 7 15" fill="currentColor" stroke="none"></polygon></svg>';
-const SVG_AUDIO  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>';
+const SVG_VIDEO  = Ayni.icon( 'video', '', 18 );
+const SVG_AUDIO  = Ayni.icon( 'music', '', 18 );
 // Only used inside "Compartido conmigo": the Photos and Trips launcher
 // glyphs, so a shared album / trip looks like the app that opens it.
-const SVG_PHOTOS = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="16" height="16" rx="2"></rect><circle cx="12" cy="8" r="2"></circle><path d="m22 13-1.3-1.3a2.4 2.4 0 0 0-3.4 0L11 18"></path><path d="M18 22H4a2 2 0 0 1-2-2V6"></path></svg>';
-const SVG_TRIPS  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="5.5" cy="9" rx="2" ry="2.5"></ellipse><ellipse cx="12" cy="6" rx="2.1" ry="2.6"></ellipse><ellipse cx="18.5" cy="9" rx="2" ry="2.5"></ellipse><path d="M12 12c-4.5 0-7.8 2-7.8 4.4 0 2 2.55 3.3 5.4 2.9 1.35-.2 1.5-.7 2.4-.7s1.05.5 2.4.7c2.85.4 5.4-.9 5.4-2.9C19.8 14 16.5 12 12 12z"></path></svg>';
-const SVG_SPLIT  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 7A7 7 0 1 0 16.5 17"></path><line x1="3" y1="10.2" x2="13.5" y2="10.2"></line><line x1="3" y1="13.8" x2="13.5" y2="13.8"></line></svg>';
+const SVG_PHOTOS = Ayni.icon( 'photos', '', 18 );
+const SVG_TRIPS  = Ayni.icon( 'trips', '', 18 );
+const SVG_SPLIT  = Ayni.icon( 'euro', '', 18 );
 
 // Extensions each tool can open/import (mirrors the accept="" of their import
 // inputs — see apps/write, apps/calc). Kept disjoint so a double-click routes
@@ -301,18 +301,18 @@ const TEXT_IMPORT  =
 //               (canvas.toDataURL) → they open in Image (apps/image).
 //   IMAGE_VIEW  every other raster type → the plain lightbox (view only), and
 //               it also stays the superset used for the file-row icon.
-const IMAGE_EDIT = NayivePhoto.EDIT_EXT;     // shared/photo.js: Image takes the same list
+const IMAGE_EDIT = AyniPhoto.EDIT_EXT;     // shared/ayni/ayni-photo.js: Image takes the same list
 const IMAGE_VIEW = [ 'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif' ];
 // Audio / video → Drive's own player (browser-native <audio>/<video> controls,
 // view only, no editing). What actually plays depends on the browser's codecs.
 const VIDEO_VIEW = [ 'mp4', 'm4v', 'webm', 'ogv', 'mov', 'mkv' ];
 const AUDIO_VIEW = [ 'mp3', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'wav', 'flac', 'weba' ];
 
-const extOf = NayiveUI.extOf, pad2 = NayiveUI.pad2;   // shared/ui.js (loads before this file)
+const extOf = Ayni.extOf, pad2 = Ayni.dates.pad;   // shared/ui.js (loads before this file)
 
 // Server nodes carry `size` (bytes, files only) and `mtime` (last-modified,
 // Unix seconds). Dates always render yyyy-mm-dd (Nayive ANSI-date rule).
-function fmtSize( bytes ) { return bytes == null ? '' : NayiveUI.fmtBytes( bytes ); }
+function fmtSize( bytes ) { return bytes == null ? '' : Ayni.fmtBytes( bytes ); }
 
 // A day as yyyy-mm-dd (the listing's dates, the search dialog's fields).
 function isoDay( d ) { return d.getFullYear() + '-' + pad2( d.getMonth() + 1 ) + '-' + pad2( d.getDate() ); }
@@ -420,7 +420,7 @@ function buildListRow( node, showPath )
 
     if( showPath )
     {
-        meta.textContent = fsRel( NayiveMedia.dirOf( node.path ) ) || homeName();
+        meta.textContent = fsRel( Ayni.dirOf( node.path ) ) || homeName();
         meta.title       = node.path;
 
         // The "Biggest files" list leads with the size - the one thing it is
@@ -444,7 +444,7 @@ function buildListRow( node, showPath )
         if( linkBroken( node ) ) meta.textContent = T( 'drive.shortcutBroken' );
         else
         {
-            meta.textContent = '→ ' + ( fsRel( NayiveMedia.dirOf( node.link.to ) ) || homeName() );
+            meta.textContent = '→ ' + ( fsRel( Ayni.dirOf( node.link.to ) ) || homeName() );
             meta.title       = TF( 'drive.shortcutTo', { path: fsRel( node.link.to ) } );
         }
     }

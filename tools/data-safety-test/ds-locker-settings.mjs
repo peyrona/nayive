@@ -23,7 +23,7 @@ const c = await browser( s );
 const phone = await s.client();
 
 ok( await c.open( "/nayive/desktop/index.html" ), "desktop page opens" );
-ok( await c.until( "typeof NayiveUI !== 'undefined' && typeof NayiveLock !== 'undefined' && typeof NayiveWho !== 'undefined'" ), "ready" );
+ok( await c.until( "typeof NayiveUI !== 'undefined' && typeof AyniLocker !== 'undefined' && typeof AyniWho !== 'undefined'" ), "ready" );
 // The lockers' scripts, as the desktop's ⋮ menu loads them; a switch that
 // makes the server's answer to one settings file a 503 (window.__failRead);
 // and a count of the page's PUTs (window.__puts), so the disk is read only
@@ -119,7 +119,7 @@ ok( st && st.units === "c", "saved over the fresh copy", st );
 //----------------------------------------------------------------------------
 section( "CS1 - a locker this build does not know (the dropped \"stars\") keeps the minutes" );
 
-const lockSet = raw => c.evaluate( `( () => { localStorage.setItem( 'nayive-locker', ${JSON.stringify( raw )} ); return JSON.stringify( NayiveLock.settings() ); } )()` );
+const lockSet = raw => c.evaluate( `( () => { localStorage.setItem( 'nayive-locker', ${JSON.stringify( raw )} ); return JSON.stringify( AyniLocker.settings() ); } )()` );
 let ls = JSON.parse( await lockSet( '{"id":"stars","min":15}' ) );
 ok( ls.id === "" && ls.min === 15, "stars, 15 min: the black screen after 15 min (was: never locks)", ls );
 ls = JSON.parse( await lockSet( '{"id":"","min":15}' ) );

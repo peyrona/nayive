@@ -132,7 +132,7 @@ const answer = which => c.evaluate( `( () => { const b = [ ...document.querySele
     b[ ${ JSON.stringify( { later: 0, drop: 1, keep: 2 } ) }[ ${ JSON.stringify( which ) } ] ]?.click(); return b.length; } )()` );
 const toastNow = () => c.evaluate( "( window.__toasts || [] ).join( ' | ' ) + ' | ' + ( ( document.getElementById( 'ayni-toasts' ) || {} ).textContent || '' )" );
 const closeWriter = async () => { if( await writing() ) { await c.evaluate( "document.getElementById( 'backBtn' ).click(); true" ); await c.until( "document.getElementById( 'composeView' ).hidden" ); } };
-// What sign-out counts of eMail (shared/store.js localCount: every record of "nayive-drafts")
+// What sign-out counts of eMail (shared/ayni/ayni-store.js localCount: every record of "nayive-drafts")
 const RECORDS = `new Promise( r => { const q = indexedDB.open( 'nayive-drafts', 1 );
     q.onupgradeneeded = () => q.result.createObjectStore( 'drafts', { keyPath: 'app' } );
     q.onsuccess = () => { const g = q.result.transaction( 'drafts' ).objectStore( 'drafts' ).getAll();
@@ -195,9 +195,9 @@ await compose( "bob@example.com", "Larga", "<div>Veinte minutos de texto</div>" 
 ok( await c.until( "( window.__toasts || [] ).some( t => /No se guardó en Borradores/.test( t ) )", 30000 ),
     "a save that fails is said in a toast", await toasts() );
 ok( await settles( COPIES + ".then( l => l.includes( 'Larga' ) )", 20000 ), "the writer is kept on this device", await c.evaluate( COPIES ) );
-await c.evaluate( "window.__asked = typeof window.nayiveBeforeClose === 'function' ? window.nayiveBeforeClose() : Promise.resolve( 'none' ); true" );
+await c.evaluate( "window.__asked = typeof window.ayniBeforeClose === 'function' ? window.ayniBeforeClose() : Promise.resolve( 'none' ); true" );
 ok( await c.until( "document.querySelector( 'dialog.panel[open] h2' )?.textContent === 'Sin guardar en Borradores'" ),
-    "the desktop's × (window.nayiveBeforeClose) asks first", await c.evaluate( "String( typeof window.nayiveBeforeClose )" ) );
+    "the desktop's × (window.ayniBeforeClose) asks first", await c.evaluate( "String( typeof window.ayniBeforeClose )" ) );
 // its first button is Cancel (shared/ui.js confirmDialog)
 await c.evaluate( "document.querySelector( 'dialog.panel[open] footer button' )?.click(); true" );
 ok( await c.evaluate( "window.__asked" ) === false && await writing(), "…'Cancel' keeps the window and the writer" );
@@ -214,7 +214,7 @@ await knob( "fail=0" );
 ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 30000 ), "saves working again: it goes to Drafts", await status() );
 ok( ( await drafts() ).some( d => d.subject === "Larga" && d.text.includes( "Veinte minutos de texto" ) ), "the server has it", await drafts() );
 ok( await settles( COPIES + ".then( l => ! l.length )", 20000 ), "the copy here is gone", await c.evaluate( COPIES ) );
-await c.evaluate( "window.__asked = window.nayiveBeforeClose ? window.nayiveBeforeClose() : Promise.resolve( 'none' ); true" );
+await c.evaluate( "window.__asked = window.ayniBeforeClose ? window.ayniBeforeClose() : Promise.resolve( 'none' ); true" );
 ok( await c.until( "window.__asked.then( v => window.__answer = v ) && window.__answer === true" ) &&
     ! await c.evaluate( "!! document.querySelector( 'dialog.panel[open]' )" ), "all in Drafts: the × closes with no question" );
 await c.evaluate( "document.getElementById( 'backBtn' ).click(); true" );
@@ -261,8 +261,8 @@ section( "I4 - THE SESSION ENDS WHILE WRITING: SIGN IN, AND IT IS BACK" );
 await c.evaluate( "fetch( '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { user: 'ana', password: 'abc', remember: true } ) } ).then( r => r.status )" );
 await compose( "bob@example.com", "Sesión", "<div>texto antes de entrar</div>" );
 await c.evaluate( "fetch( '/api/logout', { method: 'POST', credentials: 'same-origin' } ).then( r => r.status )" );
-ok( await c.until( "!! document.getElementById( 'nayive-session-bar' )", 30000 ), "the next save meets the ended session: the bar says so" );
-await c.evaluate( "document.querySelector( '#nayive-session-bar button' ).click(); true" );
+ok( await c.until( "!! document.getElementById( 'ayni-session-bar' )", 30000 ), "the next save meets the ended session: the bar says so" );
+await c.evaluate( "document.querySelector( '#ayni-session-bar button' ).click(); true" );
 ok( await c.until( "location.pathname === '/nayive/login.html'", 30000 ), "'Sign in' goes to the sign-in page" );
 await c.evaluate( "fetch( '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { user: 'ana', password: 'abc', remember: true } ) } ).then( r => r.status )" );
 ok( await openMail() && await c.until( ASKED ), "signed in again: it asks about the copy" );

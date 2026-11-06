@@ -47,7 +47,7 @@ async function refreshDiskGauge()
 {
     try
     {
-        const s    = JSON.parse( await GumApi.fetchText( GumApi.API_FILES + '?stat=disk' ) );
+        const s    = JSON.parse( await AyniNet.fetchText( AyniNet.API_FILES + '?stat=disk' ) );
         const used = s.total - s.usable;
         const held = s.trash || 0;
         setDiskGauge( used / s.total );
@@ -79,7 +79,7 @@ function offerEmptyTrash( on, held )
         // The bin as it is when asked: only those go (purgeBinIds, G4), and
         // the question counts them - not the gauge's older figure.
         let items;
-        try { items = await withBusy( GumApi.trashList() ); }
+        try { items = await withBusy( AyniNet.trashList() ); }
         catch( _ ) { Ayni.toast( 'err', T( 'drive.emptyTrashFailed' ) ); return; }
         if( ! items.length ) { reload(); return; }
         const ids  = items.map( function( it ) { return it.id; } );
@@ -100,7 +100,7 @@ function setSyncStatus( ok )
     const el = document.getElementById( 'syncIndicator' );
     el.classList.toggle( 'synced', ok !== false );
     // The plug IS the "re-read this folder" button now (it replaced #refreshBtn).
-    Ayni.setTip( el, T( ok === false ? 'drive.connError' : 'ui.sync.synced' ) + T( 'ui.sync.tapHint' ) );
+    Ayni.setTip( el, T( ok === false ? 'drive.connError' : 'ayni.sync.synced' ) + T( 'ayni.sync.tapHint' ) );
 }
 
 // Any request in flight (list, upload, rename, delete, download) turns the dot
@@ -115,7 +115,7 @@ function netBusy( delta )
     if( el ) el.classList.toggle( 'busy', netInFlight > 0 );
 }
 
-// Run a GumApi call with the dot blue for as long as it is in flight.
+// Run a AyniNet call with the dot blue for as long as it is in flight.
 function withBusy( promise )
 {
     netBusy( 1 );
@@ -128,7 +128,7 @@ async function reload()
 
     try
     {
-        dirTreeRoot = scopeTree( await withBusy( GumApi.dirTree() ) );
+        dirTreeRoot = scopeTree( await withBusy( AyniNet.dirTree() ) );
         computeFsRoot();
 
         if( ! findNode( currentFolder ) )
@@ -151,7 +151,7 @@ async function reload()
 //------------------------------------------------------------------------//
 // NEWS FROM OTHER APPS
 //
-// Another tab or desktop window changed files (shared/gum-api.js sends the
+// Another tab or desktop window changed files (shared/ayni/ayni-net.js sends the
 // news): a "Save as" in Write, a new folder in a second Drive... Refresh
 // quietly - no "Loading", the selection kept - but only when it touches the
 // open folder, or the folder tree. A hidden Drive waits until it is seen.
@@ -164,7 +164,7 @@ function onFilesNews( msg )
 {
     if( ! dirTreeRoot ) return;      // still starting: the first load shows it anyway
 
-    const parent = NayiveMedia.dirOf;
+    const parent = Ayni.dirOf;
     const seen   = ( msg.paths || [] ).filter( function( p )
     {
         if( typeof p !== 'string' ) return false;
@@ -194,14 +194,14 @@ async function applyNews()
     {
         if( tree )
         {
-            dirTreeRoot = scopeTree( await GumApi.dirTree() );
+            dirTreeRoot = scopeTree( await AyniNet.dirTree() );
             computeFsRoot();
             if( ! findNode( currentFolder ) ) { reload(); return; }   // the open folder went away
         }
 
         const path = currentFolder;
         const seq  = ++listingSeq;
-        const r    = await GumApi.listDir( path, true );      // shortcuts too, as navigate.js
+        const r    = await AyniNet.listDir( path, true );      // shortcuts too, as navigate.js
         if( seq !== listingSeq || path !== currentFolder || trashMode ) return;
 
         curListing = { path: path, nodes: pruneNodes( r.nodes || [] ) };
@@ -211,8 +211,8 @@ async function applyNews()
     catch( _ ) {}     // offline or a hiccup: the next news or a manual reload catches up
 }
 
-// Write, Calc and Text save through shared/store.js, which tells the other
-// pages on its own channel ("saved"), not on GumApi's: hear it too, so a
+// Write, Calc and Text save through shared/ayni/ayni-store.js, which tells the other
+// pages on its own channel ("saved"), not on AyniNet's: hear it too, so a
 // new document's first save shows up here. Only listens - never writes.
 function listenStoreSaves()
 {

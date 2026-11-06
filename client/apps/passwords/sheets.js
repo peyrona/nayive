@@ -371,7 +371,7 @@ let clipOwed  = 0;      // when a wipe is owed (ms), 0 = none
 function copySecret( text, doneKey )
 {
     if( ! text ) return;
-    NayiveUI.copyText( text ).then( function()
+    Ayni.copyText( text ).then( function()
     {
         Ayni.toast( 'ok', TF( 'passwords.copiedFor', { what: T( doneKey ), n: ui.clipSec } ) );
         clearTimeout( clipTimer );
@@ -395,7 +395,7 @@ function copyFromItem( id, what )
 {
     const n = item( id );
     if( ! n ) return;
-    if( what === 'user' ) NayiveUI.copyText( n.user ).then( function() { Ayni.toast( 'ok', T( 'passwords.userCopied' ) ); }, function() {} );
+    if( what === 'user' ) Ayni.copyText( n.user ).then( function() { Ayni.toast( 'ok', T( 'passwords.userCopied' ) ); }, function() {} );
     else copySecret( n.pass, 'passwords.passCopied' );
 }
 

@@ -248,7 +248,7 @@
         return String( text || "" ).split( "\n" ).map( function ( l )
         {
             l = l.replace( /^ | $/g, "\u00a0" ).replace( / {2}/g, " \u00a0" );
-            return "<div>" + ( l ? NayiveUI.escapeHtml( l ) : "<br>" ) + "</div>";
+            return "<div>" + ( l ? Ayni.esc( l ) : "<br>" ) + "</div>";
         } ).join( "" );
     }
 
@@ -477,12 +477,12 @@
                                    on: { click: function () { C.files.splice( i, 1 ); renderFiles(); changed(); } } } );
             box.appendChild( h( "span", { class: "mail-part mail-cfile", html: E.icon( "file" ) },
                                 h( "span", { text: f.name } ),
-                                f.size ? h( "small", { text: NayiveUI.fmtBytes( f.size ) } ) : null, x ) );
+                                f.size ? h( "small", { text: Ayni.fmtBytes( f.size ) } ) : null, x ) );
         } );
         box.hidden = ! C.files.length;
     }
 
-    // THE CLIP: Chat's panel (NayiveUI.attachPanel), the three kinds of file
+    // THE CLIP: Chat's panel (Ayni.attachPanel), the three kinds of file
     // a mail can carry - a document from this device, one from Nayive, and
     // pictures from the gallery. Under the clip, right-aligned to it.
     var attach = null;
@@ -511,7 +511,7 @@
         if( attach ) { closeAttach(); return; }
         if( ! C ) return;
         var ic = function ( name ) { var t = document.createElement( "template" ); t.innerHTML = E.icon( name ); return t.content.firstChild; };
-        attach = NayiveUI.attachPanel( [
+        attach = Ayni.attachPanel( [
             { icon: ic( "file" ),   label: E.T( "chat.localDoc" ),  color: 1, act: function () { pickDevice( false ); } },
             { icon: ic( "nayive" ), label: E.T( "chat.nayiveDoc" ), color: 0, act: pickNayive },
             { icon: ic( "image" ),  label: E.T( "chat.gallery" ),   color: 6, act: function () { pickDevice( true ); } }
@@ -629,7 +629,7 @@
         try { data = JSON.parse( res.body ); } catch( e ) {}
         if( ! res.ok )
         {
-            if( res.status === 401 ) NayiveUI.sessionExpired();
+            if( res.status === 401 ) Ayni.pwa.sessionExpired();
             var err = new Error( ( data && data.error ) || "HTTP " + res.status );
             err.status = res.status;
             err.code = ( data && data.code ) || "down";
@@ -640,7 +640,7 @@
     }
 
     // With files: XMLHttpRequest, the one that tells how much went up, told
-    // as GumApi's "nayive:upload" events - the shared bar (ui.js) shows a big
+    // as AyniNet's "nayive:upload" events - the shared bar (ui.js) shows a big
     // attachment going up. Answers fetch's { ok, status }, the body as text.
     var upSeq = 0;
     function upload( url, fd )
@@ -1024,7 +1024,7 @@
     // phone killing the page or the session bar's "Sign in" would then lose
     // everything since the last good save. So the writer is also kept HERE:
     // a moment after a change, and at least every second while typing goes
-    // on. IndexedDB "nayive-drafts" (shared/office.js's database of device
+    // on. IndexedDB "nayive-drafts" (shared/ayni/ayni-doc.js's database of device
     // drafts - sign-out counts it, asks, and empties it), one record per
     // writer, "email:<lid>"; the bytes of each file from this device once,
     // in a database of their own ("nayive-mail-files": they are this
@@ -1048,12 +1048,12 @@
     var KEEP_AFTER = 300;    // ms after the last change: the copy here...
     var KEEP_EVERY = 1000;   // ...and while typing goes on, at least this often
 
-    // "nayive-drafts" (GumApi.draftsDb: the same upgrade as shared/office.js),
+    // "nayive-drafts" (AyniNet.draftsDb: the same upgrade as shared/ayni/ayni-doc.js),
     // and the bytes of the files from this device. localTx / bytesTx:
     // fn( objectStore ) -> request: its result once the transaction is done
     // (null on any failure).
-    var localDb = GumApi.draftsDb();
-    var bytesDb = GumApi.sideDb( "nayive-mail-files", "files", "key" );
+    var localDb = AyniNet.draftsDb();
+    var bytesDb = AyniNet.sideDb( "nayive-mail-files", "files", "key" );
     function localTx( mode, fn ) { return localDb.tx( mode, fn ); }
     function bytesTx( mode, fn ) { return bytesDb.tx( mode, fn ); }
 
@@ -1127,7 +1127,7 @@
     // The lids of the writers on screen now, in this browser (their locks).
     function liveLids()
     {
-        return GumApi.heldLocks( "nayive-mail-writer:" ).catch( function () { return new Set(); } );
+        return AyniNet.heldLocks( "nayive-mail-writer:" ).catch( function () { return new Set(); } );
     }
 
     // File bytes whose copy is gone (sent, binned, sign-out emptied the
@@ -1154,7 +1154,7 @@
     {
         if( mine.lock ) return Promise.resolve( true );
         if( ! ( navigator.locks && navigator.locks.request ) ) return Promise.resolve( true );   // no locks here: never known taken
-        var lock = GumApi.tryLock( "nayive-mail-writer:" + mine.lid, claim ).catch( function () { return null; } );
+        var lock = AyniNet.tryLock( "nayive-mail-writer:" + mine.lid, claim ).catch( function () { return null; } );
         mine.lock = lock;
         return lock.then( function ( release )
         {
@@ -1437,7 +1437,7 @@
     // ---------------------------------------------------------------------
     // THE CLOSE GUARD (data-safety I1, I4)
     //
-    // The desktop asks window.nayiveBeforeClose before its × closes this
+    // The desktop asks window.ayniBeforeClose before its × closes this
     // window (desktop/index.html close): what is not in Drafts goes now, and
     // when it cannot, the user is asked - the copy on this device stays
     // either way. A tab closed or reloaded: beforeunload, while something is
@@ -1447,7 +1447,7 @@
     // after the page is gone, mail-chat #10).
     // ---------------------------------------------------------------------
 
-    window.nayiveBeforeClose = async function ()
+    window.ayniBeforeClose = async function ()
     {
         var mine = C;
         if( ! mine || mine.sending || mine.closing || ! mine.typed || empty() ) return true;

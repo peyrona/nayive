@@ -26,11 +26,11 @@ section( "K5 · A SAVE MADE WHILE THE SIGN-OUT QUESTION IS UP" );
     await A.open( "/nayive/st.html" );
 
     // The launcher first, and offline before the save is made: at boot it
-    // sends what waits here (NayiveStore.sendLeft), so a save queued before
+    // sends what waits here (AyniStore.sendLeft), so a save queued before
     // would already be up - nothing left to ask about.
     const L = await A.tab();
     await L.open( "/nayive/" );
-    ok( await L.until( "window.NayiveStore && window.NayiveUI && document.getElementById( 'logoutBtn' )" ), "the launcher is up" );
+    ok( await L.until( "window.AyniStore && window.NayiveUI && document.getElementById( 'logoutBtn' )" ), "the launcher is up" );
     // The question, answered by the test; the launcher offline too, so
     // nothing goes up before the count.
     await L.evaluate( `Object.defineProperty( navigator, 'onLine', { get: () => false, configurable: true } );
@@ -65,7 +65,7 @@ section( "L4 · TWO ACCOUNTS ON ONE BROWSER" );
     await A.evaluate( `fetch( '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify( { user: 'ana', password: 'aaa' } ) } ).then( r => r.status )` );
     await A.open( "/nayive/st.html" );
-    ok( await A.evaluate( "NayiveStore.me" ) === "user:ana", "the page is ana's", await A.evaluate( "NayiveStore.me" ) );
+    ok( await A.evaluate( "AyniStore.me" ) === "user:ana", "the page is ana's", await A.evaluate( "AyniStore.me" ) );
     await A.evaluate( `SM.read( '${F}' ).then( r => { M.l4 = JSON.parse( r.body ); return true; } )` );
     const qa = JSON.parse( await A.evaluate( `( offline( true ), M.l4.push( { id: 'ana-unsent' } ), J( SM.write( '${F}', JSON.stringify( M.l4 ) ) ) )` ) );
     ok( qa.offline, "ana's save waits here", qa );
@@ -78,7 +78,7 @@ section( "L4 · TWO ACCOUNTS ON ONE BROWSER" );
         body: JSON.stringify( { user: 'beto', password: 'bbb' } ) } ).then( r => r.status === 200 )` ), "beto signs in here" );
     const B = await A.tab();
     await B.open( "/nayive/st.html" );
-    ok( await B.evaluate( "NayiveStore.me" ) === "user:beto", "the new page is beto's" );
+    ok( await B.evaluate( "AyniStore.me" ) === "user:beto", "the new page is beto's" );
     const rb = await B.evaluate( `SM.read( '${F}' ).then( r => r.body )` );
     ok( rb === '[{"id":"b"}]', "beto reads HIS file", rb );
     const doc1 = await B.evaluate( `idb( 'docs', '${F}' )` );

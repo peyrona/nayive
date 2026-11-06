@@ -29,13 +29,7 @@ const URL_CFG = '/api/translate/config';
 
 let tr = null;
 
-function el( tag, cls, text )
-{
-    const e = document.createElement( tag );
-    if( cls ) e.className = cls;
-    if( text != null ) e.textContent = text;
-    return e;
-}
+const el = Ayni.h;
 
 //------------------------------------------------------------------------//
 // THE SERVER AS THE TRANSLATOR'S STORAGE
@@ -54,7 +48,7 @@ function serverStorage( shared )
         {
             const r = await fetch( URL_CFG, { method: 'PUT', credentials: 'same-origin',
                                               headers: { 'Content-Type': 'application/json' }, body } ).catch( () => null );
-            if( r && r.status === 401 && NayiveUI.sessionExpired ) NayiveUI.sessionExpired();
+            if( r && r.status === 401 && Ayni.pwa.sessionExpired ) Ayni.pwa.sessionExpired();
             else if( ! r || ! r.ok ) Ayni.toast( 'err', T( 'ui.saveFailed' ) );
         } );
     };

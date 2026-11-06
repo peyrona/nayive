@@ -3,9 +3,9 @@
  * be tested on its own (tools/desktop-test). The desktop (index.html) does the
  * rest: it measures the pages, moves the windows and keeps the state.
  *
- *   NayiveTiling.tile( n, W, H, opt ) - where n windows go on a W x H desk
- *   NayiveTiling.fit( W, H, nat, cap ) - how much a W x H window shrinks what it shows
- *   NayiveTiling.need( r )             - what a page needs, from one reading of it
+ *   AyniTiling.tile( n, W, H, opt ) - where n windows go on a W x H desk
+ *   AyniTiling.fit( W, H, nat, cap ) - how much a W x H window shrinks what it shows
+ *   AyniTiling.need( r )             - what a page needs, from one reading of it
  */
 ( function ( root )
 {
@@ -141,6 +141,6 @@
     }
 
     var api = { tile: tile, fit: fit, need: need, SHAPE: SHAPE };
-    root.NayiveTiling = api;
+    root.AyniTiling = api;
     if( typeof module === 'object' && module.exports ) module.exports = api;
 } )( typeof window !== 'undefined' ? window : globalThis );

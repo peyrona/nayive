@@ -1,5 +1,5 @@
 /* calculator.js - Calculator: the arithmetic, the screen, the history and the
- * currency mode. The rates are shared/fx.js's (NayiveFx).
+ * currency mode. The rates are shared/ayni/ayni-fx.js's (AyniFx).
  *
  * Arithmetic, phone style: × and ÷ before + and −; "=" again repeats the last
  * operation; "%" after + or − takes that percentage of what comes before
@@ -224,7 +224,7 @@ function fmtEntry( s )
 // In the currency's own decimals: 2 for most, none for JPY or CLP.
 function fmtMoney( x, code )
 {
-    const dp = NayiveFx.digits( code );
+    const dp = AyniFx.digits( code );
     return Math.abs( x ) >= 1e12 ? fmtNum( x )
          : new Intl.NumberFormat( LOCALE, { minimumFractionDigits: dp, maximumFractionDigits: dp, useGrouping: 'always' } ).format( x );
 }
@@ -268,18 +268,18 @@ function render()
 function converted()
 {
     if( error ) return null;
-    const r = NayiveFx.convert( current(), from, to );
+    const r = AyniFx.convert( current(), from, to );
     return r === null || ! isFinite( r ) ? null : tidy( r );
 }
 
 // The line over the amounts: the rate and its day, or why there is none.
 function noteText()
 {
-    const day = NayiveFx.date();
-    if( ! day ) return NayiveFx.offline() ? T( 'calculator.fxNoRates' ) : T( 'calculator.fxLoading' );
+    const day = AyniFx.date();
+    if( ! day ) return AyniFx.offline() ? T( 'calculator.fxNoRates' ) : T( 'calculator.fxLoading' );
 
-    const k   = NayiveFx.rate( from, to );
-    const off = NayiveFx.offline() ? ' · ' + T( 'calculator.fxOffline' ) : '';
+    const k   = AyniFx.rate( from, to );
+    const off = AyniFx.offline() ? ' · ' + T( 'calculator.fxOffline' ) : '';
     if( k === null )  return TF( 'calculator.fxNoRate', { pair: from + '/' + to } ) + ' · ' + day + off;
     if( from === to ) return TF( 'calculator.fxRatesOf', { date: day } ) + off;
     return '1 ' + from + ' = ' + fmtRate( k ) + ' ' + to + ' · ' + day + off;
@@ -288,30 +288,30 @@ function noteText()
 function renderFx()
 {
     if( mode !== 'fx' ) return;
-    $( 'symFrom' ).textContent = NayiveFx.symbol( from );
-    $( 'symTo'   ).textContent = NayiveFx.symbol( to );
+    $( 'symFrom' ).textContent = AyniFx.symbol( from );
+    $( 'symTo'   ).textContent = AyniFx.symbol( to );
     const r = converted();
     $( 'displayTo' ).textContent = r === null ? '—' : fmtMoney( r, to );
     $( 'fxNote' ).textContent = noteText();
-    $( 'fxNote' ).classList.toggle( 'warn', NayiveFx.rate( from, to ) === null );
+    $( 'fxNote' ).classList.toggle( 'warn', AyniFx.rate( from, to ) === null );
     $( 'fxGuess' ).hidden = ! guessPlace;
     if( guessPlace ) $( 'fxGuess' ).textContent = TF( 'calculator.fxNoCurrency', { place: guessPlace } );
 }
 
 function fillCurrencies()
 {
-    const list = NayiveFx.CODES.slice().sort( function( a, b ) { return NayiveFx.name( a ).localeCompare( NayiveFx.name( b ), LOCALE ); } );
+    const list = AyniFx.CODES.slice().sort( function( a, b ) { return AyniFx.name( a ).localeCompare( AyniFx.name( b ), LOCALE ); } );
     // Ayni filtered lists: type to narrow, only a currency of the list is taken; the closed field shows the code
     [ 'fxFrom', 'fxTo' ].forEach( function( id )
     {
-        Ayni.picker( $( id ), { mode: 'filter', options: list.map( function( c ) { return { value: c, text: c + ' · ' + NayiveFx.name( c ), short: c }; } ) } );
+        Ayni.picker( $( id ), { mode: 'filter', options: list.map( function( c ) { return { value: c, text: c + ' · ' + AyniFx.name( c ), short: c }; } ) } );
     } );
 }
 
 function setCurrencies( f, t )
 {
-    if( NayiveFx.CODES.includes( f ) ) from = f;
-    if( NayiveFx.CODES.includes( t ) ) to   = t;
+    if( AyniFx.CODES.includes( f ) ) from = f;
+    if( AyniFx.CODES.includes( t ) ) to   = t;
     Ayni.picker( $( 'fxFrom' ) ).set( from );
     Ayni.picker( $( 'fxTo'   ) ).set( to );
     savePrefs();
@@ -324,7 +324,7 @@ function setCurrencies( f, t )
 function hugWindow()
 {
     let ask = null;
-    try { ask = window.parent !== window && window.parent.nayiveFitWindow; } catch( e ) {}
+    try { ask = window.parent !== window && window.parent.ayniFitWindow; } catch( e ) {}
     if( typeof ask !== 'function' ) return;
     const root = document.documentElement, panel = $( 'calc' ), page = panel.parentElement;
     const seen = new ResizeObserver( function()
@@ -345,7 +345,7 @@ function setMode( m )
     mode = m === 'fx' ? 'fx' : 'arith';
     $( 'calc' ).dataset.mode = mode;
     document.querySelector( '#modeSwitch input[value="' + mode + '"]' ).checked = true;
-    if( mode === 'fx' ) NayiveFx.start();
+    if( mode === 'fx' ) AyniFx.start();
     savePrefs();
     render();
 }
@@ -355,20 +355,20 @@ function setMode( m )
 function renderCheck()
 {
     const body  = $( 'fxCheckBody' );
-    const h     = NayiveUI.h;
+    const h     = Ayni.h;
     const codes = [ from, to ].filter( function( c, i, a ) { return c !== 'EUR' && a.indexOf( c ) === i; } );
     const kids  = [];
 
-    if( ! NayiveFx.date() )
+    if( ! AyniFx.date() )
         kids.push( h( 'p', { class: 'dim-note', text: noteText() } ) );
     else if( ! codes.length )
         kids.push( h( 'p', { class: 'dim-note', text: T( 'calculator.fxBase' ) } ) );
 
     codes.forEach( function( code )
     {
-        if( ! NayiveFx.date() ) return;
-        const lookup = NayiveFx.check( code );
-        kids.push( h( 'h3', { class: 'fx-code', text: code + ' · ' + NayiveFx.name( code ) } ) );
+        if( ! AyniFx.date() ) return;
+        const lookup = AyniFx.check( code );
+        kids.push( h( 'h3', { class: 'fx-code', text: code + ' · ' + AyniFx.name( code ) } ) );
         kids.push( h( 'div', { class: 'fx-sources' }, lookup.results.map( function( r )
         {
             return h( 'div', { class: 'fx-source-row' }, [
@@ -383,14 +383,14 @@ function renderCheck()
             const asOf = v.sourceA.asOf || v.sourceB.asOf;
             kids.push( h( 'p', { class: 'dim-note', text: TF( 'calculator.fxVerified', {
                 a: v.sourceA.source, b: v.sourceB.source,
-                tol: NayiveFx.toleranceText( v.sourceA.rate, v.sourceB.rate ),
+                tol: AyniFx.toleranceText( v.sourceA.rate, v.sourceB.rate ),
                 rate: v.rate.toFixed( 4 ), code: code } ) + ( asOf ? TF( 'calculator.fxAsOf', { date: asOf } ) : '' ) + '.' } ) );
         }
         else
         {
             const last = lookup.compared[ lookup.compared.length - 1 ];
             kids.push( h( 'p', { class: 'warn-box', text: last
-                ? TF( 'calculator.fxUnverified', { tol: NayiveFx.toleranceText( last.a.rate, last.b.rate ) } )
+                ? TF( 'calculator.fxUnverified', { tol: AyniFx.toleranceText( last.a.rate, last.b.rate ) } )
                 : T( 'calculator.fxNoSource' ) } ) );
         }
     } );
@@ -414,10 +414,10 @@ function renderHistory()
 {
     $( 'histList' ).replaceChildren.apply( $( 'histList' ), hist.map( function( it )
     {
-        const b = NayiveUI.h( 'button', { attrs: { type: 'button', 'aria-label': it.expr + ' ' + fmtNum( it.result ) }, data: { value: it.result } }, [
-            NayiveUI.h( 'span', { class: 'h-expr', text: it.expr } ),
-            NayiveUI.h( 'span', { class: 'h-res',  text: fmtNum( it.result ) } ) ] );
-        return NayiveUI.h( 'li', {}, [ b ] );
+        const b = Ayni.h( 'button', { attrs: { type: 'button', 'aria-label': it.expr + ' ' + fmtNum( it.result ) }, data: { value: it.result } }, [
+            Ayni.h( 'span', { class: 'h-expr', text: it.expr } ),
+            Ayni.h( 'span', { class: 'h-res',  text: fmtNum( it.result ) } ) ] );
+        return Ayni.h( 'li', {}, [ b ] );
     } ) );
     $( 'histEmpty' ).hidden = hist.length > 0;
     $( 'histClearBtn' ).ariaDisabled = hist.length === 0;
@@ -442,15 +442,15 @@ function loadPrefs()
     {
         const p = JSON.parse( localStorage.getItem( KEY_PREFS ) ) || {};
         if( p.mode ) mode = p.mode;
-        if( NayiveFx.CODES.includes( p.from ) ) from = p.from;
-        if( NayiveFx.CODES.includes( p.to ) )   to   = p.to;
+        if( AyniFx.CODES.includes( p.from ) ) from = p.from;
+        if( AyniFx.CODES.includes( p.to ) )   to   = p.to;
     }
     catch( e ) {}
 
     const q = new URLSearchParams( location.search );
     if( q.get( 'mode' ) ) mode = q.get( 'mode' );
-    if( NayiveFx.CODES.includes( q.get( 'from' ) ) ) from = q.get( 'from' );
-    if( NayiveFx.CODES.includes( q.get( 'to' ) ) )   to   = q.get( 'to' );
+    if( AyniFx.CODES.includes( q.get( 'from' ) ) ) from = q.get( 'from' );
+    if( AyniFx.CODES.includes( q.get( 'to' ) ) )   to   = q.get( 'to' );
     guessPlace = q.get( 'place' ) || '';
     return q.has( 'from' );   // opened by another app
 }
@@ -536,7 +536,7 @@ Ayni.i18n.ready.then( function()
     const opened = loadPrefs();
     Ayni.picker( $( 'fxFrom' ) ).set( from );
     Ayni.picker( $( 'fxTo'   ) ).set( to );
-    $( 'backBtn' ).hidden = ! opened || NayiveUI.windowed;
+    $( 'backBtn' ).hidden = ! opened || Ayni.frame.windowed;
 
     $( 'keys' ).addEventListener( 'click', function( e ) { const b = e.target.closest( '.key' ); if( b ) press( b.dataset.k ); } );
 
@@ -560,7 +560,7 @@ Ayni.i18n.ready.then( function()
     $( 'fxTo'   ).addEventListener( 'ayni:change', function( e ) { guessPlace = ''; setCurrencies( from, e.detail.value ); } );
     $( 'fxSwap' ).addEventListener( 'click',  function() { setCurrencies( to, from ); } );
     $( 'fxNote' ).addEventListener( 'click',  function() { renderCheck(); document.getElementById( 'fxCheckBackdrop' ).showModal(); } );
-    NayiveFx.onChange( function() { render(); if( $( 'fxCheckBackdrop' ).open ) renderCheck(); } );
+    AyniFx.onChange( function() { render(); if( $( 'fxCheckBackdrop' ).open ) renderCheck(); } );
 
     $( 'histBtn' ).addEventListener( 'click', function() { renderHistory(); document.getElementById( 'histBackdrop' ).showModal(); } );
     $( 'histList' ).addEventListener( 'click', function( e )

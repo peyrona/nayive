@@ -5,8 +5,8 @@
  * .docx is the native format. A document lives wherever the user put it in
  * Drive - "Guardar como" asks for the folder on the first save - and a copy of
  * the previous version is kept in a .bak/ beside it. Loaded as a module by
- * index.html AFTER shared/gum-api.js, shared/ui.js and shared/office.js
- * (classic scripts) have set window.GumApi / NayiveUI / NayiveOffice.
+ * index.html AFTER shared/ayni/ayni-net.js, shared/ui.js and shared/ayni/ayni-doc.js
+ * (classic scripts) have set window.AyniNet / NayiveUI / AyniDoc.
  *
  * The engine under lib/docx-editor/ is vendored and pinned (Apache-2.0, its
  * fonts OFL); see lib/docx-editor/BUILD.md. Its PUBLIC API does the work here -
@@ -76,11 +76,11 @@ function sizeNameFor( w, h )
 }
 
 
-// Offline-capable persistence (../shared/store.js): every write is cached in
+// Offline-capable persistence (../shared/ayni/ayni-store.js): every write is cached in
 // IndexedDB first and the PUT is queued, so a crash or a dropped connection
 // never loses the document. binary — bodies are .docx bytes. conflicts — a save
 // over a file changed on another device since it was opened is refused.
-const store = NayiveStore.createStore( { apiBase: GumApi.API_FILES, binary: true, conflicts: true } );
+const store = AyniStore.createStore( { apiBase: AyniNet.API_FILES, binary: true, conflicts: true } );
 
 let editor = null;    // the docx-editor.dev instance, made once in boot()
 
@@ -108,7 +108,7 @@ const PHONE = window.matchMedia( '(max-width: 640px)' );
 // Folding sets height:0, never display:none, so the real buttons stay in the
 // DOM for the menu entries that click them.
 
-// The header's "⋮" menu, built by shared/office.js from the REAL buttons -
+// The header's "⋮" menu, built by shared/ayni/ayni-doc.js from the REAL buttons -
 // glyph and title cloned, an entry clicks the button it came from - so there
 // is one set of handlers and the menu can never drift from them.
 //
@@ -135,20 +135,20 @@ function toolbarOpen() { return fold ? fold.isOpen() : true; }
 // Show / hide the formatting row and keep the "Aa" button in step with it.
 // Folding also closes the "⋮" expansion — coming back to a four-row toolbar
 // would undo the whole point of folding it away.
-// shared/office.js's foldingToolbar does all of this: the "is-folded" height-0
+// shared/ayni/ayni-doc.js's foldingToolbar does all of this: the "is-folded" height-0
 // fold, the "⋮" expansion, and both buttons' aria state.
 let fold = null;   // set in wireStaticUI, once the DOM is there
 
 function setToolbarOpen( open ) { if( fold ) fold.setOpen( open ); }
 
-// Phone or PC (shared/office.js, phoneChrome): the "?" and the File button move
+// Phone or PC (shared/ayni/ayni-doc.js, phoneChrome): the "?" and the File button move
 // between the header and the tool row - the File button with the drop-down
 // caret its neighbours carry on a PC - the menus close, the row unfolds on a PC.
 function applyPhoneChrome()
 {
     applyKeyHints();          // the hints come off on a phone and back on a PC
 
-    NayiveOffice.phoneChrome( PHONE.matches, {
+    AyniDoc.phoneChrome( PHONE.matches, {
         menus     : function() { return CHROME.on(); },
         tools     : 'writeTools',
         helpBefore: null,
@@ -167,9 +167,9 @@ let lastGood       = null;   // what is on screen, as bytes - retaken before eve
 // The open document - its path, whether it is someone else's, its name, the
 // top-bar label, New / Import / "Guardar como" / rename / Restore, start-up,
 // the header plug and the autosave - is the one Calc and Text use
-// (shared/office.js, THE OPEN DOCUMENT). Write only says how a .docx gets into
+// (shared/ayni/ayni-doc.js, THE OPEN DOCUMENT). Write only says how a .docx gets into
 // and out of the engine, and that its files are always .docx.
-const session = NayiveOffice.session( {
+const session = AyniDoc.session( {
     app        : 'write',
     store      : store,
     appDir     : DOC_DIR,
@@ -231,7 +231,7 @@ Ayni.i18n.ready.then( function()
     // connection is back), show #app, run boot(). It also settles the header
     // plug afterwards, so a brand-new blank document opens on the real resting
     // state instead of the red "no state yet" one.
-    NayiveUI.bootWithStore( store, boot );
+    AyniBoot.boot( store, boot );
 });
 
 async function boot( who )
@@ -256,7 +256,7 @@ async function boot( who )
 
 function wireStaticUI()
 {
-    // New, Import, "Guardar como" and Restore are wired by the session (shared/office.js).
+    // New, Import, "Guardar como" and Restore are wired by the session (shared/ayni/ayni-doc.js).
     document.getElementById( 'printBtn'         ).addEventListener( 'click', function() { printDocument( false ); } );
     document.getElementById( 'tplBtn'           ).addEventListener( 'click', openTemplates );
     document.getElementById( 'tplCloseBtn'      ).addEventListener( 'click', function() { setBackdrop( 'tplBackdrop', false ); } );
@@ -307,10 +307,10 @@ function wireStaticUI()
     document.getElementById( 'psSize'              ).addEventListener( 'ayni:change', syncPageSizeRows );
 
     // ---- the header menu and the group cards ----
-    NayiveOffice.fileMenu( { btn: 'moreBtn', menu: 'topMenu', ids: MENU_IDS, phoneOnly: MENU_PHONE_ONLY } );
+    AyniDoc.fileMenu( { btn: 'moreBtn', menu: 'topMenu', ids: MENU_IDS, phoneOnly: MENU_PHONE_ONLY } );
 
     // Help on the "?" - the same rows the menu bar's Help menu holds.
-    NayiveOffice.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
+    AyniDoc.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
     // The group cards (#outputPopup, #pagePopup) are Ayni tool groups: their
     // triggers open them by themselves (popovertarget in index.html).
 
@@ -320,7 +320,7 @@ function wireStaticUI()
     PHONE.addEventListener( 'change', applyPhoneChrome );
 
     // The shared folding toolbar wires #fmtBtn and #moreToolsBtn itself.
-    fold = NayiveOffice.foldingToolbar( { toolbar: 'toolbarRow' } );
+    fold = AyniDoc.foldingToolbar( { toolbar: 'toolbarRow' } );
 
     // ---- the pull-down menus (see PULL-DOWN MENUS below) ----
     // Built once; the panels are built fresh on every open, so a language
@@ -727,7 +727,7 @@ async function loadPersonalWords()
 {
     try
     {
-        const j = await GumApi.readJson( PERSONAL_DICT );
+        const j = await AyniNet.readJson( PERSONAL_DICT );
         if( j !== null && ! Array.isArray( j && j.words ) ) throw new Error( PERSONAL_DICT + ' has no word list' );
         personalWords = j ? j.words : [];
         dictRead      = true;
@@ -778,7 +778,7 @@ async function removePersonalWord( word )
 // Write windows are normal on a PC, and writing this page's boot-time list
 // dropped every word another window had added since. The list is a set, so
 // the change is made to what is up there now, and that becomes this page's
-// list too. Version-checked (GumApi.updateJson): a word added in another
+// list too. Version-checked (AyniNet.updateJson): a word added in another
 // window between the read and the write makes it read again and change
 // again. A list that cannot be read is never written (it would keep only
 // one word): false, as for a write that failed.
@@ -787,7 +787,7 @@ async function changeDict( change )
     let saved;
     try
     {
-        saved = await GumApi.updateJson( PERSONAL_DICT, function( j )
+        saved = await AyniNet.updateJson( PERSONAL_DICT, function( j )
         {
             if( j !== null && ! Array.isArray( j && j.words ) ) throw new Error( PERSONAL_DICT + ' has no word list' );
             const words = j ? j.words.slice() : [];
@@ -936,10 +936,10 @@ function selectBack( pid, from, to )
 // Templates are just .docx files in a folder you pick. Nothing is shipped: the
 // folder is yours, so what counts as a template is your business. Its own key in
 // data/write/config.json, NOT the launcher-folder slot, so a future "open Write
-// in folder X" cannot collide with it. Read-modify-write (shared/office.js,
+// in folder X" cannot collide with it. Read-modify-write (shared/ayni/ayni-doc.js,
 // appConfig): a file that could not be read is never written over with just
 // the key being changed (the templates folder, the menu bar).
-const writeCfg = NayiveOffice.appConfig( 'data/write/config.json', 'ui.prefsUnread' );
+const writeCfg = AyniDoc.appConfig( 'data/write/config.json', 'ui.prefsUnread' );
 
 async function openTemplates()
 {
@@ -969,15 +969,15 @@ async function renderTemplates( dir )
     const list = document.getElementById( 'tplList' );
     const crumb = document.getElementById( 'tplCrumb' );
 
-    crumb.textContent = NayiveOffice.dirLabel ? NayiveOffice.dirLabel( dir ) : dir;
+    crumb.textContent = AyniDoc.dirLabel ? AyniDoc.dirLabel( dir ) : dir;
     list.innerHTML = '<li class="is-loading"></li>';
 
     let nodes = [];
-    try { nodes = ( ( await GumApi.listDir( dir ) ) || {} ).nodes || []; }
+    try { nodes = ( ( await AyniNet.listDir( dir ) ) || {} ).nodes || []; }
     catch( _ ) { list.innerHTML = ''; Ayni.toast( 'err', Ayni.t( 'ui.openFailed' ) ); return; }
 
     const docs = nodes.filter( function( n ) { return n.nodes === null && /\.docx$/i.test( n.path || '' ); } )
-                      .sort( NayiveOffice.byBaseName );
+                      .sort( AyniDoc.byBaseName );
 
     list.innerHTML = '';
 
@@ -989,7 +989,7 @@ async function renderTemplates( dir )
         li.innerHTML = '<span class="open-ic"></span>';
         const nm = document.createElement( 'span' );
         nm.className   = 'open-nm';
-        nm.textContent = NayiveOffice.baseName( n.path ).replace( /\.docx$/i, '' );
+        nm.textContent = Ayni.baseName( n.path ).replace( /\.docx$/i, '' );
         li.appendChild( nm );
         li.addEventListener( 'click', function() { useTemplate( n.path ); } );
         list.appendChild( li );
@@ -1029,7 +1029,7 @@ async function useTemplate( path )
         await loadIntoEditor( bytes );
 
         if( dropping ) await session.dropDraft();     // or a reload would bring it back over the template
-        session.untitled( docxName( Ayni.tf( 'write.templateCopy', { name: NayiveOffice.baseName( path ).replace( /\.docx$/i, '' ) } ) ),
+        session.untitled( docxName( Ayni.tf( 'write.templateCopy', { name: Ayni.baseName( path ).replace( /\.docx$/i, '' ) } ) ),
                           { dirty: true } );
         if( kept )       session.offerBack( kept, aside );
         else if( aside ) Ayni.toast( 'info', Ayni.t( 'write.draftSetAside' ) );
@@ -1452,7 +1452,7 @@ async function openStyles()
     // The colour list: Automatic, then the menu's own colours (labelled now,
     // so they follow the language).
     pk( 'stColor' ).options = [ { value: 'auto', text: Ayni.t( 'write.stAuto' ) } ]
-        .concat( NayiveMenus.COLORS.map( function( c ) { return { value: c[0].slice( 1 ), text: Ayni.t( 'ui.color.' + c[1] ) }; } ) );
+        .concat( AyniMenus.COLORS.map( function( c ) { return { value: c[0].slice( 1 ), text: Ayni.t( 'ui.color.' + c[1] ) }; } ) );
 
     stVals = {}; stTouched = {};
     const styleItems = pk( 'stStyle' ).options;
@@ -1575,7 +1575,7 @@ async function openStats()
         words += trimmed.split( /\s+/ ).length;
     }
 
-    NayiveOffice.showStats( [
+    AyniDoc.showStats( [
         { text: Ayni.t( 'write.statWords'      ), value: words    },
         { text: Ayni.t( 'write.statChars'      ), value: chars    },
         { text: Ayni.t( 'write.statCharsNoSp'  ), value: noSpaces },
@@ -1596,7 +1596,7 @@ async function openStats()
 // that back. "Documento nuevo" gets Alt+N, exactly as Drive's "nueva carpeta"
 // did for the same reason.
 
-const IS_MAC = NayiveUI.isMac;
+const IS_MAC = Ayni.isMac;
 
 function kMod()   { return IS_MAC ? '⌘' : Ayni.t( 'ui.keyCtrl'  ); }
 function kAlt()   { return IS_MAC ? '⌥' : Ayni.t( 'ui.keyAlt'   ); }
@@ -1893,14 +1893,14 @@ function onShortcutKey( e )
     if( btn && ! btn.disabled && btn.ariaDisabled !== 'true' ) btn.click();
 }
 
-// Shortcut hints on the tooltips (NayiveUI.keyHints); i18n rewrites these
+// Shortcut hints on the tooltips (Ayni.keyHints); i18n rewrites these
 // titles when the language changes.
-function applyKeyHints() { NayiveUI.keyHints( SHORTCUTS, PHONE.matches ); }
+function applyKeyHints() { Ayni.keyHints( SHORTCUTS, PHONE.matches ); }
 
 // The help sheet: the same table, rendered (the sheet is Calc's too).
 function openShortcuts()
 {
-    NayiveOffice.showShortcuts( SHORTCUTS.map( function( s ) { return { text: Ayni.t( s.key ), keys: s.label() }; } ) );
+    AyniDoc.showShortcuts( SHORTCUTS.map( function( s ) { return { text: Ayni.t( s.key ), keys: s.label() }; } ) );
 }
 
 //----------------------------------------------------------------------------//
@@ -1979,7 +1979,7 @@ function printDocument( pdfHint )
 // toolbarCommandState() at the moment the panel opens.
 //
 // THE MACHINERY IS NOT HERE. The bar, the panels, the hover-to-slide behaviour
-// and the toolbar/menus switch all live in shared/menubar.js, which Calc uses
+// and the toolbar/menus switch all live in shared/ayni/ayni-menutable.js, which Calc uses
 // too; the item vocabulary is documented at the top of that file. What is left
 // below is Write's own: the table of menus, and the small hooks that read and
 // drive the engine.
@@ -2041,9 +2041,9 @@ function sizeItems()
 
 function textColorItems()
 {
-    // Word's own first row of text colours, plus white (NayiveMenus.COLORS,
+    // Word's own first row of text colours, plus white (AyniMenus.COLORS,
     // Calc's too). The engine takes the six hex digits without the '#'.
-    return NayiveMenus.COLORS.map( function( c )
+    return AyniMenus.COLORS.map( function( c )
     {
         return { key: 'ui.color.' + c[1], swatch: c[0], slot: 'text.color', value: c[0].slice( 1 ) };
     } );
@@ -2244,7 +2244,7 @@ const MENUS = [
     [
         { key: 'write.newDoc',  el: 'newBtn'  },
         { key: 'ui.openDoc',    el: 'openBtn', sc: 'ui.openDoc' },
-        { key: 'ui.recent',     sub: session.recentItems },   // shared/office.js
+        { key: 'ui.recent',     sub: session.recentItems },   // shared/ayni/ayni-doc.js
         { sep: true },
         { key: 'ui.save',       run: saveNow, sc: 'write.sc.save', icon: 'check' },
         { key: 'ui.saveAs',     el: 'saveAsBtn' },
@@ -2344,7 +2344,7 @@ const MENUS = [
 },
 {
     key: 'ui.menu.help',
-    items: NayiveOffice.helpItems   // the "?" shows the same rows (shared/office.js)
+    items: AyniDoc.helpItems   // the "?" shows the same rows (shared/ayni/ayni-doc.js)
 } ];
 
 // What the toolbar's drop-downs open (toolbar.js): the same tables.
@@ -2382,7 +2382,7 @@ function itemEnabled( it )
 {
     if( it.slot  ) return slotState( it.slot ).enabled === true && ! slotBlocked( it.slot );
     if( it.exec  ) return canExec( it.exec );
-    return undefined;                        // let shared/menubar.js decide
+    return undefined;                        // let shared/ayni/ayni-menutable.js decide
 }
 
 // A value entry is ticked when it is the selection's value; a toggle while it
@@ -2404,9 +2404,9 @@ function hintFor( scKey )
     return s ? s.label() : '';
 }
 
-//---- the bar and the switch, both from shared/menubar.js ------------------//
+//---- the bar and the switch, both from shared/ayni/ayni-menutable.js ------------------//
 
-const MENUBAR = NayiveMenus.create(
+const MENUBAR = AyniMenus.create(
 {
     menus   : MENUS,
     ready   : function() { return ready; },   // nothing is live until the document is
@@ -2416,7 +2416,7 @@ const MENUBAR = NayiveMenus.create(
     exec    : function( it ) { if( it.slot ) runSlot( it.slot, it.value ); else if( it.exec ) runExec( it.exec ); }
 } );
 
-const CHROME = NayiveMenus.chrome(
+const CHROME = AyniMenus.chrome(
 {
     key   : 'nayive-write-chrome',
     menus : MENUBAR,
@@ -2502,7 +2502,7 @@ async function clipPaste( plain )
 {
     if( ! ready || ! editor ) return;
 
-    const dt = await NayiveOffice.clip.read();
+    const dt = await AyniDoc.clip.read();
     if( ! dt ) { Ayni.toast( 'warn', Ayni.t( 'ui.clipboardBlocked' ) ); return; }
 
     const text = dt.getData( 'text/plain' ) || '';
@@ -2691,7 +2691,7 @@ function showLinkMenu( act )
 //
 // Put in at the caret, as it would come out of Word: inline, at its own size
 // but never wider than the text. Shrunk first to 1600 px on the long side (the
-// shared NayivePhoto step Photos and Drive use), because it travels inside the
+// shared AyniPhoto step Photos and Drive use), because it travels inside the
 // .docx for good. The engine's insert is asynchronous (it decodes the picture),
 // so it goes through executeImageCommand, not exec.
 
@@ -2715,7 +2715,7 @@ async function insertPickedImage( file )
         let   mime = blob.type === 'image/jpg' ? 'image/jpeg' : blob.type;
         if( IMAGE_MIMES.indexOf( mime ) < 0 )
         {
-            try { blob = await NayivePhoto.shrinkToJpeg( blob, { maxW: IMAGE_MAX_EDGE, maxH: IMAGE_MAX_EDGE } ); mime = 'image/jpeg'; }
+            try { blob = await AyniPhoto.shrinkToJpeg( blob, { maxW: IMAGE_MAX_EDGE, maxH: IMAGE_MAX_EDGE } ); mime = 'image/jpeg'; }
             catch( _ ) { Ayni.toast( 'warn', Ayni.t( 'write.formatUnsupported' ) ); return; }
         }
 
@@ -3093,11 +3093,11 @@ async function exportBytes()
 }
 
 // Ctrl-S / the menu: save now. An untitled or someone else's document goes to
-// "Guardar como" (shared/office.js).
+// "Guardar como" (shared/ayni/ayni-doc.js).
 function saveNow() { session.saveNow(); }
 
 //----------------------------------------------------------------------------//
-// THE DOCUMENT IN THE ENGINE  (what the session in shared/office.js needs from Write)
+// THE DOCUMENT IN THE ENGINE  (what the session in shared/ayni/ayni-doc.js needs from Write)
 
 // A .docx body on screen: opened, imported, the device draft or the .bak copy.
 // Throws when the engine refuses it - the session says "could not be opened".
@@ -3142,26 +3142,26 @@ async function toBytes( body )
 // HELPERS
 
 // Write's file-name rule, for "Guardar como" and a rename: always .docx.
-function docxName( name ) { return NayiveOffice.withExt( name, 'docx' ); }
+function docxName( name ) { return AyniDoc.withExt( name, 'docx' ); }
 
 async function fetchBytes( path )
 {
-    return toBytes( await GumApi.readFileBytes( path ) );
+    return toBytes( await AyniNet.readFileBytes( path ) );
 }
 
 // An image is stored inside the .docx, so whatever comes out of here is carried
 // in the document for good. A phone photo is 3-6 MB and turns a two-page letter
 // into a file nobody can e-mail, so it goes through the same shrink Photos and
-// Drive use (shared/photo.js) first.
+// Drive use (shared/ayni/ayni-photo.js) first.
 const IMAGE_MAX_EDGE = 1600;   // px on the long side - plenty at 100 % on paper
 
 async function shrinkImage( file )
 {
     try
     {
-        if( window.NayivePhoto )
+        if( window.AyniPhoto )
         {
-            const prepared = await NayivePhoto.prepare( file, IMAGE_MAX_EDGE );
+            const prepared = await AyniPhoto.prepare( file, IMAGE_MAX_EDGE );
             if( prepared && prepared.blob ) return prepared.blob;
         }
     }

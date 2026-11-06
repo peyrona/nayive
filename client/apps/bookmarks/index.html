@@ -1,5 +1,5 @@
 <!-- index.html - Bookmarks: web links kept in folders. One JSON file per user,
-     data/bookmarks/bookmarks.json, read and written through shared/store.js
+     data/bookmarks/bookmarks.json, read and written through shared/ayni/ayni-store.js
      (offline cache + write-behind). Imports and exports the Netscape HTML
      file every browser reads, plus its own JSON backup. See
      docs/bookmarks-app.md. -->
@@ -12,6 +12,7 @@
          dictionary is in, and every script below may call it. -->
     <script src="../shared/i18n.js"></script>
     <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
+    <script src="../shared/ayni/ayni-util.js"></script>
     <title>Bookmarks</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z'/%3E%3C/svg%3E">
 
@@ -28,10 +29,26 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-share.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pwa.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-locker.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-status.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-shell.css">
     <link rel="stylesheet" href="../shared/app.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-doc.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-media.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-image.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-map.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-icons-more.js" defer></script>
+    <script src="../shared/ayni/ayni-shell.js" defer></script>
+    <script src="../shared/ayni/ayni-status.js" defer></script>
+    <script src="../shared/ayni/ayni-share.js" defer></script>
+    <script src="../shared/ayni/ayni-upload.js" defer></script>
+    <script src="../shared/ayni/ayni-pwa.js" defer></script>
+    <script src="../shared/ayni/ayni-boot.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
@@ -43,6 +60,7 @@
     <script src="../shared/ayni/ayni-pickers.js" defer></script>
     <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
+    <script src="../shared/ayni/ayni-locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS. -->
     <link rel="manifest" href="manifest.json">
@@ -54,9 +72,9 @@
             window.addEventListener( 'load', function () { navigator.serviceWorker.register( '../sw.js' ).catch( function () {} ); } );
     </script>
 
-    <script src="../shared/gum-api.js" defer></script>
+    <script src="../shared/ayni/ayni-net.js" defer></script>
     <script src="../shared/ui.js" defer></script>
-    <script src="../shared/store.js" defer></script>
+    <script src="../shared/ayni/ayni-store.js" defer></script>
 
     <!-- The app: classic deferred files sharing one scope, in this order, then
          the one module that waits for the dictionary and boots. -->
@@ -116,7 +134,7 @@
                         <span class="icon" data-icon="help"></span>
                     </button>
                 </div>
-                <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="data-tip:ui.sync.synced"></button>
+                <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="data-tip:ayni.sync.synced"></button>
             </div>
         </div>
 
@@ -126,10 +144,10 @@
                 <div class="tree-head">
                     <span class="section-label" data-i18n="bookmarks.folders"></span>
                     <button id="expandAllBtn" class="btn sm" type="button" data-i18n-attr="data-tip:bookmarks.expandAll, aria-label:bookmarks.expandAll">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 8 12 13 17 8"></polyline><polyline points="7 13 12 18 17 13"></polyline></svg>
+                        <span class="icon" data-icon="chevs-down" style="--icon:15px"></span>
                     </button>
                     <button id="collapseAllBtn" class="btn sm" type="button" data-i18n-attr="data-tip:bookmarks.collapseAll, aria-label:bookmarks.collapseAll">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 16 12 11 17 16"></polyline><polyline points="7 11 12 6 17 11"></polyline></svg>
+                        <span class="icon" data-icon="chevs-up" style="--icon:15px"></span>
                     </button>
                 </div>
                 <ul id="tree" data-fit data-i18n-attr="aria-label:bookmarks.folders"></ul>
@@ -230,7 +248,7 @@
             </div>
             <div class="choice-row">
                 <button id="importDeviceBtn" class="btn text primary" type="button">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                    <span class="icon" data-icon="monitor" style="--icon:18px"></span>
                     <span data-i18n="bookmarks.fromDevice"></span>
                 </button>
                 <button id="importNayiveBtn" class="btn text primary" type="button">
@@ -255,7 +273,7 @@
             </div>
             <div class="choice-row">
                 <button id="exportHtmlBtn" class="btn text primary" type="button">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                    <span class="icon" data-icon="globe" style="--icon:18px"></span>
                     <span data-i18n="bookmarks.exportHtml"></span>
                 </button>
                 <button id="exportJsonBtn" class="btn text primary" type="button">
@@ -276,7 +294,7 @@
             <p class="sheet-lead" data-i18n="bookmarks.bookmarkletLead"></p>
             <div class="choice-row">
                 <a id="bmletLink" class="btn text primary" draggable="true" href="#">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+                    <span class="icon" data-icon="bookmark" style="--icon:18px"></span>
                     <span data-i18n="bookmarks.bookmarkletBtn"></span>
                 </a>
             </div>

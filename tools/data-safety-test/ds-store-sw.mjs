@@ -7,7 +7,7 @@
 // refreshed: an editor showed an old copy with its old version, and the Image
 // editor saved over the newer file. Now: the network first, the request and
 // the answer untouched (If-None-Match, ETag); the trip's copy only when the
-// network fails, marked, and shared/store.js reads it as "offline".
+// network fails, marked, and shared/ayni/ayni-store.js reads it as "offline".
 import { server, browser, ok, section, done } from "./lib.mjs";
 import { stPage, seed } from "./store-lib.mjs";
 

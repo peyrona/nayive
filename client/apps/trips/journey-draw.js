@@ -74,7 +74,7 @@
         box.hidden = false;
 
         var map = L.map( box, { zoomControl: true, attributionControl: true, scrollWheelZoom: o.wheel !== false } );
-        if( window.NayiveBaseMap ) NayiveBaseMap.add( map );
+        if( window.AyniBaseMap ) AyniBaseMap.add( map );
 
         var css    = getComputedStyle( document.documentElement );
         var cv     = function ( name, fallback ) { return css.getPropertyValue( name ).trim() || fallback; };
@@ -97,7 +97,7 @@
             var mark   = L.circleMarker( [ p.lat, p.lon ], { radius: stage ? 7 : 4, color: colour, weight: 2,
                                                            fillColor: colour, fillOpacity: stage ? 0.9 : 0.7 } );
             // A tooltip string is HTML to Leaflet, and a place name is someone's text.
-            if( p.place ) mark.bindTooltip( NayiveUI.escapeHtml( p.place ), { direction: "top" } );
+            if( p.place ) mark.bindTooltip( Ayni.esc( p.place ), { direction: "top" } );
             mark.addTo( map );
         } );
 

@@ -32,7 +32,7 @@
     //------------------------------------------------------------------------//
     // DATES
 
-    function pad2( n ) { return ( n < 10 ? "0" : "" ) + n; }
+    var pad2 = Ayni.dates.pad, toIso = Ayni.dates.iso, todayIso = Ayni.dates.today;
 
     function isIso( s ) { return /^\d{4}-\d{2}-\d{2}$/.test( String( s || "" ) ); }
 
@@ -43,9 +43,6 @@
         return m ? new Date( +m[ 1 ], +m[ 2 ] - 1, +m[ 3 ] ) : null;
     }
 
-    function toIso( d ) { return d.getFullYear() + "-" + pad2( d.getMonth() + 1 ) + "-" + pad2( d.getDate() ); }
-
-    function todayIso() { return toIso( new Date() ); }
 
     // The day n days after (or before, n < 0) iso. Day overflow keeps it DST-safe.
     function isoAdd( iso, n )
@@ -263,22 +260,22 @@
     // same paths serve the rows, the month grid and the picker.
 
     var ICONS = {
-        water:    "<path d='M12 2.7s-6.5 7-6.5 11.3a6.5 6.5 0 0 0 13 0C18.5 9.7 12 2.7 12 2.7z'/>",
-        walk:     "<circle cx='13' cy='4' r='1.7'/><path d='M13 7l-2 5-2 8'/><path d='M11 12l3 3 1 5'/><path d='M13 7l-3 3'/><path d='M13 7l3 4'/>",
-        run:      "<circle cx='15.5' cy='4' r='1.7'/><path d='M14.5 7l-4 3-1.5 3.5'/><path d='M14.5 7l-1 5 3 3v5'/><path d='M13.5 12l-4 4-4 1'/><path d='M14.5 7l4 2 2.5 3'/>",
-        book:     "<path d='M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z'/><path d='M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z'/>",
-        nosugar:  "<circle cx='12' cy='12' r='3.2'/><path d='M14.6 10.2L19 6v7'/><path d='M9.4 13.8L5 18v-7'/><line x1='3' y1='3' x2='21' y2='21'/>",
-        sleep:    "<path d='M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z'/>",
-        pill:     "<rect x='3.5' y='8.5' width='17' height='7' rx='3.5' transform='rotate(-45 12 12)'/><line x1='9.5' y1='9.5' x2='14.5' y2='14.5'/>",
-        meditate: "<circle cx='12' cy='4.5' r='1.8'/><path d='M12 8v5'/><path d='M5 11l7 2 7-2'/><path d='M4 19c3-4 6-5 8-5s5 1 8 5'/>",
-        write:    "<path d='M12 20h9'/><path d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z'/>",
-        music:    "<path d='M9 18V5l12-2v13'/><circle cx='6' cy='18' r='3'/><circle cx='18' cy='16' r='3'/>",
-        globe:    "<circle cx='12' cy='12' r='10'/><line x1='2' y1='12' x2='22' y2='12'/><path d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/>",
-        weights:  "<path d='M6 7v10'/><path d='M18 7v10'/><path d='M3 9.5v5'/><path d='M21 9.5v5'/><line x1='6' y1='12' x2='18' y2='12'/>",
-        bike:     "<circle cx='5.5' cy='17' r='3.5'/><circle cx='18.5' cy='17' r='3.5'/><path d='M5.5 17l3.5-7h5l4.5 7'/><path d='M12 17l-3-7'/><path d='M14 10l-1.5-4h3'/>",
-        fruit:    "<path d='M12 7c-1.5-1.5-4-1.5-5.5 0C4 9 4 13 6 17c1.5 3 3.5 4 6 3 2.5 1 4.5 0 6-3 2-4 2-8-.5-10-1.5-1.5-4-1.5-5.5 0z'/><path d='M12 7c0-2 1-3.5 3-4'/>",
-        nophone:  "<rect x='7' y='2.5' width='10' height='19' rx='2'/><line x1='12' y1='18' x2='12.01' y2='18'/><line x1='4' y1='4' x2='20' y2='20'/>",
-        star:     "<polygon points='12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2'/>"
+        water: "water",
+        walk: "walk",
+        run: "run",
+        book: "book",
+        nosugar: "nosugar",
+        sleep: "moon",
+        pill: "pill",
+        meditate: "meditate",
+        write: "pen-line",
+        music: "music",
+        globe: "globe",
+        weights: "weights",
+        bike: "bike",
+        fruit: "fruit",
+        nophone: "nophone",
+        star: "star-2"
     };
 
     // The app's own glyph (a sprout = something you grow), shared with the launcher tile and the PNG icons.
@@ -287,7 +284,7 @@
     function glyph( name )
     {
         return "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
-             + ( ICONS[ name ] || ICONS.star ) + "</svg>";
+             + "<use href='#i-" + ( ICONS[ name ] || ICONS.star ) + "'/></svg>";
     }
 
     //------------------------------------------------------------------------//

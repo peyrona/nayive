@@ -25,7 +25,7 @@ function newId()
 function round2( n ) { return Math.round( n * 100 ) / 100; }
 // The OLD slug (accented letters dropped: "Córdoba" -> "c-rdoba"). Only for a
 // legacy document's file name, which was made with it and must still be found.
-// Every new name uses NayiveUI.slugify ("cordoba").
+// Every new name uses Ayni.slugify ("cordoba").
 function legacySlug( s ) { return (s || '').toLowerCase().trim().replace( /[^a-z0-9]+/g, '-' ).replace( /^-+|-+$/g, '' ) || 'item'; }
 
 // A safe, in-folder file name for an UPLOADED document: the original base name
@@ -38,7 +38,7 @@ function uniqueFileName( sOriginalName, aSiblingDocs, aTakenNames )
 {
     const dot  = sOriginalName.lastIndexOf( '.' );
     const ext  = (dot > 0 ? sOriginalName.slice( dot + 1 ) : '').toLowerCase().replace( /[^a-z0-9]/g, '' );
-    const base = NayiveUI.slugify( dot > 0 ? sOriginalName.slice( 0, dot ) : sOriginalName, 'item' );
+    const base = Ayni.slugify( dot > 0 ? sOriginalName.slice( 0, dot ) : sOriginalName, 'item' );
     const make = function( n ) { return base + (n > 1 ? '-' + n : '') + (ext ? '.' + ext : ''); };
     const taken = new Set( (aSiblingDocs || []).map( function( d ) { return d.file; } ).filter( Boolean ).concat( Array.from( aTakenNames || [] ) ) );
 
@@ -57,7 +57,7 @@ function allTripDocs( trip )
 // Base name only ("destination-year") - resolveNewTripDirName() adds a "-2", "-3"...
 // suffix on collision at creation time; an already-saved trip's real folder is
 // trip.dirName, never this recomputed straight from its (possibly since-edited) fields.
-function dirNameFor( sDestination, sStartDate ) { return NayiveUI.slugify( sDestination, 'item' ) + '-' + (sStartDate ? sStartDate.slice( 0, 4 ) : 'new'); }
+function dirNameFor( sDestination, sStartDate ) { return Ayni.slugify( sDestination, 'item' ) + '-' + (sStartDate ? sStartDate.slice( 0, 4 ) : 'new'); }
 
 // Where a document's bytes live, and the URL that serves them. A document is one of:
 //   kind 'link'   -> doc.path points straight into the user's files/ tree (not copied)
@@ -85,11 +85,11 @@ function sharedRef( base, ownerPath )
 }
 function tripBase( trip )  { return trip && trip._base ? trip._base : 'data/trips/' + (trip && trip.dirName); }
 function tripIsRO( trip )  { return !! ( trip && trip._ro ); }
-function docHref( trip, doc )    { return GumApi.fileUrl( docPath( tripBase( trip ), doc ) ); }
+function docHref( trip, doc )    { return AyniNet.fileUrl( docPath( tripBase( trip ), doc ) ); }
 function docIsLink( doc )   { return doc && doc.kind === 'link'; }
 function docHasFile( doc )  { return !!( (doc && doc.kind === 'link' && doc.path) || (doc && doc.file) || (doc && doc._pending) ); }
 
-function viewerTz() { return NayiveUI.viewerTz(); }   // impl in shared/ui.js
+function viewerTz() { return Ayni.dates.zone(); }   // impl in shared/ui.js
 function localTimeIn( sTz )
 {
     try { return new Intl.DateTimeFormat( 'en-GB', { timeZone: sTz, hour: '2-digit', minute: '2-digit', hour12: false } ).format( new Date() ); }
@@ -102,5 +102,5 @@ function addDaysIso( sIso, n )
 {
     const d = new Date( sIso + 'T00:00:00' );
     d.setDate( d.getDate() + n );
-    return d.getFullYear() + '-' + String( d.getMonth() + 1 ).padStart( 2, '0' ) + '-' + String( d.getDate() ).padStart( 2, '0' );
+    return Ayni.dates.iso( d );
 }

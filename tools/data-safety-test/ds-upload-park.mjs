@@ -1,5 +1,5 @@
 // ds-upload-park.mjs - big office saves are PARKED on this device and go up
-// only now and then (shared/store.js PARKED SAVES, docs/upload-less-plan.md).
+// only now and then (shared/ayni/ayni-store.js PARKED SAVES, docs/upload-less-plan.md).
 //
 // Store side (the real store.js on st.html): over 100 KB going up (Text: once
 // gzipped) is kept in the outbox with no PUT; 100 KB or less goes up as
@@ -142,7 +142,7 @@ section( "BYTES (WRITE / CALC): PARKED, SENT WHOLE, SET ASIDE WHOLE" );
 {
     // A binary store, as Write's and Calc's; 300 KB of random bytes (a .docx
     // with pictures does not shrink either). Its sum, to compare with the disk.
-    const SB = `( window.SB = window.SB || NayiveStore.createStore( { apiBase: location.origin + '/api/files', binary: true, conflicts: true } ) )`;
+    const SB = `( window.SB = window.SB || AyniStore.createStore( { apiBase: location.origin + '/api/files', binary: true, conflicts: true } ) )`;
     const BYTES = `( function () { var b = new Uint8Array( 300 * 1024 ); for( var i = 0; i < b.length; i += 65536 ) crypto.getRandomValues( b.subarray( i, i + 65536 ) );
         var sum = 0; for( var j = 0; j < b.length; j++ ) sum = ( sum * 31 + b[ j ] ) >>> 0; window.__bytes = b; return sum; } )()`;
     const sumOf = buf => { let x = 0; for( const v of buf ) x = ( x * 31 + v ) >>> 0; return x; };
@@ -210,7 +210,7 @@ section( "TEXT: AN AUTOSAVE PARKS, CTRL+S / A CLOSED WINDOW / A HIDDEN TOUCH PAG
     await typeIn( "DOS " );
     await hide();
     ok( await t.until( "document.getElementById('savedAt').dataset.state === 'here'", 10000 ), "parked again" );
-    ok( await t.evaluate( "window.nayiveBeforeClose().then( function ( r ) { return r === true; } )" ), "a desktop window's close is let through" );
+    ok( await t.evaluate( "window.ayniBeforeClose().then( function ( r ) { return r === true; } )" ), "a desktop window's close is let through" );
     ok( ( disk( F ) || "" ).indexOf( "DOS UNO " ) === 0, "and the save went up before it" );
 
     // A touch screen: hidden = it may be killed, so the parked save goes up.

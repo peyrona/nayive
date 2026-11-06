@@ -8,11 +8,11 @@
  * first, with an Undo (saveTo). "Save a copy" writes a new file beside it
  * and goes on editing the copy. Leaving with something unsaved asks first:
  * the ← (not in a desktop window), Escape, and the desktop window's own
- * close, which asks through window.nayiveBeforeClose (desktop/index.html,
+ * close, which asks through window.ayniBeforeClose (desktop/index.html,
  * close).
  *
  * Nothing here tells Drive or Photos what changed: every write goes through
- * GumApi, whose file news (onFilesChanged) they already listen to.
+ * AyniNet, whose file news (onFilesChanged) they already listen to.
  */
 
 // Nothing is drawn from JS before the dictionary is in: without an
@@ -24,10 +24,10 @@ const TF = function( k, o ) { return Ayni.tf( k, o ); };
 const $  = function( id )   { return document.getElementById( id ); };
 
 // The formats the editor can load AND re-encode (canvas.toDataURL); Drive
-// opens these here (shared/photo.js).
-const EDIT_EXT = NayivePhoto.EDIT_EXT;
+// opens these here (shared/ayni/ayni-photo.js).
+const EDIT_EXT = AyniPhoto.EDIT_EXT;
 
-let imageEditor = null;    // the live editor (shared/image-editor.js), or null
+let imageEditor = null;    // the live editor (shared/ayni/ayni-image-editor.js), or null
 let editorPath  = '';      // the file being edited - the copy, after "Save a copy"
 let editorDirty = false;   // an image edit not yet on disk
 let savedOnce   = false;   // after a save the undo stack still holds what was saved
@@ -42,7 +42,7 @@ const keptOnce  = new Set();   // paths whose original is safe this session: bin
 let heldTag     = null;
 let fromCopy    = false;   // loaded from the offline copy (X-Nayive-Copy): never saved over
 
-const extOf = NayiveMedia.extOf, nameOf = NayiveMedia.baseName, dirOf = NayiveMedia.dirOf;   // shared/media.js
+const extOf = Ayni.extOf, nameOf = Ayni.baseName, dirOf = Ayni.dirOf;   // shared/media.js
 
 function showName( path )
 {
@@ -112,13 +112,13 @@ async function start()
     showName( file || T( 'ui.untitled' ) );
     setBusy( true );
 
-    try { await GumApi.probeAccess(); }
-    catch( err ) { if( err && err.status === 401 ) { GumApi.loginRedirect(); return; } }
+    try { await AyniNet.probeAccess(); }
+    catch( err ) { if( err && err.status === 401 ) { AyniNet.loginRedirect(); return; } }
 
     if( ! file || EDIT_EXT.indexOf( extOf( file ) ) < 0 ) { setMsg( T( 'photos.cantEdit' ) ); return; }
 
     setMsg( T( 'drive.loadingEditor' ) );
-    try { await NayivePhoto.loadEditor(); }
+    try { await AyniPhoto.loadEditor(); }
     catch( _ ) { setMsg( T( 'drive.editorFailed' ) ); return; }
 
     // The picture's bytes AND their version, in one read: the editor shows
@@ -126,14 +126,14 @@ async function start()
     let src;
     try
     {
-        const v = await GumApi.readVersion( file, { bytes: true } );
+        const v = await AyniNet.readVersion( file, { bytes: true } );
         heldTag  = v.tag;
         fromCopy = v.offline;
         src = URL.createObjectURL( new Blob( [ v.body ], { type: mimeOf( file ) } ) );
     }
     catch( err )
     {
-        if( err && err.status === 401 ) { GumApi.loginRedirect(); return; }
+        if( err && err.status === 401 ) { AyniNet.loginRedirect(); return; }
         setMsg( T( 'ui.loadFailed' ) );
         return;
     }
@@ -143,7 +143,7 @@ async function start()
 
     const host = $( 'editorHost' );
     host.innerHTML = '';
-    imageEditor = NayivePhoto.newEditor( host, src, nameOf( file ), { tools: $( 'editorTools' ), head: $( 'editorHead' ) } );
+    imageEditor = AyniPhoto.newEditor( host, src, nameOf( file ), { tools: $( 'editorTools' ), head: $( 'editorHead' ) } );
     imageEditor.on( 'undoStackChanged', function( len ) { editorDirty = savedOnce || len > 0; } );
     rankHeader();
     setBusy( false );
@@ -236,7 +236,7 @@ async function saveTo( dest, replaced )
     if( fmt !== 'png' ) opts.quality = 0.92;
 
     let bytes;
-    try { bytes = NayivePhoto.dataUrlBytes( imageEditor.toDataURL( opts ) ); }
+    try { bytes = AyniPhoto.dataUrlBytes( imageEditor.toDataURL( opts ) ); }
     catch( _ ) { Ayni.toast( 'err', T( 'drive.renderFailed' ) ); return false; }
     const size = imageEditor.getCanvasSize();
 
@@ -249,21 +249,21 @@ async function saveTo( dest, replaced )
     try
     {
         // Both read the file at its path: before it goes to the bin.
-        bytes = await NayivePhoto.keepExif( editorPath, bytes, size.width, size.height );
-        const oldThumb = await NayivePhoto.thumbOf( dest );   // a file being rewritten
+        bytes = await AyniPhoto.keepExif( editorPath, bytes, size.width, size.height );
+        const oldThumb = await AyniPhoto.thumbOf( dest );   // a file being rewritten
 
         if( ! replaced && dest === editorPath && ! keptOnce.has( dest ) )
         {
             // Still the version this edit started from? Else it would go to
             // the bin unseen, and this edit take its place.
             let now = null;
-            try { now = await GumApi.versionOf( dest ); }
+            try { now = await AyniNet.versionOf( dest ); }
             catch( _ ) { Ayni.toast( 'err', T( 'drive.imageSaveFailed' ) ); return false; }
             if( ! now.tag || now.tag !== heldTag ) throw { status: 412 };   // as the server would answer
 
             const note = await noteOf( dest );
             let ids = null;
-            try { ids = await GumApi.binPaths( [ dest ] ); }
+            try { ids = await AyniNet.binPaths( [ dest ] ); }
             catch( _ ) { Ayni.toast( 'err', T( 'drive.imageSaveFailed' ) ); return false; }   // the original stays as it is
             if( ids ) kept = { ids: ids, note: note, from: dest, tag: heldTag };
             keptOnce.add( dest );
@@ -272,10 +272,10 @@ async function saveTo( dest, replaced )
 
         // A new file (a copy, or the name this ✓ just cleared) only where
         // there is none; else only over the version held.
-        const w = await GumApi.writeFileBytes( dest, bytes, copy || cleared ? { createOnly: true } : { ifMatch: heldTag } );
+        const w = await AyniNet.writeFileBytes( dest, bytes, copy || cleared ? { createOnly: true } : { ifMatch: heldTag } );
         heldTag  = w.tag;
         fromCopy = false;                      // what is held now is this write, not the offline copy
-        NayivePhoto.dropThumb( oldThumb );
+        AyniPhoto.dropThumb( oldThumb );
         editorDirty = false;
         savedOnce   = true;
         keptOnce.add( dest );                  // written here: nothing of the past to keep at that name
@@ -315,9 +315,9 @@ async function saveTo( dest, replaced )
 async function putBack( dest, r )
 {
     let res = null;
-    try { res = await GumApi.trashRestore( r.ids ); }
+    try { res = await AyniNet.trashRestore( r.ids ); }
     catch( _ ) { Ayni.toast( 'err', TF( 'drive.imageNotSavedBin', { name: nameOf( dest ) } ) ); return; }
-    GumApi.announce( [ dest ], false );             // a restore says nothing by itself
+    AyniNet.announce( [ dest ], false );             // a restore says nothing by itself
 
     const renamed = res && res.renamed && res.renamed.length ? res.renamed[ 0 ] : '';
     Ayni.toast( 'err', TF( 'drive.imageNotSavedBack', { name: nameOf( renamed || dest ) } ) );
@@ -350,7 +350,7 @@ function openSaveCopy()
 // as Drive's own check does.
 async function nameTaken( dir, name )
 {
-    try { return ( await GumApi.namesIn( dir ) ).has( name ); }
+    try { return ( await AyniNet.namesIn( dir ) ).has( name ); }
     catch( _ ) { return false; }
 }
 
@@ -378,7 +378,7 @@ async function confirmSaveCopy()
 
         const note = await noteOf( dest );          // the copy's note will take its place
         let ids;
-        try { ids = await GumApi.binPaths( [ dest ] ); }
+        try { ids = await AyniNet.binPaths( [ dest ] ); }
         catch( _ ) { Ayni.toast( 'err', T( 'drive.moveExistingFailed' ) ); return; }
         await NayiveMedia.purgePaths( [ dest ] );   // its thumbnail + scan entry, as Drive's own delete does
 
@@ -399,7 +399,7 @@ async function confirmSaveCopy()
 // overwrite the file that just came back.
 async function undoSaveCopy( dest, r )
 {
-    try { await GumApi.deletePaths( [ dest ] ); }
+    try { await AyniNet.deletePaths( [ dest ] ); }
     catch( _ ) { Ayni.toast( 'err', T( 'drive.restoreFailed' ) ); return; }
     await NayiveMedia.purgePaths( [ dest ] );
 
@@ -413,9 +413,9 @@ async function undoSaveCopy( dest, r )
     }
 
     let res = null;
-    try { res = await GumApi.trashRestore( r.ids ); }
+    try { res = await AyniNet.trashRestore( r.ids ); }
     catch( _ ) { Ayni.toast( 'err', T( 'drive.restoreFailed' ) ); return; }
-    GumApi.announce( [ dest ], false );             // a restore says nothing by itself
+    AyniNet.announce( [ dest ], false );             // a restore says nothing by itself
     if( r.from === dest ) keptOnce.delete( dest );  // the original is back: the next ✓ keeps it again
 
     // Its note, unless it had to land under another name: the one the copy's
@@ -453,7 +453,7 @@ async function canLeave()
         body: T( 'drive.unsavedBody' ),
         confirm: T( 'drive.closeWithout' ), danger: true } );
 }
-window.nayiveBeforeClose = canLeave;
+window.ayniBeforeClose = canLeave;
 
 // ← / Escape. A desktop window: the desktop closes it (its window.close).
 // A phone opened this page in place of Drive / Photos: back to them. A tab
@@ -462,9 +462,9 @@ async function leave()
 {
     if( ! await canLeave() ) return;
     closing = true;
-    if( ! NayiveUI.windowed && history.length > 1 ) { history.back(); return; }
+    if( ! Ayni.frame.windowed && history.length > 1 ) { history.back(); return; }
     window.close();
-    if( ! NayiveUI.windowed ) setTimeout( function() { location.href = '../drive/index.html'; }, 400 );
+    if( ! Ayni.frame.windowed ) setTimeout( function() { location.href = '../drive/index.html'; }, 400 );
 }
 
 window.addEventListener( 'beforeunload', function( e )

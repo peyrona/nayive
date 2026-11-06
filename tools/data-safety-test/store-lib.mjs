@@ -1,5 +1,5 @@
 // store-lib.mjs - what the ds-store-*.mjs tests share (not a test itself:
-// run.mjs only runs ds-*.mjs): a bare page with the REAL shared/store.js and
+// run.mjs only runs ds-*.mjs): a bare page with the REAL shared/ayni/ayni-store.js and
 // three stores on it, a network the test can hold or cut, and a look into the
 // browser's own storage.
 //
@@ -64,16 +64,16 @@ window.idbPut = function ( store, rec ) {
     } );
 };
 </script>
-<script src="shared/store.js"></script>
+<script src="shared/ayni/ayni-store.js"></script>
 <script>
 window.mergeList = function ( p, base, mine, theirs ) {
-    return JSON.stringify( NayiveStore.mergeLists( base ? JSON.parse( base ) : null, JSON.parse( mine ), JSON.parse( theirs ),
+    return JSON.stringify( AyniStore.mergeLists( base ? JSON.parse( base ) : null, JSON.parse( mine ), JSON.parse( theirs ),
                                                    { id: function ( x ) { return x.id; } } ) );
 };
 var API = location.origin + "/api/files";
-window.SM = NayiveStore.createStore( { apiBase: API, conflicts: true, merge: mergeList } );
-window.SC = NayiveStore.createStore( { apiBase: API, conflicts: true } );
-window.SP = NayiveStore.createStore( { apiBase: API } );
+window.SM = AyniStore.createStore( { apiBase: API, conflicts: true, merge: mergeList } );
+window.SC = AyniStore.createStore( { apiBase: API, conflicts: true } );
+window.SP = AyniStore.createStore( { apiBase: API } );
 SM.onMerged( function ( p, b ) { EV.push( { merged: p, body: b } ); } );
 SC.onConflict( function ( p ) { EV.push( { conflict: p } ); } );
 if( SM.onSaved ) SM.onSaved( function ( p, b, t, mine ) { EV.push( { saved: p, body: b, tag: t, mine: mine } ); } );

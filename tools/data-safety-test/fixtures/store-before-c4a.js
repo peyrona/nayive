@@ -47,7 +47,7 @@
  * Every page may flush any entry, but only a page whose store claimed the path
  * (read or wrote it with `merge`) can merge it: elsewhere a 412 just leaves it
  * queued for its own app. So a merging store reads and writes only its own
- * app's files; another app's file is read with GumApi (or a plain store).
+ * app's files; another app's file is read with AyniNet (or a plain store).
  * Every store keeps `base` for a text file (a plain store reading or writing a
  * merged path must not wipe it), and a plain store's write over a queued
  * merging save keeps it merge-protected (`mrg`, If-Unmodified-Since). A clean
@@ -77,7 +77,7 @@
  * Auth: /api/files is authenticated by the nayive_session cookie only
  * (same-origin fetch sends it). A 401 while flushing surfaces as the "needs-auth"
  * state and the outbox entry is kept, so nothing is lost across a re-login. It
- * also raises the shared "tu sesión ha caducado" bar (NayiveUI.sessionExpired),
+ * also raises the shared "tu sesión ha caducado" bar (Ayni.pwa.sessionExpired),
  * because a red dot alone never told the user what to do about it.
  *
  * Service workers / offline shells require a secure context, so offline only
@@ -86,9 +86,9 @@
  * to serve from cache because the page always reaches the server.
  *
  * No dependencies. Load as a classic script before the app's module script:
- *     <script src="../shared/store.js"></script>
+ *     <script src="../shared/ayni/ayni-store.js"></script>
  * then in the app:
- *     const store = NayiveStore.createStore( { apiBase: origin + '/api/files' } );
+ *     const store = AyniStore.createStore( { apiBase: origin + '/api/files' } );
  *
  * Bodies are UTF-8 text by default. Pass { binary: true } for a store whose
  * bodies are raw bytes (Uint8Array) instead - write() takes bytes, read()
@@ -378,7 +378,7 @@
         }
 
         // Recompute a resting state from what is still queued. Exposed as
-        // `resting()` for NayiveUI.bootWithStore, which calls it for an app that
+        // `resting()` for AyniBoot.boot, which calls it for an app that
         // opened without touching the store (a blank sheet, a new document) -
         // the plug would otherwise sit on its red "no state yet" resting class.
         async function settle()
@@ -406,7 +406,7 @@
         function authLost( status )
         {
             if( status !== 401 ) return;
-            if( window.NayiveUI && NayiveUI.sessionExpired ) NayiveUI.sessionExpired();
+            if( window.NayiveUI && Ayni.pwa.sessionExpired ) Ayni.pwa.sessionExpired();
         }
 
         async function netFetch( url, options, retry )
@@ -1179,11 +1179,11 @@
     // sign in here would be offered it. localCount() is how many saves and
     // untitled drafts are still only here - EVERY account's, since they all go -
     // so the button can ask first; clearLocal() empties the store's database
-    // and shared/office.js's "nayive-drafts". Each store is emptied with clear()
+    // and shared/ayni/ayni-doc.js's "nayive-drafts". Each store is emptied with clear()
     // in place: deleteDatabase() waits for every other open tab and, meanwhile,
     // does nothing.
 
-    // "nayive-drafts" as shared/office.js opens it - the same upgrade, so
+    // "nayive-drafts" as shared/ayni/ayni-doc.js opens it - the same upgrade, so
     // opening it here first never leaves a database with no "drafts" store.
     function openDraftsDb()
     {
@@ -1431,7 +1431,7 @@
 
     // hashText( text ) - a short stable name for a text (two 32-bit FNV-1a
     // hashes, 16 hex digits): a key for an item that has none, the same on
-    // every device (shared/ical.js has its own copy, for Node).
+    // every device (shared/ayni/formats/ical.js has its own copy, for Node).
     function hashText( text )
     {
         var a = 0x811c9dc5, b = 0x01000193 ^ 0x5bd1e995;
@@ -1445,7 +1445,7 @@
         return ( "0000000" + a.toString( 16 ) ).slice( -8 ) + ( "0000000" + b.toString( 16 ) ).slice( -8 );
     }
 
-    window.NayiveStore = { createStore: createStore, me: ME, sendWaiting: sendWaiting,
+    window.AyniStore = { createStore: createStore, me: ME, sendWaiting: sendWaiting,
                            localCount: localCount, clearLocal: clearLocal,
                            mergeLists: mergeLists, mergeFields: mergeFields, mergeSets: mergeSets,
                            hashText: hashText };

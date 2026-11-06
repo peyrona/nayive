@@ -10,6 +10,7 @@
          every inline script below may call Ayni.t(). -->
     <script src="../shared/i18n.js"></script>
     <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
+    <script src="../shared/ayni/ayni-util.js"></script>
     <title>Tasks</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='17' rx='2'%3E%3C/rect%3E%3Cpath d='M8 4V3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1'%3E%3C/path%3E%3Cpolyline points='8 13 11 16 16 10.5'%3E%3C/polyline%3E%3C/svg%3E">
 
@@ -27,10 +28,26 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-share.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pwa.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-locker.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-status.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-shell.css">
     <link rel="stylesheet" href="../shared/app.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-doc.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-media.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-image.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-map.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-icons-more.js" defer></script>
+    <script src="../shared/ayni/ayni-shell.js" defer></script>
+    <script src="../shared/ayni/ayni-status.js" defer></script>
+    <script src="../shared/ayni/ayni-share.js" defer></script>
+    <script src="../shared/ayni/ayni-upload.js" defer></script>
+    <script src="../shared/ayni/ayni-pwa.js" defer></script>
+    <script src="../shared/ayni/ayni-boot.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
@@ -42,6 +59,7 @@
     <script src="../shared/ayni/ayni-pickers.js" defer></script>
     <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
+    <script src="../shared/ayni/ayni-locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
     <link rel="manifest" href="manifest.json">
@@ -417,13 +435,13 @@
     <!-- The help dialog builds each row from the real button on screen, and the
          sub-task dots button only exists while a group is open. This hidden copy is
          what that row borrows its glyph from. -->
-    <span id="planGlyph" hidden><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg></span>
+    <span id="planGlyph" hidden><span class="icon" data-icon="dots-big" style="--icon:14px"></span></span>
 
     <!-- Vendored date lib, for the once-a-day birthday and trip syncs. Shared with calendar (shared/lib/): one download, one cache entry. -->
     <script src="../shared/lib/luxon_v3.7.2.min.js"></script>
 
     <!-- File-API helpers: the access probe, retrying fetch. -->
-    <script src="../shared/gum-api.js" defer></script>
+    <script src="../shared/ayni/ayni-net.js" defer></script>
     <!-- Small shared UI helpers: backdrop open/close, toast, viewerTz. -->
     <script src="../shared/ui.js" defer></script>
     <script>
@@ -469,8 +487,8 @@
     </script>
 
     <!-- Offline-capable persistence: local last-known-good cache + write-behind sync. -->
-    <script src="../shared/store.js" defer></script>
-    <script src="../shared/vcard.js" defer></script>
+    <script src="../shared/ayni/ayni-store.js" defer></script>
+    <script src="../shared/ayni/formats/vcard.js" defer></script>
 
     <script type="module">
         // Nothing is drawn from JS before the dictionary is in: without an
@@ -482,20 +500,20 @@
         //------------------------------------------------------------------------//
         // STATE
 
-        const API_FILES  = GumApi.API_FILES;
+        const API_FILES  = AyniNet.API_FILES;
         const TASKS_FILE = 'data/tasks.json';
 
-        // Offline-capable persistence for TASKS_FILE (see ../shared/store.js).
-        const store = NayiveStore.createStore( { apiBase: API_FILES, conflicts: true, merge: mergeTasks } );
+        // Offline-capable persistence for TASKS_FILE (see ../shared/ayni/ayni-store.js).
+        const store = AyniStore.createStore( { apiBase: API_FILES, conflicts: true, merge: mergeTasks } );
 
         // Two devices saved from the same copy: both changes are kept, task by
-        // task and sub-task by sub-task, by id (shared/store.js MERGE). A task
+        // task and sub-task by sub-task, by id (shared/ayni/ayni-store.js MERGE). A task
         // changed on both takes, field by field, the side that changed it - mine
         // when both did. The reminders file merges as sets. null = a side that
         // is not what this app writes: nothing is merged over it.
         function mergeTasks( path, base, mine, theirs )
         {
-            const S     = NayiveStore;
+            const S     = AyniStore;
             const parse = t => { try { return JSON.parse( t ); } catch( _ ) { return undefined; } };
             const m = parse( mine ), t = parse( theirs ), b = base == null ? null : parse( base );
 
@@ -557,7 +575,7 @@
         const T  = k           => Ayni.t( k );
         const TF = ( k, vars ) => Ayni.tf( k, vars );
 
-        const VIEWER_TZ              = NayiveUI.viewerTz();
+        const VIEWER_TZ              = Ayni.dates.zone();
 
         const CONTACTS_FILE          = 'data/contacts.vcf';
         const BIRTHDAY_SYNC_DATE_KEY = 'tasks_birthday_sync_date';
@@ -629,7 +647,7 @@
             document.getElementById( 'planClearBtn' ).addEventListener( 'click', function() { savePlanSheet( true ); } );
             document.getElementById( 'planSaveBtn'  ).addEventListener( 'click', function() { savePlanSheet( false ); } );
             // The store's state machine drives the header plug for every read and write.
-            store.onState( NayiveUI.syncIndicator() );
+            store.onState( Ayni.plug.listener() );
 
             // The plug's click and the focus / visibilitychange re-reads, all on ONE guarded
             // path (shared/ui.js). The guard skips the read while a text field holds unsaved
@@ -642,7 +660,7 @@
             // syncs would be missed. They run after the re-read, which is awaited first: every
             // saveTasks() PUTs the whole list (last write wins), so syncing into a stale
             // snapshot would delete whatever another device added meanwhile.
-            NayiveUI.wireRefresh(
+            AyniBoot.wireRefresh(
             {
                 store: store,
                 read:  loadTasks,
@@ -657,7 +675,7 @@
             // Probe the API, then load. On a failed probe the shared helper bounces to the
             // sign-in page only when we are really online with nothing cached; otherwise it
             // opens on the local cache and the store syncs once the connection is back.
-            NayiveUI.bootWithStore( store, async function()
+            AyniBoot.boot( store, async function()
             {
                 await loadTasks();
                 maybeSyncBirthdaysToday();   // background: independent once-a-day scan of contacts.vcf
@@ -868,7 +886,7 @@
 
             try
             {
-                const vcfText = await GumApi.readFile( CONTACTS_FILE );
+                const vcfText = await AyniNet.readFile( CONTACTS_FILE );
                 people = todaysBirthdays( vcfText );
             }
             catch( _ )
@@ -937,7 +955,7 @@
 
             try
             {
-                const pref = JSON.parse( await GumApi.fetchText( GumApi.API_FILES + '?tripdays=1' ) );
+                const pref = JSON.parse( await AyniNet.fetchText( AyniNet.API_FILES + '?tripdays=1' ) );
                 const lead = Number( pref.days ) || 0;
 
                 if( lead <= 0 )
@@ -1030,7 +1048,7 @@
 
             try
             {
-                tree = await GumApi.listDirRecursive( TRIPS_DIR );
+                tree = await AyniNet.listDirRecursive( TRIPS_DIR );
             }
             catch( err )
             {
@@ -1049,7 +1067,7 @@
                     continue;
 
                 let trip;
-                try { trip = JSON.parse( await GumApi.readFile( file.path ) ); }
+                try { trip = JSON.parse( await AyniNet.readFile( file.path ) ); }
                 catch( _ ) { continue; }
 
                 if( ! trip || trip.id == null )
@@ -1079,7 +1097,7 @@
 
         // [{ name, age }] (alphabetical) of every contact whose birthday falls today;
         // `age` is null when the vCard gives no usable birth year. Only FN / N and
-        // BDAY are needed, so this reads the cards the light way (shared/vcard.js)
+        // BDAY are needed, so this reads the cards the light way (shared/ayni/formats/vcard.js)
         // rather than building the full contact model (see contact/index.html).
         function todaysBirthdays( vcfText )
         {
@@ -1092,7 +1110,7 @@
 
             const people = [];
 
-            for( const props of NayiveVCard.read( vcfText ) )
+            for( const props of AyniVCard.read( vcfText ) )
             {
                 const card = { fn: '', n: '', md: null };
 
@@ -1100,7 +1118,7 @@
                 {
                     const val = p.value.trim();
 
-                    if( p.name === 'FN' )         card.fn = NayiveVCard.unescapeText( val );
+                    if( p.name === 'FN' )         card.fn = AyniVCard.unescapeText( val );
                     else if( p.name === 'N' )     card.n  = nFromStructured( val );
                     else if( p.name === 'BDAY' )  card.md = bdayDate( val );
                 }
@@ -1132,7 +1150,7 @@
         // "family;given;additional;prefix;suffix" -> "Given Family".
         function nFromStructured( val )
         {
-            const p = NayiveVCard.splitEscaped( val, ';' ).map( NayiveVCard.unescapeText );
+            const p = AyniVCard.splitEscaped( val, ';' ).map( AyniVCard.unescapeText );
             return [ p[ 1 ], p[ 0 ] ].filter( Boolean ).join( ' ' ).trim();
         }
 
@@ -2019,7 +2037,7 @@
                 const chevron = document.createElement( 'button' );
                 chevron.className = 'task-chevron' + (isExpanded ? ' expanded' : '');
                 Ayni.setTip( chevron, T( isExpanded ? 'tasks.hideSubtasks' : 'tasks.showSubtasks' ) );
-                chevron.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>';
+                chevron.innerHTML = Ayni.icon( 'chev-right-small', '', 16 );
                 chevron.addEventListener( 'click', function() { toggleCollapse( t.id ); } );
 
                 row.appendChild( chevron );
@@ -2099,7 +2117,7 @@
                 const delBtn = document.createElement( 'button' );
                 delBtn.className = 'btn danger';
                 Ayni.setTip( delBtn, Ayni.t( 'ui.delete' ) );
-                delBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>';
+                delBtn.innerHTML = Ayni.icon( 'trash', '', 16 );
                 delBtn.addEventListener( 'click', function() { deleteTask( t.id ); } );
 
                 actions.appendChild( delBtn );
@@ -2109,7 +2127,7 @@
                 const checkBtn = document.createElement( 'button' );
                 checkBtn.className = 'btn check';
                 Ayni.setTip( checkBtn, T( 'tasks.markDone' ) );
-                checkBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 9 17 20 6"></polyline></svg>';
+                checkBtn.innerHTML = Ayni.icon( 'check-task', '', 18 );
                 checkBtn.addEventListener( 'click', function() { toggleTask( t.id ); } );
 
                 actions.appendChild( checkBtn );
@@ -2117,7 +2135,7 @@
                 const addSubBtn = document.createElement( 'button' );
                 addSubBtn.className = 'btn';
                 Ayni.setTip( addSubBtn, T( 'tasks.addSubtask' ) );
-                addSubBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
+                addSubBtn.innerHTML = Ayni.icon( 'plus', '', 18 );
                 addSubBtn.addEventListener( 'click', function() { startNewSubtask( t.id ); } );
 
                 actions.appendChild( addSubBtn );
@@ -2142,7 +2160,7 @@
             const handle = document.createElement( 'div' );
             handle.className = 'subtask-handle';
             handle.title = T( 'tasks.dragHandle' );
-            handle.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"></circle><circle cx="15" cy="6" r="1.6"></circle><circle cx="9" cy="12" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle><circle cx="9" cy="18" r="1.6"></circle><circle cx="15" cy="18" r="1.6"></circle></svg>';
+            handle.innerHTML = Ayni.icon( 'grip-dots', '', 14 );
             handle.addEventListener( 'pointerdown', function( e ) { onSubtaskDragStart( e, task.id, s.id ); } );
 
             row.appendChild( handle );
@@ -2206,7 +2224,7 @@
             checkBtn.className = s.done ? 'btn sm' : 'btn sm check';
             Ayni.setTip( checkBtn, T( s.done ? 'tasks.markUndone' : 'tasks.markDone' ) );
             checkBtn.innerHTML = s.done ? Ayni.icon( 'undo' )
-                                        : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 9 17 20 6"></polyline></svg>';
+                                        : Ayni.icon( 'check-task', '', 14 );
             checkBtn.addEventListener( 'click', function() { toggleSubtask( task.id, s.id ); } );
 
             actions.appendChild( checkBtn );
@@ -2217,7 +2235,7 @@
                 const delBtn = document.createElement( 'button' );
                 delBtn.className = 'btn sm danger';
                 Ayni.setTip( delBtn, Ayni.t( 'ui.delete' ) );
-                delBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>';
+                delBtn.innerHTML = Ayni.icon( 'trash', '', 14 );
                 delBtn.addEventListener( 'click', function() { deleteSubtask( task.id, s.id ); } );
 
                 actions.appendChild( delBtn );
@@ -2228,7 +2246,7 @@
             const planBtn = document.createElement( 'button' );
             planBtn.className = 'btn sm thin subtask-plan-btn';
             Ayni.setTip( planBtn, T( 'tasks.planOpen' ) );
-            planBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>';
+            planBtn.innerHTML = Ayni.icon( 'dots-big', '', 14 );
             planBtn.addEventListener( 'click', function() { openPlanSheet( task.id, s.id ); } );
 
             actions.appendChild( planBtn );

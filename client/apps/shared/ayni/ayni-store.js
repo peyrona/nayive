@@ -1,6 +1,6 @@
-// SEALED - a user-data write path (docs/sealed-crud.md): announce a change, keep it minimal, then `node tools/data-safety-test/run.mjs` must be ALL GREEN.
+// DATA: this code decides what reaches the disk. Change it with care, and run your data tests.
 /*
- * store.js - Offline-capable persistence for the Nayive single-page apps.
+ * store.js - Offline-capable persistence for the the app single-page apps.
  *
  * The apps used to talk to the file API directly: GET/PUT
  * `/api/files?file=data/<file>`, with the in-memory model as the only
@@ -50,7 +50,7 @@
  * only a page whose store claimed the path (read or wrote it with `merge`) can
  * merge it: elsewhere a 412 just leaves it queued for its own app. So a merging
  * store reads and writes only its own app's files; another app's file is read
- * with GumApi (or a plain store). A plain store's write over a queued merging
+ * with AyniNet (or a plain store). A plain store's write over a queued merging
  * save keeps it merge-protected (`mrg`, its version check). A merge that said
  * null is tried again each time its app reads the file. The merge's GET is
  * dropped when another account signed in since (whoNow).
@@ -113,8 +113,8 @@
  * up with whatever session the browser held when it was sent - beto's, after a
  * sign-out, an expired session or a sign-in in another tab - and land in HIS
  * home. So this page reads who it belongs to ONCE, when it loads (the readable
- * "nayive_who" cookie, server/go/store_owner.go), and every record it writes
- * carries that name (`who`). A queued save goes up with it in X-Nayive-User;
+ * "ayni_who" cookie, server/go/store_owner.go), and every record it writes
+ * carries that name (`who`). A queued save goes up with it in X-Ayni-User;
  * the server answers 423 when it is not the session's, and the entry stays
  * here until its owner signs in again. Records of another account are never
  * read, sent or counted by this page. No cookie (a page that loaded signed
@@ -132,7 +132,7 @@
  * Saves queued here before the admin renamed ana to ana2 carry "user:ana":
  * nobody's any more, so a page of ana2 never sent or showed them, and the
  * sign-out deleted them. The server hands the account's old names in the
- * readable "nayive_was" cookie ("user:ana2/user:ana", server/go/
+ * readable "ayni_was" cookie ("user:ana2/user:ana", server/go/
  * store_owner.go). When its first name is THIS page's owner (ME), the
  * records of those old names - queued saves, cached copies, device drafts -
  * are re-tagged to ME once, before this page touches any of them. Never for
@@ -146,10 +146,10 @@
  * conflict, for the app to ask. { replace: true } is the user's answer
  * "replace it": no check, and a held-back save goes again.
  *
- * Auth: /api/files is authenticated by the nayive_session cookie only
+ * Auth: /api/files is authenticated by the ayni_session cookie only
  * (same-origin fetch sends it). A 401 while flushing surfaces as the "needs-auth"
  * state and the outbox entry is kept, so nothing is lost across a re-login. It
- * also raises the shared "tu sesión ha caducado" bar (NayiveUI.sessionExpired),
+ * also raises the shared "tu sesión ha caducado" bar (Ayni.pwa.sessionExpired),
  * because a red dot alone never told the user what to do about it.
  *
  * Service workers / offline shells require a secure context, so offline only
@@ -158,9 +158,9 @@
  * to serve from cache because the page always reaches the server.
  *
  * No dependencies. Load as a classic script before the app's module script:
- *     <script src="../shared/store.js"></script>
+ *     <script src="../ayni-store.js"></script>
  * then in the app:
- *     const store = NayiveStore.createStore( { apiBase: origin + '/api/files' } );
+ *     const store = AyniStore.createStore( { apiBase: origin + '/api/files' } );
  *
  * Bodies are UTF-8 text by default. Pass { binary: true } for a store whose
  * bodies are raw bytes (Uint8Array) instead - write() takes bytes, read()
@@ -190,7 +190,7 @@
  * going up (Text: once gzipped) is stored in the outbox as usual, flagged
  * `park`, and NOT sent: unpark( path ) sends it (Ctrl+S, a closed window, the
  * editor's own 10 / 60 min). The page holds a shared Web Lock
- * "nayive-park:<who>:<path>" from BEFORE the entry is stored until
+ * "ayni-park:<who>:<path>" from BEFORE the entry is stored until
  * releasePark( path ) or its end; a flush from any page skips a parked entry
  * whose lock is held, and sends one whose page is gone (the launcher and the
  * desktop flush at boot). settle() does not count parked entries: the plug
@@ -220,6 +220,8 @@
 ( function ()
 {
     "use strict";
+
+    var NAMES = window.AyniNames || {}, KEYS = NAMES.key || "ayni-", COOKIE = NAMES.cookie || "ayni_", API = NAMES.api || "/api/", HDR = NAMES.header || "X-Ayni-";
 
     var DB_NAME    = "nube-store";   // kept from the old name on purpose: renaming the IndexedDB would drop pending offline writes
     var DB_VERSION = 1;
@@ -252,19 +254,19 @@
     var toastAt  = 0;
     var lastQ    = 0;
 
-    // Who this page belongs to: the "nayive_who" cookie AS IT WAS WHEN THE PAGE
+    // Who this page belongs to: the "ayni_who" cookie AS IT WAS WHEN THE PAGE
     // LOADED - never read again, so a tab left open across another account's
     // sign-in still tags its saves with its own owner. "" = unknown.
     var ME = whoNow();
 
     // Who is signed in on this browser NOW (the cookie as it is at this moment,
-    // unlike ME): "" = unknown. The same read as NayiveWho.now (shared/i18n.js
+    // unlike ME): "" = unknown. The same read as AyniWho.now (the app
     // WHOSE PAGE), kept here: the data-safety harness loads this file alone.
     function whoNow()
     {
         try
         {
-            var m = document.cookie.match( /(?:^|;\s*)nayive_who=([^;]*)/ );
+            var m = document.cookie.match( new RegExp( "(?:^|;\\s*)" + COOKIE + "who=([^;]*)" ) );
             return m ? m[ 1 ] : "";
         }
         catch ( e ) { return ""; }
@@ -275,13 +277,13 @@
     function ours( rec ) { return ! rec || ! rec.who || ! ME || rec.who === ME; }
 
     // The names an admin rename took from THIS page's owner (AN ADMIN RENAME):
-    // the "nayive_was" cookie's names after its first, only when that first
+    // the "ayni_was" cookie's names after its first, only when that first
     // one is ME. [] = none (no cookie, or another account's).
     var WAS = ( function ()
     {
         try
         {
-            var m = document.cookie.match( /(?:^|;\s*)nayive_was=([^;]*)/ );
+            var m = document.cookie.match( new RegExp( "(?:^|;\\s*)" + COOKIE + "was=([^;]*)" ) );
             var l = m && m[ 1 ] ? m[ 1 ].split( "/" ) : [];
             return ME && l.length > 1 && l[ 0 ] === ME ? l.slice( 1 ).filter( function ( w ) { return w && w !== ME; } ) : [];
         }
@@ -711,7 +713,7 @@
     var lastSaved = {};   // path -> the last save heard of: { id, prev, tag, srv, base } (write()'s page-only race)
 
     var channel = null;
-    try { if( typeof BroadcastChannel === "function" ) channel = new BroadcastChannel( "nayive-store" ); }
+    try { if( typeof BroadcastChannel === "function" ) channel = new BroadcastChannel( KEYS + "store" ); }
     catch ( e ) { channel = null; }
     if( channel ) channel.onmessage = function ( ev )
     {
@@ -735,15 +737,15 @@
         } );
 
         // A desktop window's (x) removes its frame with no beforeunload: the
-        // desktop asks window.nayiveBeforeClose instead (desktop/index.html,
+        // desktop asks window.ayniBeforeClose instead (desktop/index.html,
         // close). This one answers for every app that has none of its own -
         // the office editors, Image and eMail set theirs later, over it.
-        if( typeof window.nayiveBeforeClose !== "function" )
-            window.nayiveBeforeClose = function ()
+        if( typeof window.ayniBeforeClose !== "function" )
+            window.ayniBeforeClose = function ()
             {
                 if( ! Object.keys( pageOnly ).length ) return true;
                 if( ! window.Ayni || ! Ayni.confirm || ! Ayni.t ) return false;
-                return Ayni.confirm( { title: Ayni.t( "drive.unsavedTitle" ), body: Ayni.t( "ui.store.pageOnly" ),
+                return Ayni.confirm( { title: Ayni.t( "drive.unsavedTitle" ), body: Ayni.t( "ayni.store.pageOnly" ),
                                            confirm: Ayni.t( "drive.closeWithout" ), danger: true } );
             };
     }
@@ -832,21 +834,21 @@
     {
         try
         {
-            var id = localStorage.getItem( "nayive-office-device" );
-            if( ! id ) { id = newId(); localStorage.setItem( "nayive-office-device", id ); }
+            var id = localStorage.getItem( KEYS + "office-device" );
+            if( ! id ) { id = newId(); localStorage.setItem( KEYS + "office-device", id ); }
             return id;
         }
         catch ( e ) { return ""; }
     } )();
 
     // The name a person knows it by: the enrolled phone's own (index.html,
-    // "nayive-device"), else "<system> · <browser>" - no guess at phone or
+    // KEYS + "device"), else "<system> · <browser>" - no guess at phone or
     // tablet (Chrome no longer gives the model).
     function deviceName()
     {
         try
         {
-            var d = JSON.parse( localStorage.getItem( "nayive-device" ) || "null" );
+            var d = JSON.parse( localStorage.getItem( KEYS + "device" ) || "null" );
             if( d && d.n ) return String( d.n );
         }
         catch ( e ) {}
@@ -862,7 +864,7 @@
 
     function canPark() { return !! DEVICE && !! ( navigator.locks && navigator.locks.request && navigator.locks.query ); }
 
-    function parkName( who, path ) { return "nayive-park:" + ( who || "" ) + ":" + path; }
+    function parkName( who, path ) { return KEYS + "park:" + ( who || "" ) + ":" + path; }
 
     var parkLocks = {};   // path -> this page's park lock: a promise of its release() (null: not had)
 
@@ -903,7 +905,7 @@
         try
         {
             var q = await navigator.locks.query(), out = {};
-            ( q.held || [] ).forEach( function ( l ) { if( String( l.name ).indexOf( "nayive-park:" ) === 0 ) out[ l.name ] = true; } );
+            ( q.held || [] ).forEach( function ( l ) { if( String( l.name ).indexOf( KEYS + "park:" ) === 0 ) out[ l.name ] = true; } );
             return out;
         }
         catch ( e ) { return null; }
@@ -913,7 +915,7 @@
 
     // ---- the marks ----------------------------------------------------------
 
-    function marksUrl() { return window.location.origin + "/api/files?file=" + encodeURIComponent( MARKS ); }
+    function marksUrl() { return window.location.origin + API + "files?file=" + encodeURIComponent( MARKS ); }
 
     function freshMark( m ) { return !! m && typeof m.path === "string" && Date.now() - ( +m.at || 0 ) < MARK_DAYS * 86400000; }
 
@@ -927,7 +929,7 @@
         {
             var r = await fetch( marksUrl(), { method: "GET", cache: "no-store" } );
             if( r.status === 404 ) return { ok: true, list: [], tag: null, none: true };
-            if( ! r.ok || r.headers.get( "X-Nayive-Copy" ) ) return { ok: false, status: r.ok ? 0 : r.status };
+            if( ! r.ok || r.headers.get( HDR + "Copy" ) ) return { ok: false, status: r.ok ? 0 : r.status };
             var j = null;
             try { j = JSON.parse( await r.text() ); } catch ( e ) {}   // not ours to keep: rewritten whole
             return { ok: true, tag: strongTag( r.headers.get( "ETag" ) ),
@@ -952,7 +954,7 @@
             var h = { "Content-Type": "application/json" };
             if( got.tag )       h[ "If-Match" ] = got.tag;
             else if( got.none ) h[ "If-None-Match" ] = "*";
-            if( ME )            h[ "X-Nayive-User" ] = ME;
+            if( ME )            h[ HDR + "User" ] = ME;
             try
             {
                 var r = await fetch( marksUrl(), { method: "PUT", headers: h, body: JSON.stringify( { marks: list } ) } );
@@ -967,7 +969,7 @@
     // What this device still has to say there, per account (a sign-out
     // leaves it for the next sign-in): path -> { at } "changes waiting here
     // since at", or 0 "none any more". The latest word wins.
-    function owedKey( who ) { return "nayive-park-marks:" + ( who || "" ); }
+    function owedKey( who ) { return KEYS + "park-marks:" + ( who || "" ); }
 
     function owedOf( who )
     {
@@ -1065,9 +1067,9 @@
         {
             var d    = new Date( +m.at || 0 );
             var hm   = ( "0" + d.getHours() ).slice( -2 ) + ":" + ( "0" + d.getMinutes() ).slice( -2 );
-            var when = d.toDateString() === now.toDateString() ? ( T ? T.tf( "ui.park.today", { time: hm } ) : hm )
+            var when = d.toDateString() === now.toDateString() ? ( T ? T.tf( "ayni.park.today", { time: hm } ) : hm )
                      : d.toLocaleDateString( T ? T.i18n.lang() : undefined ) + " " + hm;
-            return "• " + ( T ? T.tf( "ui.park.since", { device: m.name, when: when } ) : m.name + ", " + when ) +
+            return "• " + ( T ? T.tf( "ayni.park.since", { device: m.name, when: when } ) : m.name + ", " + when ) +
                    ( many ? " · " + String( m.path ).split( "/" ).pop() : "" );
         } ).join( "\n" );
     }
@@ -1082,7 +1084,7 @@
         var d    = new Date( at || Date.now() );
         var time = ( "0" + d.getHours() ).slice( -2 ) + "." + ( "0" + d.getMinutes() ).slice( -2 );
         var v    = { name: name, device: deviceName(), time: time, ext: ext };
-        try { if( window.NayiveUI && Ayni.tf ) { var s = Ayni.tf( "ui.park.copyName", v ); if( s && s.indexOf( "ui.park" ) !== 0 ) return s; } }
+        try { if( window.Ayni && Ayni.tf ) { var s = Ayni.tf( "ayni.park.copyName", v ); if( s && s.indexOf( "ayni.park" ) !== 0 ) return s; } }
         catch ( e ) {}
         return name + " (" + v.device + ", " + time + ")" + ext;
     }
@@ -1094,7 +1096,7 @@
     {
         opts = opts || {};
 
-        var api       = opts.apiBase || ( window.location.origin + "/api/files" );
+        var api       = opts.apiBase || ( window.location.origin + API + "files" );
         var binary    = !! opts.binary;   // body is raw bytes (Uint8Array), not text
         var mergeFn   = typeof opts.merge === "function" ? opts.merge : null;   // see MERGE above
         var conflicts = !! opts.conflicts || !! mergeFn; // send the version check (see CONFLICTS above)
@@ -1168,7 +1170,7 @@
         }
 
         // Recompute a resting state from what is still queued. Exposed as
-        // `resting()` for NayiveUI.bootWithStore, which calls it for an app that
+        // `resting()` for AyniDocHost.bootWithStore, which calls it for an app that
         // opened without touching the store (a blank sheet, a new document) -
         // the plug would otherwise sit on its red "no state yet" resting class.
         async function settle()
@@ -1202,7 +1204,7 @@
         function authLost( status )
         {
             if( status !== 401 ) return;
-            if( window.NayiveUI && NayiveUI.sessionExpired ) NayiveUI.sessionExpired();
+            if( window.Ayni && Ayni.pwa && Ayni.pwa.sessionExpired ) Ayni.pwa.sessionExpired();
         }
 
         async function netFetch( url, options, retry )
@@ -1233,7 +1235,7 @@
 
                 // The service worker's offline copy of a trip document (sw.js,
                 // tripDocOrNetwork) is not the server's version: as offline (B6).
-                if( r.headers.get( "X-Nayive-Copy" ) ) return { ok: false, status: 0, netError: true };
+                if( r.headers.get( HDR + "Copy" ) ) return { ok: false, status: 0, netError: true };
 
                 if( r.ok )
                 {
@@ -1315,7 +1317,7 @@
                 if( v && v.tag )  headers[ "If-Match" ] = v.tag;
                 if( v && v.srv )  headers[ "If-Unmodified-Since" ] = new Date( v.srv ).toUTCString();
                 if( v && v.none ) headers[ "If-None-Match" ] = "*";
-                if( who )    headers[ "X-Nayive-User" ] = who;
+                if( who )    headers[ HDR + "User" ] = who;
 
                 var r = await netFetch( api + "?file=" + encodeURIComponent( path ),
                                         { method: "PUT", headers: headers, body: packed || body } );
@@ -1999,7 +2001,7 @@
                     // the next open sends it again): the file there may be its
                     // own first try. Exactly its bytes there = saved, not
                     // "changed on another device" nor set aside (D6 did this for
-                    // create-only saves only; GumApi does it for all).
+                    // create-only saves only; AyniNet does it for all).
                     if( head !== 404 )
                     {
                         var there = await netGet( path );
@@ -2438,7 +2440,7 @@
                     var h = {};
                     if( v.tag ) h[ "If-Match" ] = v.tag;
                     if( v.srv ) h[ "If-Unmodified-Since" ] = new Date( v.srv ).toUTCString();
-                    if( who )   h[ "X-Nayive-User" ] = who;
+                    if( who )   h[ HDR + "User" ] = who;
                     var r = await fetch( api + "?from=" + encodeURIComponent( path ) + "&bak=1", { method: "POST", headers: h } );
                     done = r.ok || r.status === 404;
                 }
@@ -2650,8 +2652,8 @@
             var now = Date.now();
             if( now - toastAt < 4000 || ! window.Ayni || ! Ayni.toast ) return;
             toastAt = now;
-            Ayni.toast( ( reason === "bad" || reason === "loading" ? "warn" : "err" ), Ayni.t( reason === "bad"     ? "ui.store.badFile"
-                                      : reason === "loading" ? "ui.store.loading" : "ui.store.notRead" ) );
+            Ayni.toast( ( reason === "bad" || reason === "loading" ? "warn" : "err" ), Ayni.t( reason === "bad"     ? "ayni.store.badFile"
+                                      : reason === "loading" ? "ayni.store.loading" : "ayni.store.notRead" ) );
         }
 
         // The save could not be sent and is only in this page (the browser's
@@ -2663,7 +2665,7 @@
             var now = Date.now();
             if( now - toastAt < 4000 || ! window.Ayni || ! Ayni.toast ) return;
             toastAt = now;
-            Ayni.toast( "warn", Ayni.t( "ui.store.pageOnly" ) );
+            Ayni.toast( "warn", Ayni.t( "ayni.store.pageOnly" ) );
         }
 
         //--------------------------------------------------------------------//
@@ -2711,8 +2713,8 @@
     var waitStore = null; // sendWaiting's store: one per page (each store listens to the page's events)
 
     // A database as its owner opens it - the same upgrade, so opening it here
-    // first never leaves one with no store: "nayive-drafts" (GumApi.draftsDb),
-    // "nayive-mail-files" (email/compose.js). GumApi.sideDb's opener, kept
+    // first never leaves one with no store: KEYS + "drafts" (AyniNet.draftsDb),
+    // KEYS + "mail-files" (email/compose.js). AyniNet.sideDb's opener, kept
     // here: this file runs without gum-api.js (admin, the launcher, the harness).
     function openSide( name, store, keyPath )
     {
@@ -2727,7 +2729,7 @@
         } );
     }
 
-    function openDraftsDb() { return openSide( "nayive-drafts", "drafts", "app" ); }
+    function openDraftsDb() { return openSide( KEYS + "drafts", "drafts", "app" ); }
 
     // fn( objectStore ) -> request, in one transaction; its result, or null.
     function oneTx( db, name, mode, fn )
@@ -2779,9 +2781,7 @@
     // The app that merges a list file's saves, by name, for the sign-out's
     // advice ("open Planner › Tasks to finish saving": Tasks, Calendar and
     // Habits live in Planner). Anything else: its file name.
-    var MERGING_APPS = [ [ "data/tasks.json", "Planner \u203a Tasks" ], [ "data/calendar.ics", "Planner \u203a Calendar" ], [ "data/contacts.vcf", "Contacts" ],
-                         [ "data/habits/", "Planner \u203a Habits" ], [ "data/split/", "Split" ], [ "data/trips/", "Trips" ],
-                         [ "data/games/", "Games" ], [ "data/bookmarks/", "Bookmarks" ] ];
+    var MERGING_APPS = NAMES.mergingApps || [];
 
     function appOf( p )
     {
@@ -2794,7 +2794,7 @@
     }
 
     // Chat's typed, unsent text (chat/compose.js: localStorage
-    // "nayive-chat-draft:<whose>|<world>|<chat>"), as "key\0text": counted and
+    // "ayni-chat-draft:<whose>|<world>|<chat>"), as "key\0text": counted and
     // asked about like every other unsaved thing.
     function chatDrafts()
     {
@@ -2804,7 +2804,7 @@
             for( var i = 0; i < localStorage.length; i++ )
             {
                 var k = localStorage.key( i );
-                var v = k && k.indexOf( "nayive-chat-draft:" ) === 0 ? localStorage.getItem( k ) : null;
+                var v = k && k.indexOf( KEYS + "chat-draft:" ) === 0 ? localStorage.getItem( k ) : null;
                 if( v ) out.push( k + "\u0000" + v );
             }
         }
@@ -2922,7 +2922,7 @@
         // stay (eMail sweeps the ones no draft needs when it next opens).
         if( ! mailKept )
         {
-            var files = await openSide( "nayive-mail-files", "files", "key" );
+            var files = await openSide( KEYS + "mail-files", "files", "key" );
             await oneTx( files, "files", "readwrite", function ( os ) { return os.clear(); } );
             if( files ) files.close();
         }
@@ -3140,7 +3140,7 @@
 
     // hashText( text ) - a short stable name for a text (two 32-bit FNV-1a
     // hashes, 16 hex digits): a key for an item that has none, the same on
-    // every device (shared/ical.js has its own copy, for Node).
+    // every device (shared/ayni/formats/ical.js has its own copy, for Node).
     function hashText( text )
     {
         var a = 0x811c9dc5, b = 0x01000193 ^ 0x5bd1e995;
@@ -3154,7 +3154,7 @@
         return ( "0000000" + a.toString( 16 ) ).slice( -8 ) + ( "0000000" + b.toString( 16 ) ).slice( -8 );
     }
 
-    window.NayiveStore = { createStore: createStore, me: ME, sendWaiting: sendWaiting, sendLeft: sendLeft,
+    window.AyniStore = { createStore: createStore, me: ME, sendWaiting: sendWaiting, sendLeft: sendLeft,
                            pendingElsewhere: pendingElsewhere, dismissPending: dismissPending, pendingText: pendingText, deviceName: deviceName,
                            localCount: localCount, clearLocal: clearLocal, leaveDevice: leaveDevice,
                            mergeLists: mergeLists, mergeFields: mergeFields, mergeSets: mergeSets,

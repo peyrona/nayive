@@ -30,15 +30,15 @@
          phone, never with a query or hash (?here=, enrolment...: this page acts on it), and
          never for an account that must pick its password first (login.html's
          "nayive-must-set": the desktop's apps would all be refused).
-         nayiveDeskMode / nayiveWantDesk (shared/desk-rule.js, the one copy of the
+         ayniDeskMode / ayniWantDesk (shared/ayni/ayni-desk-rule.js, the one copy of the
          rule; the desktop loads it too) are used again below (My account, MOUSE CHIP). -->
-    <script src="shared/desk-rule.js"></script>
+    <script src="shared/ayni/ayni-desk-rule.js" data-key="balata-desktop"></script>
     <script>
     try
     {
         if( window.top === window && ! location.search && ! location.hash &&
             sessionStorage.getItem( 'nayive-must-set' ) !== '1' &&
-            nayiveWantDesk( nayiveDeskMode() ) ) location.replace( 'desktop/' );
+            ayniWantDesk( ayniDeskMode() ) ) location.replace( 'desktop/' );
     }
     catch( e ) {}
     </script>
@@ -47,6 +47,7 @@
          every inline script below may call Ayni.t(). -->
     <script src="shared/i18n.js"></script>
     <script src="shared/ayni/ayni-i18n.js" data-dict="shared/i18n/" data-langs="es en pt fr de"></script>
+    <script src="shared/ayni/ayni-util.js"></script>
     <title>Apps</title>
     <link rel="icon" type="image/png" href="icons/icon-192.png">
 
@@ -63,11 +64,28 @@
     <link rel="stylesheet" href="shared/ayni/ayni-fields.css">
     <link rel="stylesheet" href="shared/ayni/ayni-pickers.css">
     <link rel="stylesheet" href="shared/ayni/ayni-layout.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-schemes.css">
     <link rel="stylesheet" href="shared/theme.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-share.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-pwa.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-locker.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-status.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-shell.css">
     <link rel="stylesheet" href="shared/app.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-doc.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-media.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-image.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-map.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="shared/ayni/ayni-icons.js" defer></script>
     <script src="shared/ayni/ayni-base.js" defer></script>
+    <script src="shared/ayni/ayni-icons-more.js" defer></script>
+    <script src="shared/ayni/ayni-shell.js" defer></script>
+    <script src="shared/ayni/ayni-status.js" defer></script>
+    <script src="shared/ayni/ayni-share.js" defer></script>
+    <script src="shared/ayni/ayni-upload.js" defer></script>
+    <script src="shared/ayni/ayni-pwa.js" defer></script>
+    <script src="shared/ayni/ayni-boot.js" defer></script>
     <script src="shared/ayni/ayni-buttons.js" defer></script>
     <script src="shared/ayni/ayni-toasts.js" defer></script>
     <script src="shared/ayni/ayni-dialogs.js" defer></script>
@@ -78,8 +96,9 @@
     <script src="shared/ayni/ayni-fields.js" defer></script>
     <script src="shared/ayni/ayni-pickers.js" defer></script>
     <script src="shared/ayni/ayni-layout.js" defer></script>
+    <script src="shared/ayni/ayni-schemes.js" defer></script>
     <script src="shared/ui.js" defer></script>
-    <script src="shared/store.js" defer></script>
+    <script src="shared/ayni/ayni-store.js" defer></script>
     <script>
     Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
@@ -95,7 +114,7 @@
                 { sel: '#findBtn',           name: Ayni.t( 'find.title' ), text: Ayni.t( 'launcher.introFind' ), tour: { open: '#moreBtn' } },
                 // The plug of every app, explained once here: it only shows when saving
                 // has trouble, so the app helps can't point at it. Drawn unplugged.
-                { svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 5h2a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-2"></path><rect x="1" y="6" width="6" height="12" rx="2" fill="currentColor" stroke="none"></rect><path d="M7 10h3"></path><path d="M7 14h3"></path></svg>',
+                { svg: Ayni.icon( 'plug-off' ),
                   name: Ayni.t( 'ui.syncName' ), text: Ayni.t( 'launcher.introSync' ), tour: false },
                 { section: Ayni.t( 'launcher.introSettings' ) },
                 { sel: '#gearBtn',           text: Ayni.t( 'launcher.introGear' ) },
@@ -112,6 +131,7 @@
     } );
     </script>
     <script src="shared/locker.js"></script>
+    <script src="shared/ayni/ayni-locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL.
          This one service worker (apps/sw.js) also serves the tasks / calendar / contact / planner shells offline. -->
@@ -131,13 +151,13 @@
         // doesn't fight the first paint; NayiveUI decides whether to actually
         // show anything (installed / declined / unsupported).
         window.addEventListener( 'load', function () {
-            setTimeout( function () { if( window.NayiveUI ) NayiveUI.offerInstall(); }, 1500 );
+            setTimeout( function () { if( window.NayiveUI ) Ayni.pwa.offerInstall(); }, 1500 );
             // Chrome / Edge in the Android app, or a limited browser: the note (NayiveUI
             // decides). Not inside the desktop's menu frame: the desktop shows its own.
-            setTimeout( function () { if( window.NayiveUI && NayiveUI.warnChrome && window.top === window ) NayiveUI.warnChrome(); }, 1500 );
+            setTimeout( function () { if( window.NayiveUI && Ayni.pwa.warnBrowser && window.top === window ) Ayni.pwa.warnBrowser(); }, 1500 );
         } );
         window.addEventListener( 'beforeinstallprompt', function () {
-            setTimeout( function () { if( window.NayiveUI ) NayiveUI.offerInstall(); }, 300 );
+            setTimeout( function () { if( window.NayiveUI ) Ayni.pwa.offerInstall(); }, 300 );
         } );
 
         // The "Instalar app" button in the settings row: opens the same dialog by
@@ -147,9 +167,9 @@
         Ayni.i18n.ready.then( function () {
             var b = document.getElementById( 'installBtn' );
             if( ! b ) return;
-            if( window.NayiveUI && NayiveUI.isStandalone() ) { b.remove(); return; }
+            if( window.NayiveUI && Ayni.pwa.isStandalone() ) { b.remove(); return; }
             b.addEventListener( 'click', function () {
-                if( window.NayiveUI ) NayiveUI.offerInstall( { manual: true } );
+                if( window.NayiveUI ) Ayni.pwa.offerInstall( { manual: true } );
             } );
             window.addEventListener( 'appinstalled', function () { b.remove(); } );
         } );
@@ -228,57 +248,16 @@
         .grid::after  { background: var(--engrave-groove); }
         @media (forced-colors: active) { .grid::before, .grid::after { display: none; } }
 
-        .tile
-        {
-            position: relative;               /* holds Planner's, Chat's and eMail's count badges */
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 10px;
-            width: clamp(88px, 27vw, 110px);
-            padding: 16px 8px 12px;
-            border-radius: var(--radius-l);
-            color: var(--text);
-            text-decoration: none;
-            transition: background .12s ease, transform .1s ease;
-        }
-        .tile:hover  { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-        .tile:active { transform: scale(0.95); }
-
-        .tile svg { width: 40px; height: 40px; color: var(--accent); flex: 0 0 auto; }
-
-        .tile span
-        {
-            font-size: 0.85rem;
-            color: var(--text-dim);
-            text-align: center;
-            line-height: 1.2;
-        }
-        .tile:hover span { color: var(--text); }
-
-        /* Office's and Records' caret: at the icon's bottom-right, not the tile's far
-           corner, its top just under the icon's base line (his ask, 2026-10-07).
-           --icon-base = where the icon's drawing ends inside its 40px box, outer
-           edge of the stroke (measured); --pad-top = the tile's top padding. */
-        .tile.has-popup         { --pad-top: 16px; }
-        #officeBtn              { --icon-base: 36.5px; }
-        #recordsBtn             { --icon-base: 38.2px; }
-        #moreBtn                { --icon-base: 37.3px; }
-        .tile.has-popup::after  { right: auto; bottom: auto; left: calc(50% + 20px);
-                                  top: calc(var(--pad-top) + var(--icon-base)); }
-        /* The desktop's menu: a bit bigger than the toolbar's. */
-        :root.in-desktop .tile.has-popup::after { border-width: 4px 4px 0; }
-
         /* The settings row's buttons are shared .btn buttons; only their
            size is local - the row's geometry is built on 42px. */
-        .tools .btn { width: 42px; height: 42px; }
+        #tools .btn { width: 42px; height: 42px; }
 
         /* Settings row: the gear sits dead-centre on its own. Pressing it rolls the gear
            along to the left border - it spins the whole way - while the other tool
            buttons (theme, account, install, logout) unfold into place to its
            right, one after another. Colour schemes live in the account
            dialog's bottom row (2026-09-19). Pressing it again plays the whole thing in reverse. */
-        .tools
+        #tools
         {
             position: relative;               /* containing block for the absolutely-placed gear */
             container-type: inline-size;       /* lets the gear park itself at 50cqw (row centre) */
@@ -293,7 +272,7 @@
             overflow: hidden;                 /* clips the extras while they widen into place */
             transition: padding-left .55s ease-in-out;
         }
-        .tools.open { padding-left: 42px; }    /* leaves room for the gear at the left edge */
+        #tools.open { padding-left: 42px; }    /* leaves room for the gear at the left edge */
 
         /* The gear is taken out of the flex flow so it can glide from the centre to the
            left border on its own - and, being sized only by itself, it can never be
@@ -316,10 +295,10 @@
             background: color-mix(in srgb, var(--accent) 24%, var(--card2));
             border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
         }
-        .tools.open #gearBtn { transform: translateX(0) translateY(-50%); }   /* at the left edge */
+        #tools.open #gearBtn { transform: translateX(0) translateY(-50%); }   /* at the left edge */
 
         /* Inset ring so .tools' overflow:hidden can't swallow the keyboard focus outline. */
-        .tools .btn:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
+        #tools .btn:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
 
         /* Each extra button is a zero-width slot until the row opens, then it widens in.
            Staggered delays make them arrive (and, on close, leave) one after another. */
@@ -336,7 +315,7 @@
             overflow: hidden;
             transition: width .24s ease, margin-left .24s ease, opacity .2s ease, visibility .24s;
         }
-        .tools:not(.open) .tool-extra
+        #tools:not(.open) .tool-extra
         {
             width: 0;
             margin-left: 0;
@@ -351,14 +330,14 @@
            slot. On CLOSE the gear rolls left-to-right and the order is mirrored: the
            left-most button leaves first, the right-most last.
            nth-child counts the gear as child 1, so the four extras are 2..5. */
-        .tools.open       .tool-extra:nth-child(5) { transition-delay: 0s;   }
-        .tools.open       .tool-extra:nth-child(4) { transition-delay: .11s; }
-        .tools.open       .tool-extra:nth-child(3) { transition-delay: .21s; }
-        .tools.open       .tool-extra:nth-child(2) { transition-delay: .32s; }
-        .tools:not(.open) .tool-extra:nth-child(2) { transition-delay: 0s;   }
-        .tools:not(.open) .tool-extra:nth-child(3) { transition-delay: .11s; }
-        .tools:not(.open) .tool-extra:nth-child(4) { transition-delay: .21s; }
-        .tools:not(.open) .tool-extra:nth-child(5) { transition-delay: .32s; }
+        #tools.open       .tool-extra:nth-child(5) { transition-delay: 0s;   }
+        #tools.open       .tool-extra:nth-child(4) { transition-delay: .11s; }
+        #tools.open       .tool-extra:nth-child(3) { transition-delay: .21s; }
+        #tools.open       .tool-extra:nth-child(2) { transition-delay: .32s; }
+        #tools:not(.open) .tool-extra:nth-child(2) { transition-delay: 0s;   }
+        #tools:not(.open) .tool-extra:nth-child(3) { transition-delay: .11s; }
+        #tools:not(.open) .tool-extra:nth-child(4) { transition-delay: .21s; }
+        #tools:not(.open) .tool-extra:nth-child(5) { transition-delay: .32s; }
 
         .tool-extra svg { width: 20px; height: 20px; }
 
@@ -377,23 +356,14 @@
         #plannerBtn .chat-badge { background: var(--ok); }
 
 
-        /* Office and Records are <button> tiles (they open a popup, not a page). */
-        button.tile { border: 0; background: none; font: inherit; cursor: pointer; }
-
-        /* A tile with nothing to open yet (Find my devices, until there is a
-           phone or a last known position): dimmed and deaf. */
-        button.tile:disabled { opacity: .4; cursor: default; }
-        button.tile:disabled:hover { background: none; }
-        button.tile:disabled:active { transform: none; }
-
         /* Office's and Records' popups: an Ayni tool group (.panel.popup.tools), laid out as ONE
            row of tiles the size of the grid's (the ids outweigh the phone rule's
            width: 100%). Tools has four: two by two. */
         #officeMenu, #recordsMenu, #moreMenu  { flex-direction: row; gap: 4px; min-width: 0; }
-        #officeMenu .tile, #recordsMenu .tile, #moreMenu .tile { width: clamp(88px, 27vw, 110px); }
+        #officeMenu .btn.large, #recordsMenu .btn.large, #moreMenu .btn.large { width: clamp(88px, 27vw, 110px); }
         #moreMenu { flex-wrap: wrap; justify-content: center; max-width: calc(2 * clamp(88px, 27vw, 110px) + 1 * 4px + 2 * 6px + 2px); }
 
-        /* Its dialog, and Mi cuenta's list of phones: rows like .scm-row, not buttons. */
+        /* Its dialog, and Mi cuenta's list of phones: rows like .acct-row, not buttons. */
         .find-row
         {
             display: flex; align-items: center; gap: 8px;
@@ -407,7 +377,7 @@
         .find-note { font-size: 0.8rem; color: var(--text-dim); margin: 10px 0 0; }
         /* Mi cuenta: under each phone, its photo upload switch and folder. */
         .dev-media { padding: 0 6px 0 12px; margin-bottom: 8px; }
-        .dev-media .scm-check-row { margin: 6px 0; }
+        .dev-media .acct-check-row { margin: 6px 0; }
         .dev-media .folder-pick[hidden] { display: none; }
 
         /* Phone (see TWO LAYOUT MODES in shared/app.css): the panel fills the
@@ -421,81 +391,38 @@
             :root:not(.in-desktop) .launcher { padding: 16px 10px; }
             :root:not(.in-desktop) .apps-panel { width: 100%; max-width: 420px; padding: 22px 12px 26px; gap: 22px; }
             :root:not(.in-desktop) .grid     { width: 100%; gap: 8px 4px; justify-items: center; }
-            :root:not(.in-desktop) .tile     { width: 100%; max-width: 110px; padding: 12px 4px 10px; }
-            :root:not(.in-desktop) .tile.has-popup { --pad-top: 12px; }
+            :root:not(.in-desktop) .btn.large { width: 100%; max-width: 110px; padding: 12px 4px 10px; }
         }
 
         /* An on / off row: text · (i) · the shared .switch at the end. */
-        .scm-check-row { display: flex; align-items: center; gap: 6px; margin: 10px 0; }
-        .scm-check-row[hidden] { display: none; }
-        .scm-check { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 0.88rem; cursor: pointer; }
-        .scm-check-row .scm-check { margin: 0; }
-        .scm-check-row > .switch { margin-left: auto; }
+        .acct-check-row { display: flex; align-items: center; gap: 6px; margin: 10px 0; }
+        .acct-check-row[hidden] { display: none; }
+        .acct-check { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 0.88rem; cursor: pointer; }
+        .acct-check-row .acct-check { margin: 0; }
+        .acct-check-row > .switch { margin-left: auto; }
 
         /* ---- The three dialogs (Esquemas de color, Mi cuenta, Buscar mi móvil) ----
            Ayni's dialog.panel, opened with showModal() and closed with close(), so
            Ayni gives them its Escape, focus and moving, and "a dialog is open"
            guards see them. Esquemas, opened from Mi cuenta, is the innermost one
            (drawn over it, closed first by Escape). */
-        .scm-h
+        .acct-h
         {
             font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
             color: var(--text-faint); margin: 18px 0 8px;
         }
 
-        .scm-list { display: flex; flex-direction: column; gap: 6px; }
-        .scm-row
-        {
-            display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
-            background: var(--card2); border: 1px solid var(--line); border-radius: 10px;
-            padding: 8px 10px; color: var(--text); font: inherit; font-size: 0.88rem; cursor: pointer;
-        }
-        .scm-row.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-        .scm-sw { display: flex; flex: 0 0 auto; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
-        .scm-sw i { width: 10px; height: 18px; display: block; }
-        .scm-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .scm-kind { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); }
-        .scm-badge
-        {
-            font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;
-            background: var(--accent); color: var(--on-accent); border-radius: var(--radius-pill); padding: 1px 7px;
-        }
+        .acct-list { display: flex; flex-direction: column; gap: 6px; }
+        .acct-msg { font-size: 0.8rem; color: var(--danger); margin: 10px 0 0; }
+        .acct-msg[hidden] { display: none; }
 
-        /* Look from app.css (FORM FIELD); only width and the gap are local. */
-        .scm-input { width: 100%; margin: 10px 0; }
-
-        .scm-seg { display: flex; align-items: center; gap: 6px; }   /* a choice row of two */
-
-        /* Name field and the Dark / Light switch share one row; both take the row's height. */
-        .scm-name-row { display: flex; align-items: stretch; gap: 8px; margin: 10px 0; }
-        .scm-name-row .scm-input { flex: 1 1 auto; min-width: 0; width: auto; margin: 0; }
-        .scm-name-row .scm-seg { flex: 0 0 auto; }
-
-        .scm-tok { display: flex; align-items: center; gap: 10px; margin: 9px 0; }
-        .scm-tok input[type="color"]
-        {
-            width: 32px; height: 32px; flex: 0 0 auto; border: none; background: none; padding: 0;
-            border-radius: 7px; cursor: pointer; box-shadow: inset 0 0 0 1px var(--line);
-        }
-        .scm-tok input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
-        .scm-tok input[type="color"]::-webkit-color-swatch { border: none; border-radius: 7px; }
-        .scm-tok code { flex: 1 1 auto; font-size: 0.82rem; color: var(--text-dim); font-family: ui-monospace, Menlo, Consolas, monospace; }
-        .scm-tok input[type="text"]      /* the shared field look (app.css); a hex code's layout only */
-        {
-            width: 96px; flex: 0 0 auto; text-align: center; text-transform: uppercase;
-            font-family: ui-monospace, Menlo, Consolas, monospace;
-        }
-        .scm-tok input[type="text"].bad { border-color: var(--danger); color: var(--danger); }
-        .scm-msg { font-size: 0.8rem; color: var(--danger); margin: 10px 0 0; }
-        .scm-msg[hidden] { display: none; }
-
-        .scm-assign { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; font-size: 0.88rem; }
-        .scm-assign.scm-assign-inline { justify-content: flex-start; }   /* spinner sits right after the label, not pushed to the edge */
-        .scm-assign .picker { min-width: 120px; max-width: 190px; }   /* Ayni's list picker */
+        .acct-assign { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; font-size: 0.88rem; }
+        .acct-assign.acct-assign-inline { justify-content: flex-start; }   /* spinner sits right after the label, not pushed to the edge */
+        .acct-assign .picker { min-width: 120px; max-width: 190px; }   /* Ayni's list picker */
         /* Colour schemes: the dark and light pickers share one row, half each. */
-        .scm-assign-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 8px 0; }
-        .scm-assign-row .scm-assign { margin: 0; min-width: 0; }
-        .scm-assign-row .scm-assign .picker { flex: 1 1 auto; min-width: 0; max-width: none; }
+        .acct-assign-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 8px 0; }
+        .acct-assign-row .acct-assign { margin: 0; min-width: 0; }
+        .acct-assign-row .acct-assign .picker { flex: 1 1 auto; min-width: 0; max-width: none; }
         /* The zone list is the widest select in the dialog, and on a narrow phone
            it left too little for its own label ("Fuseau horaire" wrapped). Cap it
            at a share of the row instead, so the label always gets one line. */
@@ -515,66 +442,66 @@
                  Trips+Drive+Games -->
             <!-- Calendar and Tasks have no tile of their own (2026-09-06): both open inside Planner. -->
             <!-- Planner: today's events still to come ride on its icon (2026-10-28). -->
-            <a class="tile" id="plannerBtn" href="planner/index.html">
+            <a class="btn large" id="plannerBtn" href="planner/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                 <span>Planner</span>
                 <b class="chat-badge" hidden></b>
             </a>
             <!-- Chat (2026-09-19): the unread count rides on its icon. The admin has
                  no chat: the script below hides the tile but keeps its slot. -->
-            <a class="tile" id="chatBtn" href="chat/index.html">
+            <a class="btn large" id="chatBtn" href="chat/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
                 <span>Chat</span>
                 <b class="chat-badge" hidden></b>
             </a>
             <!-- eMail (2026-09-26): the unread count of every account's Inbox rides on
                  its icon, like Chat's. The admin has no mail: hidden, slot kept. -->
-            <a class="tile" id="mailBtn" href="email/index.html">
+            <a class="btn large" id="mailBtn" href="email/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><polyline points="22 6 12 13 2 6"></polyline></svg>
                 <span>eMail</span>
                 <b class="chat-badge" hidden></b>
             </a>
 
             <!-- Office (2026-09-23): Write, Calc and Text in a popup (#officeMenu, under the grid). -->
-            <button class="tile" id="officeBtn" type="button" popovertarget="officeMenu" aria-haspopup="true">
+            <button class="btn large" id="officeBtn" type="button" popovertarget="officeMenu" aria-haspopup="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
                 <span>Office</span>
             </button>
             <!-- Records (2026-09-23): Contacts, Bookmarks and Passwords in a popup (#recordsMenu, under the grid). -->
-            <button class="tile" id="recordsBtn" type="button" popovertarget="recordsMenu" aria-haspopup="true">
+            <button class="btn large" id="recordsBtn" type="button" popovertarget="recordsMenu" aria-haspopup="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="10" y1="7" x2="14" y2="7"></line><line x1="10" y1="17" x2="14" y2="17"></line></svg>
                 <span>Records</span>
             </button>
             <!-- Tools (2026-10-28): Find my devices, Split, Language and Calculator
                  in a popup (#moreMenu, under the grid). -->
-            <button class="tile" id="moreBtn" type="button" popovertarget="moreMenu" aria-haspopup="true">
+            <button class="btn large" id="moreBtn" type="button" popovertarget="moreMenu" aria-haspopup="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
                 <span>Tools</span>
             </button>
 
-            <a class="tile" href="photos/index.html">
+            <a class="btn large" href="photos/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="16" height="16" rx="2"></rect><circle cx="12" cy="8" r="2"></circle><path d="m22 13-1.3-1.3a2.4 2.4 0 0 0-3.4 0L11 18"></path><path d="M18 22H4a2 2 0 0 1-2-2V6"></path></svg>
                 <span>Photos</span>
             </a>
-            <a class="tile" href="music/index.html">
+            <a class="btn large" href="music/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
                 <span>Music</span>
             </a>
-            <a class="tile" href="movies/index.html">
+            <a class="btn large" href="movies/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>
                 <span>Movies</span>
             </a>
 
-            <a class="tile" href="trips/index.html">
+            <a class="btn large" href="trips/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="5.5" cy="9" rx="2" ry="2.5"></ellipse><ellipse cx="12" cy="6" rx="2.1" ry="2.6"></ellipse><ellipse cx="18.5" cy="9" rx="2" ry="2.5"></ellipse><path d="M12 12c-4.5 0-7.8 2-7.8 4.4 0 2 2.55 3.3 5.4 2.9 1.35-.2 1.5-.7 2.4-.7s1.05.5 2.4.7c2.85.4 5.4-.9 5.4-2.9C19.8 14 16.5 12 12 12z"></path></svg>
                 <span>Trips</span>
             </a>
-            <a class="tile" href="drive/index.html">
+            <a class="btn large" href="drive/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"></path></svg>
                 <span>Drive</span>
             </a>
             <!-- Habits has no tile (2026-09-06): it opens inside Planner. -->
-            <a class="tile" href="games/index.html">
+            <a class="btn large" href="games/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="11" x2="10" y2="11"></line><line x1="8" y1="9" x2="8" y2="13"></line><line x1="15" y1="12" x2="15.01" y2="12"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><path d="M17.32 5H6.68a4 4 0 0 0-3.98 3.59c-.08.67-.7 5.87-.7 7.41a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.41-1.41A2 2 0 0 1 9.83 16h4.34a2 2 0 0 1 1.41.59L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.54-.62-6.74-.7-7.41A4 4 0 0 0 17.32 5z"></path></svg>
                 <span>Games</span>
             </a>
@@ -585,29 +512,29 @@
              on the tile) holding one row of real launcher tiles - links, so the
              desktop's menu opens them as windows, like the grid's. -->
         <div class="panel popup tools" popover id="officeMenu" role="group" aria-labelledby="officeBtn">
-            <a class="tile" href="write/index.html">
+            <a class="btn large" href="write/index.html">
                 <svg viewBox="0 0 512 512" fill="currentColor"><g transform="translate(45 465) rotate(-48)"><path d="M0 0 28 -14 82 -36C96 -36 110 -27 122 -19L122 19C110 27 96 36 82 36L28 14Z"></path><rect x="132" y="-26" width="350" height="52"></rect><path d="M494 -26 522 -26C542 -26 550 -14 550 0 550 14 542 26 522 26L494 26Z"></path></g><rect x="262" y="220" width="176" height="50" rx="12"></rect><path fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" d="M294 270 294 300C294 314 228 312 228 332L228 445C228 460 240 472 255 472L445 472C460 472 472 460 472 445L472 332C472 312 406 314 406 300L406 270"></path><path d="M228 355 472 355 472 445C472 460 460 472 445 472L255 472C240 472 228 460 228 445Z"></path></svg>
                 <span>Write</span>
             </a>
-            <a class="tile" href="calc/index.html">
+            <a class="btn large" href="calc/index.html">
                 <svg viewBox="0 0 512 512" fill="currentColor"><g transform="translate(-213.2 -558.1) scale(1.8891 3.2191)"><g transform="translate(37.3 3.7)"><path d="m 159.5,210.8 v 7.2 h 25.2 v 16.5 H 159.5 V 300 h -21.5 v -65.6 h -19.9 v -16.5 h 19.9 v -5.7 q 0,-14.8 6.2,-20.5 6.2,-5.7 22.9,-5.7 h 17.7 v 16.5 h -16.8 q -4.8,0 -6.6,1.8 -1.7,1.8 -1.8,6.5 z"></path><g transform="translate(67.4 112.5) scale(.625)"><path d="m 243.4,186.2 q -9.7,17.5 -14.4,33.9 -4.7,16.4 -4.7,32.8 0,16.3 4.7,32.8 4.7,16.5 14.4,34.1 h -16.7 q -11.6,-16.9 -17.3,-33.3 -5.6,-16.5 -5.6,-33.5 0,-17 5.6,-33.5 5.7,-16.6 17.3,-33.3 z"></path><path d="M 329.9,218 302.2,257.2 332.3,300 H 307.2 L 291.1,272.4 275.1,300 h -25 l 30.3,-42.8 -27.9,-39.3 h 25 l 13.6,24.5 13.7,-24.5 z"></path><path d="m 338.9,186.2 h 16.7 q 11.6,16.7 17.2,33.3 5.7,16.5 5.7,33.5 0,17.1 -5.6,33.5 -5.6,16.4 -17.3,33.3 h -16.7 q 9.7,-17.6 14.4,-34.1 4.7,-16.6 4.7,-32.8 0,-16.4 -4.7,-32.8 -4.7,-16.4 -14.4,-33.9 z"></path></g></g></g></svg>
                 <span>Calc</span>
             </a>
-            <a class="tile" href="text/index.html">
+            <a class="btn large" href="text/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline><line x1="14" y1="4" x2="10" y2="20"></line></svg>
                 <span>Text</span>
             </a>
         </div>
         <div class="panel popup tools" popover id="recordsMenu" role="group" aria-labelledby="recordsBtn">
-            <a class="tile" href="contact/index.html">
+            <a class="btn large" href="contact/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"></rect><circle cx="9" cy="11" r="2.2"></circle><path d="M5.5 17.5c0-2.2 1.7-3.3 3.5-3.3s3.5 1.1 3.5 3.3"></path><line x1="14" y1="10" x2="18" y2="10"></line><line x1="14" y1="14" x2="18" y2="14"></line></svg>
                 <span>Contacts</span>
             </a>
-            <a class="tile" href="bookmarks/index.html">
+            <a class="btn large" href="bookmarks/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
                 <span>Bookmarks</span>
             </a>
-            <a class="tile" href="passwords/index.html">
+            <a class="btn large" href="passwords/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="M10.7 12.3 21 2"></path><path d="m15.5 7.5 3 3"></path><path d="m18 5 2.5 2.5"></path></svg>
                 <span>Passwords</span>
             </a>
@@ -616,19 +543,19 @@
         <!-- Tools' popup (2026-10-28). -->
         <div class="panel popup tools" popover id="moreMenu" role="group" aria-labelledby="moreBtn">
             <!-- Find my devices: disabled until the script below finds a phone or a last known position. -->
-            <button class="tile" id="findBtn" type="button" disabled>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v5"></path><line x1="9.5" y1="18" x2="9.51" y2="18"></line><circle cx="16.5" cy="14.5" r="3.5"></circle><line x1="19" y1="17" x2="22" y2="20"></line></svg>
+            <button class="btn large" id="findBtn" type="button" aria-disabled="true">
+                <span class="icon" data-icon="phone-find"></span>
                 <span data-i18n="find.title"></span>
             </button>
-            <a class="tile" href="split/index.html">
+            <a class="btn large" href="split/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 7A7 7 0 1 0 16.5 17"></path><line x1="3" y1="10.2" x2="13.5" y2="10.2"></line><line x1="3" y1="13.8" x2="13.5" y2="13.8"></line></svg>
                 <span>Split</span>
             </a>
-            <a class="tile" href="language/index.html">
+            <a class="btn large" href="language/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="6.5"></circle><ellipse cx="9" cy="9" rx="2.8" ry="6.5"></ellipse><path d="M2.5 9h13"></path><path d="M15 14h5.5a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3l-2.5 2.2v-2.2a1.5 1.5 0 0 1-1.5-1.5v-3a1.5 1.5 0 0 1 1.5-1.5z"></path></svg>
                 <span>Language</span>
             </a>
-            <a class="tile" href="calculator/index.html">
+            <a class="btn large" href="calculator/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"></path></svg>
                 <span>Calculator</span>
             </a>
@@ -653,7 +580,7 @@
             </button>
 
             <a class="btn tool-extra" id="logoutBtn" href="#" data-i18n-attr="data-tip:launcher.logout, aria-label:launcher.logout">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                <span class="icon" data-icon="sign-out" style="--icon:18px"></span>
             </a>
 
         </div>
@@ -667,14 +594,8 @@
     <dialog class="panel" id="pwBackdrop" data-i18n-attr="aria-label:ui.account">
         <header>
             <h2 data-i18n="ui.account"></h2>
-            <button class="btn" id="schemesBtn" type="button" data-i18n-attr="data-tip:ui.colorSchemes, aria-label:ui.colorSchemes">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="13.5" cy="6.5" r="1.1" fill="currentColor" stroke="none"></circle>
-                    <circle cx="17" cy="10.5" r="1.1" fill="currentColor" stroke="none"></circle>
-                    <circle cx="8.5" cy="7.5" r="1.1" fill="currentColor" stroke="none"></circle>
-                    <circle cx="6.5" cy="12" r="1.1" fill="currentColor" stroke="none"></circle>
-                    <path d="M12 2.5C6.75 2.5 2.5 6.75 2.5 12S6.75 21.5 12 21.5c1 0 1.7-.8 1.7-1.75 0-.45-.18-.85-.45-1.15-.28-.3-.45-.68-.45-1.1a1.7 1.7 0 0 1 1.7-1.7h2C19.5 14.6 21.5 12.6 21.5 10 21.5 5.9 17.3 2.5 12 2.5Z"></path>
-                </svg>
+            <button class="btn" id="schemesBtn" type="button" data-i18n-attr="data-tip:ayni.scm.title, aria-label:ayni.scm.title">
+                <span class="icon" data-icon="palette" style="--icon:18px"></span>
             </button>
             <button class="btn" id="acctClose" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
         </header>
@@ -682,12 +603,12 @@
             <!-- Close-only, the GNOME way (docs/audit/dialogs.md): every row saves
                  itself on change, so the dialog has just its ×. The password,
                  the one thing that needs a ✓, has its own small dialog below. -->
-            <div class="scm-assign">
+            <div class="acct-assign">
                 <span data-i18n="lock.password"></span>
                 <button id="pwChangeBtn" type="button" class="btn text bordered sm" data-i18n="acct.changePwBtn"></button>
             </div>
 
-            <div class="scm-assign">
+            <div class="acct-assign">
                 <label for="langSel" data-i18n="acct.languagePrompt"></label>
                 <!-- An Ayni list picker. The first item = no choice made: the
                      browser's language decides. The rest are endonyms and stay literal. -->
@@ -703,32 +624,32 @@
                     </ul></div>
                 </div>
             </div>
-            <p class="scm-msg" id="langMsg" hidden></p>
+            <p class="acct-msg" id="langMsg" hidden></p>
 
-            <div class="scm-assign">
+            <div class="acct-assign">
                 <label for="tzSel" data-i18n="acct.timezone"></label>
                 <!-- An Ayni filtered list, filled from Intl.supportedValuesOf('timeZone'):
                      the browser's own IANA database; typing narrows it, and a zone
                      that does not exist is never taken. -->
                 <div class="picker" id="tzSel" data-picker="filter"></div>
             </div>
-            <p class="scm-msg" id="tzMsg" hidden></p>
+            <p class="acct-msg" id="tzMsg" hidden></p>
 
             <!-- Automatic light/dark. Unlike the timezone this is DEVICE state,
                  not account state (shared/theme.js keeps it in localStorage):
                  the person is one, but the phone and the PC can be in different
                  places, and each must follow its own sun. -->
-            <div class="scm-check-row" id="autoThemeWrap">
-                <label class="scm-check" for="autoThemeChk"><span data-i18n="acct.themeAuto"></span></label>
+            <div class="acct-check-row" id="autoThemeWrap">
+                <label class="acct-check" for="autoThemeChk"><span data-i18n="acct.themeAuto"></span></label>
                 <button class="info-tip" data-i18n-attr="data-help:acct.themeAutoInfo"></button>
                 <label class="switch"><input role="switch" type="checkbox" id="autoThemeChk"></label>
             </div>
-            <p class="scm-msg" id="autoThemeMsg" hidden></p>
+            <p class="acct-msg" id="autoThemeMsg" hidden></p>
 
             <!-- Open the desktop: Auto / Always / Never - DEVICE state too (see the
                  <head>). The ONLY place for it (one action, one knob): a big screen,
                  or inside the desktop (it follows the change, see its OPEN THE DESKTOP). -->
-            <div class="scm-assign" id="deskModeWrap" hidden>
+            <div class="acct-assign" id="deskModeWrap" hidden>
                 <span><label for="deskModeSel" data-i18n="desktop.openMode"></label> <button class="info-tip" type="button" data-i18n-attr="data-help:desktop.openModeInfo"></button></span>
                 <div class="picker" id="deskModeSel">
                     <input type="hidden" value="auto">
@@ -740,19 +661,19 @@
                 </div>
             </div>
 
-            <div class="scm-check-row" id="pushChkWrap">
-                <label class="scm-check" for="pushChk"><span data-i18n="acct.notifsOff"></span></label>
+            <div class="acct-check-row" id="pushChkWrap">
+                <label class="acct-check" for="pushChk"><span data-i18n="acct.notifsOff"></span></label>
                 <button class="info-tip" data-i18n-attr="data-help:acct.notifsInfo"></button>
                 <label class="switch"><input role="switch" type="checkbox" id="pushChk"></label>
             </div>
             <!-- "Remind me N min before" lives in Planner › Settings (2026-09-27):
                  only events use it. -->
-            <p class="scm-msg" id="pushMsg" hidden></p>
+            <p class="acct-msg" id="pushMsg" hidden></p>
 
             <!-- Phones with the Android app (server/go/devices.go); only when there is one. -->
             <div id="devWrap" hidden>
-                <p class="scm-h" data-i18n="dev.title"></p>
-                <div class="scm-list" id="devList"></div>
+                <p class="acct-h" data-i18n="dev.title"></p>
+                <div class="acct-list" id="devList"></div>
             </div>
         </div>
     </dialog>
@@ -775,53 +696,12 @@
                 <button type="button" class="btn" data-reveal></button>
             </div>
 
-            <p class="scm-msg" id="pwMsg" hidden></p>
+            <p class="acct-msg" id="pwMsg" hidden></p>
         </div>
         <footer>
             <button class="btn" id="pwCancel" type="button" data-close data-i18n-attr="data-tip:ui.cancel"><span class="icon" data-icon="close"></span></button>
             <button class="btn primary" id="pwSave"   type="button" data-i18n-attr="data-tip:ui.save"><span class="icon" data-icon="check"></span></button>
         </footer>
-    </dialog>
-
-    <!-- "Esquemas de color" dialog - opened by the palette button in the settings row. -->
-    <dialog class="panel" id="scmBackdrop" data-i18n-attr="aria-label:ui.colorSchemes">
-        <header>
-            <h2 data-i18n="ui.colorSchemes"></h2>
-            <button class="btn" id="scmCloseBtn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
-        </header>
-        <div class="body">
-            <p class="scm-h" data-i18n="scm.saved"></p>
-            <div class="scm-list" id="scmList"></div>
-
-            <p class="scm-h" id="scmEditTitle"><span data-i18n="scm.edit"></span><button class="info-tip" data-i18n-attr="data-help:scm.info"></button></p>
-            <div class="scm-name-row">
-                <input class="input scm-input" id="scmName" spellcheck="false" autocomplete="off" data-i18n-attr="placeholder:scm.namePh">
-                <div class="scm-seg" role="group" data-i18n-attr="aria-label:scm.kind">
-                    <button type="button" class="btn text sm bordered" aria-pressed="false" data-kind="dark" id="scmKindDark" data-i18n="scm.dark"></button>
-                    <button type="button" class="btn text sm bordered" aria-pressed="false" data-kind="light" id="scmKindLight" data-i18n="scm.light"></button>
-                </div>
-            </div>
-            <div id="scmTokens">
-                <label class="scm-tok"><input type="color" data-k="--bg" aria-label="--bg"><code>--bg</code><input class="input" type="text" data-k="--bg" maxlength="7" spellcheck="false" aria-label="--bg hex"></label>
-                <label class="scm-tok"><input type="color" data-k="--card" aria-label="--card"><code>--card</code><input class="input" type="text" data-k="--card" maxlength="7" spellcheck="false" aria-label="--card hex"></label>
-                <label class="scm-tok"><input type="color" data-k="--card2" aria-label="--card2"><code>--card2</code><input class="input" type="text" data-k="--card2" maxlength="7" spellcheck="false" aria-label="--card2 hex"></label>
-                <label class="scm-tok"><input type="color" data-k="--line" aria-label="--line"><code>--line</code><input class="input" type="text" data-k="--line" maxlength="7" spellcheck="false" aria-label="--line hex"></label>
-                <label class="scm-tok"><input type="color" data-k="--accent" aria-label="--accent"><code>--accent</code><input class="input" type="text" data-k="--accent" maxlength="7" spellcheck="false" aria-label="--accent hex"></label>
-            </div>
-            <p class="scm-msg" id="scmAccentMsg" hidden></p>
-            <div class="actions-row">
-                <div class="extra"><button id="scmDelete"  class="btn danger" type="button" data-i18n-attr="data-tip:scm.deleteThis"><span class="icon" data-icon="trash"></span></button></div>
-                <button class="btn" id="scmSaveNew" type="button" data-i18n-attr="data-tip:scm.saveAsNew"><span class="icon" data-icon="save-as"></span></button>
-                <button class="btn primary" id="scmSave"    type="button" data-i18n-attr="data-tip:scm.saveChanges"><span class="icon" data-icon="check"></span></button>
-            </div>
-            <p class="scm-msg" id="scmMsg" hidden></p>
-
-            <p class="scm-h" data-i18n="scm.assignHead"></p>
-            <div class="scm-assign-row">
-                <div class="scm-assign"><label for="scmActiveDark" data-i18n="scm.dark"></label><div class="picker" id="scmActiveDark"></div></div>
-                <div class="scm-assign"><label for="scmActiveLight" data-i18n="scm.light"></label><div class="picker" id="scmActiveLight"></div></div>
-            </div>
-        </div>
     </dialog>
 
     <!-- "Buscar mi móvil" (server/go/devices.go): ring a phone that has the
@@ -834,14 +714,14 @@
         </header>
         <div class="body">
             <div id="findPhonesWrap" hidden>
-                <p class="scm-h" data-i18n="find.phones"></p>
-                <div class="scm-list" id="findPhones"></div>
+                <p class="acct-h" data-i18n="find.phones"></p>
+                <div class="acct-list" id="findPhones"></div>
             </div>
-            <p class="scm-h" data-i18n="find.last"></p>
-            <div class="scm-list" id="findLast"></div>
+            <p class="acct-h" data-i18n="find.last"></p>
+            <div class="acct-list" id="findLast"></div>
             <div id="findAskWrap" hidden>
-                <p class="scm-h" data-i18n="find.others"></p>
-                <div class="scm-list" id="findAsk"></div>
+                <p class="acct-h" data-i18n="find.others"></p>
+                <div class="acct-list" id="findAsk"></div>
                 <p class="find-note" data-i18n="find.iphone"></p>
             </div>
         </div>
@@ -861,7 +741,7 @@
             {
                 try { if( sessionStorage.getItem( 'nayive-must-set' ) === '1' ) return; } catch( e ) {}
                 if( ! fine.matches || ! window.NayiveUI || location.search || location.hash ||
-                    nayiveDeskMode() !== 'auto' || ! nayiveWantDesk( 'auto' ) ) return;
+                    ayniDeskMode() !== 'auto' || ! ayniWantDesk( 'auto' ) ) return;
                 Ayni.toast( 'info', Ayni.t( 'desktop.toDeskAsk' ),
                             { action: { label: Ayni.t( 'desktop.toDeskGo' ), icon: 'apps', run: function () { location.replace( 'desktop/' ); } } } );
             }
@@ -874,8 +754,7 @@
         // keeps its slot, so the grid does not shift. Planner's is today's
         // events still to come on this device's clock (2026-10-28): it also
         // asks every minute, as events go by; the admin just gets 0.
-        var zone = '';
-        try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch( e ) {}
+        var zone = Ayni.dates.zone( '' );
         [ [ 'chatBtn', '/api/chat/unread' ], [ 'mailBtn', '/api/mail/unread' ],
           [ 'plannerBtn', '/api/calendar/today?tz=' + encodeURIComponent( zone ) ] ].forEach( function ( tile )
         {
@@ -999,344 +878,12 @@
                 if( btn && btn !== gear && tools.classList.contains( 'open' ) ) setOpen( false );
             }, true );
 
+            document.getElementById( 'schemesBtn' ).addEventListener( 'click', function () { Ayni.schemeDialog(); } );
+
             document.addEventListener( 'keydown', function ( e )
             {
-                if( e.key === 'Escape' && tools.classList.contains( 'open' ) && ! scmBack.open ) setOpen( false );
+                if( e.key === 'Escape' && tools.classList.contains( 'open' ) && ! ( document.getElementById( 'scmBackdrop' ) || {} ).open ) setOpen( false );
             } );
-
-            /* ---- "Esquemas de color" ---------------------------------- */
-            var KEY   = 'ayni-schemes';
-            var NKEYS = [ '--bg', '--card', '--card2', '--line', '--accent' ];   // what the dialog edits
-            // The highlight colour: theme.css's accent per mode, used when a scheme has
-            // none of its own. Its text colour (--on-accent) is never typed - onAccent()
-            // picks theme.css's dark or light ink, whichever reads better on it.
-            var ACCENT     = { dark: '#1f80b1', light: '#61410a' };
-            var INK        = { dark: '#0D0F17', light: '#F9F9FB' };
-            var LOW_ACCENT = 3;   // accent contrast on page / cards / fields below this -> warn
-            var HEX   = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
-            // The built-in schemes' names are DATA, not interface text: they are
-            // written into localStorage (and the user can rename them), so they stay
-            // literal in every language - like "Beige" beside them.
-            // Bump SEED_VERSION whenever a built-in changes or is added: load() then
-            // brings stored data up to date (see upgrade()).
-            var SEED_VERSION = 4;
-            var SEED  = {
-                schemes: [
-                    { id: 'dark-default',  name: 'Oscuro', kind: 'dark',  tokens: { '--bg': '#1E1F23', '--card': '#25272B', '--card2': '#2F3034', '--line': '#424349', '--accent': '#1F80B1', '--on-accent': '#0D0F17' } },
-                    { id: 'dark-noche',    name: 'Noche',  kind: 'dark',  tokens: { '--bg': '#101722', '--card': '#18202C', '--card2': '#212B38', '--line': '#353F4E', '--accent': '#16A085', '--on-accent': '#0D0F17' } },
-                    { id: 'light-default', name: 'Beige',  kind: 'light', tokens: { '--bg': '#D8D0C0', '--card': '#E3DCCC', '--card2': '#F2ECDF', '--line': '#86714B', '--accent': '#61410A', '--on-accent': '#F9F9FB' } },
-                    { id: 'light-niebla',  name: 'Niebla', kind: 'light', tokens: { '--bg': '#D4DBD9', '--card': '#DFE5E3', '--card2': '#F0F5F3', '--line': '#76847F', '--accent': '#0A4061', '--on-accent': '#F9F9FB' } }
-                ],
-                activeDark: 'dark-default',
-                activeLight: 'light-default',
-                seedVersion: SEED_VERSION
-            };
-            // The built-ins as older versions shipped them: a stored copy still equal
-            // to one of these was never edited, so upgrade() may refresh it.
-            var SEED_OLD = {
-                'dark-default':  [ { '--bg': '#1E1F23', '--card': '#25272B', '--card2': '#2F3034', '--line': '#343539' },
-                                   { '--bg': '#1E1F23', '--card': '#25272B', '--card2': '#2F3034', '--line': '#424349', '--accent': '#16A085' },
-                                   { '--bg': '#1E1F23', '--card': '#25272B', '--card2': '#2F3034', '--line': '#424349', '--accent': '#0876A6' } ],
-                'light-default': [ { '--bg': '#D8D0C0', '--card': '#E0D9CB', '--card2': '#F2ECDF', '--line': '#735C2E' },
-                                   { '--bg': '#D8D0C0', '--card': '#E3DCCC', '--card2': '#F2ECDF', '--line': '#86714B', '--accent': '#0A6151' } ],
-                'light-niebla':  [ { '--bg': '#D4DBD9', '--card': '#DFE5E3', '--card2': '#F0F5F3', '--line': '#76847F', '--accent': '#0A6151' } ]
-            };
-            // The SEED_VERSION that first shipped each built-in (1 when not listed).
-            var SEED_BORN = { 'dark-noche': 2, 'light-niebla': 2 };
-
-            var root     = document.documentElement;
-            var openBtn  = document.getElementById( 'schemesBtn' );
-            var scmBack  = document.getElementById( 'scmBackdrop' );
-            var listEl   = document.getElementById( 'scmList' );
-            var nameEl   = document.getElementById( 'scmName' );
-            var titleEl  = document.getElementById( 'scmEditTitle' );
-            var kindDark = document.getElementById( 'scmKindDark' );
-            var kindLite = document.getElementById( 'scmKindLight' );
-            var saveBtn  = document.getElementById( 'scmSave' );
-            var newBtn   = document.getElementById( 'scmSaveNew' );
-            var delBtn   = document.getElementById( 'scmDelete' );
-            var msgEl    = document.getElementById( 'scmMsg' );
-            var selDark  = document.getElementById( 'scmActiveDark' );
-            var selLite  = document.getElementById( 'scmActiveLight' );
-            var closeBtn = document.getElementById( 'scmCloseBtn' );
-            var accentMsg = document.getElementById( 'scmAccentMsg' );
-
-            var col = {}, hex = {};
-            scmBack.querySelectorAll( '.scm-tok input[type="color"]' ).forEach( function ( el ){ col[ el.dataset.k ] = el; } );
-            scmBack.querySelectorAll( '.scm-tok input[type="text"]'  ).forEach( function ( el ){ hex[ el.dataset.k ] = el; } );
-
-            var data      = load();
-            var editingId = null;
-            var draft     = null;
-
-            function load()
-            {
-                try
-                {
-                    var d = JSON.parse( localStorage.getItem( KEY ) || 'null' );
-                    if( d && d.schemes && d.schemes.some( isDark ) && d.schemes.some( isLight ) ) return upgrade( d );
-                }
-                catch ( e ) { /* ignore */ }
-                return JSON.parse( JSON.stringify( SEED ) );
-            }
-            // Stored data from an older SEED_VERSION: add the built-ins it lacks
-            // (only NEW ones - an old built-in the user deleted stays deleted) and
-            // refresh an old built-in the user never edited. Saved at once, so every
-            // other app picks the new tones up through theme.js.
-            function upgrade( d )
-            {
-                var from = d.seedVersion || 1;
-                if( from >= SEED_VERSION ) return d;
-                SEED.schemes.forEach( function ( s )
-                {
-                    var have = null, last = -1;
-                    for( var i = 0; i < d.schemes.length; i++ )
-                    {
-                        if( d.schemes[ i ].id === s.id )     have = d.schemes[ i ];
-                        if( d.schemes[ i ].kind === s.kind ) last = i;
-                    }
-                    if( have )
-                    {
-                        if( ( SEED_OLD[ s.id ] || [] ).some( function ( o ){ return sameTokens( have.tokens, o ); } ) ) have.tokens = JSON.parse( JSON.stringify( s.tokens ) );
-                    }
-                    else if( ( SEED_BORN[ s.id ] || 1 ) > from ) d.schemes.splice( last + 1, 0, JSON.parse( JSON.stringify( s ) ) );
-                } );
-                d.seedVersion = SEED_VERSION;
-                try { localStorage.setItem( KEY, JSON.stringify( d ) ); } catch ( e ) {}
-                return d;
-            }
-            function sameTokens( a, b ){ return Object.keys( b ).every( function ( k ){ return String( ( a && a[ k ] ) || '' ).toLowerCase() === b[ k ].toLowerCase(); } ); }
-            // A scheme's editable tokens, with the mode's default accent when it has no accent yet.
-            function tokensOf( s ){ var t = {}; NKEYS.forEach( function ( k ){ t[ k ] = ( s.tokens && s.tokens[ k ] ) || ( k === '--accent' ? ACCENT[ s.kind ] : '' ); } ); return t; }
-            // What gets stored: the edited tokens plus the derived --on-accent.
-            function toStore( t ){ var o = {}; NKEYS.forEach( function ( k ){ o[ k ] = t[ k ]; } ); o[ '--on-accent' ] = onAccent( t[ '--accent' ] ); return o; }
-            function lum( h )
-            {
-                var n = parseInt( h.slice( 1 ), 16 ), w = [ 0.2126, 0.7152, 0.0722 ];
-                return [ n >> 16 & 255, n >> 8 & 255, n & 255 ].reduce( function ( sum, v, i )
-                {
-                    v /= 255;
-                    return sum + w[ i ] * ( v <= 0.03928 ? v / 12.92 : Math.pow( ( v + 0.055 ) / 1.055, 2.4 ) );
-                }, 0 );
-            }
-            function contrast( a, b ){ var x = lum( a ), y = lum( b ); return ( Math.max( x, y ) + 0.05 ) / ( Math.min( x, y ) + 0.05 ); }
-            function onAccent( a ){ return contrast( a, INK.dark ) >= contrast( a, INK.light ) ? INK.dark : INK.light; }
-            function isDark( s ){ return s.kind === 'dark'; }
-            function isLight( s ){ return s.kind === 'light'; }
-            function persist(){ try { localStorage.setItem( KEY, JSON.stringify( data ) ); } catch ( e ) {} }
-            function find( id ){ for( var i = 0; i < data.schemes.length; i++ ) if( data.schemes[ i ].id === id ) return data.schemes[ i ]; return null; }
-            function firstOfKind( k ){ for( var i = 0; i < data.schemes.length; i++ ) if( data.schemes[ i ].kind === k ) return data.schemes[ i ]; return null; }
-            function countKind( k, exceptId ){ return data.schemes.filter( function ( s ){ return s.kind === k && s.id !== exceptId; } ).length; }
-            function reconcile()
-            {
-                if( ! find( data.activeDark )  || find( data.activeDark ).kind  !== 'dark'  ) data.activeDark  = firstOfKind( 'dark' ).id;
-                if( ! find( data.activeLight ) || find( data.activeLight ).kind !== 'light' ) data.activeLight = firstOfKind( 'light' ).id;
-            }
-            function loadDraft()
-            {
-                var s = find( editingId ) || firstOfKind( 'dark' );
-                editingId = s.id;
-                draft = { name: s.name, kind: s.kind, tokens: tokensOf( s ) };
-            }
-            function norm( h )
-            {
-                h = h.trim().toLowerCase();
-                if( h && h[ 0 ] !== '#' ) h = '#' + h;
-                if( h.length === 4 ) h = '#' + h[ 1 ] + h[ 1 ] + h[ 2 ] + h[ 2 ] + h[ 3 ] + h[ 3 ];
-                return h;
-            }
-            function showMsg( t ){ msgEl.textContent = t; msgEl.hidden = false; }
-            function clearMsg(){ msgEl.hidden = true; }
-
-            // Paint the draft on :root so the whole launcher previews it live.
-            function previewDraft()
-            {
-                root.setAttribute( 'data-theme', draft.kind === 'light' ? 'light' : 'dark' );
-                NKEYS.forEach( function ( k ){ root.style.setProperty( k, draft.tokens[ k ] ); } );
-                root.style.setProperty( '--on-accent', onAccent( draft.tokens[ '--accent' ] ) );
-            }
-
-            function render()
-            {
-                // scheme list
-                listEl.innerHTML = '';
-                data.schemes.forEach( function ( s )
-                {
-                    var b = document.createElement( 'button' );
-                    b.type = 'button';
-                    b.className = 'scm-row' + ( s.id === editingId ? ' sel' : '' );
-                    b.dataset.id = s.id;
-                    var isActive = s.id === data.activeDark || s.id === data.activeLight;
-                    var st = tokensOf( s );
-                    b.innerHTML =
-                        '<span class="scm-sw">' + NKEYS.map( function ( k ){ return '<i style="background:' + st[ k ] + '"></i>'; } ).join( '' ) + '</span>' +
-                        '<span class="scm-name"></span>' +
-                        '<span class="scm-kind">' + ( s.kind === 'dark' ? Ayni.t( 'scm.darkWord' ) : Ayni.t( 'scm.lightWord' ) ) + '</span>' +
-                        ( isActive ? '<span class="scm-badge" data-i18n="scm.activeBadge"></span>' : '' );
-                    b.querySelector( '.scm-name' ).textContent = s.name;
-                    listEl.appendChild( b );
-                } );
-
-                if( document.activeElement !== nameEl ) nameEl.value = draft.name;
-                // Into the title's own span: the info dot beside it stays.
-                // Its data-i18n goes, so a later translation pass keeps the name.
-                var titleSpan = titleEl.querySelector( 'span' );
-                titleSpan.removeAttribute( 'data-i18n' );
-                titleSpan.textContent = Ayni.tf( 'scm.editing', { name: draft.name || Ayni.t( 'scm.unnamed' ) } );
-                kindDark.setAttribute( 'aria-pressed', draft.kind === 'dark'  ? 'true' : 'false' );
-                kindLite.setAttribute( 'aria-pressed', draft.kind === 'light' ? 'true' : 'false' );
-                kindDark.setAttribute( 'aria-pressed', draft.kind === 'dark' );
-                kindLite.setAttribute( 'aria-pressed', draft.kind === 'light' );
-
-                NKEYS.forEach( function ( k )
-                {
-                    if( document.activeElement !== col[ k ] ) col[ k ].value = draft.tokens[ k ];
-                    if( document.activeElement !== hex[ k ] ) { hex[ k ].value = draft.tokens[ k ].toUpperCase(); hex[ k ].classList.remove( 'bad' ); }
-                } );
-
-                delBtn.ariaDisabled = countKind( find( editingId ).kind, editingId ) === 0;
-
-                // Warn (never block) when the highlight is hard to see on the scheme's tones.
-                var worst = Math.min( contrast( draft.tokens[ '--accent' ], draft.tokens[ '--bg' ] ),
-                                      contrast( draft.tokens[ '--accent' ], draft.tokens[ '--card' ] ),
-                                      contrast( draft.tokens[ '--accent' ], draft.tokens[ '--card2' ] ) );
-                accentMsg.hidden = worst >= LOW_ACCENT;
-                if( ! accentMsg.hidden ) accentMsg.textContent = Ayni.tf( 'scm.accentLow', { ratio: worst.toFixed( 1 ) } );
-
-                fillSelect( selDark, 'dark', data.activeDark );
-                fillSelect( selLite, 'light', data.activeLight );
-
-                previewDraft();
-            }
-
-            function fillSelect( sel, kind, activeId )
-            {
-                var pk = Ayni.picker( sel );
-                pk.options = data.schemes.filter( function ( s ){ return s.kind === kind; } ).map( function ( s ){ return { value: s.id, text: s.name }; } );
-                pk.set( activeId );
-            }
-
-            function openDialog()
-            {
-                editingId = ( root.getAttribute( 'data-theme' ) === 'light' ) ? data.activeLight : data.activeDark;
-                loadDraft();
-                clearMsg();
-                document.getElementById( 'scmBackdrop' ).showModal();
-                render();
-            }
-            function closeDialog() { document.getElementById( 'scmBackdrop' ).close(); }
-
-            // However it closes - its x, or Escape (Ayni presses the x) - the
-            // live preview goes.
-            scmBack.addEventListener( 'close', function ()
-            {
-                NKEYS.forEach( function ( k ){ root.style.removeProperty( k ); } );
-                root.style.removeProperty( '--on-accent' );
-                if( window.Ayni ) Ayni.setTheme( Ayni.theme.mode() );   // re-applies the stored schemes
-            } );
-
-            openBtn.addEventListener( 'click', openDialog );
-            closeBtn.addEventListener( 'click', closeDialog );
-
-            listEl.addEventListener( 'click', function ( e )
-            {
-                var row = e.target.closest( '.scm-row' );
-                if( ! row ) return;
-                editingId = row.dataset.id;
-                loadDraft();
-                clearMsg();
-                render();
-            } );
-
-            nameEl.addEventListener( 'input', function (){ draft.name = this.value; render(); } );
-
-            [ kindDark, kindLite ].forEach( function ( btn )
-            {
-                btn.addEventListener( 'click', function ()
-                {
-                    var k = this.dataset.kind;
-                    if( k === draft.kind ) return;
-                    var savedKind = find( editingId ).kind;
-                    if( savedKind !== k && countKind( savedKind, editingId ) === 0 )
-                    {
-                        showMsg( Ayni.tf( 'scm.needOne', { kind: savedKind === 'dark' ? Ayni.t( 'scm.darkWord' ) : Ayni.t( 'scm.lightWord' ) } ) );
-                        return;
-                    }
-                    // Keep the default accent right for the new mode; a chosen colour stays.
-                    if( draft.tokens[ '--accent' ].toLowerCase() === ACCENT[ draft.kind ] ) draft.tokens[ '--accent' ] = ACCENT[ k ];
-                    draft.kind = k;
-                    clearMsg();
-                    render();
-                } );
-            } );
-
-            NKEYS.forEach( function ( k )
-            {
-                col[ k ].addEventListener( 'input', function (){ draft.tokens[ k ] = this.value.toLowerCase(); render(); } );
-                hex[ k ].addEventListener( 'input', function ()
-                {
-                    var v = norm( this.value );
-                    if( HEX.test( v ) ) { draft.tokens[ k ] = v; this.classList.remove( 'bad' ); render(); }
-                    else this.classList.add( 'bad' );
-                } );
-                hex[ k ].addEventListener( 'blur', render );
-            } );
-
-            saveBtn.addEventListener( 'click', function ()
-            {
-                var s = find( editingId );
-                s.name   = draft.name.trim() || s.name;
-                s.kind   = draft.kind;
-                s.tokens = toStore( draft.tokens );
-                reconcile();
-                loadDraft();
-                persist(); clearMsg(); Ayni.toast( 'ok', Ayni.t( 'ui.saved' ) ); render();
-            } );
-
-            newBtn.addEventListener( 'click', function ()
-            {
-                var id = 's' + Date.now().toString( 36 ) + Math.random().toString( 36 ).slice( 2, 5 );
-                data.schemes.push( {
-                    id: id,
-                    name: draft.name.trim() || Ayni.t( 'scm.newScheme' ),
-                    kind: draft.kind,
-                    tokens: toStore( draft.tokens )
-                } );
-                editingId = id;
-                loadDraft();
-                persist(); clearMsg(); Ayni.toast( 'ok', Ayni.t( 'scm.created' ) ); render();
-            } );
-
-            delBtn.addEventListener( 'click', function ()
-            {
-                if( delBtn.ariaDisabled === 'true' ) return;
-                var s = find( editingId );
-                var at = data.schemes.indexOf( s ), wasDark = data.activeDark === s.id, wasLight = data.activeLight === s.id;
-                data.schemes = data.schemes.filter( function ( x ){ return x.id !== s.id; } );
-                reconcile();
-                editingId = ( firstOfKind( s.kind ) || data.schemes[ 0 ] ).id;
-                loadDraft();
-                persist(); clearMsg(); render();
-                // Undo: the scheme back in its place, and in use again if it was.
-                Ayni.toast( 'ok', Ayni.t( 'ui.toast.deleted' ), { undo: function ()
-                {
-                    if( find( s.id ) ) return;
-                    data.schemes.splice( Math.min( at, data.schemes.length ), 0, s );
-                    if( wasDark )  data.activeDark  = s.id;
-                    if( wasLight ) data.activeLight = s.id;
-                    persist();
-                    if( ! scmBack.open ) { if( window.Ayni ) Ayni.setTheme( Ayni.theme.mode() ); return; }   // re-applies the stored schemes
-                    editingId = s.id;
-                    loadDraft(); clearMsg(); render();
-                } } );
-            } );
-
-            selDark.addEventListener( 'ayni:change', function ( e ){ data.activeDark  = e.detail.value; persist(); render(); } );
-            selLite.addEventListener( 'ayni:change', function ( e ){ data.activeLight = e.detail.value; persist(); render(); } );
-
-            // Keep the in-memory model consistent, but don't write to localStorage until
-            // the user actually changes something - a fresh install stays 100% theme.css.
-            reconcile();
         } )();
     </script>
 
@@ -1450,12 +997,12 @@
             var tzSaved = null;            // last value confirmed by the server
             var tzCtl   = null;            // its Ayni.autoSave
 
-            // Every zone the browser knows (NayiveUI.timeZones; ancient browsers
+            // Every zone the browser knows (Ayni.dates.zones; ancient browsers
             // get a short list) plus, below, whatever is already saved, which is
             // enough to see and keep the current value.
             function fillZones( current )
             {
-                var zones = NayiveUI.timeZones().slice();
+                var zones = Ayni.dates.zones().slice();
                 // The saved zone ALWAYS gets an entry, even when this browser's
                 // list has never heard of it (an old IANA alias, a newer server).
                 // Without this the box would silently snap to the first option
@@ -1477,7 +1024,7 @@
                     if( r.ok ) tzSaved = d.tz || '';
                 }
                 catch ( e ) { /* keep whatever we had */ }
-                fillZones( tzSaved || NayiveUI.viewerTz() );
+                fillZones( tzSaved || Ayni.dates.zone() );
                 if( tzCtl ) tzCtl.saved( Ayni.picker( tzSel ).value );
             }
 
@@ -1520,39 +1067,12 @@
 
                 say( autoMsg, Ayni.t( 'acct.themeAutoLocating' ), true );
 
-                navigator.geolocation.getCurrentPosition(
-                    function ( pos )
-                    {
-                        Ayni.theme.setPlace( pos.coords.latitude, pos.coords.longitude );
-                        say( autoMsg, Ayni.t( 'acct.themeAutoGeo' ), true );
-                    },
-                    function ()
-                    {
-                        // Refused, or the device simply does not know where it
-                        // is. Auto mode stays ON: theme.js falls back to the
-                        // sun of the time zone's main city.
-                        say( autoMsg, Ayni.t( 'acct.themeAutoNoGeo' ), false );
-                    },
-                    { timeout: 10000, maximumAge: 24 * 3600 * 1000 } );
-            }
-
-            // People travel, and a stale set of coordinates would keep flipping
-            // the theme on the old continent's clock. Refresh quietly whenever
-            // the dialog is opened - but ONLY when permission is already
-            // granted, so opening "Mi cuenta" can never raise a fresh prompt.
-            function refreshGeoQuietly()
-            {
-                if( ! navigator.permissions || ! navigator.permissions.query ) return;
-
-                navigator.permissions.query( { name: 'geolocation' } ).then( function ( st )
+                // Refused, or the device simply does not know where it is: auto
+                // mode stays ON, on the sun of the time zone's main city.
+                Ayni.theme.askPlace().then( function ( got )
                 {
-                    if( st.state !== 'granted' ) return;
-
-                    navigator.geolocation.getCurrentPosition(
-                        function ( pos ) { Ayni.theme.setPlace( pos.coords.latitude, pos.coords.longitude ); },
-                        function () { /* keep what we had */ },
-                        { timeout: 10000, maximumAge: 6 * 3600 * 1000 } );
-                } ).catch( function () { /* browser without the geolocation permission name */ } );
+                    say( autoMsg, Ayni.t( got ? 'acct.themeAutoGeo' : 'acct.themeAutoNoGeo' ), got );
+                } );
             }
 
             // Automatic (Ayni's Sun mode) is only ever turned on by its tick: new
@@ -1568,7 +1088,7 @@
                 var key = autoState();
                 say( autoMsg, key ? Ayni.t( key ) : '', key === 'acct.themeAutoGeo' );
 
-                if( on && Ayni.theme.hasPlace() ) refreshGeoQuietly();
+                if( on && Ayni.theme.hasPlace() ) Ayni.theme.refreshPlace();
             }
 
             function autoWrap() { return document.getElementById( 'autoThemeWrap' ); }
@@ -1598,8 +1118,8 @@
 
             // base64url -> Uint8Array, and "made with this key?": shared/ui.js (deferred:
             // this script runs first, so looked up at call time).
-            function b64ToU8( s )        { return NayiveUI.b64ToU8( s ); }
-            function sameKey( sub, b64 ) { return NayiveUI.samePushKey( sub, b64 ); }
+            function b64ToU8( s )        { return Ayni.pwa.b64ToU8( s ); }
+            function sameKey( sub, b64 ) { return Ayni.pwa.samePushKey( sub, b64 ); }
 
             async function pushGet( endpoint )
             {
@@ -1620,7 +1140,7 @@
                     body: JSON.stringify( { subscription:    sub.toJSON(),
                                             lang:  Ayni.i18n.lang(),
                                             label: navigator.platform || '',
-                                            tz:    NayiveUI.viewerTz() } )
+                                            tz:    Ayni.dates.zone() } )
                 } );
                 var d = await r.json().catch( function (){ return {}; } );
                 if( r.ok )
@@ -1647,8 +1167,8 @@
                     localStorage.setItem( PUSH_NOTE, JSON.stringify( {
                         ep:   sub.endpoint,
                         lang: Ayni.i18n.lang(),
-                        tz:   NayiveUI.viewerTz(),
-                        who:  ( window.NayiveStore && NayiveStore.me ) || '' } ) );
+                        tz:   Ayni.dates.zone(),
+                        who:  ( window.AyniStore && AyniStore.me ) || '' } ) );
                 }
                 catch ( e ) {}
             }
@@ -1666,7 +1186,7 @@
                 try
                 {
                     var note = JSON.parse( localStorage.getItem( PUSH_NOTE ) || 'null' );
-                    var who  = ( window.NayiveStore && NayiveStore.me ) || '';
+                    var who  = ( window.AyniStore && AyniStore.me ) || '';
                     var lang = Ayni.i18n.lang();
                     var reg  = await navigator.serviceWorker.getRegistration();
                     if( ! reg || ! reg.pushManager ) return;
@@ -1674,7 +1194,7 @@
                     if( sub )
                     {
                         if( note && note.ep === sub.endpoint && note.lang === lang && note.who === who &&
-                            note.tz === NayiveUI.viewerTz() ) return;   // a trip to another zone re-posts
+                            note.tz === Ayni.dates.zone() ) return;   // a trip to another zone re-posts
                         await postSub( sub );
                         return;
                     }
@@ -1746,7 +1266,7 @@
                 // does not support notifications" - a dead end, when the true
                 // answer is "install Nayive on the Home Screen and it works".
                 // installMode() says "ios" only on iOS and NOT installed.
-                if( NayiveUI.installMode && NayiveUI.installMode() === 'ios' )
+                if( Ayni.pwa.installMode && Ayni.pwa.installMode() === 'ios' )
                 {
                     if( pushWrap ) pushWrap.hidden = true;
                     say( pushMsgEl, Ayni.t( 'acct.notifsIos' ) );
@@ -1777,11 +1297,11 @@
                 // STICKY, so one naive attempt would permanently poison this
                 // user's ability to ever turn notifications on. installMode()
                 // returns "ios" only when we are on iOS and NOT installed.
-                if( NayiveUI.installMode && NayiveUI.installMode() === 'ios' )
+                if( Ayni.pwa.installMode && Ayni.pwa.installMode() === 'ios' )
                 {
                     say( pushMsgEl, Ayni.t( 'acct.notifsIos' ) );
                     renderPush();
-                    if( NayiveUI.offerInstall ) NayiveUI.offerInstall( { manual: true } );
+                    if( Ayni.pwa.offerInstall ) Ayni.pwa.offerInstall( { manual: true } );
                     return;
                 }
                 if( ! pushState.supported )
@@ -1854,7 +1374,7 @@
                 var big = window.matchMedia( '(min-width: 1024px) and (min-height: 600px)' ).matches ||
                           window.matchMedia( '(min-width: 600px) and (min-height: 1024px)' ).matches;
                 document.getElementById( 'deskModeWrap' ).hidden = window.top === window && ! big;
-                Ayni.picker( deskSel ).set( nayiveDeskMode() );
+                Ayni.picker( deskSel ).set( ayniDeskMode() );
             }
             deskSel.addEventListener( 'ayni:change', function ()
             {
@@ -1862,7 +1382,7 @@
                 try { cur = JSON.parse( localStorage.getItem( 'balata-desktop' ) || 'null' ) || {}; } catch( e ) {}
                 cur.mode = Ayni.picker( deskSel ).value;
                 try { localStorage.setItem( 'balata-desktop', JSON.stringify( cur ) ); } catch( e ) {}
-                if( window.top === window && nayiveWantDesk( cur.mode ) ) location.replace( 'desktop/' );
+                if( window.top === window && ayniWantDesk( cur.mode ) ) location.replace( 'desktop/' );
             } );
 
             // My account. Close-only: every row saves itself, its × just closes.
@@ -1963,7 +1483,7 @@
 
             function nudgeDue()
             {
-                if( ! window.NayiveUI || ! NayiveUI.isStandalone || ! NayiveUI.isStandalone() ) return false;
+                if( ! window.NayiveUI || ! Ayni.pwa.isStandalone || ! Ayni.pwa.isStandalone() ) return false;
                 if( ! pushState.supported ) return false;
                 // 'granted' - already on. 'denied' - the browser has slammed the
                 // door and only its own settings can reopen it. Either way,
@@ -2024,7 +1544,7 @@
             // No VAPID key back = the server did not answer: never nag on that.
             async function pushFixable()
             {
-                if( NayiveUI.installMode && NayiveUI.installMode() === 'ios' ) return false;
+                if( Ayni.pwa.installMode && Ayni.pwa.installMode() === 'ios' ) return false;
                 if( ! pushState.supported ) return false;
                 if( Notification.permission === 'denied' ) return false;
                 await loadPush();                 // also self-heals a forgotten subscription
@@ -2076,7 +1596,7 @@
             saveBtn.addEventListener( 'click', async function ()
             {
                 // The only ✓ left in My account: everything else saves itself.
-                Ayni.setBusy( saveBtn, Ayni.t( 'ui.sync.saving' ) );
+                Ayni.setBusy( saveBtn, Ayni.t( 'ayni.sync.saving' ) );
 
                 if( ! mandatory && ! curEl.value )
                     { say( msgEl, Ayni.t( 'acct.fillBoth' ) ); Ayni.setBusy( saveBtn, false ); return; }
@@ -2159,10 +1679,10 @@
                 if( window.Ayni && Ayni.i18n.setLang( me.lang ) ) return;
 
                 // What an editor closed meanwhile left parked on this device
-                // goes up now (shared/store.js PARKED SAVES; deferred: whoami
+                // goes up now (shared/ayni/ayni-store.js PARKED SAVES; deferred: whoami
                 // can answer before it has run).
-                var sendLeft = function () { if( window.NayiveStore && NayiveStore.sendLeft ) NayiveStore.sendLeft(); };
-                if( window.NayiveStore ) sendLeft(); else document.addEventListener( 'DOMContentLoaded', sendLeft );
+                var sendLeft = function () { if( window.AyniStore && AyniStore.sendLeft ) AyniStore.sendLeft(); };
+                if( window.AyniStore ) sendLeft(); else document.addEventListener( 'DOMContentLoaded', sendLeft );
 
                 Ayni.setTip( document.getElementById( 'logoutBtn' ), Ayni.tf( 'launcher.logoutUser', { user: me.user } ) );
 
@@ -2176,9 +1696,7 @@
                 // its "UTC" fallback would persist a zone the user never has.
                 if( me.tz == null )
                 {
-                    var here = '';
-                    try { here = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; }
-                    catch ( e ) {}
+                    var here = Ayni.dates.zone( '' );
                     if( here )
                         fetch( '/api/tz?value=' + encodeURIComponent( here ),
                                { method: 'POST', credentials: 'same-origin' } )
@@ -2245,7 +1763,7 @@
         {
             function T( k )     { return window.NayiveUI ? Ayni.t( k ) : k; }
             function TF( k, o ) { return window.NayiveUI ? Ayni.tf( k, o ) : k; }
-            function esc( v )   { return window.NayiveUI ? NayiveUI.escapeHtml( String( v ) ) : String( v ); }
+            var esc = Ayni.esc;
             function get( k )    { try { return localStorage.getItem( k ); } catch ( e ) { return null; } }
             function put( k, v ) { try { if( v == null ) localStorage.removeItem( k ); else localStorage.setItem( k, v ); } catch ( e ) {} }
             function parse( k )  { try { return JSON.parse( get( k ) || 'null' ); } catch ( e ) { return null; } }
@@ -2437,7 +1955,7 @@
                 {
                     if( j._status !== 200 ) return;          // the admin (403), or signed out
                     state = j;
-                    findBtn.disabled = ! worthIt( j );
+                    findBtn.setAttribute( 'aria-disabled', worthIt( j ) ? 'false' : 'true' );
                     if( isOpen() ) render();
                 } ).catch( function () {} );
             }
@@ -2573,8 +2091,8 @@
             {
                 var id = 'devMedia-' + d.id;
                 return '<div class="dev-media">' +
-                       '<div class="scm-check-row">' +
-                           '<label class="scm-check" for="' + esc( id ) + '"><span>' + esc( T( 'dev.media' ) ) + '</span></label>' +
+                       '<div class="acct-check-row">' +
+                           '<label class="acct-check" for="' + esc( id ) + '"><span>' + esc( T( 'dev.media' ) ) + '</span></label>' +
                            '<button class="info-tip" type="button" data-help="' + esc( T( 'dev.mediaInfo' ) ) + '"></button>' +
                            '<label class="switch"><input role="switch" type="checkbox" id="' + esc( id ) + '" data-dev-media="' + esc( d.id ) + '"' +
                                ( d.media ? ' checked' : '' ) + '></label>' +
@@ -2611,17 +2129,17 @@
                 drawAccount();
                 saveMedia( d.id, { media: on }, function () { d.media = ! on; drawAccount(); } );
             } );
-            // The folder picker needs GumApi (shared/gum-api.js), which this page
+            // The folder picker needs AyniNet (shared/ayni/ayni-net.js), which this page
             // does not load up front: fetched on the first tap.
             var gumLoad = null;
             function needGum()
             {
-                if( window.GumApi ) return Promise.resolve();
+                if( window.AyniNet ) return Promise.resolve();
                 if( ! gumLoad )
                     gumLoad = new Promise( function ( resolve, reject )
                     {
                         var sc = document.createElement( 'script' );
-                        sc.src = 'shared/gum-api.js';
+                        sc.src = 'shared/ayni/ayni-net.js';
                         sc.onload = resolve;
                         sc.onerror = function () { gumLoad = null; reject( new Error( 'gum-api' ) ); };
                         document.head.appendChild( sc );

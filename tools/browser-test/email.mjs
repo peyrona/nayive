@@ -206,10 +206,39 @@ await eyeOf( "nolabel" );
 ok( await visible( "Hello 5" ) && ! await visible( "Hello 6" ), "No label's eye: the mail with no label hidden" );
 await eyeOf( "nolabel" );
 ok( await visible( "Hello 6" ), "again: back" );
-// a click opens a label's list
+// the eye of Labels: all closed, or with any closed all open
+const pressed = id => c.evaluate( `document.querySelector( '${TR( id )} [data-tail]' ).getAttribute( 'aria-pressed' ) === 'true'` );
+await eyeOf( "labels" );
+ok( ! await visible( "Hello 5" ) && ! await visible( "Hello 6" ) && await pressed( "labels" ) && await pressed( "l:" + work.id ) && await pressed( "nolabel" ), "Labels' eye: every eye closed, nothing in sight" );
+ok( await c.evaluate( "! document.getElementById('listEmpty').hidden && document.getElementById('veilBar').hidden" ), "…the empty state says so, no note too" );
+ok( await c.evaluate( "NayiveMail.S.next = 'x'; NayiveMail.moreGate(); const r = document.getElementById('listMore').hidden; NayiveMail.S.next = ''; r" ), "…no more pages are read" );
+await c.evaluate( "NayiveMail.search( 'Hello 5' ); true" );
+ok( await c.until( "NayiveMail.S.query && ! NayiveMail.S.loading && [ ...document.querySelectorAll('#list .mail-row') ].some( r => ! r.hidden && r.textContent.includes( 'Hello 5' ) )", 10000 ), "a search ignores the eyes" );
+await c.evaluate( "NayiveMail.clearSearch(); true" );
+ok( await c.until( "! NayiveMail.S.query && ! NayiveMail.S.loading && document.querySelectorAll('#list .mail-row').length > 1", 10000 ) && ! await visible( "Hello 5" ), "…cleared, they hide again" );
+await eyeOf( "l:" + work.id );
+ok( await visible( "Hello 5" ) && ! await visible( "Hello 6" ) && await pressed( "labels" ), "one eye opened: only its mail, Labels' eye still closed" );
+ok( await c.evaluate( "/\\d/.test( document.getElementById('veilBar').textContent ) && ! document.getElementById('veilBar').hidden" ), "…a note counts the hidden", await c.evaluate( "document.getElementById('veilBar').textContent" ) );
+await c.evaluate( "NayiveMail.S.veilDry = 10; NayiveMail.S.next = 'x'; NayiveMail.moreGate(); window.__dry = !! document.querySelector('#listMore button'); NayiveMail.S.next = ''; NayiveMail.S.veilDry = 0; document.getElementById('listMore').hidden = true; true" );
+ok( await c.evaluate( "window.__dry" ), "10 pages with nothing to show: the list waits for the button" );
+await eyeOf( "labels" );
+ok( await visible( "Hello 5" ) && await visible( "Hello 6" ) && ! await pressed( "labels" ) && await c.evaluate( "document.getElementById('veilBar').hidden" ), "Labels' eye again: all open, the note goes" );
+// two labels: any open eye shows the mail
+await c.evaluate( `( () => { const E = NayiveMail, S = E.S, m = S.items.find( x => x.subject === "Hello 5" );
+    S.labels.push( { id: "x", name: "X", color: "#3b82f6" } ); m.labels = ( m.labels || [] ).concat( "x" ); E.renderSide(); return true; } )()` );
+await eyeOf( "l:x" );
+ok( await visible( "Hello 5" ), "two labels, one eye closed: it shows" );
+await eyeOf( "l:" + work.id );
+ok( ! await visible( "Hello 5" ), "…both closed: it hides" );
+await eyeOf( "labels" );
+await c.evaluate( `( () => { const E = NayiveMail, S = E.S, m = S.items.find( x => x.subject === "Hello 5" );
+    S.labels = S.labels.filter( l => l.id !== "x" ); m.labels = m.labels.filter( l => l !== "x" ); E.renderSide(); return true; } )()` );
+// a click opens a label's list, closed eye or not
+await eyeOf( "l:" + work.id );
 await mouse( c, TR( "l:" + work.id ), { dx: 40 } );
 ok( await c.until( `NayiveMail.S.label === ${JSON.stringify( work.id )} && ! NayiveMail.S.loading` ) && await c.until( "document.querySelectorAll('#list .mail-row').length === 1" ) && await shown( "Hello 5" ),
     "a click on the label lists its mail" );
+await eyeOf( "l:" + work.id );
 // the Trash: Restore and Delete for good, not Delete
 await mouse( c, TR( "inbox" ), { dx: 40 } );
 await c.until( "NayiveMail.S.tray === 'inbox' && ! NayiveMail.S.label && document.querySelectorAll('#list .mail-row').length >= 10 && ! NayiveMail.S.loading" );

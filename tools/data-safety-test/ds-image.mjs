@@ -57,7 +57,7 @@ ok( back && back.equals( RED ), "Undo: the original is back, byte for byte" );
 section( "D12 · \"SAVE A COPY\" ONTO A NAME THAT EXISTS, AND THE WRITE FAILS" );
 
 ok( await imagePage( "files/p.png" ), "p.png is open in the editor" );
-// The copy's write fails (a dropped line, a full disk...). GumApi PUTs a
+// The copy's write fails (a dropped line, a full disk...). AyniNet PUTs a
 // file with XMLHttpRequest (upload progress).
 await c.evaluate( `( function () {
     var open = XMLHttpRequest.prototype.open, send = XMLHttpRequest.prototype.send;

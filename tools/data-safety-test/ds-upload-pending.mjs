@@ -1,4 +1,4 @@
-// ds-upload-pending.mjs - the marks of parked saves (shared/store.js PARKED
+// ds-upload-pending.mjs - the marks of parked saves (shared/ayni/ayni-store.js PARKED
 // SAVES, docs/upload-less-plan.md): "changes waiting on device X" in
 // data/office/pending.json, and what each device does with them.
 //
@@ -86,10 +86,10 @@ section( "A PARKED SAVE PUTS ITS MARK UP; A REPLACING SAVE KEEPS IT" );
     await sleep( 500 );
     ok( markOf( F ).length === 1, "still one mark" );
 
-    const seen = await B.evaluate( `NayiveStore.pendingElsewhere( ${J( F )} )` );
+    const seen = await B.evaluate( `AyniStore.pendingElsewhere( ${J( F )} )` );
     ok( seen.length === 1 && seen[ 0 ].name === m[ 0 ].name, "the other device sees it", seen );
-    ok( ( await p.t.evaluate( `NayiveStore.pendingElsewhere( ${J( F )} )` ) ).length === 0, "this device does not warn itself" );
-    ok( ( await B.evaluate( `NayiveStore.pendingElsewhere( 'files' )` ) ).length === 1, "a folder counts for what is in it" );
+    ok( ( await p.t.evaluate( `AyniStore.pendingElsewhere( ${J( F )} )` ) ).length === 0, "this device does not warn itself" );
+    ok( ( await B.evaluate( `AyniStore.pendingElsewhere( 'files' )` ) ).length === 1, "a folder counts for what is in it" );
 
     await p.t.evaluate( `SC.unpark( ${J( F )}, { open: true } ).then( function () { return true; } )` );
     ok( await untilNode( () => markOf( F ).length === 0 ), "sent: the mark goes" );
@@ -103,7 +103,7 @@ section( "A MARK 31 DAYS OLD IS IGNORED, AND GOES AT THE NEXT WRITE" );
     const now = JSON.parse( disk( MARKS ) || '{"marks":[]}' );
     now.marks.push( { path: OLD, device: "gone-phone", name: "Old phone", at: Date.now() - 31 * 86400000, state: "pending" } );
     await seed( phone, MARKS, JSON.stringify( now ) );
-    ok( ( await B.evaluate( `NayiveStore.pendingElsewhere( ${J( OLD )} )` ) ).length === 0, "not shown" );
+    ok( ( await B.evaluate( `AyniStore.pendingElsewhere( ${J( OLD )} )` ) ).length === 0, "not shown" );
     await seed( phone, "files/g.txt", "old\n" );
     const p = await parkIn( A, "files/g.txt", "g" );
     ok( p.parked && markOf( OLD ).length === 0, "dropped from pending.json at the next write" );
@@ -117,7 +117,7 @@ section( "DISMISSED, PAGE OPEN: THE CONFLICT QUESTION, NEVER A SILENT DROP" );
     const F = "files/open.txt";
     await seed( phone, F, "old\n" );
     const p = await parkIn( A, F, "open" );
-    ok( await B.evaluate( `NayiveStore.dismissPending( ${J( F )} )` ) && markOf( F )[ 0 ].state === "dismissed", "device B goes on: dismissed" );
+    ok( await B.evaluate( `AyniStore.dismissPending( ${J( F )} )` ) && markOf( F )[ 0 ].state === "dismissed", "device B goes on: dismissed" );
     const r = JSON.parse( await p.t.evaluate( `J( SC.unpark( ${J( F )}, { open: true } ) )` ) );
     ok( r.conflict && r.dismissed, "its upload is held back as a conflict", r );
     ok( await p.t.until( `EV.some( function ( e ) { return e.c2 === ${J( F )} && e.why === 'dismissed'; } )` ), "the page is told, with why 'dismissed'" );
@@ -134,7 +134,7 @@ section( "DISMISSED, NO PAGE: DROPPED IN SILENCE, NO PUT, NOTHING TO REQUEUE" );
     const F = "files/closed.txt";
     await seed( phone, F, "old\n" );
     const p = await parkIn( A, F, "closed" );
-    await B.evaluate( `NayiveStore.dismissPending( ${J( F )} )` );
+    await B.evaluate( `AyniStore.dismissPending( ${J( F )} )` );
     await closeTab( A, p.t );
     await flush( A );
     ok( await untilEntry( A, F, e => ! e ), "a flush elsewhere drops the entry" );
@@ -199,7 +199,7 @@ section( "A TAB THAT OPENS A CLOSED TAB'S PARKED SAVE HOLDS IT" );
     await closeTab( A, p.t );
     const t2 = await tabOf( A );
     await read( t2, F );                                 // it shows the parked body: its model now
-    await B.evaluate( `NayiveStore.dismissPending( ${J( F )} )` );
+    await B.evaluate( `AyniStore.dismissPending( ${J( F )} )` );
     await flush( A );
     await sleep( 1000 );
     ok( ( await entry( A, F ) || {} ).park && await puts( A, F ) === 0, "a flush in another tab neither sends nor drops it" );
@@ -283,7 +283,7 @@ section( "SIGN-OUT: WHAT IS PARKED GOES UP, EVEN WITH ITS TAB OPEN" );
     await write( t2, G, big( 300, "stuck" ) );
     ok( await untilEntry( t2, G, e => e && e.marked ), "a second parked save, which the server will refuse (quota full)" );
     // The sign-out runs in t2 (its fetch refuses no-sale.txt): leave anyway.
-    const went = await t2.evaluate( "NayiveStore.leaveDevice( function () { return Promise.resolve( true ); } )" );
+    const went = await t2.evaluate( "AyniStore.leaveDevice( function () { return Promise.resolve( true ); } )" );
     ok( went === true, "signed out after the question" );
     ok( disk( F ) === p.body, "the parked save of the open tab went up first" );
     ok( disk( G ) === "old\n" && await untilNode( () => markOf( G ).length === 0 ), "the one left unsent loses its mark with it" );

@@ -117,180 +117,6 @@
  * ===========================================================================*/
 
 
-/* -----------------------------------------------------------------------------
- * BASE / RESET
- *
- * border-box everywhere. The page never scrolls sideways. The body carries the
- * UI font, the primary text colour and the page background so an app's <body>
- * rule can be deleted. Links are the accent-independent --link blue, underline
- * on hover only.
- * ---------------------------------------------------------------------------*/
-*,
-*::before,
-*::after            { box-sizing: border-box; }
-
-html               { overflow-x: hidden; overflow-y: auto; }
-
-body
-{
-    margin: 0;
-    font-family: var(--font-sans);
-    color: var(--text);
-    background: var(--bg);
-    -webkit-tap-highlight-color: transparent;
-}
-
-a                  { color: var(--link); text-decoration: none; }
-a:hover            { text-decoration: underline; opacity: 0.85; }
-
-/* The hidden attribute always wins - a class that sets display: flex on the
-   same element (an .btn, a bar, a pane) must not un-hide it. */
-[hidden]           { display: none !important; }
-
-
-/* -----------------------------------------------------------------------------
- * APP SHELL - two layouts, pick one per app
- *
- * A) TOOL SHELL  (.app)  - calc, calendar, drive, text, write, planner
- *    A full-height flex column: a fixed .topbar on top, the work area (a grid,
- *    an editor, a map) fills the rest and does its own scrolling. The page
- *    background is --bg.
- *
- * B) CARD SHELL  (.page > .page-inner > .card)  - tasks, contact
- *    A single centred column that reads like a sheet of paper. Max width
- *    460px. On a real phone (<=480px) the card loses its border, radius and
- *    shadow and goes edge to edge. The edge-to-edge rule is scoped to
- *    .page > .page-inner > .card, so a standalone .card (login, a dialog-free
- *    panel) keeps its box at every width.
- *
- *    trip is a card app too but runs its own two-column variant (.trip-panel,
- *    not .card): the list on the left, a sticky route map on the right on a
- *    wide viewport.
- *
- * Do not mix A and B. An app is either a tool or a list/document.
- * ---------------------------------------------------------------------------*/
-.app
-{
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-}
-
-.page
-{
-    display: flex;
-    justify-content: center;
-    width: 100%;
-    min-height: 100vh;
-    padding: 28px 14px;
-}
-
-.page-inner        { width: 100%; max-width: 460px; }
-
-.card
-{
-    padding: 20px 16px 16px;
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-l);
-    box-shadow: var(--elev-card);
-}
-
-@media (max-width: 480px)
-{
-    .page                        { padding: 0; }
-    .page > .page-inner          { max-width: 100%; }
-    .page > .page-inner > .card
-    {
-        min-height: 100vh;
-        border: none;
-        border-radius: 0;
-        box-shadow: none;
-    }
-}
-
-
-/* -----------------------------------------------------------------------------
- * HEADER
- *
- * Same shape in every app, same order left to right (his call, 2026-09-30:
- * "look on the left, act on the right"):
- *
- *   [<- back] [.app-icon] <h1> [file name] [.tb-modes] [pager]  ...
- *        ... .topbar-actions [ selection | search, + new, tools | more, settings, ? ]  [.sync-indicator]
- *
- * - LEFT, after the title: what you LOOK at - the view switch (.tb-modes:
- *   grid / list, day / week / month...), then a pager (Calendar's dates).
- *   The <- of a sub-view goes before the icon.
- * - RIGHT, one .topbar-actions / .header-actions: what you DO, in .tb-group
- *   boxes, in this order: the actions on a selection or the open item (only
- *   while there is one), then the search magnifier, + new, the app's other
- *   tools, then .tb-sys: more (...), settings, help (?). A thin line between
- *   two groups that show, drawn here - never a hand-placed .sep.
- *   Buttons with data-rank leave when the bar runs out of room (highest rank
- *   first, .fit-out) and the ONE ⋮ in .tb-sys lists them (Ayni.fitBar): the
- *   bar stays on the title's line.
- *   A selection group that comes and goes grows the bar leftwards, so the
- *   buttons after it never move.
- * - .topbar is the tool-shell header. It is ONE row while everything fits; when
- *   the viewport is too narrow the button bar wraps onto the next line(s) - the
- *   same way a toolbar overflows - and the title always stays fully readable
- *   (it wraps its own text before it is ever clipped). Divider underneath.
- *   Card-shell apps (.header) LOOK the same (his call, 2026-09-30): the card's
- *   top row, edge to edge, same padding, same divider, sticky while the list
- *   scrolls under it. See "Card-shell header" below.
- * - .app-icon: an inline SVG in --accent, 20px in either header.
- * - The <h1> (or .app-title) is ALWAYS --accent, 1.1rem, weight 700, no margin.
- *   Do not colour it --text; do not size it per app. Never give it
- *   `text-overflow: ellipsis` - the title is not allowed to be truncated.
- * - The sync dot is ALWAYS the last child of the header.
- * - Header buttons are .btn (see below). The primary "new" one gets
- *   .accent; a destructive one gets .danger.
- * - Wrap the trailing controls (every button + the sync dot) in a
- *   .topbar-actions / .header-actions group so the whole bar drops to the next
- *   line together, instead of one lone button clinging to the title's line.
- *   A header with just a control or two can skip the wrapper.
- * ---------------------------------------------------------------------------*/
-.topbar
-{
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;              /* a long title / crowded bar wraps to a second row, never truncates */
-    gap: 2px;
-    row-gap: 4px;                 /* breathing room between wrapped rows */
-    flex: 0 0 auto;
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--line);
-    overflow-x: auto;            /* safety net: a single un-wrappable wide child still scrolls */
-}
-
-.topbar h1,
-.app-title
-{
-    flex: 0 1 auto;             /* sit at its natural width; wrap its text before shrinking further */
-    min-width: min-content;    /* wrap the title's own text - never clip it */
-    margin: 0 10px 0 0;
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--accent);
-    white-space: normal;
-}
-
-.app-icon          { flex: 0 0 auto; color: var(--accent); }
-/* .topbar's gap is 2px (a toolbar's), so the icon needs 6px more to sit the same
-   8px from the title as it does in a card .header, whose gap is --space-2.
-   Descendant, not child: Drive wraps its icon + title in a div. */
-.topbar .app-icon  { margin-right: 6px; }
-
-/* The app icon + name double as a button back to the launcher (wired in
-   shared/ui.js). Only the cursor + a light hover hint at it - the layout is
-   unchanged. Real controls inside the header keep their own action. */
-.nayive-home-link                    { cursor: pointer; }
-.topbar h1.nayive-home-link:hover,
-.header h1.nayive-home-link:hover,
-.app-title.nayive-home-link:hover    { text-decoration: underline; text-underline-offset: 3px; }
-.app-icon.nayive-home-link:hover     { opacity: 0.7; }
-
 /* Desktop mode: a window behind others (html[data-win-behind], set by the
    desktop) shows its icon + name in the same colour, softer. */
 html[data-win-behind] .topbar .app-icon,
@@ -300,100 +126,6 @@ html[data-win-behind] .header h1,
 html[data-win-behind] .trip-header .app-icon,
 html[data-win-behind] .app-title     { opacity: 0.55; }
 
-/* Chat has unread messages (shared/ui.js, CHAT DOT): a red dot on the app
-   icon's top-right corner, placed by JS. It lets the tap through to the icon.
-   It blinks 5 times when a new message arrives - on purpose also with
-   "reduce motion" on: it is a short signal, not decoration. */
-.chat-dot
-{
-    position: absolute; z-index: 2;
-    width: 11px; height: 11px; border-radius: 50%;
-    background: var(--danger);
-    box-shadow: 0 0 0 2px var(--bg);
-    pointer-events: none;
-}
-.chat-dot[hidden]  { display: none; }
-.chat-dot.blink    { animation: chat-dot-blink .7s ease-in-out 5; }
-@keyframes chat-dot-blink { 50% { opacity: 0.1; transform: scale(0.6); } }
-
-/* -----------------------------------------------------------------------------
- * EMBEDDED  - the page runs inside another Nayive page's <iframe> (Planner
- * frames calendar + tasks + habits). shared/ui.js stamps html.is-embedded
- * on load. The host page already shows the app name and ONE sync dot for both
- * frames, so the framed app hides its own icon, title and dot. Its toolbar
- * buttons (and its "?" help, which documents THAT toolbar) stay.
- * ---------------------------------------------------------------------------*/
-html.is-embedded .topbar > .app-icon,
-html.is-embedded .header > .app-icon,
-html.is-embedded .topbar > h1,
-html.is-embedded .header > h1,
-html.is-embedded .sync-indicator         { display: none; }
-/* card-shell header (tasks): the <h1> was the spacer that pushed the buttons
-   to the right edge; keep them there without it */
-html.is-embedded .header                 { justify-content: flex-end; }
-
-/* ...EXCEPT the icon when the HOST is a PC / tablet (html.is-embedded-wide, see
-   shared/ui.js): there Planner shows the three panes at once, and the icon in
-   the top-left corner of each one says which app that area is. The title stays
-   off - the icon alone is the label, and a 25%-wide pane has no room for more.
-   On a phone Planner shows one pane at a time from three icon buttons in its
-   own header, so the class is absent and the rule above still hides the icon.
-
-   Nothing has to move to make room: calendar's .topbar starts with the icon,
-   tasks' always-open compose field (flex-grow) still pushes the buttons to the
-   right edge, and habits' .tb-modes already carry margin-right: auto. One detail
-   though (the icon is 20px in every header now, so no trim is needed; habits'
-   header, already the fullest row, wraps its buttons to a second line in a 25%
-   pane either way): the header packs from the LEFT again: the flex-end above was written for a header
-   that began with a button, and it parked the icon at the right end of its row
-   the moment the row wrapped. */
-html.is-embedded.is-embedded-wide .topbar > .app-icon,
-html.is-embedded.is-embedded-wide .header > .app-icon { display: block; }
-html.is-embedded.is-embedded-wide .header             { justify-content: flex-start; }
-
-/* A framed card app (tasks, habits) fills its pane. The card shell centres a
-   460px sheet of paper on a wide screen, which is right when the app IS the
-   window; inside a Planner pane the pane already is the app's whole area, so
-   the sheet look would only add gutters and a second border around a box that
-   already has one. Same treatment as the <=480px phone rule further up -
-   no outer padding, no cap, no border / radius / shadow, and a min-height so a
-   short list does not leave a card-coloured box floating on the page
-   background. Standalone (own tab, installed PWA) the card is untouched. */
-html.is-embedded .page,
-html.is-windowed .page                       { padding: 0; }
-html.is-embedded .page > .page-inner,
-html.is-windowed .page > .page-inner         { max-width: 100%; }
-html.is-embedded .page > .page-inner > .card,
-html.is-windowed .page > .page-inner > .card
-{
-    min-height: 100vh;
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-}
-
-/* -----------------------------------------------------------------------------
- * WINDOWED  - the app runs as a window of the desktop (desktop/index.html).
- * shared/ui.js stamps html.is-windowed instead of .is-embedded: the app keeps
- * its icon and title (not its sync dot: the desktop shows one for all), and its top row doubles as the window's title
- * bar. The card shell fills the window (same rule as EMBEDDED above). The
- * window's own buttons (Scale / Resize, minimise, maximise, close) are on the
- * desktop's bar, not in the app.
- * ---------------------------------------------------------------------------*/
-/* The connection status: ONE for the whole desktop, after its clock (it copies
-   the worst of every window's), so no window shows its own. */
-html.is-windowed .sync-indicator { display: none; }
-
-/* The trailing button bar, kept together so it wraps as one unit (see above). */
-.topbar-actions,
-.header-actions
-{
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    flex: 0 0 auto;
-    margin-left: auto;          /* hug the right edge while it shares the title's line */
-}
 
 /* The right-hand groups (see HEADER) are Ayni's: the header's actions are an
    Ayni toolbar (role="toolbar" .tall: one Tab stop, the arrows move) whose
@@ -409,67 +141,18 @@ html.is-windowed .sync-indicator { display: none; }
     background: var(--line);
 }
 
-/* In a desktop window the top row is the window's title bar (desktop/index.html
- * drags it from any empty spot). The app name keeps an empty strip after it to
- * grab the window by - 1.5rem - so every
- * control after it stays together. Drive and Planner wrap their name, so the
- * wrapper carries the strip there (drive.css, planner/index.html). */
-html.is-windowed .topbar h1,
-html.is-windowed .header h1,
-html.is-windowed .app-title { margin-right: 1.5rem; }
-
-/* Card-shell header (Contacts, Tasks, Habits, Split): the same bar as a tool
-   app's .topbar (his call, 2026-09-30) - same padding, gaps, icon size and
-   divider - laid over the card's top padding, edge to edge. It never scrolls
-   away: sticky, opaque, the rows slide under it unseen (in a desktop window it
-   is also the title bar). The floating sync chip lands under its divider, as
-   it does in every other app. shared/ui.js puts its height in --win-head-h for
-   an app's own sticky heads (Contacts' letters). */
-.header
-{
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 2px;
-    row-gap: 4px;
-    margin-bottom: var(--space-4);
-}
-.page > .page-inner > .card > .header
-{
-    position: sticky; top: 0; z-index: 20;
-    margin: -20px -16px var(--space-4);          /* the card's padding: 20px 16px */
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--line);
-    border-top-left-radius: inherit;             /* the card's own corners - none on a phone */
-    border-top-right-radius: inherit;
-    background: var(--card);
-}
-.header .app-icon  { width: 20px; height: 20px; margin-right: 6px; }
-.header h1,
-.header .app-title
-{
-    flex: 1 1 auto;
-    min-width: min-content;     /* wrap the title, never clip it; buttons wrap below instead */
-    margin: 0 10px 0 0;
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--accent);
-    white-space: normal;
-}
-
-
 /* -----------------------------------------------------------------------------
  * FOLDER-BACKED VIEWERS  (Photos, Music, Movies)  -  one header row
  *
- *   .topbar: [icon] <h1> [folder ?] [.tb-modes]  ...  .topbar-actions [ search, tools, rescan | ? ]  [sync dot]
+ *   .topbar: [icon] <h1> [.tb-modes]  ...  .topbar-actions [ search, tools, rescan | i ? ]  [sync dot]
  *
  * The toolbar lives IN the header, as in Drive - the header is also the
- * desktop window's title bar. It follows the HEADER order: folder-? and the
+ * desktop window's title bar. It follows the HEADER order: the
  * modes on the left, the rest in .topbar-actions. An app that shows no
  * tools yet (Music / Movies before a folder is picked) hides its .tb-tools
  * boxes (display: contents).
  *
- * - The folder-? button (popovertarget) opens an Ayni popup, .folder-menu:
+ * - The "i" button (popovertarget, in .tb-sys) opens an Ayni popup, .folder-menu:
  *   #crumb, a text button with the folder icon +
  *   the folder PATH that opens the change-folder picker, then #subStrip, a
  *   .menu-info line with the item counts / genres / totals. Nothing else
@@ -477,13 +160,10 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
  * - .tb-modes holds the buttons that switch what is shown; the right-hand
  *   group starts with the search (it folds behind a magnifier, SEARCH
  *   below), then the app's tools, then the rescan button (#reloadBtn in all
- *   three); help is in the .tb-sys group after it.
+ *   three); the "i" and help are in the .tb-sys group after it.
  * - The games still use .view-bar as a row of its own (below).
  * ---------------------------------------------------------------------------*/
-.tb-tools:not([hidden]) { display: contents; }
 /* The .topbar's gap is a toolbar's 2px; its groups keep the 8px the old row had. */
-.topbar .tb-modes,
-.topbar .tb-actions     { margin-right: 6px; }
 
 .folder-menu            { width: auto; max-width: min(360px, calc(100vw - 12px)); padding: 6px; gap: 2px; }
 .folder-menu .folder-crumb { width: 100%; justify-content: flex-start; text-align: left; padding: 8px 12px; border-radius: var(--radius-s); }
@@ -496,47 +176,6 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
     font-variant-numeric: tabular-nums;
 }
 .menu-info:empty        { display: none; }
-
-/* A row of toolbar groups (the games' option bars). .tb-modes switches WHAT is
-   shown, .tb-actions acts ON it (introduced by a .tb-sep). The
-   action group carries its own divider inside it, so a group whose buttons are
-   all hidden takes the divider with it instead of leaving it hanging. */
-.view-bar
-{
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    row-gap: 2px;
-    flex: 0 0 auto;
-    padding: var(--space-2) var(--space-4);
-    border-bottom: 1px solid var(--line);
-}
-.tb-modes,
-.tb-actions       { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
-.tb-actions:not(:has(> button:not([hidden]))) { display: none; }
-
-/* Scoped, NOT a bare .tb-sep: text uses that name for a vertical divider of its
-   own and write for a HORIZONTAL one inside .tb-popup - a global width: 1px
-   would squash write's to a sliver. */
-.view-bar .tb-sep,
-.tb-actions > .tb-sep { width: 1px; align-self: stretch; margin: 4px; background: var(--line); flex: 0 0 auto; }
-
-/* -----------------------------------------------------------------------------
- * SEARCH  - every search field is Ayni's (shared/ayni/ayni-search.css): a
- * toolbar one is .input-group.search-field.fold behind its [data-search]
- * magnifier; what does not fit beside it goes into the ⋮ (Ayni.fitBar).
- * Only Nayive's header layout is here: a card .header's title grows at rest
- * (it pushes the buttons right); while searching it keeps its width, as a
- * .topbar's does, and the field gets the room.
- * ---------------------------------------------------------------------------*/
-.header:has(.search-field.fold.is-open) h1 { flex-grow: 0; }
-/* While searching the title row stops wrapping: the field squeezes to its
-   180px and what still does not fit goes into the ⋮ by rank (a wrapped row
-   would only push the whole toolbar below the title). */
-.topbar:has(.search-field.fold.is-open),
-.header:has(.search-field.fold.is-open) { flex-wrap: nowrap; }
-
 
 /* -----------------------------------------------------------------------------
  * BUTTONS  - Ayni's buttons family (shared/ayni/ayni-buttons.css)
@@ -551,6 +190,7 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
  *   .btn.bordered   a card disc with a thin border, for a button alone on a
  *                   plain surface
  *   .btn.on-media   a dark glass disc over a photo or a video
+ *   .btn.large      a big icon over its name, for a launcher or a home screen
  *   .btn.text       a pill with a word, only for a wide call to action
  *                   ("Extract here"); .primary fills it, .bordered rings it,
  *                   .dashed is "add another", .sm is tighter
@@ -691,26 +331,6 @@ input[type="file"] { accent-color: var(--accent); }
 
 
 
-/* -----------------------------------------------------------------------------
- * SYNC INDICATOR  - defined in theme.css
- *
- * .sync-indicator  the plug glyph in the header (shared/ui.js draws it). It is
- *                  hidden while all is well and floats as a chip just off the
- *                  bar's end when not (theme.css, FLOATING CHIP).
- *                  Toggle the state class:
- *     (none)     --danger red   not synced yet (the safe start state)
- *     .synced    --ok green     saved
- *     .busy      --busy blue    a GET / PUT is in flight
- *     .offline   --warn gold    working offline, changes queued
- *
- * Notifications are Ayni's: Ayni.toast( "ok", "Saved" ) (kinds ok, info, warn,
- * err; an err stays until closed), with { undo, final } for an Undo, and
- * Ayni.progress() for a long job. The page needs no element for them.
- * ---------------------------------------------------------------------------*/
-
-
-
-
 /* A long-press on a button would otherwise pop the iOS callout / selection menu.
    Menus too: a long-press opens a menu under the finger and, if the finger stays
    down, iOS goes on and selects the word under it ("Responder" painted blue). */
@@ -728,118 +348,6 @@ button,
     user-select: text;
 }
 
-
-/* ---------------------------------------------------------------------------
- * INSTALL-AS-APP DIALOG  (.install-*)
- *
- * Built by NayiveUI.offerInstall() on Ayni.dialog, with Ayni's help-card row
- * list (.help-list / .help-t) for the three "what you get" lines. The plain row
- * glyph, the app logo, the numbered iOS steps and the wide buttons are its own.
- * ---------------------------------------------------------------------------*/
-.install-ico
-{
-    flex: 0 0 auto;
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-dim);
-}
-.install-ico svg     { width: 18px; height: 18px; display: block; }
-
-.install-logo
-{
-    display: block;
-    width: 64px;
-    height: 64px;
-    margin: 2px auto 10px;
-    border-radius: var(--radius-l);
-    box-shadow: var(--elev-card);
-}
-.install-title { text-align: center; }
-.install-lead  { text-align: center; }
-
-.install-h     { margin-top: 16px; }
-
-/* The three iOS steps: a counter bubble, the real glyph, then the sentence. */
-.install-steps
-{
-    counter-reset: install-step;
-    list-style: none;
-    margin: 8px 0 0;
-    padding: 0;
-}
-.install-steps li
-{
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    padding: 8px 2px;
-    font-size: 0.86rem;
-    line-height: 1.35;
-}
-.install-steps li + li { border-top: 1px solid var(--line); }
-.install-steps li::before
-{
-    counter-increment: install-step;
-    content: counter(install-step);
-    flex: 0 0 auto;
-    width: 22px;
-    height: 22px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    background: var(--card2);
-    color: var(--text-dim);
-    font-size: 0.78rem;
-    font-weight: 600;
-}
-.install-steps b { font-weight: 600; color: var(--text); }
-
-.install-note
-{
-    margin-top: 14px;
-    font-size: 0.85rem;
-    line-height: 1.4;
-    color: var(--text-dim);
-}
-
-/* Stacked full-width actions: Instalar / Ahora no / No mostrar más. */
-.install-actions
-{
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 16px;
-}
-.install-btn
-{
-    flex: 1 1 auto;
-    min-height: 44px;
-    padding: 8px 14px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-pill);
-    background: var(--card2);
-    color: var(--text-dim);
-    font-family: inherit;
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: color var(--tr-fast), background var(--tr-fast);
-}
-.install-btn:hover { color: var(--text); background: color-mix(in srgb, var(--accent) 12%, var(--card2)); }
-.install-btn.primary
-{
-    border-color: transparent;
-    background: var(--accent);
-    color: var(--on-accent);
-    font-size: 0.95rem;
-    font-weight: 600;
-}
-.install-btn.primary:hover { background: var(--accent); color: var(--on-accent); filter: brightness(1.06); }
-.install-never { border-color: transparent; background: none; font-size: 0.8rem; min-height: 36px; }
-.install-never:hover { background: none; color: var(--text); text-decoration: underline; }
 
 /* ---------------------------------------------------------------------------
    SHARING  -  the "Compartir" dialog (NayiveUI.shareSheet) and the read-only
@@ -865,88 +373,6 @@ button,
    beige light ground and bright enough on the dark one. */
 .ro-badge svg { flex: 0 0 auto; width: 15px; height: 15px; color: var(--link); }
 
-/* Who already has it: one row per person, with a round × to take it back. */
-.share-have
-{
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin: 12px 0;
-}
-.share-row
-{
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 6px 6px 6px 12px;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    background: var(--card);
-}
-.share-drop
-{
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border: none;
-    border-radius: 50%;
-    background: none;
-    color: var(--text-dim);
-    cursor: pointer;
-}
-.share-drop:hover  { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
-.share-drop svg    { width: 16px; height: 16px; }
-.share-drop[disabled] { opacity: 0.5; cursor: default; }
-
-/* Who else could have it: an Ayni pick list (ul.lb), the names in three
- * columns, the check square in front of each. A name too wide for its column
- * ends in "..." (full name in the tooltip). */
-.share-pick
-{
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    align-content: start;
-    gap: 2px;
-    max-height: 44vh;
-    margin: 12px 0 4px;
-}
-.share-pick [role="option"]      { min-width: 0; padding-top: 8px; padding-bottom: 8px; }
-.share-pick [role="option"] span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* "Pueden añadir archivos" - one tick under the people list. Deliberately not
-   inside the .share-pick box: it is a property of the share, not of a person. */
-.share-add
-{
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 10px 2px 0;
-    font-size: 0.86rem;
-    color: var(--text-dim);
-    cursor: pointer;
-}
-.share-add input:not([role="switch"]) { flex: 0 0 auto; width: auto; margin: 0; }
-.share-add > .switch { margin-left: auto; }   /* an on / off row: the text, then the switch */
-/* "Everybody": the on / off row above the names (it greys them out). */
-.share-all { margin: 12px 2px 0; }
-
-/* The sheet's sections: "Cualquiera con el enlace" (a trip only, on top) and
-   the people. Each has a heading and a note; the divider goes only BETWEEN two
-   of them, so a sheet with just the people (Drive, Photos, Split) gets none. */
-.share-sect + .share-sect { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
-.share-head { margin: 0 0 4px; font-size: 0.9rem; font-weight: 600; color: var(--text); }
-.share-note { margin: 0 0 10px; font-size: 0.8rem; line-height: 1.4; color: var(--text-dim); }
-
-/* A trip's public link: a plain .share-row with .share-drop buttons; only the
-   long URL has to give way. The row keeps its height while the link is still
-   being made and has no buttons yet. */
-.share-link-url  { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.86rem; }
-.share-link .share-row { gap: 2px; min-height: 46px; }
 .share-link-app  { margin-top: 12px; }
 .share-link-how  { margin: 6px 0 0; }
 /* "My location": one card per app (Overland on iPhone, GPSLogger on Android),
@@ -958,24 +384,6 @@ button,
 /* Location sending not set up: the (i) sits right after "not set up", the "+" stays right. */
 .share-link-app .info-tip                { margin-right: auto; }
 /* A menu row already spaces its items: no extra margin before its (i). */
-
-
-/* -----------------------------------------------------------------------------
- * IDENTITY COLOURS  ([data-c="0"] ... [data-c="7"]  ->  var(--id-color))
- *
- * The theme has one accent; people (Split) and habits (Habits) have to be told
- * apart at a glance, so each gets one of eight fixed hues by its index. They
- * are identity colours, not theme colours: the same in light and dark, and
- * white text reads on all of them. The page paints with var(--id-color).
- * ---------------------------------------------------------------------------*/
-[data-c="0"] { --id-color: hsl(170 40% 38%); }
-[data-c="1"] { --id-color: hsl(215 45% 50%); }
-[data-c="2"] { --id-color: hsl(345 45% 52%); }
-[data-c="3"] { --id-color: hsl(35 55% 46%); }
-[data-c="4"] { --id-color: hsl(275 35% 52%); }
-[data-c="5"] { --id-color: hsl(95 35% 40%); }
-[data-c="6"] { --id-color: hsl(15 50% 52%); }
-[data-c="7"] { --id-color: hsl(200 25% 45%); }
 
 
 /* -----------------------------------------------------------------------------
@@ -1011,11 +419,6 @@ button,
     box-shadow: var(--elev-dialog);
 }
 .popup:not(.panel).open  { display: block; }
-.popup-row               { display: flex; gap: 2px; }
-.popup-row + .popup-row  { margin-top: 2px; }
-.popup-row-sep           { margin-top: 5px; padding-top: 6px; border-top: 1px solid var(--line); }
-
-.btn.pop-btn             { --btn: 32px; }
 
 
 /* A row for a button that IS on the bar on a PC and only disappears on a
@@ -1026,562 +429,11 @@ button,
     .panel.menu .mi-phone { display: none; }
 }
 
-/* -----------------------------------------------------------------------------
- * PULL-DOWN MENU BAR  (#menuBar)  -  shared/menubar.js, Ayni.menuBar
- *
- * The classic "Archivo · Edición · Ver …" row Write and Calc offer instead of
- * their icon toolbar: an Ayni menu bar of text buttons, across the window
- * under the header. Its drop-downs are Ayni menus (shortcut column, ticks,
- * one level of submenus); a row whose glyph is a character (Calc's "∑")
- * shows it in the icon slot (.mi-char).
- *
- * Each app keeps its own `#app.is-menus …` rule for collapsing its toolbar -
- * what has to disappear differs, and Write's strip must collapse with
- * visibility:hidden rather than display:none (its buttons stay in the DOM,
- * measured, for the menu entries that click them).
- * ---------------------------------------------------------------------------*/
-#menuBar
-{
-    flex: 0 0 auto;
-    display: flex; align-items: center; flex-wrap: wrap;
-    gap: 1px; padding: 2px 6px;
-    border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--card);
-}
-
-
-
-
-
-
-/* -----------------------------------------------------------------------------
- * OFFICE CHROME  (.file-label, .open-list, .folder-pick, .sc-list, .st-list)  -  Calc, Text, Write
- *
- * The three document editors share one header shape: after the app name, the
- * open document's name (.file-label - click it to rename in place, which swaps
- * in .file-label-input), then the sync plug. Their "Abrir documento" dialog is
- * one plain folder browser: a breadcrumb (.open-crumb) over a one-level list
- * (.open-list) of folders and openable files. Their "Guardar como" dialog asks
- * where the document goes with .folder-pick - a button dressed as a field
- * control that opens NayiveUI.pickFolder. shared/office.js builds all three.
- * ---------------------------------------------------------------------------*/
-/* The document name is an EDIT IN PLACE pair: .file-label (span, at rest) swaps
- * for .file-label-input (the box). Both carry Ayni's .inline-text /
- * .input.inline look - only the header layout is set here. A name too long to fit
- * loses its START ("...informe 2026.docx"): the end, with the extension, is what
- * tells documents apart. rtl puts the ellipsis on the left; the name itself sits
- * in a <bdi> so it still reads left to right. */
-.file-label
-{
-    flex: 1 1 auto;
-    min-width: 0;
-    color: var(--text-dim);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    direction: rtl;
-    text-align: left;
-}
-.file-label-input        { flex: 1 1 auto; min-width: 0; }
-
-/* The two phone toggles of Calc and Write (each app shows them in its own
- * phone block): the header's "Aa" (#fmtBtn) folds the toolbar away while you
- * type - a TEXT button, not an icon one: "Aa" says "formato" at a glance - and
- * the toolbar's own "⋮" (#moreToolsBtn) opens the rest of it in place; open,
- * it takes the tint of a property that is on. Write's is also matched inside
- * #toolbarRow, to outweigh that row's own button rule. */
-#fmtBtn
-{
-    font-family: var(--font-sans);
-    font-size: 0.95rem;
-    font-weight: 600;
-    line-height: 1;
-    letter-spacing: 0.5px;
-}
-#moreToolsBtn[aria-expanded="true"],
-#toolbarRow #moreToolsBtn[aria-expanded="true"] { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
-
-/* The save floppy before the sync plug (NayiveOffice.autosave): a readout, not
- * a control. Plain text colour while edits wait, blue saving, green saved;
- * "here" = green with a blue dot: saved on this device, not sent yet
- * (store.js PARKED SAVES); amber "draft" = on this device only; red only when
- * something went wrong. Its title says "Guardado 12:04" / "Borrador 12:04".
- * Empty (no state) until a document is open. */
-.saved-at                { display: inline-flex; align-items: center; margin-left: 6px; color: var(--danger); position: relative; }
-.saved-at:not([data-state]) { display: none; }
-.saved-at svg            { width: 18px; height: 18px; }
-.saved-at[data-state="pending"] { color: var(--text); }
-.saved-at[data-state="draft"]   { color: var(--warn); }
-.saved-at[data-state="saving"] { color: var(--busy); }
-.saved-at[data-state="saved"],
-.saved-at[data-state="here"]   { color: var(--ok); }
-.saved-at[data-state="here"]::after { content: ""; position: absolute; top: -1px; right: -3px; width: 7px; height: 7px;
-                                      border-radius: 50%; background: var(--busy); }
-
-.open-crumb              { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin-bottom: 8px;
-                           font-size: 0.85rem; color: var(--text-dim); }
-.open-crumb.is-note      { display: block; font-style: italic; }
-.open-crumb .crumb-seg   { background: none; border: none; padding: 3px 5px; border-radius: var(--radius-s);
-                           color: var(--accent); font: inherit; cursor: pointer; }
-.open-crumb .crumb-seg:disabled { color: var(--text-dim); cursor: default; }
-.open-crumb .crumb-seg:not(:disabled):hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
-.open-crumb .crumb-sep   { color: var(--text-dim); }
-
-.open-list               { list-style: none; margin: 0 0 14px; padding: 0; min-height: 120px; max-height: 46vh;
-                           overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius-s); }
-.open-list li            { display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer;
-                           border-bottom: 1px solid var(--line); font-size: 0.92rem; }
-.open-list li:last-child { border-bottom: none; }
-.open-list li:hover      { background: color-mix(in srgb, var(--accent) 14%, transparent); }
-.open-list li.is-loading,
-.open-list li.is-empty   { cursor: default; color: var(--text-dim); }
-.open-list li.is-loading:hover,
-.open-list li.is-empty:hover { background: none; }
-.open-list li.is-empty   { justify-content: center; padding: 16px; font-size: 0.88rem; }
-.open-list .open-ic      { flex: 0 0 auto; display: flex; color: var(--text-dim); }
-.open-list .open-ic svg  { width: 17px; height: 17px; }
-.open-list .open-nm      { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.open-list li.is-folder .open-nm { font-weight: 600; }
-.open-list li.is-folder::after   { content: "\203A"; color: var(--text-dim); flex: 0 0 auto; padding-right: 2px; }
-
-/* The folder row of a save-as dialog. It sits inside a .field, so it has to
- * look exactly like Ayni's .input above it - only the folder icon and the
- * pointer say it opens something. */
-.folder-pick
-{
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    min-height: var(--ctl-h);
-    padding: 5px 8px;
-    font: inherit;
-    font-size: var(--field-fs);
-    text-align: left;
-    color: var(--text);
-    background: var(--card2);
-    border: 1px solid var(--field-line);
-    border-radius: var(--ctl-radius);
-    cursor: pointer;
-}
-.folder-pick:hover         { border-color: var(--text-dim); }
-.folder-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
-.folder-pick .fp-btn-ic     { flex: 0 0 auto; display: flex; color: var(--text-dim); }
-.folder-pick .fp-btn-ic svg { width: 16px; height: 16px; }
-.folder-pick .fp-btn-nm     { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-
-/* Help ▸ "Keyboard shortcuts" (Calc, Write): one row per shortcut, its keys on
-   the right. NayiveOffice.showShortcuts fills #scList. */
-.sc-list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 10px; }
-.sc-row  { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; padding: 5px 0; }
-.sc-row + .sc-row { border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent); }
-.sc-row kbd
-{
-    font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap;
-    color: var(--text-dim); border: 1px solid var(--line);
-    border-radius: var(--radius-s); padding: 1px 6px; background: var(--card2);
-}
-
-/* Help ▸ "Statistics" (Calc, Text, Write): label left, number right, the same
-   rhythm as the shortcut sheet above. NayiveOffice.showStats fills #stList. */
-.st-list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 6px; }
-.st-row  { display: flex; align-items: baseline; justify-content: space-between; gap: 32px; padding: 5px 0; }
-.st-row + .st-row { border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent); }
-.st-row b { font-variant-numeric: tabular-nums; }
-.st-note { font-size: 0.78rem; color: var(--text-dim); margin: 0 0 4px; }
-
-
-/* -----------------------------------------------------------------------------
- * MEDIA VIEWER  (.main-row, .view-head, .media-card, .scope-chip, .empty-hint, .player-bar)
- *
- * Photos, Music and Movies are one app shape wearing three skins: a folder tree
- * (or scope chip) on the left, a scrolling library in the middle, a transport
- * bar at the bottom. They already share their JavaScript (shared/media.js);
- * these are the rules all three (or, for the player bar, the two with a
- * transport) had pasted into their own <style> byte for byte.
- *
- * What stays per-app is only the sizes that genuinely differ: the poster is
- * 34x50, the album cover 48x48; Movies' elapsed label holds "1:23:45" and needs
- * 54px where Music's "3:21" needs 34. Those overrides sit in the app, each next
- * to the grid it belongs to.
- * ---------------------------------------------------------------------------*/
-.main-row          { flex: 1 1 auto; display: flex; min-height: 0; }
-
-/* A library view's heading (Music, Movies). Its bottom margin is the app's. */
-.view-head         { font-size: 0.95rem; font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
-.view-head small   { margin-left: 8px; font-size: 0.78rem; font-weight: 400; color: var(--text-dim); }
-
-/* A card in a library grid (Music's albums and artists, Movies' genres): its
-   title and the line under it. The grid, the art and any other padding are
-   the app's. */
-.media-card
-{
-    display: flex; flex-direction: column; gap: 10px; padding: 12px;
-    background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-m);
-    cursor: pointer; text-align: left; font: inherit; color: inherit;
-    transition: border-color var(--tr-fast), background-color var(--tr-fast);
-}
-.media-card:hover     { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
-.media-card.is-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--card2)); }
-.media-card-title     { font-size: 0.86rem; font-weight: 600; color: var(--text);
-                        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.media-card-sub       { font-size: 0.76rem; color: var(--text-dim); }
-
-/* "You are looking at <folder> [x]" - the pill above a scoped library. */
-.scope-chip
-{
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: 6px 6px 6px 12px;
-    background: var(--card2);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-pill);
-    color: var(--text-dim);
-    font-size: 0.78rem;
-}
-.scope-chip button
-{
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    border: none;
-    border-radius: 50%;
-    background: transparent;
-    color: var(--text-dim);
-    cursor: pointer;
-    transition: background-color var(--tr-fast), color var(--tr-fast);
-}
-.scope-chip button:hover    { background: color-mix(in srgb, var(--text) 14%, transparent); color: var(--text); }
-.scope-chip button svg      { width: 12px; height: 12px; }
-
-/* The media apps' "nothing to show yet" panel. (.empty-state above is the
-   list apps' version; this one is centred in a whole pane and can carry a
-   .btn.text call to action.) */
-.empty-hint
-{
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    padding: 44px 20px;
-    color: var(--text-faint);
-    text-align: center;
-}
-.empty-hint svg             { width: 32px; height: 32px; opacity: 0.5; }
-.empty-hint p               { margin: 0; font-size: 0.86rem; max-width: 320px; }
-.empty-hint .btn.text       { margin-top: 6px; }
-
-/* The transport bar pinned under the library (Music, Movies). Left: what is
-   playing. Middle: the buttons and the seek bar. Right: volume. */
-.player-bar
-{
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    padding: 12px 22px;
-    border-top: 1px solid var(--line);
-    background: var(--card);
-}
-/* Left third of the bar: the cover, then the title over the sub-line. Only the
-   COVER's box differs between the two apps (a 34x50 poster, a 48x48 sleeve) and
-   with it .player-now's width - both stay in the app. */
-.player-now                 { display: flex; align-items: center; gap: var(--space-3); flex: 0 0 auto; min-width: 0; }
-.player-art                 { display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
-                              color: rgba(255, 255, 255, 0.85); }
-.player-meta                { min-width: 0; }
-.player-title               { font-size: 0.88rem; font-weight: 600; color: var(--text);
-                              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.player-sub                 { font-size: 0.76rem; color: var(--text-dim);
-                              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-.transport                  { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
-/* The buttons are Ayni's .btn (.transport-btn only names them); play / pause
-   is the player's default button, a 44 px .btn.primary. */
-.btn.play-btn               { --btn: 44px; }
-.btn.play-btn .icon         { --icon: 20px; }
-
-.seek-block                 { flex: 1 1 auto; display: flex; align-items: center; gap: var(--space-2); min-width: 120px; }
-.time-label                 { flex: 0 0 auto; width: 34px; font-size: 0.72rem; color: var(--text-dim); font-family: var(--font-mono); }
-.time-label.end             { text-align: right; }
-.volume-block               { display: flex; align-items: center; gap: var(--space-2); flex: 0 0 auto; width: 130px; }
-.volume-block svg           { width: 17px; height: 17px; flex: 0 0 auto; color: var(--text-dim); }
-
-/* The seek + volume sliders are Ayni's (shared/ayni/ayni-fields.css). */
-
-/* On a narrow window the bar goes to two rows with the seek bar full width
-   underneath. That lives in each media app's own narrow block, not here: the two
-   drop their side pane at different widths (Music 760, Movies 820) and the bar
-   has to fold at the same moment - see TWO LAYOUT MODES at the top of this file.
-   */
-
-
-/* -----------------------------------------------------------------------------
- * IMAGE EDITOR CHROME  (.editor-backdrop > .editor-bar / .editor-canvas /
- *                        .editor-comment)  -  Image (which Drive and Photos open) and Chat
- *
- * The frame around the photo editor (shared/image-editor.js), which the apps
- * load on first use.
- * It is a FIXED DARK surface in both schemes - literal colours on purpose, never
- * the theme tokens: you judge a photo against a neutral dark ground, the same
- * reason Drive's lightbox is always dark. That is the one place in Nayive where
- * a hex colour is the right answer.
- *
- * Chat opens it over its own screens, so it sets a `z-index` on .editor-backdrop
- * (170). Image uses only .editor-canvas + .editor-comment, under its own header.
- * ---------------------------------------------------------------------------*/
-.editor-backdrop
-{
-    position: fixed;
-    inset: 0;
-    display: none;
-    flex-direction: column;
-    background: #1e1e1e;
-}
-.editor-backdrop.open { display: flex; }
-
-.editor-bar
-{
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    height: 44px;
-    padding: 0 8px 0 14px;
-    background: #151515;
-    border-bottom: 1px solid #000;
-}
-.editor-title
-{
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.9);
-}
-.editor-actions { flex: 0 0 auto; display: flex; gap: 6px; }
-/* Its buttons are Ayni's glass .btn.on-media. */
-.editor-canvas     { flex: 1 1 auto; min-height: 0; position: relative; }
-
-/* A free-text note for the picture, saved into the comments sidecar together
-   with the image. No label - the placeholder explains it. */
-.editor-comment
-{
-    flex: 0 0 auto;
-    resize: none;
-    border: none;
-    border-top: 1px solid #000;
-    outline: none;
-    padding: 8px 14px;
-    font: inherit;
-    font-size: var(--field-fs);
-    line-height: 1.4;
-    color: #fff;
-    background: #151515;
-}
-.editor-comment::placeholder { color: rgba(255, 255, 255, 0.4); }
-
-/* The editor itself (shared/image-editor.js) fills the .editor-canvas: the
-   tools (.ie-tools, only when the app's header keeps no place for them - Chat),
-   a tool's options (.ie-opts) and, under them, the picture (.ie-main, with the
-   zoom box over its corner). It is a dark island in both schemes:
-   it sets the colour tokens the shared controls read (.btn, the
-   range), so they are the standard ones, on dark. */
-.ie
-{
-    color-scheme: dark;
-    --bg:         #151515;
-    --card2:      #2A2B2F;
-    --line:       #45464C;
-    --text:       #F2F2F3;
-    --text-dim:   #C9CBD1;
-    --text-faint: #8A8D96;
-    --accent:     #1F80B1;
-    --on-accent:  #FFFFFF;
-    --track:      #4A4B50;
-
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    color: var(--text);
-}
-.ie-main  { position: relative; flex: 1 1 auto; min-height: 0; }
-/* The scroll bars move the picture; the drawing (.ie-stage) stays put over
-   the visible part and Fabric draws what is under it. */
-.ie-view
-{
-    position: absolute;
-    inset: 0;
-    overflow: auto;
-    touch-action: none;
-    overscroll-behavior: contain;
-}
-.ie-view.is-hand     { cursor: grab; }
-.ie-view.is-panning  { cursor: grabbing; }
-.ie-sizer            { position: relative; }
-.ie-stage            { position: sticky; left: 0; top: 0; overflow: hidden; }
-
-/* Hand · zoom out · % · zoom in · fit · 1:1 - over the picture's corner. */
-.ie-zoom
-{
-    position: absolute;
-    right: 22px;
-    bottom: 22px;
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    padding: 3px;
-    border-radius: var(--radius-pill);
-    background: rgba(0, 0, 0, 0.62);
-}
-.ie-zoom-pct { min-width: 46px; text-align: center; font-size: 0.78rem; font-variant-numeric: tabular-nums; color: var(--text); }
-.ie-one span { font-size: 0.72rem; font-weight: 700; letter-spacing: -0.02em; }
-
-/* Its bars sit at the top, as every toolbar; groups of .tb-group, the line
-   between them the header's own (see HEADER). */
-.ie-bar
-{
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: safe center;
-    gap: 2px;
-    padding: 6px 10px;
-    overflow-x: auto;
-    border-bottom: 1px solid #000;
-}
-.ie-bar[hidden]      { display: none; }
-.ie-tools            { background: var(--bg); }
-.ie-opts             { min-height: 50px; background: #1A1A1A; }
-/* Adjust's slider drops under its pills when the row is short; Crop's ×
-   and ✓ never do - its pills scroll sideways instead. */
-.ie-opts:has(> .ie-range) { flex-wrap: wrap; row-gap: 6px; }
-.ie-pills            { flex: 0 1 auto; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-.ie-pills .btn       { flex: 0 0 auto; }
-@media (max-width: 640px)
-{
-    .ie-pills .btn   { padding-inline: 10px; }
-}
-.ie-range            { display: flex; align-items: center; gap: 10px; width: min(320px, 70vw); margin-left: 10px; }
-.ie-val              { flex: 0 0 auto; min-width: 34px; text-align: right; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
-/* Resize: width × height px and %, the standard inputs, sized to their digits. */
-.ie-size             { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--text-dim); }
-.ie-size .spin      { width: 128px; flex: 0 0 auto; }
-.ie-size .spin:has( [data-ie=size-pct] ) { width: 112px; margin-left: 8px; }
-
-/* The crop box: a corner sizes it, an edge too (only free), inside moves it;
-   the picture outside it goes dark. Chat's own crop (before a photo goes) is
-   the same box, with corners only. */
-.crop-box       { position: absolute; box-sizing: border-box; border: 2px solid #fff; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55); cursor: move; touch-action: none; }
-.crop-box span  { position: absolute; width: 44px; height: 44px; }
-.crop-box span::after { content: ""; position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4); }
-.crop-box .nw   { left: -22px;  top: -22px;    cursor: nwse-resize; }
-.crop-box .ne   { right: -22px; top: -22px;    cursor: nesw-resize; }
-.crop-box .sw   { left: -22px;  bottom: -22px; cursor: nesw-resize; }
-.crop-box .se   { right: -22px; bottom: -22px; cursor: nwse-resize; }
-.crop-box .n,
-.crop-box .s    { left: 50%; margin-left: -22px; cursor: ns-resize; }
-.crop-box .e,
-.crop-box .w    { top: 50%; margin-top: -22px; cursor: ew-resize; }
-.crop-box .n    { top: -22px; }
-.crop-box .s    { bottom: -22px; }
-.crop-box .e    { right: -22px; }
-.crop-box .w    { left: -22px; }
-.crop-box :is(.n, .s, .e, .w)::after { width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 3px; }
-/* The editor's box: the thirds, to frame by; no edges with a fixed ratio;
-   the hand on - the picture moves, the box does not. */
-.ie-crop
-{
-    background:
-        linear-gradient(to right, transparent calc(33.333% - 0.5px), rgba(255, 255, 255, 0.45) 0 calc(33.333% + 0.5px), transparent 0 calc(66.667% - 0.5px), rgba(255, 255, 255, 0.45) 0 calc(66.667% + 0.5px), transparent 0),
-        linear-gradient(to bottom, transparent calc(33.333% - 0.5px), rgba(255, 255, 255, 0.45) 0 calc(33.333% + 0.5px), transparent 0 calc(66.667% - 0.5px), rgba(255, 255, 255, 0.45) 0 calc(66.667% + 0.5px), transparent 0);
-}
-.ie-crop.fixed :is(.n, .s, .e, .w) { display: none; }
-.ie-crop.is-off                    { pointer-events: none; }
-.ie-crop.is-off span               { display: none; }
-
-
-/* -----------------------------------------------------------------------------
- * LEAFLET CHROME  -  Trips (the route map) and Photos (the "where" map)
- *
- * Leaflet ships its own white popup, zoom buttons and attribution box, which look
- * pasted-on in either scheme. These five rules put them on the Nayive tokens.
- *
- * EVERY selector is scoped under `.leaflet-container`, and that is not decoration:
- * both apps load `lib/.../leaflet.css` AFTER this file, so an equal-specificity
- * rule would lose to Leaflet's own (its link colour is `.leaflet-container a`).
- * The extra class puts these ahead whatever the load order. The `!important`s are
- * Leaflet's own, matched.
- *
- * The map TILES are desaturated per map (`.route-map`, `.lmap`), not here: only
- * the app knows which element is a map, and a print stylesheet wants it too.
- * ---------------------------------------------------------------------------*/
-.leaflet-container .leaflet-popup-content-wrapper,
-.leaflet-container .leaflet-popup-tip     { background: var(--card2); color: var(--text); }
-.leaflet-container a.leaflet-popup-close-button { color: var(--text-dim); }
-.leaflet-container .leaflet-control-zoom a { background: var(--card2) !important; color: var(--text) !important;
-                                            border-color: var(--line) !important; }
-.leaflet-container .leaflet-control-attribution { background: color-mix(in srgb, var(--bg) 78%, transparent) !important;
-                                            color: var(--text-dim) !important; }
-.leaflet-container .leaflet-control-attribution a { color: var(--text-dim); }
-
-
-/* -----------------------------------------------------------------------------
- * PHONE  (640px and under)  - the shared half of the phone layout; see TWO
- * LAYOUT MODES in the header. App-specific phone rules live in each app's own
- * @media (max-width: 640px) block.
- * ---------------------------------------------------------------------------*/
-@media (max-width: 640px)
-{
-    /* Fingers, not pointers: the dense 30px toolbar button grows to 36px. */
-    .btn.sm            { --btn: 36px; }
-}
-
-/* THE CLIP'S PANEL (NayiveUI.attachPanel): round coloured buttons, three to a
-   row, each with its name under it - Chat's writer and eMail's. Where it sits
-   is the app's (Chat: over its writer; eMail: under its clip). */
-.attach
-{
-    display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px 6px;
-    max-width: 420px;
-    padding: 22px 10px 18px; border-radius: var(--radius-l);
-    background: var(--card); box-shadow: var(--elev-dialog);
-}
-.att
-{
-    display: flex; flex-direction: column; align-items: center; gap: 7px;
-    border: none; background: none; font: inherit; font-size: 0.8rem; color: var(--text-dim); cursor: pointer;
-}
-.att .ai
-{
-    width: 54px; height: 54px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    color: var(--on-accent); background: var(--c);
-}
-.att .ai svg   { width: 24px; height: 24px; }
-.att:hover .ai { filter: brightness(1.08); }
 /* Ayni.icon("nayive"): a text-sized default, for buttons with no svg rule */
 .icon[data-icon="nayive"] > svg { width: 1.2em; height: 1.2em; flex: none; }
 /* the Nayive logo keeps its own colours: a white disc, not a coloured one */
 .att .ai:has([data-icon="nayive"])     { background: #fff; box-shadow: inset 0 0 0 1px var(--line); }
 .att .ai [data-icon="nayive"] > svg { width: 30px; height: 30px; }
-/* nine different colours: one per button, none repeated (Chat has nine) */
-.att[data-c="0"] { --c: var(--accent); }
-.att[data-c="1"] { --c: #8B6FD6; }      /* purple */
-.att[data-c="2"] { --c: var(--warn); }
-.att[data-c="3"] { --c: var(--danger); }
-.att[data-c="4"] { --c: #E07B39; }      /* orange */
-.att[data-c="5"] { --c: var(--ok); }
-.att[data-c="6"] { --c: #D45C9A; }      /* pink */
-.att[data-c="7"] { --c: #1E9E9A; }      /* teal */
-.att[data-c="8"] { --c: #6E7F96; }      /* slate */
 
 /* A PICTURE YOU CAN CHANGE (.face): a round picture as a button, a small
    camera badge on its corner - Chat's people and profile, Contacts' cards.
@@ -1612,41 +464,6 @@ button,
 .face-bin:hover { filter: brightness(0.92); }
 
 
-/* SCREEN LOCKER (shared/locker.js). html.nv-locked hides the page from its
-   first paint; the locker is a full-screen modal <dialog> on black - black is
-   the lockers' artwork, like a game board, not a theme colour. The password
-   box is a card in the middle, shown by a key or a press. Its class `lock`
-   keeps it above any dialog opened later (Ayni). */
-html.nv-locked body { visibility: hidden; }
-.lock-dlg
-{
-    visibility: visible;
-    position: fixed; inset: 0;
-    width: 100%; height: 100%; max-width: none; max-height: none;
-    margin: 0; padding: 0; border: 0;
-    background: #000; overflow: hidden;
-    color-scheme: dark;
-    outline: none;                /* it takes the focus back when the password box hides */
-}
-.lock-dlg::backdrop { background: #000; }
-.lock-host { position: absolute; inset: 0; overflow: hidden; }
-.lock-card
-{
-    position: absolute; left: 50%; top: 50%;
-    transform: translate(-50%, -50%);
-    width: min(340px, calc(100% - 32px));
-    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
-    padding: 16px;
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-l);
-    box-shadow: var(--elev-dialog);
-}
-.lock-card[hidden] { display: none; }
-.lock-card .input-group { flex: 1 1 0; min-width: 0; width: auto; }
-.lock-msg { flex-basis: 100%; margin: 0; font-size: 0.85rem; color: var(--danger); }
-
-
 /* -----------------------------------------------------------------------------
  * ITEM LISTS AND TREES: Ayni's (Ayni.list, Ayni.tree, shared/ayni/ayni-lists.css).
  * On a phone, while rows are picked, the picked group takes the view switch's room.
@@ -1656,32 +473,6 @@ html.nv-locked body { visibility: hidden; }
     .topbar:has(.has-selection) > .tb-modes,
     .header:has(.has-selection) > .tb-modes      { display: none; }
 }
-
-/* ---------------------------------------------------------------------------
- * EXPORT TO PDF (print)
- *
- * No PDF library: the page fills its hidden #printRoot with a plain,
- * light-theme sheet and calls window.print(); the user picks "Save as PDF".
- * NayiveUI.printPage (Calendar, Split) sets .printing on <html> until
- * afterprint, so a plain Ctrl+P still prints the page itself. Trips stages its
- * own sheet (trips.css) on top of the same base. Each page adds its own
- * .pr-* parts.
- * ------------------------------------------------------------------------- */
-#printRoot { display: none; }
-
-@media print
-{
-    @page { margin: 14mm; }
-    /* An app that locks the page (html, body { height: 100%; overflow: hidden })
-       would clip the printed sheet to a single page. */
-    .printing, .printing body { height: auto !important; overflow: visible !important; background: #fff !important; }
-    .printing #app, .printing dialog, .printing #ayni-toasts { display: none !important; }
-    .printing #printRoot { display: block !important; }
-}
-
-#printRoot { color: #111; background: #fff; font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-#printRoot .pr-empty { color: #666; font-style: italic; }
-#printRoot .pr-foot { margin-top: 24px; padding-top: 8px; border-top: 1px solid #bbb; color: #666; font-size: 10.5px; }
 
 /* ---------------------------------------------------------------------------
  * FINGER-SIZED TARGETS (touch screens only)
@@ -1708,29 +499,18 @@ html.nv-locked body { visibility: hidden; }
  * ---------------------------------------------------------------------------*/
 @media (pointer: coarse)
 {
-    :root { --hit: 44px; }
-
-    :where(.task-chevron, .stage-drag, .subtask-handle,
-           h1.nayive-home-link, .app-title.nayive-home-link, .detail-heading.collapsible)
+    :where(.task-chevron, .stage-drag, .subtask-handle, .detail-heading.collapsible)
     {
         position: relative;
     }
-    :where(.task-chevron, .stage-drag, .subtask-handle,
-           h1.nayive-home-link, .app-title.nayive-home-link, .detail-heading.collapsible)::before
+    :where(.task-chevron, .stage-drag, .subtask-handle, .detail-heading.collapsible)::before
     {
         content: "";
         position: absolute;
         inset: min(0px, calc((100% - var(--hit)) / 2));
     }
-    svg.app-icon.nayive-home-link             { box-sizing: content-box; padding: 12px; margin: -12px -6px -12px -12px; }   /* right: keeps the icon's 6px */
 
-    /* Header buttons are 36 px: 8 px between them (and between two rows of a
-       header that wraps) keeps their 44 px pads apart, so a finger hits the
-       button it means, not its neighbour. The
-       line between two groups loses its side margins (the gaps already give
-       it room). What no longer fits goes into the ⋮ (Ayni.fitBar). */
-    html :is(.topbar, .header, .topbar-actions, .header-actions, .tb-group, .tb-modes) { gap: 8px; }   /* rows too: a header that wraps */
-    html :is(.topbar-actions, .header-actions, .ie-bar) > .tb-group::before             { margin-inline: 0 !important; }   /* beats Ayni's toolbar line */
+    html .ie-bar > .tb-group::before { margin-inline: 0 !important; }
 
     :where(.stage-top, .subtask-row, .queue-row)
     {

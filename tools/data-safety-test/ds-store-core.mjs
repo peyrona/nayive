@@ -1,4 +1,4 @@
-// ds-store-core.mjs - shared/store.js keeps each page's OWN version and never
+// ds-store-core.mjs - shared/ayni/ayni-store.js keeps each page's OWN version and never
 // saves blind (batch C4a). The real store.js on a bare page (store-lib.mjs),
 // two tabs of one browser, and "the phone" over plain HTTP.
 //
@@ -233,18 +233,18 @@ section( "K2 · THE BROWSER'S STORAGE FAILS" );
         netDown = true;
         return SM.write( '${F}', JSON.stringify( [ { id: 'a' }, { id: 'saved-while-idb-is-broken' }, { id: 'kept-in-the-page' } ] ) )
                .then( r => { const ev = new Event( 'beforeunload', { cancelable: true } ); window.dispatchEvent( ev );
-                             r.guard = ev.defaultPrevented; r.close = window.nayiveBeforeClose ? window.nayiveBeforeClose() : 'none';
+                             r.guard = ev.defaultPrevented; r.close = window.ayniBeforeClose ? window.ayniBeforeClose() : 'none';
                              IDBDatabase.prototype.transaction = real; netDown = false; return JSON.stringify( r ); } ); } )()` ) );
     ok( ! r3.ok && r3.pageOnly && ! r3.offline && ! r3.needsAuth,
         "storage AND network down: NOT saved (pageOnly, none of offline / needsAuth - the apps' \"safe here\")", r3 );
     ok( r3.guard === true, "and leaving that page asks first (the edit is only there)", r3 );
-    ok( r3.close === false, "...and so does closing its desktop window (nayiveBeforeClose)", r3 );
+    ok( r3.close === false, "...and so does closing its desktop window (ayniBeforeClose)", r3 );
     ok( await A.evaluate( `SM.read( '${F}' ).then( r => r.body.indexOf( 'kept-in-the-page' ) !== -1 )` ), "a read in that page still shows the edit" );
     await A.evaluate( "SM.flush().then( () => true )" );   // (a flush already running answers at once: the disk is waited for)
     ok( await untilNode( () => ( ids( F ) || [] ).includes( "kept-in-the-page" ) ), "and it goes up once the network is back", disk( F ) );
     ok( await A.until( "( () => { const ev = new Event( 'beforeunload', { cancelable: true } ); window.dispatchEvent( ev ); return ! ev.defaultPrevented; } )()" ),
         "...after which leaving asks nothing" );
-    ok( await A.evaluate( "window.nayiveBeforeClose() === true" ), "...nor closing its window" );
+    ok( await A.evaluate( "window.ayniBeforeClose() === true" ), "...nor closing its window" );
 }
 
 //----------------------------------------------------------------------------//
@@ -285,7 +285,7 @@ section( "K4 · THE CACHE AND THE OUTBOX IN ONE STEP" );
     const put = await seed( phone, G, '[{"id":"a"}]' );
     const lm  = Date.parse( put.headers.get( "Last-Modified" ) );
     await B.evaluate( `idbPut( 'docs', { path: '${G}', body: JSON.stringify( [ { id: 'a' }, { id: 'kept-across-a-crash' } ] ), mtime: Date.now(),
-        cachedAt: Date.now(), dirty: true, srv: ${lm}, base: '[{"id":"a"}]', who: NayiveStore.me } )` );
+        cachedAt: Date.now(), dirty: true, srv: ${lm}, base: '[{"id":"a"}]', who: AyniStore.me } )` );
     const rd = await B.evaluate( `SM.read( '${G}' ).then( r => r.body )` );
     ok( String( rd ).indexOf( "kept-across-a-crash" ) !== -1, "the read shows the edit, not the older server copy", rd );
     await B.evaluate( "SM.flush().then( () => true )" );
@@ -303,7 +303,7 @@ section( "K5 · A SAVE CLEARED BEFORE IT WAS SENT" );
     await A.evaluate( `window.w2 = J( SC.write( '${F}', 'k2\\n' ) ), true` );
     ok( await A.until( `idb( 'outbox', '${F}' ).then( e => !! e && e.body === 'k2\\n' )` ), "the next one waits in the outbox" );
     // A sign-out in another tab counts and clears it (the user said yes).
-    await B.evaluate( "NayiveStore.localCount().then( () => NayiveStore.clearLocal() ).then( () => true )" );
+    await B.evaluate( "AyniStore.localCount().then( () => AyniStore.clearLocal() ).then( () => true )" );
     await A.evaluate( "release(), true" );
     const r2 = JSON.parse( await A.evaluate( "w2" ) );
     ok( ! r2.ok && ! r2.offline && ! r2.needsAuth, "the cleared save does not answer \"saved\"", r2 );
@@ -331,13 +331,13 @@ section( "PENDING / ONSAVED / SIGN-OUT CLEARS ALL (needs of earlier batches)" );
         q.onsuccess = () => { const db = q.result, tx = db.transaction( 'files', 'readwrite' );
             tx.objectStore( 'files' ).put( { key: 'm1#f1', at: Date.now(), blob: new Blob( [ 'x' ] ) } );
             tx.oncomplete = () => { db.close(); res( true ); }; }; } )` );
-    const before = await A.evaluate( "NayiveStore.localCount()" );
+    const before = await A.evaluate( "AyniStore.localCount()" );
     await A.evaluate( "localStorage.setItem( 'nayive-chat-draft:user:test|w|c1', '{\"text\":\"hola\"}' ), localStorage.setItem( 'other-key', 'stays' ), true" );
-    const counted = await A.evaluate( "NayiveStore.localCount()" );
+    const counted = await A.evaluate( "AyniStore.localCount()" );
     ok( counted === before + 1, "Chat's typed text is counted in the sign-out question", { before, counted } );
     // ...and one typed after the count (while the question is up) is not deleted.
     await A.evaluate( "localStorage.setItem( 'nayive-chat-draft:user:test|w|c2', '{\"text\":\"typed later\"}' ), true" );
-    const left = await A.evaluate( "NayiveStore.clearLocal()" );
+    const left = await A.evaluate( "AyniStore.clearLocal()" );
     const files = await A.evaluate( `new Promise( res => { const q = indexedDB.open( 'nayive-mail-files', 1 );
         q.onupgradeneeded = () => q.result.createObjectStore( 'files', { keyPath: 'key' } );
         q.onsuccess = () => { const db = q.result, g = db.transaction( 'files' ).objectStore( 'files' ).count();

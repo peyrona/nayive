@@ -1,5 +1,5 @@
 /* Ayni icons: the icons the Ayni controls use, one <symbol> per icon on a 24x24 grid, colour from the text. The
-   drawings are Nayive's; the stroke is 2px unless an icon reads better with another (a <g stroke-width>), and a
+   stroke is 2px unless an icon reads better with another (a <g stroke-width>), and a
    filled icon wraps its shapes in <g fill="currentColor" stroke="none">. Load before ayni-base.js; it puts the sprite at the start of <body>, also from file://. In a page write
    <span class="icon" data-icon="search"></span>; Ayni draws it from the icon set in use (Ayni.icons.use() plugs in
    another set) and falls back to these icons for any name the other set does not map. */

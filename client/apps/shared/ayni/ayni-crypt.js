@@ -1,8 +1,8 @@
 /*
  * crypt.js - a document locked with a password.
  *
- * Classic script, one global `NayiveCrypt`. Load it deferred, before office.js:
- *     <script src="../shared/crypt.js" defer></script>
+ * Classic script, one global `AyniCrypt`. Load it deferred, before office.js:
+ *     <script src="../ayni-crypt.js" defer></script>
  *     <script src="../shared/office.js" defer></script>
  *
  * Write, Calc and Text save through one pipeline (shared/office.js, AUTOSAVE).
@@ -24,10 +24,10 @@
  * store keeps text, not bytes. So a sealed body comes back in the shape it
  * went in:
  *
- *   NAYIVE-LOCK-BIN\n | iters | salt | iv | ciphertext+tag     (Uint8Array)
+ *   AYNI-LOCKED-BIN\n | iters | salt | iv | ciphertext+tag     (Uint8Array)
  *          16           4 BE     16    12
  *
- *   NAYIVE-LOCK-B64\n + base64( the whole blob above )         (String)
+ *   AYNI-LOCKED-B64\n + base64( the whole blob above )         (String)
  *
  * The 48-byte header is the GCM `additionalData`, so a tampered salt, IV or
  * round count fails the tag instead of quietly decrypting to rubbish. Both
@@ -36,17 +36,17 @@
  * unseal() gives back a string for B64 and a Uint8Array for BIN - the shape
  * the editor's load() expects.
  *
- *   var lock = await NayiveCrypt.newLock( password );        // a new document
- *   var lock = await NayiveCrypt.lockFrom( password, body ); // an open one: the salt is in it
- *   var out  = await NayiveCrypt.seal( lock, body );
- *   var back = await NayiveCrypt.unseal( lock, out );        // throws on a wrong password
+ *   var lock = await AyniCrypt.newLock( password );        // a new document
+ *   var lock = await AyniCrypt.lockFrom( password, body ); // an open one: the salt is in it
+ *   var out  = await AyniCrypt.seal( lock, body );
+ *   var back = await AyniCrypt.unseal( lock, out );        // throws on a wrong password
  */
 ( function ()
 {
     "use strict";
 
-    var MAGIC_BIN = "NAYIVE-LOCK-BIN\n";       // 16 bytes, raw bytes follow
-    var MAGIC_B64 = "NAYIVE-LOCK-B64\n";       // 16 bytes, base64 of a BIN blob follows
+    var MAGIC_BIN = window.AyniCryptMagic ? window.AyniCryptMagic[ 0 ] : "AYNI-LOCKED-BIN\n";       // 16 bytes, raw bytes follow
+    var MAGIC_B64 = window.AyniCryptMagic ? window.AyniCryptMagic[ 1 ] : "AYNI-LOCKED-B64\n";       // 16 bytes, base64 of a BIN blob follows
 
     var ITERS     = 600000;                    // PBKDF2 rounds for a NEW lock
     var MAX_ITERS = 5000000;                   // a header asking for more is refused, not obeyed
@@ -198,7 +198,7 @@
         return form.text ? new TextDecoder().decode( plain ) : plain;
     }
 
-    window.NayiveCrypt = {
+    window.AyniCrypt = {
         available:   available,
         looksLocked: looksLocked,
         newLock:     newLock,

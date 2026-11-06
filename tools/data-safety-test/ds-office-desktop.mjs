@@ -15,7 +15,7 @@ const c = await browser( s, { width: 1600, height: 1000 } );
 await c.evaluate( `localStorage.setItem( 'balata-desktop', JSON.stringify( { mode: 'always' } ) );
     localStorage.setItem( 'balata-intro-dismiss:text', '1' ); localStorage.setItem( 'balata-intro-dismiss:desktop', '1' ); true` );
 await c.open( "/nayive/desktop/", "/nayive/desktop/" );
-ok( await c.until( "window.NayiveDesktop && typeof NayiveDesktop.open === 'function'", 20000 ), "the desktop is up" );
+ok( await c.until( "window.AyniDesk && typeof AyniDesk.open === 'function'", 20000 ), "the desktop is up" );
 
 const WINS  = "document.querySelectorAll('#desk > .win').length";
 const LAST  = "( function () { var ws = document.querySelectorAll('#desk > .win'); return ws[ ws.length - 1 ]; } )()";
@@ -27,7 +27,7 @@ const closeFront = "document.querySelector('#tasks .chip[aria-current=true] [dat
 async function textWindow( url, want )
 {
     const before = await c.evaluate( WINS );
-    await c.evaluate( `NayiveDesktop.open( ${JSON.stringify( url )} ), true` );
+    await c.evaluate( `AyniDesk.open( ${JSON.stringify( url )} ), true` );
     await c.until( `${WINS} === ${before + 1}` );
     return c.until( `( function () { try { var cm = ${CM}; return cm && ${want === null ? "true" : `cm.getValue() === ${JSON.stringify( want )}`}
                        && ${FRAME}.document.getElementById( 'fileLabel' ).textContent; } catch ( e ) { return false; } } )()`, 20000 );
@@ -77,7 +77,7 @@ ok( await c.until( `${WINS} === ${n3 + 1}` ), "b.txt (no longer shown anywhere) 
 
 // The same file in ANOTHER of the three: a .csv open in Calc, then "Open with > Text".
 const n4 = await c.evaluate( WINS );
-await c.evaluate( "NayiveDesktop.open( '/nayive/calc/index.html?file=files/d.csv' ), true" );
+await c.evaluate( "AyniDesk.open( '/nayive/calc/index.html?file=files/d.csv' ), true" );
 ok( await c.until( `${WINS} === ${n4 + 1} && ( function () { try { return ${FRAME}.document.getElementById('fileLabel').textContent === 'd.csv'; } catch ( e ) { return false; } } )()`, 20000 ),
     "d.csv open in a Calc window" );
 await c.evaluate( `${FRAME}.open( '/nayive/text/index.html?file=files%2Fd.csv', '_blank' ), true` );

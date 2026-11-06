@@ -1,14 +1,14 @@
-// ds-gumapi.mjs - the plain file helper (shared/gum-api.js) checks versions
+// ds-gumapi.mjs - the plain file helper (shared/ayni/ayni-net.js) checks versions
 // (batch C4b), and writes only for the account its page belongs to.
 //
-// A/C (version half): GumApi.updateJson( path, fn ) - read with the file's
+// A/C (version half): AyniNet.updateJson( path, fn ) - read with the file's
 //     version, change, write over THAT version only (If-Match); another
 //     device's save in between makes it read again and change again. A file
 //     that cannot be read, or only an offline copy of it, is never written.
 // "Our own first try": a conditional PUT re-sent after a dropped connection
 //     meets the file its first try made (412) - the same bytes are a success,
 //     another file's are not.
-// L5 (office #14, GumApi half): a page left open after another account signed
+// L5 (office #14, AyniNet half): a page left open after another account signed
 //     in on this browser gets 423 - its write never lands in the other home.
 // A new file under the first free name: createFresh skips a name taken since
 //     the page looked (412), never writes over it; namesIn, uniqueName.
@@ -24,8 +24,8 @@ const phone = await s.client( "ana", "abc" );
 const seed = async ( rel, body ) => { const r = await phone.put( rel, body ); if( r.status !== 200 ) throw new Error( "seed " + rel + ": " + r.status ); };
 const json = rel => { try { return JSON.parse( onDisk( s, rel, "ana" ) ); } catch { return null; } };
 
-ok( await c.open( "/nayive/split/", "/nayive/split/" ), "a page with GumApi opens" );
-ok( await c.until( "window.GumApi && document.readyState === 'complete'" ), "GumApi is there" );
+ok( await c.open( "/nayive/split/", "/nayive/split/" ), "a page with AyniNet opens" );
+ok( await c.until( "window.AyniNet && document.readyState === 'complete'" ), "AyniNet is there" );
 await installRace( c );
 // Inside a promise, so a missing function is a FAIL line, not a crash.
 const run = js => c.evaluate( `Promise.resolve().then( async () => { ${js} } ).then( v => v, e => ( { error: e && ( e.status || e.message || String( e ) ), notRead: !! ( e && e.notRead ), offline: !! ( e && e.offline ) } ) )` );
@@ -36,7 +36,7 @@ section( "updateJson: another device's save in between is kept" );
     const F = "data/t/list.json";
     await seed( F, JSON.stringify( { a: 1 } ) );
     await arm( c, F, "t => JSON.stringify( Object.assign( JSON.parse( t ), { phone: 1 } ) )" );
-    const r = await run( `return await GumApi.updateJson( '${F}', v => { v.mine = 1; return v; } );` );
+    const r = await run( `return await AyniNet.updateJson( '${F}', v => { v.mine = 1; return v; } );` );
     ok( await raced( c ), "the phone saved between the page's read and its write" );
     const d = json( F );
     ok( d && d.a === 1 && d.phone === 1 && d.mine === 1, "the file holds both changes", { r, d } );
@@ -45,7 +45,7 @@ section( "updateJson: another device's save in between is kept" );
 section( "updateJson: no file yet - made create-only, and one made meanwhile is kept" );
 {
     const F = "data/t/new.json";
-    const r = await run( `let once = true; return await GumApi.updateJson( '${F}', v => {
+    const r = await run( `let once = true; return await AyniNet.updateJson( '${F}', v => {
         if( once ) { once = false; const x = new XMLHttpRequest(); x.open( 'PUT', '/api/files?file=' + encodeURIComponent( '${F}' ), false ); x.send( '{"phone":1}' ); }
         return Object.assign( v || {}, { mine: 1 } ); } );` );
     const d = json( F );
@@ -61,7 +61,7 @@ section( "updateJson: a file that cannot be read is not written" );
         if( window.__busy && String( u ).indexOf( encodeURIComponent( '${F}' ) ) !== -1 && ( ! o || ! o.method || o.method === 'GET' ) )
             return Promise.resolve( new Response( 'busy', { status: 503 } ) );
         return f.apply( this, arguments ); }; return true; } )()` );
-    const r = await run( `return await GumApi.updateJson( '${F}', v => ( { only: 'this' } ) );` );
+    const r = await run( `return await AyniNet.updateJson( '${F}', v => ( { only: 'this' } ) );` );
     await c.evaluate( "window.__busy = false; true" );
     ok( r && r.error === 503 && r.notRead, "it throws (notRead) on a 503", r );
     ok( onDisk( s, F, "ana" ) === before, "the file is untouched" );
@@ -76,7 +76,7 @@ section( "updateJson: an offline copy (X-Nayive-Copy) is not the file - nothing 
         if( window.__copy && String( u ).indexOf( encodeURIComponent( '${F}' ) ) !== -1 && ( ! o || ! o.method || o.method === 'GET' ) )
             return Promise.resolve( new Response( '{"old":1}', { status: 200, headers: { 'ETag': '"stale"', 'X-Nayive-Copy': 'offline' } } ) );
         return f.apply( this, arguments ); }; return true; } )()` );
-    const r = await run( `return await GumApi.updateJson( '${F}', v => { v.mine = 1; return v; } );` );
+    const r = await run( `return await AyniNet.updateJson( '${F}', v => { v.mine = 1; return v; } );` );
     await c.evaluate( "window.__copy = false; true" );
     ok( r && r.offline && r.notRead, "it throws (offline)", r );
     ok( onDisk( s, F, "ana" ) === before, "the file is untouched" );
@@ -87,7 +87,7 @@ section( "updateJson: a change that returns nothing does not empty the file" );
     const F = "data/t/keep.json";
     await seed( F, JSON.stringify( { keep: 1 } ) );
     const before = onDisk( s, F, "ana" );
-    const r = await run( `return await GumApi.updateJson( '${F}', v => { v.mine = 1; } );` );
+    const r = await run( `return await AyniNet.updateJson( '${F}', v => { v.mine = 1; } );` );
     ok( r && r.error, "it throws", r );
     ok( onDisk( s, F, "ana" ) === before, "the file is untouched" );
 }
@@ -96,11 +96,11 @@ section( "writeFileBytes { ifMatch }: only over the version read" );
 {
     const F = "files/v.txt";
     await seed( F, "v1" );
-    const r = await run( `const v = await GumApi.readVersion( '${F}' );
-        const w = await GumApi.writeFileBytes( '${F}', new TextEncoder().encode( 'mine' ), { ifMatch: v.tag } );
+    const r = await run( `const v = await AyniNet.readVersion( '${F}' );
+        const w = await AyniNet.writeFileBytes( '${F}', new TextEncoder().encode( 'mine' ), { ifMatch: v.tag } );
         let stale = null;
-        try { await GumApi.writeFileBytes( '${F}', new TextEncoder().encode( 'stale' ), { ifMatch: v.tag } ); } catch( e ) { stale = e.status; }
-        const w2 = await GumApi.writeFileBytes( '${F}', new TextEncoder().encode( 'mine again' ), { ifMatch: w.tag } );
+        try { await AyniNet.writeFileBytes( '${F}', new TextEncoder().encode( 'stale' ), { ifMatch: v.tag } ); } catch( e ) { stale = e.status; }
+        const w2 = await AyniNet.writeFileBytes( '${F}', new TextEncoder().encode( 'mine again' ), { ifMatch: w.tag } );
         return { read: v.body, tag: !! v.tag, newTag: !! w.tag && w.tag !== v.tag, stale, again: !! w2.tag };` );
     ok( r && r.read === "v1" && r.tag, "readVersion: the body and its tag", r );
     ok( r && r.newTag, "a write answers the new version", r );
@@ -127,18 +127,18 @@ const DROP = ( mode ) => `( () => { const X = XMLHttpRequest.prototype; if( ! X.
 section( "OUR OWN FIRST TRY: a re-send that meets its own file is a success" );
 {
     await c.evaluate( DROP( "landed" ) );
-    const r = await run( `const w = await GumApi.createFileBytes( 'files/first.txt', new TextEncoder().encode( 'MINE' ) ); return { tag: !! ( w && w.tag ) };` );
+    const r = await run( `const w = await AyniNet.createFileBytes( 'files/first.txt', new TextEncoder().encode( 'MINE' ) ); return { tag: !! ( w && w.tag ) };` );
     ok( r && r.tag, "createFileBytes: saved (the 412 was its own first try), with its version", r );
     ok( onDisk( s, "files/first.txt", "ana" ) === "MINE", "the file is this one's" );
 
     await seed( "files/im.txt", "v1" );
     await c.evaluate( DROP( "landed" ) );
-    const r2 = await run( `const v = await GumApi.readVersion( 'files/im.txt' );
-        const w = await GumApi.writeFileBytes( 'files/im.txt', new TextEncoder().encode( 'EDITED' ), { ifMatch: v.tag } ); return { tag: !! ( w && w.tag ) };` );
+    const r2 = await run( `const v = await AyniNet.readVersion( 'files/im.txt' );
+        const w = await AyniNet.writeFileBytes( 'files/im.txt', new TextEncoder().encode( 'EDITED' ), { ifMatch: v.tag } ); return { tag: !! ( w && w.tag ) };` );
     ok( r2 && r2.tag && onDisk( s, "files/im.txt", "ana" ) === "EDITED", "If-Match write: the same, with its version", r2 );
 
     await c.evaluate( DROP( "other" ) );
-    const r3 = await run( `await GumApi.createFileBytes( 'files/second.txt', new TextEncoder().encode( 'MINE' ) ); return 'saved';` );
+    const r3 = await run( `await AyniNet.createFileBytes( 'files/second.txt', new TextEncoder().encode( 'MINE' ) ); return 'saved';` );
     ok( r3 && r3.error === 412, "...but another device's file there is not: 412", r3 );
     ok( onDisk( s, "files/second.txt", "ana" ) === "ANOTHER FILE", "and that file is untouched" );
 }
@@ -154,35 +154,35 @@ section( "L5 · EVERY CALL THAT CHANGES FILES NAMES THE PAGE'S OWNER" );
         if( m !== 'GET' && m !== 'HEAD' ) window.__who.push( m + ' ' + ( ( o && o.headers && o.headers[ 'X-Nayive-User' ] ) || '-' ) );
         return f.apply( this, arguments ); }; return true; } )()` );
     const me = await c.evaluate( "( document.cookie.match( /(?:^|;\\s*)nayive_who=([^;]*)/ ) || [] )[ 1 ] || ''" );
-    const r = await run( `await GumApi.makeDir( 'files', 'nueva' );
-        await GumApi.rename( 'files/h/a.txt', 'files/h/b.txt' );
-        const ids = await GumApi.binPaths( [ 'files/h/b.txt' ] );
-        await GumApi.trashRestore( ids );
-        await GumApi.deletePaths( [ 'files/nueva' ] );
-        await GumApi.purgePaths( [ 'data/photos/thumbs/1_1.jpg' ] );
-        await GumApi.trashDelete( ( await GumApi.trashList() ).map( i => i.id ) );
-        await GumApi.fetchText( GumApi.API_FILES + '?trash=empty', { method: 'POST' } );
+    const r = await run( `await AyniNet.makeDir( 'files', 'nueva' );
+        await AyniNet.rename( 'files/h/a.txt', 'files/h/b.txt' );
+        const ids = await AyniNet.binPaths( [ 'files/h/b.txt' ] );
+        await AyniNet.trashRestore( ids );
+        await AyniNet.deletePaths( [ 'files/nueva' ] );
+        await AyniNet.purgePaths( [ 'data/photos/thumbs/1_1.jpg' ] );
+        await AyniNet.trashDelete( ( await AyniNet.trashList() ).map( i => i.id ) );
+        await AyniNet.fetchText( AyniNet.API_FILES + '?trash=empty', { method: 'POST' } );
         return window.__who;` );
     ok( me && Array.isArray( r ) && r.length === 8 && r.every( x => x.endsWith( " " + me ) ),
         "new folder, move, bin, restore, delete, purge, bin delete, a POST of the app's own: each says whose page it is", { me, r } );
 }
 
 //------------------------------------------------------------------------//
-// A NEW FILE UNDER THE FIRST FREE NAME: GumApi.namesIn / uniqueName /
+// A NEW FILE UNDER THE FIRST FREE NAME: AyniNet.namesIn / uniqueName /
 // createFresh (eMail's Save to Drive, Share, Bookmarks' export, Trips'
 // documents, Chat's edited photo, Office's Save as).
 section( "createFresh: names taken since the page looked (412) are skipped, never written over" );
 {
     await seed( "files/fr/a.txt", "FIRST" );
     await seed( "files/fr/a (2).txt", "SECOND" );
-    const r = await run( `const names = await GumApi.namesIn( 'files/fr' );
+    const r = await run( `const names = await AyniNet.namesIn( 'files/fr' );
         let missing = null;
-        try { await GumApi.namesIn( 'files/nope' ); } catch( e ) { missing = e.status || e.message; }
+        try { await AyniNet.namesIn( 'files/nope' ); } catch( e ) { missing = e.status || e.message; }
         const taken = new Set(), tried = [];
-        const got = await GumApi.createFresh( 'files/fr', n => { const nm = GumApi.uniqueName( 'a.txt', taken ); taken.add( nm ); tried.push( n + ':' + nm ); return nm; },
+        const got = await AyniNet.createFresh( 'files/fr', n => { const nm = AyniNet.uniqueName( 'a.txt', taken ); taken.add( nm ); tried.push( n + ':' + nm ); return nm; },
                                               new TextEncoder().encode( 'MINE' ) );
         let calls = 0, last = null;
-        try { await GumApi.createFresh( 'files/fr', () => { calls++; return 'a.txt'; }, new TextEncoder().encode( 'NO' ), { tries: 2 } ); }
+        try { await AyniNet.createFresh( 'files/fr', () => { calls++; return 'a.txt'; }, new TextEncoder().encode( 'NO' ), { tries: 2 } ); }
         catch( e ) { last = e.status; }
         return { names: [ ...names ].sort(), missing, got, tried, calls, last };` );
     ok( r && r.names && r.names.join( "|" ) === "a (2).txt|a.txt" && r.missing === 404, "namesIn: the names in the folder; a missing folder throws its 404", r );
@@ -190,7 +190,7 @@ section( "createFresh: names taken since the page looked (412) are skipped, neve
     ok( onDisk( s, "files/fr/a.txt", "ana" ) === "FIRST" && onDisk( s, "files/fr/a (2).txt", "ana" ) === "SECOND" && onDisk( s, "files/fr/a (3).txt", "ana" ) === "MINE",
         "the two files there are untouched; the new one holds its bytes" );
     ok( r && r.calls === 3 && r.last === 412, "past opts.tries taken names it gives up with the 412 (3 tries for tries: 2)", r );
-    const u = await run( `const U = GumApi.uniqueName;
+    const u = await run( `const U = AyniNet.uniqueName;
         return [ U( 'x.jpg', new Set() ), U( 'x.jpg', new Set( [ 'x.jpg' ] ) ), U( 'x.jpg', new Set( [ 'x.jpg', 'x (2).jpg' ] ) ),
                  U( 'x.jpg', new Set( [ 'x.jpg' ] ), 'copia' ), U( 'x.jpg', new Set( [ 'x.jpg', 'x (copia).jpg' ] ), 'copia' ),
                  U( 'notes', new Set( [ 'notes' ] ) ), U( '.env', new Set( [ '.env' ] ) ) ].join( '|' );` );
@@ -198,16 +198,16 @@ section( "createFresh: names taken since the page looked (412) are skipped, neve
 }
 
 //------------------------------------------------------------------------//
-// ON THIS DEVICE: GumApi.sideDb / draftsDb (the device drafts of Write, Calc,
+// ON THIS DEVICE: AyniNet.sideDb / draftsDb (the device drafts of Write, Calc,
 // Text and eMail) and the Web Locks that tell a writer's tab is alive.
 section( "sideDb: a record goes in and comes back; a failure is null, never a hang" );
 {
-    const r = await run( `const a = GumApi.draftsDb(), b = GumApi.sideDb( 'nayive-drafts', 'drafts', 'app' );
+    const r = await run( `const a = AyniNet.draftsDb(), b = AyniNet.sideDb( 'nayive-drafts', 'drafts', 'app' );
         await a.tx( 'readwrite', os => os.put( { app: 'ds:side', text: 'kept' } ) );
         const back = await b.tx( 'readonly', os => os.get( 'ds:side' ) );
         const none = await a.tx( 'readonly', os => undefined );
         const bad  = await a.tx( 'readonly', os => os.get( {} ) );
-        const gone = await GumApi.sideDb( 'nayive-drafts', 'nostore', 'k' ).tx( 'readonly', os => os.getAll() );
+        const gone = await AyniNet.sideDb( 'nayive-drafts', 'nostore', 'k' ).tx( 'readonly', os => os.getAll() );
         await a.tx( 'readwrite', os => os.delete( 'ds:side' ) );
         const after = await a.tx( 'readonly', os => os.get( 'ds:side' ) );
         return { back, none, bad, gone, after, same: a.open() === a.open() };` );
@@ -218,18 +218,18 @@ section( "sideDb: a record goes in and comes back; a failure is null, never a ha
 
 section( "tryLock / heldLocks: a held lock is seen by everyone, ifAvailable says taken" );
 {
-    const r = await run( `const rel = await GumApi.tryLock( 'ds-lock:one', true );
-        const second = await GumApi.tryLock( 'ds-lock:one', true );
-        const held = await GumApi.heldLocks( 'ds-lock:' );
+    const r = await run( `const rel = await AyniNet.tryLock( 'ds-lock:one', true );
+        const second = await AyniNet.tryLock( 'ds-lock:one', true );
+        const held = await AyniNet.heldLocks( 'ds-lock:' );
         rel();
         await new Promise( k => setTimeout( k, 50 ) );
-        const later = await GumApi.heldLocks( 'ds-lock:' );
-        const again = await GumApi.tryLock( 'ds-lock:one', true );
+        const later = await AyniNet.heldLocks( 'ds-lock:' );
+        const again = await AyniNet.tryLock( 'ds-lock:one', true );
         if( again ) again();
         Object.defineProperty( navigator, 'locks', { value: undefined, configurable: true } );
         let noTry = 'resolved', noHeld = 'resolved';
-        try { await GumApi.tryLock( 'ds-lock:x', true ); } catch( e ) { noTry = 'rejected'; }
-        try { await GumApi.heldLocks( 'ds-lock:' ); } catch( e ) { noHeld = 'rejected'; }
+        try { await AyniNet.tryLock( 'ds-lock:x', true ); } catch( e ) { noTry = 'rejected'; }
+        try { await AyniNet.heldLocks( 'ds-lock:' ); } catch( e ) { noHeld = 'rejected'; }
         delete navigator.locks;
         return { first: typeof rel, second, held: [ ...held ], later: [ ...later ], again: typeof again, noTry, noHeld, back: !! navigator.locks };` );
     ok( r && r.first === "function" && r.second === null, "the first gets a release, the second (ifAvailable) null", r );
@@ -243,10 +243,10 @@ section( "L5 · A PAGE OF ANA'S, LEFT OPEN WHILE BETO SIGNS IN ON THIS BROWSER" 
     const st = await c.evaluate( `fetch( '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify( { user: 'beto', password: 'xyz' } ) } ).then( r => r.status )` );
     ok( st === 200 && /nayive_who=user%3Abeto|nayive_who=user:beto/.test( await c.evaluate( "document.cookie" ) ), "beto signed in on this browser", st );
-    const r = await run( `await GumApi.writeFileBytes( 'files/ana.txt', new TextEncoder().encode( 'ANA' ) ); return 'saved';` );
+    const r = await run( `await AyniNet.writeFileBytes( 'files/ana.txt', new TextEncoder().encode( 'ANA' ) ); return 'saved';` );
     ok( r && r.error === 423, "ana's page: its write is refused (423)", r );
     ok( onDisk( s, "files/ana.txt", "beto" ) === null && onDisk( s, "files/ana.txt", "ana" ) === null, "nothing landed in beto's home (nor anywhere)" );
-    const r2 = await run( `return await GumApi.updateJson( 'data/t/ana.json', v => ( { ana: 1 } ) );` );
+    const r2 = await run( `return await AyniNet.updateJson( 'data/t/ana.json', v => ( { ana: 1 } ) );` );
     ok( r2 && r2.error === 423 && onDisk( s, "data/t/ana.json", "beto" ) === null, "updateJson too", r2 );
 }
 

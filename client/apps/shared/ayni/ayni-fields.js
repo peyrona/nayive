@@ -1,4 +1,4 @@
-/* Ayni library 0.1.0, fields family: text fields and text areas, password show / hide, the number field (spin
+/* Ayni library 0.2.0, fields family: text fields and text areas, password show / hide, the number field (spin
    button), the date and date-and-time fields with the calendar, sliders and field errors. Plain JavaScript, no build
    step, evergreen browsers 2024+. Load it after ayni-base.js, ayni-buttons.js and ayni-menus.js (the date popups are
    placed by it):
@@ -89,10 +89,13 @@ const initSpin = (g) => {
   const show = (v) => String(+v.toFixed(places)).replace('.', sep);
   const why = () => (Number.isFinite(min) && Number.isFinite(max) ? txf('between', { min: show(min), max: show(max) })
     : Number.isFinite(min) ? txf('atLeast', { min: show(min) }) : Number.isFinite(max) ? txf('atMost', { max: show(max) }) : tx('needNumber'));
+  /* The box holds the longest value the limits allow (or the 2 digits of a field with no limit) and anything longer typed */
+  const fit = () => g.style.setProperty('--spin-ch', Math.max(Number.isFinite(min + max) ? 1 : 2, inp.value.length,
+    ...[min, min + step, max - step, max].filter(Number.isFinite).map((v) => show(v).length)));
   let last;
   /* quiet: an empty field is not marked wrong yet (on load, or emptied from code); the user's typing and sending are not quiet */
   const check = (quiet) => {
-    limits();
+    limits(); fit();
     const empty = inp.value.trim() === '', v = empty ? null : parse();
     const bad = empty ? !optional && quiet !== true : Number.isNaN(v) || v < min || v > max;
     /* A required field that is empty has no value to tell, quiet or not */
@@ -144,9 +147,7 @@ const initSpin = (g) => {
 };
 
 /* ---------- Calendar (shared by inline calendars and the date popups) ---------- */
-const pad = (n) => String(n).padStart(2, '0');
-const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const parseIso = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.trim()); if (!m) return null; const d = new Date(+m[1], m[2] - 1, +m[3]); return iso(d) === s.trim() ? d : null; };
+const { pad, iso, parseIso } = Ayni.dates;
 const sameDay = (a, b) => a && b && iso(a) === iso(b);
 const fmtLong = new Intl.DateTimeFormat(LOCALE, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const fmtMonShort = new Intl.DateTimeFormat(LOCALE, { month: 'short' });
@@ -553,7 +554,7 @@ const init = (root) => {
 Object.assign(Ayni, {
   focusFirstError,
   calendar: makeCalendar, dateField, timeField, dateTimeField,
-  dates: { pad, iso, parseIso, formatLong: (d) => fmtLong.format(d), formatDateTime: fmtDT, parseDateTime: parseDT },
 });
+Object.assign(Ayni.dates, { formatLong: (d) => fmtLong.format(d), formatDateTime: fmtDT, parseDateTime: parseDT });
 Ayni.core.family({ setup, init });
 })();

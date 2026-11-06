@@ -22,7 +22,7 @@ await c.evaluate( "localStorage.setItem( 'balata-intro-dismiss:contact', '1' ); 
 ok( await c.open( "/nayive/contact/" ) && await c.until( "document.querySelectorAll( '#contactList .contact-row' ).length === 3" ), "Contacts opens" );
 ok( await runSteps( c, STEPS ), "Ayni.tour( steps ) starts it" );
 let st = await state( c );
-ok( st.n === 1 && st.m === 6 && /nayive-home-link/.test( st.lit ), "home is added first, «?» last (6 steps)", st );
+ok( st.n === 1 && st.m === 6 && /home-link/.test( st.lit ), "home is added first, «?» last (6 steps)", st );
 await next( c ); st = await state( c );
 ok( /searchBtn/.test( st.lit ) && st.text.includes( "lupa" ), "«search» lights the magnifier, shared text", st );
 await next( c ); st = await state( c );

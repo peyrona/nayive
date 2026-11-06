@@ -26,7 +26,7 @@ async function make( adapters, catalog, opts = {} )
     const t = new Translator( Object.assign( { adapters, catalog, storage: memoryStorage( opts.saved ? { "translator.config": opts.saved } : {} ),
                                                dictionaries: [] }, opts.extra || {} ) );
     await t.init();
-    if( opts.remote ) t.setLocalMode( false );
+    t.setLocalMode( ! opts.remote );
     return t;
 }
 const req = ( text = "Hola, ¿cómo estás?", source = "es", target = "fr", extra = {} ) => Object.assign( { text, source, target }, extra );
@@ -189,9 +189,33 @@ ok( checkBaseUrl( "https://x.com/api/", "b" ) === "https://x.com/api", "URL trai
 
 // --- Local mode --------------------------------------------------------------
 {
+    const storage = memoryStorage( {} ), cfg = { adapters: [ fakeAdapter( "loc" ) ], catalog: [ eng( "l1", "loc", 3 ) ], storage, dictionaries: [] };
+    const a = new Translator( cfg );
+    await a.init();
+    ok( ! a.isLocalMode(), "Local mode off by default" );
+    a.setLocalMode( true );
+    const b = new Translator( cfg );
+    await b.init();
+    ok( b.isLocalMode(), "Local mode: the choice survives a reload" );
+    b.setLocalMode( false );
+    const c = new Translator( cfg );
+    await c.init();
+    ok( ! c.isLocalMode(), "Local mode: switching it back off survives a reload too" );
+}
+{
+    // beforeRemote: awaited before the text leaves; not called for a local engine.
+    const rem = fakeAdapter( "rem", { location: "remote" } ), order = [];
+    const t = await make( [ rem ], [ eng( "r1", "rem", 5 ) ], { remote: true } );
+    await t.translate( req(), { beforeRemote: async ( e ) => { await 0; order.push( e.id + ":" + rem.calls.length ); } } );
+    ok( order.join() === "r1:0" && rem.calls.length === 1, "beforeRemote runs first, then the text is sent", order.join() );
+    const asked = [];
+    const t2 = await make( [ fakeAdapter( "loc" ) ], [ eng( "l1", "loc", 3 ) ], { remote: true } );
+    await t2.translate( req(), { beforeRemote: async ( e ) => asked.push( e.id ) } );
+    ok( asked.length === 0, "beforeRemote: not for a local engine" );
+}
+{
     const loc = fakeAdapter( "loc", { unsupported: [ "es>zh" ] } ), rem = fakeAdapter( "rem", { location: "remote" } );
     const t = await make( [ loc, rem ], [ eng( "l1", "loc", 3 ), eng( "r1", "rem", 5 ) ] );
-    ok( t.isLocalMode(), "Local mode on by default" );
     const r = await t.translate( req() );
     ok( r.engineId === "l1" && rem.calls.length === 0, "Local mode: remote engine never called" );
     await throws( t.translate( req( "Hola", "es", "zh" ) ), ( e ) => e instanceof LocalModeError && e.remoteEngineIds.includes( "r1" ), "Local mode, no local engine: LocalModeError naming the remote ones" );

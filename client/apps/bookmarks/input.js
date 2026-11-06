@@ -146,7 +146,7 @@ function actionList() { return [
       when: function( ids ) { return one( ids ) && isFolder( node( ids[ 0 ] ) ); },
       run: function( ids ) { openFolderSheet( null, ids[ 0 ] ); } },
     // Never a bare ⌫ (Drive's rule): ⌘⌫ on a Mac, Del elsewhere.
-    { id: 'delete', label: T( 'ui.delete' ), icon: 'trash', key: NayiveUI.isMac ? [ 'Del', 'Ctrl+Backspace' ] : 'Del', rank: 1, group: 3, danger: true,
+    { id: 'delete', label: T( 'ui.delete' ), icon: 'trash', key: Ayni.isMac ? [ 'Del', 'Ctrl+Backspace' ] : 'Del', rank: 1, group: 3, danger: true,
       run: deleteNodes }
 ]; }
 

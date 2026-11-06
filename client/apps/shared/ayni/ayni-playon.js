@@ -1,7 +1,7 @@
 /*
  * play-on.js - the "Play on..." button of Music and Movies.
  *
- *   NayivePlayOn.wire( mediaEl, btn )
+ *   AyniPlayOn.wire( mediaEl, btn )
  *
  * Its menu lists the speakers this device already paired (mediaEl.setSinkId;
  * Chrome / Edge / Android), then "Cast / AirPlay..." (the Remote Playback API;
@@ -10,12 +10,12 @@
  * row asks for it, and only that. The picked speaker is remembered per device.
  * Writes no user data.
  */
-var NayivePlayOn = ( function ()
+var AyniPlayOn = ( function ()
 {
     "use strict";
 
-    var SINK_KEY = "nayive-sink";
-    var VOL_SVG  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 5V4L8 9H4Z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>';
+    var SINK_KEY = "ayni-sink";
+    var VOL_SVG  = Ayni.icon( 'volume' );
 
     function wire( media, btn )
     {
@@ -52,20 +52,20 @@ var NayivePlayOn = ( function ()
                     outs.forEach( function ( d )
                     {
                         var id = d.deviceId === "default" ? "" : d.deviceId;
-                        items.push( { label: id ? d.label : T( "media.outDefault" ), icon: VOL_SVG,
+                        items.push( { label: id ? d.label : T( "ayni.media.outDefault" ), icon: VOL_SVG,
                                       checked: id === ( media.sinkId || "" ),
                                       run: function () { pickSink( id ); } } );
                     } );
                 else
-                    items.push( { label: T( "media.outNames" ), icon: VOL_SVG, run: unlockNames } );
+                    items.push( { label: T( "ayni.media.outNames" ), icon: VOL_SVG, run: unlockNames } );
             }
             if( canCast )
             {
                 if( items.length ) items.push( { sep: true } );
                 var none = castAvail === false;
-                items.push( { label: T( "media.outCast" ) + ( none ? " (" + T( "media.outNoneShort" ) + ")" : "" ),
+                items.push( { label: T( "ayni.media.outCast" ) + ( none ? " (" + T( "ayni.media.outNoneShort" ) + ")" : "" ),
                               icon: btn.querySelector( ".icon[data-icon]" ) ? btn.querySelector( ".icon[data-icon]" ).dataset.icon : btn.querySelector( "svg" ).outerHTML, run: castPrompt,
-                              disabled: none, why: none ? T( "media.outNone" ) : "" } );
+                              disabled: none, why: none ? T( "ayni.media.outNone" ) : "" } );
             }
             Ayni.menuAt( items, { anchor: btn, keyboard: keyboard } );
         }

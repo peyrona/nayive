@@ -20,7 +20,7 @@ Every app has one now; this is for a new app or a new button.
    `Ayni.help.show`) add `tour: [ ... ]` (or a function returning it;
    `tour: true` = `[ 'rows' ]`). The help card then shows "Take the tour";
    Write / Calc / Text (`menu: true`) get it as a row of their Help menu
-   (shared/office.js, `Ayni.help.items`). Never open it on its own.
+   (shared/ayni/ayni-doc.js, `Ayni.help.items`). Never open it on its own.
 2. `'rows'` walks the card's own rows, in order: a row with `sel` lights
    that button. A row with no `sel` (an idea, a row's button) joins only with
    a `tour: { sel / ghost / open / picked ... }` of its own; `tour: false`

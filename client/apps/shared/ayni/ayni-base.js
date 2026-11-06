@@ -1,7 +1,8 @@
-/* Ayni library 0.1.0, base: the foundations every page needs and every family file builds on (colours and light
+/* Ayni library 0.2.0, base: the foundations every page needs and every family file builds on (colours and light
    and dark, icons, texts, the browser check, start-up). Plain JavaScript, no build step, evergreen browsers 2024+.
-   Load it after ayni-i18n.js and the icons, before any family file:
+   Load it after ayni-i18n.js, ayni-util.js and the icons, before any family file:
      <script src="ayni-i18n.js"></script>
+     <script src="ayni-util.js"></script>
      <script src="ayni-icons.js" defer></script>
      <script src="ayni-base.js" defer></script>
      <script src="ayni-buttons.js" defer></script>    (and the other families, one file each)
@@ -15,7 +16,6 @@ const fire = (el, type, detail) => el.dispatchEvent(new CustomEvent(type, { deta
 const wired = new WeakMap();
 const once = (key, el) => { let s = wired.get(el); if (!s) wired.set(el, (s = new Set())); if (s.has(key)) return false; s.add(key); return true; };
 const each = (root, sel, key, fn) => [...(root.matches?.(sel) ? [root] : []), ...$$(sel, root)].forEach((el) => { if (once(key, el)) fn(el); });
-const isMac = /Mac|iPhone|iPad/.test(navigator.userAgentData?.platform || navigator.platform);
 const isRO = (el) => el?.getAttribute?.('aria-readonly') === 'true';
 /* Shared layers (tooltip, help, notifications…), created when the page does not have them yet */
 const layer = (id, html) => document.getElementById(id) || (document.body.insertAdjacentHTML('beforeend', html), document.getElementById(id));
@@ -57,8 +57,8 @@ const iconInner = (name) => {
   }
   return '';
 };
-/* Ayni.icon(name) returns the markup of one icon; extra classes go after "icon" */
-const icon = (name, cls = '') => `<span class="icon${cls && ' ' + cls}" data-icon="${name}" aria-hidden="true">${iconInner(name)}</span>`;
+/* Ayni.icon(name, cls, size) returns the markup of one icon; extra classes go after "icon", size is in px */
+const icon = (name, cls = '', size) => `<span class="icon${cls && ' ' + cls}" data-icon="${name}" aria-hidden="true"${size ? ` style="--icon:${size}px"` : ''}>${iconInner(name)}</span>`;
 const drawIcon = (el) => { el.setAttribute('aria-hidden', 'true'); el.innerHTML = iconInner(el.dataset.icon); };
 /* Name of an icon element, also for the old <svg class="icon"><use href="#i-name"/></svg> */
 const iconName = (el) => el.dataset.icon || $('use', el)?.getAttribute('href').replace('#i-', '');
@@ -186,8 +186,7 @@ const zonePlace = () => {
     }
     return undefined;
   }
-  let zone; try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return null; }
-  const c = zone && tzTable[zone];
+  const c = tzTable[Ayni.dates.zone('')];
   return c ? { lat: c[0], lon: c[1] } : null;
 };
 
@@ -261,6 +260,20 @@ const theme = {
   /* The device's place for Sun mode, rounded to one decimal (~10 km): all a sunrise needs, and not an address */
   setPlace: (lat, lon) => { writeKey(PLACE_KEY, JSON.stringify({ lat: Math.round(lat * 10) / 10, lon: Math.round(lon * 10) / 10 })); sunTick(); },
   hasPlace: () => !!sunPlace(),
+  /* Asks the device where it is, from a user's press: true when it said, and the sun follows */
+  askPlace: () => new Promise((done) => {
+    if (!navigator.geolocation) { done(false); return; }
+    navigator.geolocation.getCurrentPosition((pos) => { theme.setPlace(pos.coords.latitude, pos.coords.longitude); done(true); },
+      () => done(false), { timeout: 10000, maximumAge: 24 * 3600 * 1000 });
+  }),
+  /* People travel: a new position, but only with leave already given, so it never raises a prompt */
+  refreshPlace: () => {
+    navigator.permissions?.query?.({ name: 'geolocation' }).then((st) => {
+      if (st.state !== 'granted') return;
+      navigator.geolocation.getCurrentPosition((pos) => theme.setPlace(pos.coords.latitude, pos.coords.longitude),
+        () => {}, { timeout: 10000, maximumAge: 6 * 3600 * 1000 });
+    }).catch(() => {});
+  },
   get schemes() { return readJson(SCHEMES_KEY); },
   set schemes(d) { writeKey(SCHEMES_KEY, d == null ? null : JSON.stringify(d)); applyTheme(); },
 };
@@ -395,8 +408,29 @@ const init = (root = document) => {
 };
 const family = (f) => { families.push(f); if (started) { f.setup?.(); f.init?.(document); } };
 
+/* ---------- A page inside a frame ---------- */
+/* embedded: the page runs inside a frame (a foreign top page throws: framed too). windowed: that frame is a window of a
+   desktop, which the host says by marking it data-ayni-window; a frame without the mark is a pane. <html> says the same
+   at once, for the page's CSS. A pane's width says nothing about the screen, so the top window is the one measured:
+   .is-embedded-wide, 641 px or more, is a host that shows its panes side by side. */
+let embedded = false;
+try { embedded = window.self !== window.top; } catch { embedded = true; }
+const windowed = !!window.frameElement?.hasAttribute('data-ayni-window');
+if (embedded) document.documentElement.classList.add(windowed ? 'is-windowed' : 'is-embedded');
+if (embedded && !windowed) try {
+  const wide = window.top.matchMedia('(min-width: 641px)');
+  const sync = () => { document.documentElement.classList.toggle('is-embedded-wide', wide.matches); };
+  sync();
+  wide.addEventListener('change', sync);
+  /* The listener lives on the host's list, which outlives this page */
+  addEventListener('pagehide', () => wide.removeEventListener('change', sync));
+} catch { /* a foreign host: not ours to measure */ }
+/* The window with the address bar: the top one when framed by a page of this site, this one otherwise. Going home or
+   to sign in navigates it, so it leaves the frame. */
+const owner = () => { try { if (embedded && window.top.location.pathname) return window.top; } catch { /* foreign */ } return window; };
+
 Object.assign(window.Ayni ??= {}, {
-  version: '0.1.0', init, $, $$, icon, setIcon, isDark, setTheme, theme, supported, isMac, isTouch, setTouchPreview, setTip, fold, matcher,
+  version: '0.2.0', init, $, $$, icon, setIcon, isDark, setTheme, theme, supported, frame: { embedded, windowed, owner }, isTouch, setTouchPreview, setTip, fold, matcher,
   icons: { use: useIcons, add: addIcons, names: ICONS, get set() { return iconSet; } },
   /* For Ayni's own family files */
   core: { fire, wired, once, each, tx, txf, LOCALE, iconName, drawIcons, family, isRO, layer, isTouch, HOLD_MS, DBL_MS, retip, fold },

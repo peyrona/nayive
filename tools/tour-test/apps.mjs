@@ -123,7 +123,7 @@ const APPS = {
         expect: { 1: s => /menuBtn/.test( s.lit ) || "the apps menu" }
     },
     launcher: {
-        path: "/nayive/", ready: has( ".grid .tile" ), mouse: false, dismiss: "launcher", settle: 4000,
+        path: "/nayive/", ready: has( ".grid .btn.large" ), mouse: false, dismiss: "launcher", settle: 4000,
         expect: { 1: s => /grid|tile/.test( s.lit ) || "the app tiles" }
     },
     split: {

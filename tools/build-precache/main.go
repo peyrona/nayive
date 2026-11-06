@@ -13,7 +13,7 @@
 //     makes the service worker replace its old cache on activate.
 //
 // Scope is deliberately the phase-1 set. Add an app name to offlineApps once it
-// has been wired to shared/store.js - or, like games, once it turns out to need
+// has been wired to shared/ayni/ayni-store.js - or, like games, once it turns out to need
 // nothing from the server at all.
 //
 // Keep the output byte-stable, CACHE_VERSION included: a different hash is
@@ -36,7 +36,7 @@ import (
 )
 
 // Apps that have been wired for offline use. Usually that means "wired to
-// shared/store.js"; games is here for the other reason - it asks the server for
+// shared/ayni/ayni-store.js"; games is here for the other reason - it asks the server for
 // nothing at all, so its shell IS the whole app.
 var offlineApps = []string{"tasks", "calendar", "contact", "planner", "trips", "write", "split", "habits",
 	"games", "bookmarks", "passwords", "calculator", "desktop", // desktop: the launcher sends a big screen there, so it must open offline too
@@ -47,15 +47,14 @@ var offlineApps = []string{"tasks", "calendar", "contact", "planner", "trips", "
 // *.html is index.html plus any page it fetches (games has one per game).
 var appGlobs = []string{"*.html", "manifest.json", "*.js", "*.css", "lib/**/*", "icons/*"}
 
-var shared = []string{"shared/ayni/ayni-i18n.js", "shared/ayni/ayni-base.css", "shared/ayni/ayni-base.js",
+var shared = []string{"shared/ayni/ayni-i18n.js", "shared/ayni/ayni-util.js", "shared/ayni/ayni-boot.js", "shared/ayni/ayni-deskpage.js", "shared/ayni/ayni-deskpage.css", "shared/ayni/ayni-tiling.js", "shared/ayni/ayni-desk-rule.js", "shared/ayni/ayni-doc.css", "shared/ayni/ayni-media.css", "shared/ayni/ayni-media.js", "shared/ayni/ayni-image.css", "shared/ayni/ayni-map.css", "shared/ayni/formats/lib/ical_v2.2.1.esm.min.js", "shared/ayni/ayni-pwa.css", "shared/ayni/ayni-pwa.js", "shared/ayni/ayni-locker.css", "shared/ayni/ayni-locker.js", "shared/ayni/ayni-calview.css", "shared/ayni/ayni-compose.css", "shared/ayni/ayni-compose.js", "shared/ayni/ayni-share.css", "shared/ayni/ayni-share.js", "shared/ayni/ayni-upload.js", "shared/ayni/ayni-status.css", "shared/ayni/ayni-status.js", "shared/ayni/ayni-shell.css", "shared/ayni/ayni-shell.js", "shared/ayni/ayni-icons-more.js", "shared/ayni/ayni-schemes.css", "shared/ayni/ayni-schemes.js", "shared/ayni/ayni-base.css", "shared/ayni/ayni-base.js",
 	"shared/ayni/ayni-buttons.css", "shared/ayni/ayni-buttons.js", "shared/ayni/ayni-toasts.css", "shared/ayni/ayni-toasts.js", "shared/ayni/ayni-dialogs.css", "shared/ayni/ayni-dialogs.js", "shared/ayni/ayni-menus.css", "shared/ayni/ayni-menus.js", "shared/ayni/ayni-search.css", "shared/ayni/ayni-search.js", "shared/ayni/ayni-lists.css", "shared/ayni/ayni-lists.js", "shared/ayni/ayni-help.css", "shared/ayni/ayni-help.js", "shared/ayni/ayni-fields.css", "shared/ayni/ayni-fields.js", "shared/ayni/ayni-pickers.css", "shared/ayni/ayni-pickers.js", "shared/ayni/ayni-desktop.css", "shared/ayni/ayni-layout.css", "shared/ayni/ayni-layout.js", "shared/ayni/ayni-icons.js", "shared/ayni/tz-geo.json", "shared/ayni/i18n/en.json", "shared/ayni/i18n/es.json",
 	"shared/ayni/i18n/pt.json", "shared/ayni/i18n/fr.json", "shared/ayni/i18n/de.json",
-	"shared/theme.css", "shared/app.css", "shared/store.js",
-	"shared/gum-api.js", "shared/i18n.js", "shared/ui.js", "shared/desk-rule.js", "shared/menubar.js",
-	"shared/ical.js", "shared/media.js", "shared/play-on.js", "shared/vcard.js",
-	"shared/photo.js", "shared/image-editor.js", "shared/office.js", "shared/crypt.js", "shared/basemap.js",
+	"shared/theme.css", "shared/app.css", "shared/ayni/ayni-store.js",
+	"shared/ayni/ayni-net.js", "shared/i18n.js", "shared/ui.js", "shared/ayni/ayni-menutable.js",
+	"shared/ayni/formats/ical.js", "shared/media.js", "shared/ayni/ayni-playon.js", "shared/ayni/formats/vcard.js",
+	"shared/ayni/ayni-photo.js", "shared/ayni/ayni-image-editor.js", "shared/ayni/ayni-doc.js", "shared/ayni/ayni-crypt.js", "shared/ayni/ayni-map.js",
 	"shared/locker.js", "shared/lockers/clock.js", "shared/lockers/matrix.js", "shared/lockers/life.js", "shared/lockers/culture.js", "shared/lockers/culture-settings.js", "shared/lockers/science.js",
-	"shared/lib/ical_v2.2.1.esm.min.js",
 	"shared/lib/luxon_v3.7.2.min.js", "shared/lib/rrule_v2.8.1.min.js",
 	"shared/lib/fabric_v7.4.0.min.js",
 	"shared/i18n/es.json", "shared/i18n/en.json", "shared/i18n/pt.json",

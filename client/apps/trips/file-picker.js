@@ -22,7 +22,7 @@ async function openFilePicker( onPick )
     try
     {
         // The files/ subtree only (same node shape the old full tree gave).
-        filePickerFilesNode = await GumApi.listDirRecursive( 'files' );
+        filePickerFilesNode = await AyniNet.listDirRecursive( 'files' );
     }
     catch( err )
     {

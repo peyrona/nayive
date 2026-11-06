@@ -17,6 +17,7 @@
          every inline script below may call Ayni.t(). -->
     <script src="../shared/i18n.js"></script>
     <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
+    <script src="../shared/ayni/ayni-util.js"></script>
     <title>Drive</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cellipse cx='12' cy='5' rx='9' ry='3'%3E%3C/ellipse%3E%3Cpath d='M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3'%3E%3C/path%3E%3Cpath d='M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5'%3E%3C/path%3E%3C/svg%3E">
 
@@ -34,10 +35,26 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-share.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pwa.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-locker.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-status.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-shell.css">
     <link rel="stylesheet" href="../shared/app.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-doc.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-media.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-image.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-map.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-icons-more.js" defer></script>
+    <script src="../shared/ayni/ayni-shell.js" defer></script>
+    <script src="../shared/ayni/ayni-status.js" defer></script>
+    <script src="../shared/ayni/ayni-share.js" defer></script>
+    <script src="../shared/ayni/ayni-upload.js" defer></script>
+    <script src="../shared/ayni/ayni-pwa.js" defer></script>
+    <script src="../shared/ayni/ayni-boot.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
@@ -49,21 +66,23 @@
     <script src="../shared/ayni/ayni-pickers.js" defer></script>
     <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
+    <script src="../shared/ayni/ayni-locker.js"></script>
 
     <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
-    <script src="../shared/gum-api.js" defer></script>
+    <script src="../shared/ayni/ayni-net.js" defer></script>
     <!-- The offline store Calendar and Contacts save through: a dropped .ics /
          .vcf is merged into their file through it too (upload.js). -->
-    <script src="../shared/store.js" defer></script>
-    <script src="../shared/vcard.js" defer></script>
+    <script src="../shared/ayni/ayni-store.js" defer></script>
+    <script src="../shared/ayni/formats/vcard.js" defer></script>
     <!-- Small shared UI helpers: backdrop open/close, toast, viewerTz. -->
     <script src="../shared/ui.js" defer></script>
-    <script src="../shared/photo.js" defer></script>
+    <script src="../shared/ayni/ayni-photo.js" defer></script>
     <!-- The media apps' own module. Drive uses one block of it: the upkeep of
          their path-keyed sidecars when a file is moved, renamed, copied or
          trashed. Deferred is fine here (this page's script is a module and
          calls NayiveMedia only after DOMContentLoaded); the media apps
          themselves must NOT defer it. -->
+    <script src="../shared/ayni/ayni-media.js"></script>
     <script src="../shared/media.js" defer></script>
     <script>
     Ayni.i18n.ready.then( function () {
@@ -80,15 +99,15 @@
                 { sel: '#uploadBtn',       text: Ayni.t( 'drive.introUpload' ) },
                 // The selection's buttons (Ayni.list) come and go with
                 // what is picked, so their rows carry their own glyph and name.
-                { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>', name: Ayni.t( 'ui.download' ),      text: Ayni.t( 'drive.introDownload' ), tour: { sel: '.sel-group [data-sel-act="download"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
-                { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>', name: Ayni.t( 'ui.rename' ),        text: Ayni.t( 'drive.introRename' ), tour: { sel: '.sel-group [data-sel-act="rename"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
-                { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H2"></path><path d="M2 13h11"></path><path d="m10 16 3-3-3-3"></path></svg>', name: Ayni.t( 'drive.moveToDots' ), text: Ayni.t( 'drive.introMove' ), tour: { sel: '.sel-group [data-sel-act="move"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
-                { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>', name: Ayni.t( 'drive.copyToDots' ), text: Ayni.t( 'drive.introCopy' ), tour: { sel: '.sel-group [data-sel-act="copyTo"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
-                { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>', name: Ayni.t( 'drive.copyLink' ),   text: Ayni.t( 'drive.introLink' ), tour: { sel: '.sel-group [data-sel-act="link"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
-                { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"></line><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"></line></svg>', name: Ayni.t( 'ui.share' ),         text: Ayni.t( 'drive.introShare' ), tour: { sel: '.sel-group [data-sel-act="share"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
-                { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M11 3.5h1M10 6h1M11 8.5h1M10 11h1"></path><rect x="8.5" y="13.5" width="5" height="5" rx="1"></rect></svg>', name: Ayni.t( 'drive.compress' ),   text: Ayni.t( 'drive.introCompress' ), tour: { sel: '.sel-group [data-sel-act="compress"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
-                { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>', name: Ayni.t( 'drive.properties' ), text: Ayni.t( 'drive.introProps' ), tour: { sel: '.sel-group [data-sel-act="props"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
-                { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>', name: Ayni.t( 'ui.toTrash' ),       text: Ayni.t( 'drive.introTrash' ), tour: { sel: '.sel-group [data-sel-act="bin"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
+                { svg: Ayni.icon( 'download', '', 19 ), name: Ayni.t( 'ui.download' ),      text: Ayni.t( 'drive.introDownload' ), tour: { sel: '.sel-group [data-sel-act="download"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
+                { svg: Ayni.icon( 'edit', '', 19 ), name: Ayni.t( 'ui.rename' ),        text: Ayni.t( 'drive.introRename' ), tour: { sel: '.sel-group [data-sel-act="rename"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
+                { svg: Ayni.icon( 'rename', '', 19 ), name: Ayni.t( 'drive.moveToDots' ), text: Ayni.t( 'drive.introMove' ), tour: { sel: '.sel-group [data-sel-act="move"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
+                { svg: Ayni.icon( 'copy', '', 19 ), name: Ayni.t( 'drive.copyToDots' ), text: Ayni.t( 'drive.introCopy' ), tour: { sel: '.sel-group [data-sel-act="copyTo"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
+                { svg: Ayni.icon( 'link', '', 19 ), name: Ayni.t( 'drive.copyLink' ),   text: Ayni.t( 'drive.introLink' ), tour: { sel: '.sel-group [data-sel-act="link"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
+                { svg: Ayni.icon( 'share', '', 19 ), name: Ayni.t( 'ui.share' ),         text: Ayni.t( 'drive.introShare' ), tour: { sel: '.sel-group [data-sel-act="share"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
+                { svg: Ayni.icon( 'zip', '', 19 ), name: Ayni.t( 'drive.compress' ),   text: Ayni.t( 'drive.introCompress' ), tour: { sel: '.sel-group [data-sel-act="compress"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
+                { svg: Ayni.icon( 'move-to', '', 19 ), name: Ayni.t( 'drive.properties' ), text: Ayni.t( 'drive.introProps' ), tour: { sel: '.sel-group [data-sel-act="props"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
+                { svg: Ayni.icon( 'trash', '', 19 ), name: Ayni.t( 'ui.toTrash' ),       text: Ayni.t( 'drive.introTrash' ), tour: { sel: '.sel-group [data-sel-act="bin"]', picked: true, ghost: '.sel-group:not([hidden]), #listing' } },
                 // Fixed names: both tooltips turn into "Back to Drive" while
                 // their view is open (render in tree.js).
                 { sel: '#bigFilesBtn', name: Ayni.t( 'drive.bigTitle' ),
@@ -133,6 +152,13 @@
                 </button>
             </div>
 
+            <!-- The last view button: opens the bin, and inside the bin it is the way
+                 back (render, tree.js). Outside .tb-modes, which leaves on a phone and
+                 in the bin; this one stays. -->
+            <button id="trashViewBtn" class="btn" data-rank="24" data-i18n-attr="data-tip:acct.trash">
+                <span class="icon" data-icon="trash" style="--icon:18px"></span>
+            </button>
+
             <span id="statusLabel" class="status-label"></span>
 
             <input type="file" id="uploadInput" multiple style="display:none">
@@ -165,15 +191,15 @@
                     <button id="uploadBtn" class="btn" data-rank="22" data-i18n-attr="data-tip:drive.uploadTip">
                         <span class="icon" data-icon="upload" style="--icon:19px"></span>
                     </button>
-                    <!-- "Biggest files" on/off, like the bin next to it: lit while the
+                    <!-- "Biggest files" on/off, like the bin: lit while the
                          list is open, and a second tap goes back (listing.js). -->
                     <button id="bigFilesBtn" class="btn" data-rank="23" data-i18n-attr="data-tip:drive.bigTitle">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 16 4 4 4-4"></path><path d="M7 20V4"></path><path d="M11 4h10"></path><path d="M11 8h7"></path><path d="M11 12h4"></path></svg>
-                    </button>
-                    <button id="trashViewBtn" class="btn" data-rank="24" data-i18n-attr="data-tip:acct.trash">
-                        <span class="icon" data-icon="trash" style="--icon:18px"></span>
+                        <span class="icon" data-icon="big-files" style="--icon:18px"></span>
                     </button>
                 </div>
+
+                <!-- The bin's own tools (renderTrashBar, trash.js): only while it is open. -->
+                <div id="trashTools" class="tb-group" hidden></div>
 
                 <div class="tb-group tb-sys">
                     <!-- The buttons that do not fit the header (Ayni.fitBar, menus.js);
@@ -209,11 +235,11 @@
             <p><span data-i18n="drive.dragDropHint"></span><br><span data-i18n="drive.orPickBelow"></span></p>
             <div class="upload-choices">
                 <button id="uploadPickPhotosBtn" class="upload-choice upload-choice-photos">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-4.5-4.5L3 21"></path></svg>
+                    <span class="icon" data-icon="photo-upload" style="--icon:40px"></span>
                     <span data-i18n="trips.photos"></span>
                 </button>
                 <button id="uploadPickFilesBtn" class="upload-choice">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                    <span class="icon" data-icon="file-plain" style="--icon:40px"></span>
                     <span data-i18n="drive.pickFiles"></span>
                 </button>
                 <button id="uploadPickDirBtn" class="upload-choice upload-choice-dir">
@@ -372,7 +398,7 @@
             </p>
             <div class="upload-choices">
                 <button id="convertYesBtn" class="upload-choice">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="14" height="16" rx="2"></rect><line x1="6" y1="4" x2="6" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line><path d="M19 9a3 3 0 0 1 0 6"></path><polyline points="21 13 19 15 17 13"></polyline></svg>
+                    <span class="icon" data-icon="convert" style="--icon:40px"></span>
                     <span data-i18n="drive.convertYes"></span>
                 </button>
                 <button id="convertNoBtn" class="upload-choice">
@@ -424,19 +450,19 @@
                  App names are never translated, so the labels are literal. -->
             <div class="upload-choices open-with-apps">
                 <button id="importWithTextBtn" class="upload-choice">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline><line x1="14" y1="4" x2="10" y2="20"></line></svg>
+                    <span class="icon" data-icon="code" style="--icon:40px"></span>
                     <span>Text</span>
                 </button>
                 <button id="importWithWriteBtn" class="upload-choice">
-                    <svg width="40" height="40" viewBox="0 0 512 512" fill="currentColor"><g transform="translate(45 465) rotate(-48)"><path d="M0 0 28 -14 82 -36C96 -36 110 -27 122 -19L122 19C110 27 96 36 82 36L28 14Z"></path><rect x="132" y="-26" width="350" height="52"></rect><path d="M494 -26 522 -26C542 -26 550 -14 550 0 550 14 542 26 522 26L494 26Z"></path></g><rect x="262" y="220" width="176" height="50" rx="12"></rect><path fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" d="M294 270 294 300C294 314 228 312 228 332L228 445C228 460 240 472 255 472L445 472C460 472 472 460 472 445L472 332C472 312 406 314 406 300L406 270"></path><path d="M228 355 472 355 472 445C472 460 460 472 445 472L255 472C240 472 228 460 228 445Z"></path></svg>
+                    <span class="icon" data-icon="doc-text" style="--icon:40px"></span>
                     <span>Write</span>
                 </button>
                 <button id="importWithCalcBtn" class="upload-choice">
-                    <svg width="40" height="40" viewBox="0 0 512 512" fill="currentColor"><g transform="translate(-213.2 -558.1) scale(1.8891 3.2191)"><g transform="translate(37.3 3.7)"><path d="m 159.5,210.8 v 7.2 h 25.2 v 16.5 H 159.5 V 300 h -21.5 v -65.6 h -19.9 v -16.5 h 19.9 v -5.7 q 0,-14.8 6.2,-20.5 6.2,-5.7 22.9,-5.7 h 17.7 v 16.5 h -16.8 q -4.8,0 -6.6,1.8 -1.7,1.8 -1.8,6.5 z"></path><g transform="translate(67.4 112.5) scale(.625)"><path d="m 243.4,186.2 q -9.7,17.5 -14.4,33.9 -4.7,16.4 -4.7,32.8 0,16.3 4.7,32.8 4.7,16.5 14.4,34.1 h -16.7 q -11.6,-16.9 -17.3,-33.3 -5.6,-16.5 -5.6,-33.5 0,-17 5.6,-33.5 5.7,-16.6 17.3,-33.3 z"></path><path d="M 329.9,218 302.2,257.2 332.3,300 H 307.2 L 291.1,272.4 275.1,300 h -25 l 30.3,-42.8 -27.9,-39.3 h 25 l 13.6,24.5 13.7,-24.5 z"></path><path d="m 338.9,186.2 h 16.7 q 11.6,16.7 17.2,33.3 5.7,16.5 5.7,33.5 0,17.1 -5.6,33.5 -5.6,16.4 -17.3,33.3 h -16.7 q 9.7,-17.6 14.4,-34.1 4.7,-16.6 4.7,-32.8 0,-16.4 -4.7,-32.8 -4.7,-16.4 -14.4,-33.9 z"></path></g></g></g></svg>
+                    <span class="icon" data-icon="doc-sheet" style="--icon:40px"></span>
                     <span>Calc</span>
                 </button>
                 <button id="importWithPhotosBtn" class="upload-choice">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="16" height="16" rx="2"></rect><circle cx="12" cy="8" r="2"></circle><path d="m22 13-1.3-1.3a2.4 2.4 0 0 0-3.4 0L11 18"></path><path d="M18 22H4a2 2 0 0 1-2-2V6"></path></svg>
+                    <span class="icon" data-icon="photos" style="--icon:40px"></span>
                     <span>Photos</span>
                 </button>
                 <button id="importWithMusicBtn" class="upload-choice">
@@ -444,7 +470,7 @@
                     <span>Music</span>
                 </button>
                 <button id="importWithMoviesBtn" class="upload-choice">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>
+                    <span class="icon" data-icon="movies" style="--icon:40px"></span>
                     <span>Movies</span>
                 </button>
             </div>

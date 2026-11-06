@@ -1,4 +1,4 @@
-/* Ayni library 0.1.0, lists family: pick lists (list box), item lists that pick like a file manager (Ayni.list, with
+/* Ayni library 0.2.0, lists family: pick lists (list box), item lists that pick like a file manager (Ayni.list, with
    the picked items' group in the title row), drag and drop onto rows (Ayni.dropZone), the tree view (editable, or
    navigation beside a list) and Move to… (Ayni.pickNode). Shared with the list picker: type-ahead (Ayni.makeTypeAhead).
    Plain JavaScript, no build step, evergreen browsers 2024+. Load it after ayni-menus.js (menus, long tap, fitBar) and
@@ -9,10 +9,9 @@
    The look is in ayni-lists.css; the rules are chapters 8 (lists) and 16 (tree view) of the guidelines. */
 (() => {
 'use strict';
-const { $, $$, isMac, icon, setIcon } = Ayni;
+const { $, $$, isMac, icon, setIcon, esc } = Ayni;
 const { fire, wired, once, each, tx, txf, iconName, isRO, isTouch, retip, fold } = Ayni.core;
 const { initMenu, initToolbar, contextMenu, iconHtml } = Ayni.core.menus;
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 /* ---------- Lists: shared type-ahead and multi-selection ---------- */
 /* Shared type-ahead (lists, the drop-down list and the tree): letters typed within 500 ms build one search ("me" reaches México),
@@ -273,6 +272,7 @@ const list = (el, cfg = {}) => {
   const paint = () => {
     painting = true;
     box.classList.toggle('picking', picking); box.classList.add('item-list');
+    box.classList.toggle('ticks-shown', !!cfg.grid?.() && !Ayni.frame.windowed);     // icons: no long tap needed to find the ticks
     rows().forEach((r) => {
       const id = idOf(r), on = has(id);
       r.setAttribute('aria-selected', on ? 'true' : 'false');

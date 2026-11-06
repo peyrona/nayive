@@ -1,4 +1,4 @@
-/* Ayni library 0.1.0, notifications family: notifications (toasts) with Undo, and progress notifications.
+/* Ayni library 0.2.0, notifications family: notifications (toasts) with Undo, and progress notifications.
    Plain JavaScript, no build step, evergreen browsers 2024+. Load it after ayni-base.js:
      <script src="ayni-base.js" defer></script>
      <script src="ayni-toasts.js" defer></script>

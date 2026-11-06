@@ -16,7 +16,7 @@
  *
  * It must not be deferred: the apps' inline scripts run at parse time and
  * take what they need from NayiveMedia on their first line. Nothing here
- * touches the DOM or GumApi / NayiveUI at load time - only inside functions,
+ * touches the DOM or AyniNet / NayiveUI at load time - only inside functions,
  * which the apps call after DOMContentLoaded.
  *
  * Drive loads it too, deferred, for one block only: PATH-KEYED SIDECARS, the
@@ -32,77 +32,13 @@
     //------------------------------------------------------------------------//
     // TEXT / PATH HELPERS
 
-    // The shared copies (shared/ui.js). ui.js loads deferred, after this file
-    // in Movies / Music / Photos, so these look NayiveUI up when called.
-    function esc( s )         { return NayiveUI.escapeHtml( s ); }
-    function cssEsc( s ) { return String( s ).replace( /["\\]/g, "\\$&" ); }
-    function cssUrl( u ) { return "url(\"" + cssEsc( u ) + "\")"; }
+    var esc = Ayni.esc, extOf = Ayni.extOf, baseName = Ayni.baseName, dirOf = Ayni.dirOf;
 
-    function extOf( name )    { return NayiveUI.extOf( name ); }
-    function baseName( path ) { return NayiveUI.baseName( path ); }
-    function dirOf( path )    { var i = String( path ).lastIndexOf( "/" ); return i < 0 ? "" : String( path ).slice( 0, i ); }
-    function stripExt( name ) { return String( name ).replace( /\.[a-z0-9]+$/i, "" ); }
     // Letters and digits of every script, so "Alién" is not "Alin" and two
     // Cyrillic titles are not both "". NFC first: a macOS file name spells
     // "é" as "e" + an accent mark, which would drop the accent.
     function norm( s )        { return String( s || "" ).normalize( "NFC" ).toLowerCase().replace( /[^\p{L}\p{N}]+/gu, "" ); }
 
-    // Tile colour cycled by a stable hash of a name, so the same album / film
-    // gets the same colour across reloads.
-    var PALETTE = [ "#2E6B8A", "#3E86AE", "#6B5B95", "#8A3E3E", "#2E8A78", "#8A6A2E", "#5E4B8A", "#3E6B4A" ];
-    function colorFor( key )
-    {
-        var h = 0;
-        key = String( key || "" );
-        for( var i = 0; i < key.length; i++ ) h = ( h * 31 + key.charCodeAt( i ) ) | 0;
-        return PALETTE[ Math.abs( h ) % PALETTE.length ];
-    }
-
-    // 65 -> "1:05", 3725 -> "1:02:05"
-    function fmtClock( totalSeconds )
-    {
-        if( ! isFinite( totalSeconds ) || totalSeconds < 0 ) return "0:00";
-        var s = Math.floor( totalSeconds );
-        var h = Math.floor( s / 3600 );
-        var m = Math.floor( ( s % 3600 ) / 60 );
-        var r = s % 60;
-        var rr = r < 10 ? "0" + r : "" + r;
-        if( h > 0 ) return h + ":" + ( m < 10 ? "0" + m : m ) + ":" + rr;
-        return m + ":" + rr;
-    }
-    // 5400 -> "1 h 30 min"
-    function fmtRuntime( totalSeconds )
-    {
-        if( ! isFinite( totalSeconds ) || totalSeconds <= 0 ) return "";
-        var mins = Math.round( totalSeconds / 60 );
-        var h = Math.floor( mins / 60 );
-        var m = mins % 60;
-        return h > 0 ? ( h + " h " + m + " min" ) : ( m + " min" );
-    }
-    // Photos' own look ("1 KB", "15.3 MB"), not NayiveUI.fmtBytes ("1.5 KB",
-    // "15 MB"): the info panel keeps what it always showed, but a big video
-    // reads "5.0 GB", not "5120.0 MB".
-    function fmtSize( b )
-    {
-        if( ! b ) return "";
-        if( b < 1024 )    return b + " B";
-        if( b < 1048576 ) return Math.round( b / 1024 ) + " KB";
-        if( b < 1073741824 ) return ( b / 1048576 ).toFixed( 1 ) + " MB";
-        if( b < 1099511627776 ) return ( b / 1073741824 ).toFixed( 1 ) + " GB";
-        return ( b / 1099511627776 ).toFixed( 1 ) + " TB";
-    }
-
-    function sleep( ms ) { return new Promise( function ( r ) { setTimeout( r, ms ); } ); }
-
-    // Run `worker(item)` over `items`, at most `n` at a time.
-    async function pool( items, n, worker )
-    {
-        var i = 0;
-        async function run() { while( i < items.length ) { var k = i++; await worker( items[ k ] ); } }
-        var runners = [];
-        for( var w = 0; w < Math.min( n, items.length ); w++ ) runners.push( run() );
-        await Promise.all( runners );
-    }
 
     //------------------------------------------------------------------------//
     // THE FOLDER
@@ -134,7 +70,7 @@
     // reported.
     async function loadFolderTree( dir, onMsg, recursive )
     {
-        try { return await ( recursive ? GumApi.listDirRecursive( dir ) : GumApi.listDir( dir ) ); }
+        try { return await ( recursive ? AyniNet.listDirRecursive( dir ) : AyniNet.listDir( dir ) ); }
         catch( err )
         {
             var st = err && err.status;
@@ -144,7 +80,7 @@
             // behind it, is "try again", not "sign in".
             if( st === 404 )      onMsg( Ayni.t( 'media.folderGone' ) );
             else if( st === 403 ) onMsg( Ayni.t( 'media.noAccess' ) );
-            else if( st === 401 ) GumApi.loginRedirect();
+            else if( st === 401 ) AyniNet.loginRedirect();
             else onMsg( Ayni.t( navigator.onLine ? 'ui.loadFailed' : 'media.offlineRetry' ) );
             return null;
         }
@@ -172,7 +108,7 @@
         if( el ) el.innerHTML = Ayni.icon( "folder" ) + "<span>" + esc( label ) + "</span>";
     }
 
-    // (The folder-? button, #folderInfoBtn, opens its popup, #folderMenu, by
+    // (The "i" button, #folderInfoBtn, opens its popup, #folderMenu, by
     // itself: an Ayni popup, popovertarget in the page. See FOLDER-BACKED
     // VIEWERS in shared/app.css.)
 
@@ -256,7 +192,7 @@
             loaded: false,
             load: async function ()
             {
-                try { self.map = ( await GumApi.readJson( path ) ) || {}; self.loaded = true; }
+                try { self.map = ( await AyniNet.readJson( path ) ) || {}; self.loaded = true; }
                 catch( e ) { self.map = {}; self.loaded = false; }
                 known = {};
                 Object.keys( self.map ).forEach( function ( k ) { known[ k ] = true; } );
@@ -310,14 +246,14 @@
                 if( ! self.loaded ) return;
                 unsaved = 0;
 
-                // Version-checked (GumApi.updateJson): a re-key or a scan saved
+                // Version-checked (AyniNet.updateJson): a re-key or a scan saved
                 // elsewhere between the read and the write makes it read again
                 // and merge again, never write over it. `out` is made afresh on
                 // each round, from this page's map and the file as it is then.
                 var map = self.map, out, fresh;
                 try
                 {
-                    out = await GumApi.updateJson( path, function ( disk )
+                    out = await AyniNet.updateJson( path, function ( disk )
                     {
                         if( ! disk || typeof disk !== "object" || Array.isArray( disk ) ) disk = {};
                         var next = Object.assign( {}, map );
@@ -384,7 +320,7 @@
     // masquerade as "no comments" - the next write would wipe every one of them.
     async function readComments()
     {
-        return notesMap( await GumApi.readJson( COMMENTS_PATH ) );
+        return notesMap( await AyniNet.readJson( COMMENTS_PATH ) );
     }
 
     function notesMap( map )
@@ -396,14 +332,14 @@
 
     // The ONLY way the notes are written: `change( map )` gets the notes as
     // they are on the server now and changes them in place - false: nothing
-    // to write. Version-checked (GumApi.updateJson): a note saved elsewhere
+    // to write. Version-checked (AyniNet.updateJson): a note saved elsewhere
     // between the read and the write makes the read and `change` happen
     // again, so `change` must be its own edit only, made again on what it is
     // given. Resolves the map as written (or read); throws, writing nothing,
     // when the notes cannot be read (readComments' rule) or the write fails.
     function updateComments( change )
     {
-        return GumApi.updateJson( COMMENTS_PATH, function ( raw )
+        return AyniNet.updateJson( COMMENTS_PATH, function ( raw )
         {
             var map = notesMap( raw );
             return change( map ) === false ? false : map;
@@ -451,14 +387,14 @@
 
     // Read one sidecar, hand the map to `mutate`, write it back if that returns
     // true. A missing or unreadable file is simply left alone. Version-checked
-    // (C7, GumApi.updateJson): Movies' resume points and the scan caches are
+    // (C7, AyniNet.updateJson): Movies' resume points and the scan caches are
     // saved by other devices too, and one saved between this read and this
     // write makes it read again and `mutate` again - never written over.
     async function editSidecar( path, mutate )
     {
         try
         {
-            await GumApi.updateJson( path, function ( map )
+            await AyniNet.updateJson( path, function ( map )
             {
                 map = map || {};
                 if( typeof map !== "object" || Array.isArray( map ) ) return false;
@@ -560,7 +496,7 @@
     }
 
     // The note moves still to be made on this device, oldest first.
-    function movesKey() { return "nayive-notes-moves:" + ( ( window.GumApi && GumApi.owner && GumApi.owner() ) || "" ); }
+    function movesKey() { return "nayive-notes-moves:" + ( ( window.AyniNet && AyniNet.owner && AyniNet.owner() ) || "" ); }
     function waitingMoves()
     {
         try { var l = JSON.parse( localStorage.getItem( movesKey() ) || "[]" ); return Array.isArray( l ) ? l : []; }
@@ -681,7 +617,7 @@
         // A cache read again after a 412 (editSidecar) collects its thumbnails again.
         thumbs = Array.from( new Set( thumbs ) );
         for( var j = 0; j < thumbs.length; j += 100 )      // keep each URL a sane length
-            try { await GumApi.purgePaths( thumbs.slice( j, j + 100 ) ); } catch( e ) {}
+            try { await AyniNet.purgePaths( thumbs.slice( j, j + 100 ) ); } catch( e ) {}
     }
 
     //------------------------------------------------------------------------//
@@ -709,7 +645,7 @@
             while( sent < paths.length )
             {
                 var batch = paths.slice( sent, sent + BIN_BATCH ), got;
-                try { got = await ( wrap ? wrap( GumApi.binPaths( batch ) ) : GumApi.binPaths( batch ) ); }
+                try { got = await ( wrap ? wrap( AyniNet.binPaths( batch ) ) : AyniNet.binPaths( batch ) ); }
                 catch( err )
                 {
                     // Half done: some of this batch went (err.ids), the rest stayed (err.failed).
@@ -742,7 +678,7 @@
         var res = { renamed: [] };
         for( var i = 0; i < ids.length; i += BIN_BATCH )
         {
-            var call = GumApi.trashRestore( ids.slice( i, i + BIN_BATCH ) );
+            var call = AyniNet.trashRestore( ids.slice( i, i + BIN_BATCH ) );
             var r = await ( wrap ? wrap( call ) : call );
             if( r && r.renamed ) res.renamed = res.renamed.concat( r.renamed );
         }
@@ -751,7 +687,7 @@
 
     // The POST of a Download or a Compress of `paths`: in the address while
     // they fit - any server takes that - and in a JSON body past that.
-    // Resolves to the answer's text, as GumApi.fetchText. The server reads a
+    // Resolves to the answer's text, as AyniNet.fetchText. The server reads a
     // body of 1 MiB at most (413 past it): a pick that big is refused here,
     // as "too many items at once" (err.tooMany).
     var PATHS_IN_URL  = 8000;
@@ -763,7 +699,7 @@
         paths.forEach( function ( p ) { q.append( "paths", p ); } );
         var query = q.toString();
 
-        if( query.length <= PATHS_IN_URL ) return GumApi.fetchText( url + "?" + query, { method: "POST" } );
+        if( query.length <= PATHS_IN_URL ) return AyniNet.fetchText( url + "?" + query, { method: "POST" } );
 
         var body = JSON.stringify( { paths: paths } );
         if( new TextEncoder().encode( body ).length > PATHS_IN_BODY )
@@ -772,144 +708,7 @@
             err.tooMany = true;
             return Promise.reject( err );
         }
-        return GumApi.fetchText( url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body } );
-    }
-
-    //------------------------------------------------------------------------//
-    // DURATION PROBE - a throwaway <audio> / <video> with preload=metadata.
-    // Cheap: the server supports Range, so the browser only pulls the header.
-    // Resolves with the length in seconds, or null - after PROBE_MS at most: a
-    // file that stalls (neither metadata nor an error) must not hold its place
-    // in the scan pool for ever.
-    var PROBE_MS = 15000;
-
-    function probeDuration( kind, url )
-    {
-        return new Promise( function ( resolve )
-        {
-            var probe = document.createElement( kind === "video" ? "video" : "audio" );
-            var done = false;
-            function finish( d )
-            {
-                if( done ) return;
-                done = true;
-                // load() with no src lets the player go: past Chrome's ~1000
-                // live media players every new <audio> fails, not only <video>.
-                probe.removeAttribute( "src" );
-                probe.load();
-                resolve( isFinite( d ) && d > 0 ? d : null );
-            }
-            probe.addEventListener( "loadedmetadata", function () { finish( probe.duration ); } );
-            probe.addEventListener( "error", function () { finish( null ); } );
-            setTimeout( function () { finish( null ); }, PROBE_MS );
-            probe.preload = "metadata";
-            probe.muted   = true;
-            probe.src     = url;
-        } );
-    }
-
-    //------------------------------------------------------------------------//
-    // MARKUP BITS shared by the library views
-
-    var ICONS = {
-        folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5C3 6.12 4.12 5 5.5 5h4l2 2h7C19.88 7 21 8.12 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9Z"/></svg>',
-        x:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>'
-    };
-
-    // The "filtered by X" strip with its clear button (#clearScopeBtn).
-    function scopeBarHtml( label, clearTitle )
-    {
-        var t = esc( clearTitle || Ayni.t( 'media.clearFilter' ) );
-        return '<div class="scope-bar"><span class="scope-chip">' + esc( label ) +
-            '<button id="clearScopeBtn" data-tip="' + t + '" aria-label="' + t + '">' + ICONS.x + '</button></span></div>';
-    }
-
-    //------------------------------------------------------------------------//
-    // PLAYER BITS
-
-    // The transport button (#playBtn / #playIcon): pause glyph while playing.
-    function setPlayIcon( playing )
-    {
-        var btn = document.getElementById( "playBtn" ), ico = document.getElementById( "playIcon" );
-        if( ! btn || ! ico ) return;
-        Ayni.setTip( btn, playing ? Ayni.t( 'media.pause' ) : Ayni.t( 'media.play' ) );
-        btn.setAttribute( "aria-label", btn.dataset.tip );
-        ico.outerHTML = playing
-            ? '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" id="playIcon"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>'
-            : '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" id="playIcon"><path d="M8 5v14l11-7-11-7Z"/></svg>';
-    }
-
-    // Lock-screen / notification controls, when the browser has them. Purely
-    // additive. `meta` = { title, artist, album, artwork }; `handlers` = an
-    // object of MediaSession action name -> function; each is set on its own
-    // so one unsupported action never blocks the rest.
-    function mediaSession( meta, handlers )
-    {
-        if( ! ( "mediaSession" in navigator ) ) return;
-        try { navigator.mediaSession.metadata = new MediaMetadata( meta ); } catch( e ) { return; }
-        Object.keys( handlers || {} ).forEach( function ( action )
-        {
-            try { navigator.mediaSession.setActionHandler( action, handlers[ action ] ); } catch( e ) {}
-        } );
-    }
-
-    // The lock screen's progress bar: where `el` (the <audio> / <video>) is now.
-    // Nothing until the length is known.
-    function positionState( el )
-    {
-        if( ! ( "mediaSession" in navigator ) || ! navigator.mediaSession.setPositionState ) return;
-        if( ! isFinite( el.duration ) || el.duration <= 0 ) return;
-        try
-        {
-            navigator.mediaSession.setPositionState( {
-                duration: el.duration,
-                position: Math.min( el.currentTime, el.duration ),
-                playbackRate: el.playbackRate || 1
-            } );
-        }
-        catch( e ) {}
-    }
-
-    // The player bar's own wiring, the same in Music and Movies: the seek
-    // slider (#seekRange; #elapsedLabel follows it while dragged), the volume
-    // (#volumeRange), the length (#totalLabel), the time as it plays, the
-    // play icon and the lock screen's playing / paused. `el`: the <audio> or
-    // <video>. Hooks, each optional: loaded() once the length is shown, tick()
-    // on every timeupdate, play() / pause() before the lock screen is told;
-    // finiteSeek: a seek only once the length is known (Movies).
-    function wirePlayer( el, hooks )
-    {
-        var seekRange = document.getElementById( "seekRange" ), seeking = false;
-        seekRange.addEventListener( "input", function () { seeking = true; document.getElementById( "elapsedLabel" ).textContent = fmtClock( Number( seekRange.value ) ); } );
-        seekRange.addEventListener( "change", function () { if( ! hooks.finiteSeek || isFinite( el.duration ) ) el.currentTime = Number( seekRange.value ); seeking = false; } );
-
-        var volumeRange = document.getElementById( "volumeRange" );
-        el.volume = Number( volumeRange.value ) / 100;
-        volumeRange.addEventListener( "input", function () { el.volume = Number( volumeRange.value ) / 100; } );
-
-        el.addEventListener( "loadedmetadata", function ()
-        {
-            seekRange.max = Math.floor( el.duration ) || 1;
-            document.getElementById( "totalLabel" ).textContent = fmtClock( el.duration );
-            if( hooks.loaded ) hooks.loaded();
-        } );
-        el.addEventListener( "timeupdate", function ()
-        {
-            if( ! seeking )
-            {
-                seekRange.value = Math.floor( el.currentTime );
-                document.getElementById( "elapsedLabel" ).textContent = fmtClock( el.currentTime );
-            }
-            if( hooks.tick ) hooks.tick();
-        } );
-        function played( on, hook )
-        {
-            setPlayIcon( on );
-            if( hook ) hook();
-            if( "mediaSession" in navigator ) navigator.mediaSession.playbackState = on ? "playing" : "paused";
-        }
-        el.addEventListener( "play",  function () { played( true,  hooks.play  ); } );
-        el.addEventListener( "pause", function () { played( false, hooks.pause ); } );
+        return AyniNet.fetchText( url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body } );
     }
 
     //------------------------------------------------------------------------//
@@ -969,22 +768,16 @@
 
     window.NayiveMedia =
     {
-        esc: esc, cssEsc: cssEsc, cssUrl: cssUrl,
-        extOf: extOf, baseName: baseName, dirOf: dirOf, stripExt: stripExt, norm: norm,
-        PALETTE: PALETTE, colorFor: colorFor,
-        fmtClock: fmtClock, fmtRuntime: fmtRuntime, fmtSize: fmtSize,
-        sleep: sleep, pool: pool,
+        norm: norm,
         flattenFiles: flattenFiles, loadFolderTree: loadFolderTree,
         dirLabel: dirLabel, setCrumb: setCrumb, wireCrumbPicker: wireCrumbPicker, wireSearchToggle: wireSearchToggle, searchCount: searchCount,
-        scanCache: scanCache, probeDuration: probeDuration,
+        scanCache: scanCache,
         readComments: readComments, updateComments: updateComments, NOTES_ASIDE: ASIDE,
         parkNotes:   function ( map, path ) { return park( map, path, null ); },
         unparkNotes: function ( map, path ) { return unpark( map, path, true ); },
         remapPaths: remapPaths, copyPaths: copyPaths, purgePaths: purgePaths,
         binInBatches: binInBatches, restoreInBatches: restoreInBatches, postPaths: postPaths,
         settleNoteMoves: settleNoteMoves, noteMoveWaits: noteMoveWaits,
-        ICONS: ICONS, scopeBarHtml: scopeBarHtml,
-        setPlayIcon: setPlayIcon, mediaSession: mediaSession, positionState: positionState, wirePlayer: wirePlayer,
         openLibrary: openLibrary, folderNodes: folderNodes, libraryTree: libraryTree, showInDrive: showInDrive
     };
 } )();

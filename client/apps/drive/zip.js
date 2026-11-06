@@ -20,7 +20,7 @@ function isZipNode( node )
 async function fetchZipList( path )
 {
     const q = new URLSearchParams( { file: path } );
-    return JSON.parse( await withBusy( GumApi.fetchText( '/api/zip?' + q.toString() ) ) );
+    return JSON.parse( await withBusy( AyniNet.fetchText( '/api/zip?' + q.toString() ) ) );
 }
 
 // What to say when the server said no (the codes: api_zip.go).
@@ -136,7 +136,7 @@ async function extractZip( path )
     let r;
     try
     {
-        r = JSON.parse( await withBusy( GumApi.fetchText( '/api/zip?' + q.toString(), { method: 'POST' } ) ) );
+        r = JSON.parse( await withBusy( AyniNet.fetchText( '/api/zip?' + q.toString(), { method: 'POST' } ) ) );
     }
     catch( err )
     {

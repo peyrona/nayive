@@ -6,7 +6,7 @@
  * (the same, or blinking between two states, for a while) starts again,
  * and so does one that has run for about five minutes (a lone glider).
  */
-NayiveLock.define( "life", function ( host )
+AyniLocker.define( "life", function ( host )
 {
     "use strict";
 

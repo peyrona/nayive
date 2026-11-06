@@ -2,7 +2,7 @@
 
 //------------------------------------------------------------------------//
 // CURRENCY - the CODE is detected from the trip's destination text (never asked for).
-// The RATE is never hard-coded and never assumed: Calculator (shared/fx.js) fetches it
+// The RATE is never hard-coded and never assumed: Calculator (shared/ayni/ayni-fx.js) fetches it
 // live and cross-checks it, and says so plainly when it cannot - this is money, so a
 // guessed number is worse than no number.
 
@@ -102,7 +102,7 @@ function currencyPlacement( trip )
 
 //------------------------------------------------------------------------//
 // THE CONVERTER is the Calculator app (2026-10-28), in currency mode: the place's
-// currency typed, the euro beside it. The rate is shared/fx.js's - the same three
+// currency typed, the euro beside it. The rate is shared/ayni/ayni-fx.js's - the same three
 // sources and the same cross-check this file used to run. A place whose currency
 // could not be worked out goes with &place=, and Calculator says so plainly.
 // codeArg/matchedArg/contextName come from a per-stage button; with no args (the

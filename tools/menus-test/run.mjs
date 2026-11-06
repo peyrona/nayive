@@ -9,7 +9,7 @@
 //
 // RULES, every app, phone and desktop width: no old menu API (NayiveUI.menuAt,
 //   fitBar, longPress, keyLabel, menuOpen, wireMenu outside the desktop,
-//   NayiveOffice.groupPopup); Ayni's family is loaded; no old menu markup
+//   AyniDoc.groupPopup); Ayni's family is loaded; no old menu markup
 //   (.item-menu, .menu-panel; .top-menu only on the desktop and in Chat's hold
 //   layer); every Ayni menu and popup is a popover; every popovertarget names
 //   one; every header toolbar is an Ayni toolbar with one Tab stop; no error.
@@ -62,7 +62,7 @@ const SHOTS = process.env.SHOTS || "";            // a folder: screenshots go th
 // The rules, read off the page as it stands.
 const RULES = `( () => { const o = [], desk = !! document.querySelector( '.desk, #desk, html.is-desktop' ) || location.pathname.includes( '/desktop/' );
     if( window.NayiveUI && [ 'menuAt', 'fitBar', 'longPress', 'keyLabel', 'menuOpen', 'closeMenu' ].some( k => NayiveUI[ k ] ) ) o.push( 'old NayiveUI menu API' );
-    if( window.NayiveOffice && NayiveOffice.groupPopup ) o.push( 'old NayiveOffice.groupPopup' );
+    if( window.AyniDoc && AyniDoc.groupPopup ) o.push( 'old AyniDoc.groupPopup' );
     if( typeof Ayni.menuAt !== 'function' || typeof Ayni.fitBar !== 'function' ) return [ 'no Ayni menus family' ];
     if( document.querySelector( '.item-menu, .menu-panel, #menuPanel, #menuSub' ) ) o.push( 'old menu markup' );
     if( ! desk && [ ...document.querySelectorAll( '.top-menu' ) ].some( m => ! m.closest( '.ctx' ) ) ) o.push( 'a .top-menu outside the desktop' );

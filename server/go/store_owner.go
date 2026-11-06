@@ -6,7 +6,7 @@ package main
 // Whose save is this? - one browser, two accounts.
 // =============================================================================
 //
-// shared/store.js queues a save in the browser while the server cannot be
+// shared/ayni/ayni-store.js queues a save in the browser while the server cannot be
 // reached, and sends it later with whatever session cookie the browser holds
 // THEN. If another account signed in on that browser meanwhile - a sign-out,
 // an expired session, a second tab - the first person's file went into the
@@ -25,7 +25,7 @@ package main
 //
 // NOT ONLY SAVES (L5). The page's other changes go up with the cookie held
 // NOW too: an editor's "Restore the previous copy" or "Clean copy", Drive's
-// delete or move in a tab left open. shared/gum-api.js sends the header on
+// delete or move in a tab left open. shared/ayni/ayni-net.js sends the header on
 // every request that changes files, and every route that changes them asks
 // saveOwnerOK: all of /api/files but its reads (a save, a move or rename, a
 // delete or purge, the bin's restore / delete / empty, a new folder, a copy,
@@ -39,7 +39,7 @@ package main
 // carry "user:ana", which is nobody's any more: never sent, never shown, and
 // the launcher's sign-out deletes them. So the server keeps the names each
 // account had (config/renames.json, accountRenames below) and hands them to
-// the account's pages, for shared/store.js to re-tag those saves once:
+// the account's pages, for shared/ayni/ayni-store.js to re-tag those saves once:
 //
 //   - GET /api/whoami, as ana2: "renamed": {"who": "user:ana2", "from":
 //     ["user:ana"]} - absent when there are none. "who" is the nayive_who

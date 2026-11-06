@@ -12,6 +12,7 @@
          every inline script below may call Ayni.t(). -->
     <script src="../shared/i18n.js"></script>
     <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
+    <script src="../shared/ayni/ayni-util.js"></script>
     <title>Habits</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22V10'/%3E%3Cpath d='M12 12C12 8.5 9.2 5.5 5.5 5.5c0 3.5 2.8 6.5 6.5 6.5z'/%3E%3Cpath d='M12 14c0-3.2 2.6-5.8 6-5.8 0 3.2-2.6 5.8-6 5.8z'/%3E%3C/svg%3E">
 
@@ -29,10 +30,26 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-share.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pwa.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-locker.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-status.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-shell.css">
     <link rel="stylesheet" href="../shared/app.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-doc.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-media.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-image.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-map.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-icons-more.js" defer></script>
+    <script src="../shared/ayni/ayni-shell.js" defer></script>
+    <script src="../shared/ayni/ayni-status.js" defer></script>
+    <script src="../shared/ayni/ayni-share.js" defer></script>
+    <script src="../shared/ayni/ayni-upload.js" defer></script>
+    <script src="../shared/ayni/ayni-pwa.js" defer></script>
+    <script src="../shared/ayni/ayni-boot.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
@@ -44,6 +61,7 @@
     <script src="../shared/ayni/ayni-pickers.js" defer></script>
     <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
+    <script src="../shared/ayni/ayni-locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS (and localhost). -->
     <link rel="manifest" href="manifest.json">
@@ -320,7 +338,7 @@
                 <label for="targetInput"><span data-i18n="habits.target"></span>
                     <button class="info-tip" type="button" data-i18n-attr="data-help:habits.targetInfo"></button>
                 </label>
-                <div class="input-group spin" id="targetInputSpin"><input class="input" id="targetInput" data-optional type="number" min="2" max="99" inputmode="numeric" data-i18n-attr="placeholder:habits.targetPh"></div>
+                <div class="input-group spin" id="targetInputSpin"><input class="input" id="targetInput" data-optional type="number" min="2" max="99" inputmode="numeric"></div>
             </div>
         </div>
         <footer>
@@ -334,7 +352,7 @@
     </dialog>
 
     <!-- File-API client (access probe, retrying fetch, file ops). -->
-    <script src="../shared/gum-api.js" defer></script>
+    <script src="../shared/ayni/ayni-net.js" defer></script>
     <!-- Shared UI helpers: sheets, toast, dialogs, i18n. -->
     <script src="../shared/ui.js" defer></script>
         <script>
@@ -367,7 +385,7 @@
     } );
     </script>
     <!-- Offline-capable persistence: local last-known-good cache + write-behind sync. -->
-    <script src="../shared/store.js" defer></script>
+    <script src="../shared/ayni/ayni-store.js" defer></script>
     <!-- Days, streaks and month figures. -->
     <script src="habits.js" defer></script>
 
@@ -379,13 +397,13 @@
         //------------------------------------------------------------------------//
         // STATE
 
-        const API_FILES = GumApi.API_FILES;
+        const API_FILES = AyniNet.API_FILES;
         const FILE      = 'data/habits/habits.json';   // the whole app, one file per user
         const H         = HabitsCore;
-        const store     = NayiveStore.createStore( { apiBase: API_FILES, conflicts: true, merge: mergeHabits } );
+        const store     = AyniStore.createStore( { apiBase: API_FILES, conflicts: true, merge: mergeHabits } );
 
         // Two devices saved the list from the same copy: both changes are kept,
-        // habit by habit (shared/store.js MERGE). A habit changed on both keeps
+        // habit by habit (shared/ayni/ayni-store.js MERGE). A habit changed on both keeps
         // each side's ticks and part counts; for its other fields, the side that
         // changed one wins, mine when both did. null = mine or theirs is not a
         // list: nothing is merged over it.
@@ -394,7 +412,7 @@
             const list = t => { try { const v = JSON.parse( t ); return Array.isArray( v ) ? v : null; } catch( _ ) { return null; } };
             const m = list( mine ), t = list( theirs );
             if( ! m || ! t ) return null;
-            const S = NayiveStore;
+            const S = AyniStore;
             const merged = S.mergeLists( base == null ? null : list( base ), m, t,
             {
                 id:   h => h && h.id,
@@ -455,13 +473,7 @@
 
         const $ = id => document.getElementById( id );
 
-        function el( tag, cls, text )
-        {
-            const e = document.createElement( tag );
-            if( cls ) e.className = cls;
-            if( text != null ) e.textContent = text;
-            return e;
-        }
+        const el = Ayni.h;
 
         // "lunes": the language's own case, it sits inside the date line.
         function dowName( iso ) { return Ayni.i18n.weekday( H.isoWeekday( iso ), 'long', true ); }
@@ -565,7 +577,7 @@
         } );
 
         // The store's state machine drives the header plug for every read and write.
-        store.onState( NayiveUI.syncIndicator() );
+        store.onState( Ayni.plug.listener() );
 
         // The plug's click and the focus / visibilitychange re-reads, all on ONE guarded
         // path (shared/ui.js). Every save PUTs the whole file (last write wins), so a tab
@@ -574,12 +586,12 @@
         // backgrounded tab from the bfcache, so this is where "it is tomorrow now" gets
         // noticed. The default guard keeps the read out of an open sheet, where
         // re-rendering would throw away what is being typed.
-        NayiveUI.wireRefresh( { store: store, read: load } );
+        AyniBoot.wireRefresh( { store: store, read: load } );
 
         // Probe the API, then load. On a failed probe the shared helper bounces to the
         // sign-in page only when we are really online with nothing cached; otherwise it
         // opens on the local cache and the store syncs once the connection is back.
-        NayiveUI.bootWithStore( store, load );
+        AyniBoot.boot( store, load );
         armMidnight();
 
         // A tab left open across midnight rolls over to the new day on its own.

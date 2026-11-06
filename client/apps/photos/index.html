@@ -46,6 +46,7 @@
          every inline script below may call Ayni.t(). -->
     <script src="../shared/i18n.js"></script>
     <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
+    <script src="../shared/ayni/ayni-util.js"></script>
     <title>Photos</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6' y='2' width='16' height='16' rx='2'/%3E%3Ccircle cx='12' cy='8' r='2'/%3E%3Cpath d='m22 13-1.3-1.3a2.4 2.4 0 0 0-3.4 0L11 18'/%3E%3Cpath d='M18 22H4a2 2 0 0 1-2-2V6'/%3E%3C/svg%3E">
 
@@ -64,10 +65,26 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-share.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pwa.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-locker.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-status.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-shell.css">
     <link rel="stylesheet" href="../shared/app.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-doc.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-media.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-image.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-map.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-icons-more.js" defer></script>
+    <script src="../shared/ayni/ayni-shell.js" defer></script>
+    <script src="../shared/ayni/ayni-status.js" defer></script>
+    <script src="../shared/ayni/ayni-share.js" defer></script>
+    <script src="../shared/ayni/ayni-upload.js" defer></script>
+    <script src="../shared/ayni/ayni-pwa.js" defer></script>
+    <script src="../shared/ayni/ayni-boot.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
@@ -79,9 +96,10 @@
     <script src="../shared/ayni/ayni-pickers.js" defer></script>
     <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
-    <script src="../shared/gum-api.js" defer></script>
+    <script src="../shared/ayni/ayni-locker.js"></script>
+    <script src="../shared/ayni/ayni-net.js" defer></script>
     <script src="../shared/ui.js" defer></script>
-    <script src="../shared/photo.js" defer></script>
+    <script src="../shared/ayni/ayni-photo.js" defer></script>
     <script>
     Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
@@ -89,19 +107,21 @@
             title: 'Photos',
             lead:  Ayni.t( 'photos.introLead' ),
             rows: [
-                { sel: '#folderInfoBtn', text: Ayni.t( 'photos.introFolder' ) },
+                { sel: '#folderInfoBtn', text: Ayni.t( 'photos.introFolder' ), tour: false },   // last in the tour
                 { sel: '#searchToggle', text: Ayni.t( 'photos.introSearch' ) },
                 { sel: '#reloadBtn',   text: Ayni.t( 'photos.introRescan' ) },
                 { sel: '[data-mode="grid"]',   text: Ayni.t( 'photos.introGrid' ) },
                 { sel: '[data-mode="lista"]',  text: Ayni.t( 'photos.introList' ) },
                 { sel: '[data-mode="map"]',    text: Ayni.t( 'photos.introMap' ) },
                 { sel: '[data-mode="pase"]',   text: Ayni.t( 'photos.introSlideshow' ) },
-                { sel: '#addBtn',      text: Ayni.t( 'photos.introUpload' ) }
+                { sel: '#addBtn',      text: Ayni.t( 'photos.introUpload' ) },
+                { sel: '#camBtn',      text: Ayni.t( 'photos.introCamera' ) }
             ],
             // The guided tour ("Ver el tour" in the card): the albums, the card's
             // buttons, then picking photos (the shared item list).
             tour: [ { sel: '#treePane, #treeBtn', text: Ayni.t( 'photos.tourTree' ) }, 'rows',
-                    { use: 'pick', ghost: '#grid' }, { use: 'picked', ghost: '#grid' } ]
+                    { use: 'pick', ghost: '#grid' }, { use: 'picked', ghost: '#grid' },
+                    { sel: '#folderInfoBtn', text: Ayni.t( 'photos.introFolder' ), optional: true } ]
         } );
     } );
     </script>
@@ -532,12 +552,8 @@
             <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="16" height="16" rx="2"/><circle cx="12" cy="8" r="2"/><path d="m22 13-1.3-1.3a2.4 2.4 0 0 0-3.4 0L11 18"/><path d="M18 22H4a2 2 0 0 1-2-2V6"/></svg>
             <h1>Photos</h1>
 
-            <!-- The ranks (Ayni.fitBar): this folder button leaves into the ⋮ last of all
+            <!-- The ranks (Ayni.fitBar): #folderInfoBtn leaves into the ⋮ last of all
                  (0.5: after the picked photos' actions too); the view modes first (40-43). -->
-            <button class="btn" id="folderInfoBtn" type="button" data-rank="0.5" popovertarget="folderMenu" data-i18n-attr="data-tip:ui.folderInfo, aria-label:ui.folderInfo">
-                <span class="icon" data-icon="folder-info"></span>
-            </button>
-
             <!-- A phone's way into the albums tree (it slides in from the left). -->
             <button class="btn" id="treeBtn" type="button" hidden data-i18n-attr="data-tip:photos.albums, aria-label:photos.albums">
                 <span class="icon" data-icon="sidebar"></span>
@@ -545,20 +561,21 @@
 
             <div class="tb-modes" role="group" data-i18n-attr="aria-label:photos.galleryMode">
                 <button class="btn" data-mode="grid" data-rank="40" aria-pressed="true" data-i18n-attr="data-tip:photos.grid, aria-label:photos.grid">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                    <span class="icon" data-icon="view-tiles" style="--icon:18px"></span>
                 </button>
                 <button class="btn" data-mode="lista" data-rank="41" aria-pressed="false" data-i18n-attr="data-tip:photos.list, aria-label:photos.list">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                    <span class="icon" data-icon="view-rows" style="--icon:18px"></span>
                 </button>
                 <button class="btn" data-mode="map" data-rank="42" aria-pressed="false" data-i18n-attr="data-tip:photos.map, aria-label:photos.map">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+                    <span class="icon" data-icon="map" style="--icon:18px"></span>
                 </button>
                 <button class="btn" data-mode="pase" data-rank="43" aria-pressed="false" data-i18n-attr="data-tip:photos.slideshow, aria-label:photos.slideshow">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    <span class="icon" data-icon="slideshow" style="--icon:18px"></span>
                 </button>
             </div>
 
             <input type="file" id="addInput" accept="image/*,video/*" multiple hidden>
+            <input type="file" id="camInput" accept="image/*" capture="environment" hidden>
 
             <div class="topbar-actions tall" role="toolbar" data-i18n-attr="aria-label:ui.actions">
                 <!-- The selection group (Ayni.list draws it while photos are picked). -->
@@ -573,6 +590,9 @@
                     <button class="btn" id="addBtn" type="button" hidden data-rank="21" data-i18n-attr="data-tip:photos.uploadHere, aria-label:photos.uploadHere">
                         <span class="icon" data-icon="upload"></span>
                     </button>
+                    <button class="btn" id="camBtn" type="button" hidden data-rank="21" data-i18n-attr="data-tip:photos.takePhoto, aria-label:photos.takePhoto">
+                        <span class="icon" data-icon="camera"></span>
+                    </button>
                     <button class="btn" id="shareBtn" type="button" hidden data-rank="22" data-i18n-attr="data-tip:photos.shareAlbumTip, aria-label:photos.shareAlbum">
                         <span class="icon" data-icon="share"></span>
                     </button>
@@ -581,11 +601,14 @@
                     </button>
                 </div>
                 <div class="tb-group tb-sys">
+                    <button class="btn" id="folderInfoBtn" type="button" data-rank="0.5" popovertarget="folderMenu" data-i18n-attr="data-tip:ui.folderInfo, aria-label:ui.folderInfo">
+                        <span class="icon" data-icon="info"></span>
+                    </button>
                     <button class="btn" data-help-open data-rank="31" type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help">
                         <span class="icon" data-icon="help"></span>
                     </button>
                 </div>
-                <div class="sync-indicator synced" id="sync" data-i18n-attr="title:ui.sync.synced"></div>
+                <div class="sync-indicator synced" id="sync" data-i18n-attr="title:ayni.sync.synced"></div>
             </div>
         </header>
 
@@ -635,9 +658,9 @@
                 <div class="pase-count" id="paseCount"></div>
                 <div class="pase-cap"><div class="t" id="paseTitle"></div><div class="m" id="paseMeta"></div><div class="c" id="paseNote" hidden></div></div>
                 <div class="pase-ctrl">
-                    <button id="pPrev" class="btn on-media" data-i18n-attr="data-tip:ui.prev, aria-label:ui.prev"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 6h2v12H7zM20 6v12l-9-6z"/></svg></button>
+                    <button id="pPrev" class="btn on-media" data-i18n-attr="data-tip:ui.prev, aria-label:ui.prev"><span class="icon" data-icon="chev-left" style="--icon:18px"></span></button>
                     <button id="pPlay" class="btn primary transport-btn play-btn" data-i18n-attr="data-tip:photos.playPause, aria-label:photos.playPause"></button>
-                    <button id="pNext" class="btn on-media" data-i18n-attr="data-tip:ui.next, aria-label:ui.next"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M15 6h2v12h-2zM4 6l9 6-9 6z"/></svg></button>
+                    <button id="pNext" class="btn on-media" data-i18n-attr="data-tip:ui.next, aria-label:ui.next"><span class="icon" data-icon="chev-right-wide" style="--icon:18px"></span></button>
                     <button id="pSpeed" class="pase-speed" data-i18n-attr="data-tip:photos.secondsPerPhoto, aria-label:photos.secondsPerPhoto">6 s</button>
                 </div>
             </div>
@@ -655,13 +678,14 @@
         <div class="lb-foot">
             <div class="lb-foot-row">
                 <div class="lb-cap"><div class="t" id="lbTitle"></div><div class="m" id="lbMeta"></div></div>
-                <button class="lb-btn primary" id="lbPlay"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> <span data-i18n="photos.startHere"></span></button>
+                <button class="lb-btn primary" id="lbPlay"><span class="icon" data-icon="play-solid" style="--icon:15px"></span> <span data-i18n="photos.startHere"></span></button>
                 <button class="lb-btn" id="lbMap"><span class="icon" data-icon="place" style="--icon:15px"></span> <span data-i18n="photos.seeOnMap"></span></button>
             </div>
             <div class="lb-note" id="lbNote" hidden><p class="note-text" id="lbNoteText"></p></div>
         </div>
     </div>
 
+<script src="../shared/ayni/ayni-media.js"></script>
 <script src="../shared/media.js"></script>
 <script>
 "use strict";
@@ -669,7 +693,7 @@ const $  = s => document.querySelector( s );
 const $$ = s => document.querySelectorAll( s );
 const reduced = () => matchMedia( "(prefers-reduced-motion:reduce)" ).matches;
 // The helpers shared with Music / Movies live in shared/media.js (one copy).
-const { esc, extOf, baseName, fmtSize, sleep, pool } = NayiveMedia;
+const { esc, extOf, baseName, sleep, pool } = Ayni, fmtSize = Ayni.fmtBytes;
 
 /* ============================================================================
  * WHICH FOLDER
@@ -743,7 +767,7 @@ function photos()
 }
 // The slideshow's photos: the same, without the videos.
 function pasePhotos() { return photos().filter( p => ! p.video ); }
-function dayOf( ts )  { const d = new Date( ts ), p = NayiveUI.pad2; return d.getFullYear() + "-" + p( d.getMonth() + 1 ) + "-" + p( d.getDate() ); }
+function dayOf( ts )  { return Ayni.dates.iso( new Date( ts ) ); }
 // p.day stays yyyy-mm-dd (it groups and sorts); what is shown - the day
 // and the time - is in the user's language.
 function timeOf( ts ) { return dateFmt( "t", { hour: "numeric", minute: "2-digit" } ).format( new Date( ts ) ); }
@@ -766,7 +790,7 @@ function sortPhotos() { PHOTOS.sort( ( a, b ) => ( a.ts - b.ts ) || a.name.local
  *
  * A real photo is an <img> (so the browser applies EXIF orientation).
  * -------------------------------------------------------------------------*/
-const NOTE_MARK = '<span class="note-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-4 4v-4H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/></svg></span>';
+const NOTE_MARK = '<span class="note-mark" aria-hidden="true">' + Ayni.icon( 'comment' ) + '</span>';
 
 /* ---------------------------------------------------------------------------
  * THUMBNAILS  - made here, in the browser; the server only stores them.
@@ -832,13 +856,13 @@ function thumbSrc( p )
     {
         const state = p.size && p.mtime ? THUMB_STATE.get( thumbKey( p ) ) : "failed";
         if( state === "missing" || state === "pending" || state === "failed" ) return { src: "", stage: "video" };
-        return { src: GumApi.fileUrl( thumbPath( p ) ) + "&immutable=1", stage: "thumb" };
+        return { src: AyniNet.fileUrl( thumbPath( p ) ) + "&immutable=1", stage: "thumb" };
     }
     if( p.localUrl || ! p.size || ! p.mtime ) return { src: srcFor( p ), stage: "full" };
     const state = THUMB_STATE.get( thumbKey( p ) );
     if( state === "missing" || state === "pending" || state === "failed" ) return { src: srcFor( p ), stage: "fallback" };
     // `immutable`: the key IS the content, so the browser may cache it for good.
-    return { src: GumApi.fileUrl( thumbPath( p ) ) + "&immutable=1", stage: "thumb" };
+    return { src: AyniNet.fileUrl( thumbPath( p ) ) + "&immutable=1", stage: "thumb" };
 }
 
 function photoById( id ) { return PHOTOS.find( p => p.id === id ) || null; }
@@ -909,9 +933,9 @@ async function makeThumb( p, source )
     {
         const frame = p.video ? await videoFrame( source ) : null;
         let   blob;
-        try { blob = await NayivePhoto.shrinkToJpeg( frame || source, { maxW: THUMB_W, quality: THUMB_Q } ); }
+        try { blob = await AyniPhoto.shrinkToJpeg( frame || source, { maxW: THUMB_W, quality: THUMB_Q } ); }
         finally { if( frame && frame.close ) frame.close(); }
-        await GumApi.writeFileBytes( thumbPath( p ), blob );
+        await AyniNet.writeFileBytes( thumbPath( p ), blob );
         THUMB_STATE.set( key, "ok" );
         if( p.video ) showVideoThumb( p );
     }
@@ -952,7 +976,7 @@ function videoFrame( source )
 // A video's thumbnail is made: its tiles (grid, strip) show it.
 function showVideoThumb( p )
 {
-    const src = GumApi.fileUrl( thumbPath( p ) ) + "&immutable=1";
+    const src = AyniNet.fileUrl( thumbPath( p ) ) + "&immutable=1";
     $$( 'img.ph[data-stage="video"]' ).forEach( img =>
     {
         if( img.dataset.id !== p.id ) return;
@@ -980,7 +1004,7 @@ async function homeImageKeys()
     const keys = new Set();
     async function part( since, until )
     {
-        const r = await GumApi.search( { exts: SHOW_EXT, since, until } );
+        const r = await AyniNet.search( { exts: SHOW_EXT, since, until } );
         if( ! r.truncated )
         {
             ( r.nodes || [] ).forEach( n => { if( n.size && n.mtime ) keys.add( n.size + "_" + n.mtime + ".jpg" ); } );
@@ -1009,7 +1033,7 @@ async function sweepThumbs()
     if( last === today ) return;
 
     let listing;
-    try { listing = await GumApi.listDir( THUMB_DIR ); }
+    try { listing = await AyniNet.listDir( THUMB_DIR ); }
     catch( err )
     {
         if( ! err || err.status !== 404 ) return;                               // offline etc: try tomorrow
@@ -1031,7 +1055,7 @@ async function sweepThumbs()
     try
     {
         for( let i = 0; i < dead.length; i += 100 )       // keep each URL a sane length
-            await GumApi.purgePaths( dead.slice( i, i + 100 ) );
+            await AyniNet.purgePaths( dead.slice( i, i + 100 ) );
         localStorage.setItem( THUMB_SWEEP_KEY, today );
     }
     catch( _ ) {}
@@ -1044,7 +1068,7 @@ async function sweepThumbs()
 async function refreshStat( p )
 {
     let folder;
-    try { folder = await GumApi.listDir( DIR ); } catch( _ ) { return; }
+    try { folder = await AyniNet.listDir( DIR ); } catch( _ ) { return; }
     const n = ( folder.nodes || [] ).find( n => n.path === p.path );
     if( ! n ) return;
     p.size = n.size || 0; p.mtime = n.mtime || 0;
@@ -1054,10 +1078,10 @@ async function refreshStat( p )
     // Only this entry goes to the file, laid over a fresh read of it: this
     // page's copy may be hours old, and written whole it would undo Drive's
     // re-keys and other devices' scans made since. Version-checked
-    // (GumApi.updateJson): one saved in between makes it read again.
+    // (AyniNet.updateJson): one saved in between makes it read again.
     try
     {
-        await GumApi.updateJson( SCAN_PATH, disk =>
+        await AyniNet.updateJson( SCAN_PATH, disk =>
         {
             disk = disk || {};
             if( typeof disk !== "object" || Array.isArray( disk ) ) return false;
@@ -1068,7 +1092,7 @@ async function refreshStat( p )
     catch( _ ) {}
 }
 
-const PLAY_MARK = '<span class="play-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>';
+const PLAY_MARK = '<span class="play-mark" aria-hidden="true">' + Ayni.icon( 'play-solid' ) + '</span>';
 
 function sceneInner( p, thumb )
 {
@@ -1106,13 +1130,13 @@ function setGridMsg( text, busy )
 /* The header sync dot: "saving" (blue) while a PUT is in flight, "synced"
  * otherwise. shared/ui.js owns the classes and the title; Photos only overrides
  * the two states it words its own way. Its dot is #sync, not #syncIndicator.
- * A wrapper rather than NayiveUI.syncIndicator(): this script runs at parse
+ * A wrapper rather than Ayni.plug.listener(): this script runs at parse
  * time, before the deferred ui.js has set window.NayiveUI. */
 const SYNC_TITLES = { titles: { saving: 'photos.uploading', offline: 'photos.offline' } };
 
 function setSync( state )
 {
-    NayiveUI.applySyncState( 'sync', state, SYNC_TITLES );
+    Ayni.plug.set( 'sync', state, SYNC_TITLES );
 }
 
 /* One photo into DIR as a NEW file only (create-only PUT, D3): the names on
@@ -1126,7 +1150,7 @@ async function sendPhoto( name, blob, taken, opts )
 {
     for( let tries = 0; ; tries++ )
     {
-        try { await GumApi.createFileBytes( DIR + "/" + name, blob, opts ); return name; }
+        try { await AyniNet.createFileBytes( DIR + "/" + name, blob, opts ); return name; }
         catch( err ) { if( ! err || err.status !== 412 || tries >= 20 ) throw err; }
 
         const choice = await Ayni.confirm( {
@@ -1138,13 +1162,16 @@ async function sendPhoto( name, blob, taken, opts )
         if( choice === false ) return null;
         if( choice === true )
         {
-            await GumApi.writeFileBytes( DIR + "/" + name, blob, opts );
+            await AyniNet.writeFileBytes( DIR + "/" + name, blob, opts );
             return name;
         }
-        name = NayiveUI.uniqueName( name, taken );
+        name = Ayni.uniqueName( name, taken );
         taken.add( name );
     }
 }
+
+/* The camera button goes with Upload, where this device can take a photo. */
+function showCamBtn() { $( "#camBtn" ).hidden = $( "#addBtn" ).hidden || ! AyniPhoto.canTakePhoto(); }
 
 /* Upload the picked images into the folder Photos is showing (DIR), then
  * reload so the scan cache picks up just the new files. Wired to #addBtn. */
@@ -1168,13 +1195,13 @@ async function handleAddPhotos( fileList )
 
     // If this user has a max photo size, every photo is shrunk to it and turned
     // into JPEG here, in the browser, before a single byte is sent.
-    const maxPx   = await NayivePhoto.limit();
+    const maxPx   = await AyniPhoto.limit();
     const taken   = new Set( PHOTOS.map( p => p.name ) );
     const emptied = ! PHOTOS.length;          // nothing on screen -> ok to use the grid for progress
     let   done    = 0;
 
     setSync( 'saving' );
-    Ayni.setBusy( $( "#addBtn" ), Ayni.t( "ui.sync.saving" ) );
+    Ayni.setBusy( $( "#addBtn" ), Ayni.t( "ayni.sync.saving" ) );
 
     for( let i = 0; i < files.length; i++ )
     {
@@ -1185,7 +1212,7 @@ async function handleAddPhotos( fileList )
         // No limit -> ready.blob is the original file, untouched. A video
         // goes up as it is.
         const video = isVideo( f.name );
-        const ready = video ? { blob: f, name: f.name } : await NayivePhoto.prepare( f, maxPx );
+        const ready = video ? { blob: f, name: f.name } : await AyniPhoto.prepare( f, maxPx );
         // Only the types Photos lists (a HEIC the limit turned into a JPEG
         // passes): an SVG, a TIFF, a HEIC would sit in the album unseen.
         if( SHOW_EXT.indexOf( extOf( ready.name || f.name ) ) === -1 )
@@ -1193,7 +1220,7 @@ async function handleAddPhotos( fileList )
             Ayni.toast( "warn", Ayni.tf( "photos.notAPhoto", { name: f.name } ) );
             continue;
         }
-        let name = NayiveUI.uniqueName( ready.name || ( "foto-" + Date.now() + "-" + i + ".jpg" ), taken );
+        let name = Ayni.uniqueName( ready.name || ( "foto-" + Date.now() + "-" + i + ".jpg" ), taken );
         taken.add( name );
 
         try
@@ -1246,15 +1273,16 @@ async function loadFolder( folder, fromNews )
     setGridMsg( Ayni.t( 'photos.loadingPhotos' ), true );
     // Upload: our own album, or one we were given permission to add to.
     $( "#addBtn" ).hidden = DEMO || ( RO && ! CAN_ADD );
+    showCamBtn();
     // Sharing stays OURS alone: you never pass on what was lent to you.
     $( "#shareBtn" ).hidden = DEMO || RO;
 
-    // `folder` is a GumApi.listDir() result - { path, nodes: [ ... ] } holding
+    // `folder` is a AyniNet.listDir() result - { path, nodes: [ ... ] } holding
     // just this one folder's direct entries (files + sub-folders), never the
     // whole recursive tree. Passed in by boot(); fetched here on a reload.
     if( ! folder )
     {
-        try { folder = await GumApi.listDir( DIR ); }
+        try { folder = await AyniNet.listDir( DIR ); }
         catch( _ ) { setGridMsg( Ayni.t( 'photos.loadFailed' ) ); return; }
     }
 
@@ -1280,7 +1308,7 @@ async function loadFolder( folder, fromNews )
     {
         const ts = ( n.mtime || 0 ) * 1000;
         return {
-            id: n.path, path: n.path, name: baseName( n.path ), url: GumApi.fileUrl( n.path ),
+            id: n.path, path: n.path, name: baseName( n.path ), url: AyniNet.fileUrl( n.path ),
             ts: ts, day: dayOf( ts ), time: timeOf( ts ),
             lat: null, lon: null, place: "", cluster: null,
             size: n.size || 0, mtime: n.mtime || 0, video: isVideo( n.path ),
@@ -1446,11 +1474,11 @@ async function exifFor( p )
 // 256 KB.
 async function exifHead( p )
 {
-    let buf = await GumApi.fetchBinary( p.url, { headers: { Range: "bytes=0-65535" } } );
-    const x    = NayivePhoto.exifAt( buf );   // { tiff, end } | { past } | null (shared/photo.js)
+    let buf = await AyniNet.fetchBinary( p.url, { headers: { Range: "bytes=0-65535" } } );
+    const x    = AyniPhoto.exifAt( buf );   // { tiff, end } | { past } | null (shared/ayni/ayni-photo.js)
     const need = ! x ? 0 : x.past ? 262144 : x.end;
     if( need > buf.length && buf.length >= 65536 )
-        buf = await GumApi.fetchBinary( p.url, { headers: { Range: "bytes=0-" + ( Math.min( need, 262144 ) - 1 ) } } );
+        buf = await AyniNet.fetchBinary( p.url, { headers: { Range: "bytes=0-" + ( Math.min( need, 262144 ) - 1 ) } } );
     return buf;
 }
 
@@ -1460,7 +1488,7 @@ function parseJpegExif( u8, full )
 {
     if( ! u8 || u8.length < 12 || u8[ 0 ] !== 0xFF || u8[ 1 ] !== 0xD8 ) return null;
 
-    const at   = NayivePhoto.exifAt( u8 );
+    const at   = AyniPhoto.exifAt( u8 );
     const tiff = at && ! at.past ? at.tiff : -1;
     if( tiff < 0 || tiff + 8 > u8.length ) return null;
 
@@ -1646,7 +1674,7 @@ async function geocodeRun( my )
     let canSave = ! DEMO && ! RO;
     try
     {
-        const map = await GumApi.readJson( PLACES_PATH );
+        const map = await AyniNet.readJson( PLACES_PATH );
         if( map && typeof map === "object" && ! Array.isArray( map ) ) PLACES = map;
         else if( map !== null ) canSave = false;
     }
@@ -1674,7 +1702,7 @@ async function geocodeRun( my )
 // A run lasts minutes and other devices save places too: each save reads the
 // file again and adds only this run's places to it - never the copy read at
 // the start, which would drop theirs (asked again later, against his
-// Nominatim budget) - and version-checked (GumApi.updateJson): places saved
+// Nominatim budget) - and version-checked (AyniNet.updateJson): places saved
 // between that read and this write make it read again. What they found
 // meanwhile is kept here as well, so this run does not ask for it. A file
 // that cannot be read is not written: the next save carries every place of
@@ -1684,7 +1712,7 @@ async function savePlaces( mine )
     let disk;
     try
     {
-        disk = await GumApi.updateJson( PLACES_PATH, raw =>
+        disk = await AyniNet.updateJson( PLACES_PATH, raw =>
         {
             const d = raw === null ? {} : raw;
             if( typeof d !== "object" || Array.isArray( d ) ) return false;
@@ -1784,7 +1812,7 @@ async function sweepComments()
     // folder that cannot be listed sweeps nothing: the sweep runs again on
     // the next load.
     let bin, now;
-    try { bin = await GumApi.trashList(); now = await GumApi.listDir( DIR ); }
+    try { bin = await AyniNet.trashList(); now = await AyniNet.listDir( DIR ); }
     catch( _ ) { return; }
     const binned = key => bin.some( it => it && typeof it.orig === "string" &&
                                           ( it.orig === key || ( it.dir && key.indexOf( it.orig + "/" ) === 0 ) ) );
@@ -1861,7 +1889,7 @@ function tileHtml( p )
 
 // A HEIC / HEIF: listed, so it is not just missing, but no browser here can
 // draw it - a tap offers Download or Drive instead (openUnshown).
-const NO_SHOW_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/><line x1="3" y1="3" x2="21" y2="21"/></svg>';
+const NO_SHOW_SVG = Ayni.icon( 'slideshow-off' );
 function unshown()
 {
     const q = Ayni.matcher( st.q );
@@ -1889,12 +1917,7 @@ async function openUnshown( path )
     if( pick === true ) location.href = '../drive/index.html?sel=' + encodeURIComponent( path );
     else if( pick === 'other' )
     {
-        const a = document.createElement( 'a' );
-        a.href = GumApi.fileUrl( path );
-        a.download = name;
-        document.body.appendChild( a );
-        a.click();
-        a.remove();
+        Ayni.saveUrl( AyniNet.fileUrl( path ), name );
     }
 }
 
@@ -2003,7 +2026,7 @@ function renderGrid( keepTop )
 /* ---------------------------------------------------------------------------
  * MAP (real Leaflet map)
  * -------------------------------------------------------------------------*/
-// Leaflet plus the base map (shared/basemap.js and MapLibre GL, vendored with
+// Leaflet plus the base map (shared/ayni/ayni-map.js and MapLibre GL, vendored with
 // Leaflet in trips/lib/), loaded on first use. Only Leaflet and basemap.js are
 // required: without MapLibre the base map falls back to the OSM pictures.
 let leafletPromise = null;
@@ -2032,7 +2055,7 @@ function ensureLeaflet()
             const gl = js( lib + "maplibre-gl_v5.24.0/maplibre-gl.js" )
                 .then( () => js( lib + "maplibre-gl-leaflet_v0.1.4/leaflet-maplibre-gl.js" ) )
                 .catch( () => {} );
-            return Promise.all( [ js( "../shared/basemap.js" ), gl ] );
+            return Promise.all( [ js( "../shared/ayni/ayni-map.js" ), gl ] );
         } )
         .catch( e => { leafletPromise = null; throw e; } );
     return leafletPromise;
@@ -2062,7 +2085,7 @@ async function drawMap()
     if( ! st.map )
     {
         st.map = L.map( "lmap", { zoomControl: true, attributionControl: true } );
-        NayiveBaseMap.add( st.map );
+        AyniBaseMap.add( st.map );
     }
 
     st.markers.forEach( m => m.remove() );
@@ -2244,8 +2267,8 @@ function setPlaying( on )
 {
     st.playing = on;
     $( "#pPlay" ).innerHTML = on
-        ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>'
-        : '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+        ? Ayni.icon( 'pause-solid', '', 18 )
+        : Ayni.icon( 'play-solid', '', 18 );
     if( on ) armTimer();
     else clearTimeout( st.timer );
 }
@@ -2255,7 +2278,7 @@ function setPlaying( on )
  * desktop window or a browser tab; on a phone, in place of this page (Back
  * comes back here).
  *
- * Its saves come back as file news (GumApi.onFilesChanged), as any other
+ * Its saves come back as file news (AyniNet.onFilesChanged), as any other
  * page's do: a photo written over gets its new size + mtime (so a new
  * thumbnail) and a fresh copy; any other change in this folder (a "Save a
  * copy", a file binned or put back) re-reads the folder; the notes file,
@@ -2347,6 +2370,7 @@ function setMode( m )
     $( "#pase" ).hidden = m !== "pase";
     document.body.classList.toggle( "pase", m === "pase" );
     document.body.classList.toggle( "view-list", m === "lista" );
+    if( browse ) browse.redraw();    // ticks: always on in the grid, not in the list
     $$( ".tb-modes .btn" ).forEach( b =>
     {
         const on = b.dataset.mode === m;
@@ -2403,6 +2427,18 @@ $( "#grid" ).addEventListener( "click", e =>
 NayiveMedia.wireCrumbPicker( { app: "photos", allowRoot: true, when: () => ! DEMO } );
 
 $( "#addBtn"   ).addEventListener( "click", () => $( "#addInput" ).click() );
+// Take a photo: it goes up like any other, into this folder.
+$( "#camBtn"   ).addEventListener( "click", () =>
+{
+    if( AyniPhoto.ownCamera() ) AyniPhoto.camera( file => { if( file ) handleAddPhotos( [ file ] ); } );
+    else $( "#camInput" ).click();
+} );
+$( "#camInput" ).addEventListener( "change", e =>
+{
+    const files = Array.from( e.target.files );
+    e.target.value = "";
+    handleAddPhotos( files );
+} );
 $( "#shareBtn" ).addEventListener( "click", () =>
 {
     // The album we are looking at, shared read-only with another user of this
@@ -2501,8 +2537,8 @@ document.addEventListener( "keydown", e =>
  * an album move there; an album has its own menu (albumMenu).
  *
  * Moves, copies and the bin are Drive's own calls in Drive's order
- * (drive/move-copy.js, drive/actions.js): GumApi.rename / the server's copy /
- * GumApi.binPaths, then NayiveMedia.remapPaths / copyPaths / purgePaths, so
+ * (drive/move-copy.js, drive/actions.js): AyniNet.rename / the server's copy /
+ * AyniNet.binPaths, then NayiveMedia.remapPaths / copyPaths / purgePaths, so
  * the notes and the scan caches follow the photos. Moves and the bin have an
  * Undo; when the open album itself moved or went, the page opens where it is
  * now (or the album above) and the Undo comes along (carryUndo).
@@ -2510,13 +2546,13 @@ document.addEventListener( "keydown", e =>
 let browse   = null;          // Ayni.list on #grid
 let treeView = null;          // Ayni.tree (nav) in #treePane
 let ROOT     = null;          // the tree's top folder (albumRoot)
-let ALBUMS   = null;          // ROOT's node of GumApi.dirTree(): { path, nodes }
+let ALBUMS   = null;          // ROOT's node of AyniNet.dirTree(): { path, nodes }
 let DRIVE    = null;          // the Drive's top node of it: "Move to…" / "Copy to…" go anywhere
 let albumIndexShown = false;  // #grid holds the album cards (renderAlbums)
 
 const TREE_OPEN_KEY = "photos-tree-open";        // localStorage: the open albums
 const CARRY_KEY     = "photos-carry-undo";       // sessionStorage: an Undo across a re-open
-const MAP_PIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12Z"/><circle cx="12" cy="9" r="2.4"/></svg>';
+const MAP_PIN = Ayni.icon( 'place' );
 
 let treeOpen = new Set();
 try { treeOpen = new Set( JSON.parse( localStorage.getItem( TREE_OPEN_KEY ) || "[]" ) ); } catch( _ ) {}
@@ -2536,7 +2572,7 @@ async function albumRoot()
     if( RO ) return DIR;
     try
     {
-        const cfg = await GumApi.readJson( "data/photos/config.json" );
+        const cfg = await AyniNet.readJson( "data/photos/config.json" );
         const f   = cfg && typeof cfg.folder === "string" ? ( cfg.folder.replace( /\/+$/, "" ) || "files" ) : "";
         if( f && under( DIR, f ) ) return f;
     }
@@ -2567,7 +2603,7 @@ async function loadAlbums()
 {
     const my = ++albumsSeq;
     let all = null, top = null;
-    try { all = await GumApi.dirTree(); top = findDir( all, ROOT ); } catch( _ ) { return; }
+    try { all = await AyniNet.dirTree(); top = findDir( all, ROOT ); } catch( _ ) { return; }
     if( my !== albumsSeq || ! top ) return;
     ALBUMS = top;
     DRIVE  = findDir( all, "files" ) || all;     // an admin's tree has no files/ top
@@ -2595,7 +2631,7 @@ function albumNodes( from )
 function canDropOn( ids, dest )
 {
     if( RO || DEMO || ! ids || ! ids.length || NayiveUI.isShared( dest ) ) return false;
-    return ids.every( p => ! under( dest, p ) && NayiveMedia.dirOf( p ) !== dest );
+    return ids.every( p => ! under( dest, p ) && Ayni.dirOf( p ) !== dest );
 }
 
 function wireTree()
@@ -2605,7 +2641,7 @@ function wireTree()
     $( "#treeBtn" ).hidden = false;
     // The open album shows, its albums above it open.
     treeOpen.add( ROOT );
-    for( let p = DIR; p && p !== ROOT && under( p, ROOT ); p = NayiveMedia.dirOf( p ) ) treeOpen.add( NayiveMedia.dirOf( p ) );
+    for( let p = DIR; p && p !== ROOT && under( p, ROOT ); p = Ayni.dirOf( p ) ) treeOpen.add( Ayni.dirOf( p ) );
 
     treeView = Ayni.tree( $( "#tree" ), {
         nav:     true,
@@ -2666,7 +2702,7 @@ function photoActions()
           where: () => ! DEMO, when: one, run: ids => showInfo( ids[ 0 ] ) },
         { id: "map", label: Ayni.t( "photos.seeOnMap" ), icon: MAP_PIN, rank: 8, hideOff: true, group: 2,
           when: ids => ids.every( id => { const p = photoById( id ); return !! p && p.cluster != null; } ), run: showOnMap },
-        { id: "bin", label: Ayni.t( "ui.toTrash" ), icon: "trash", key: NayiveUI.isMac ? [ "Del", "Ctrl+Backspace" ] : "Del",   // never a bare ⌫ (Drive's rule)
+        { id: "bin", label: Ayni.t( "ui.toTrash" ), icon: "trash", key: Ayni.isMac ? [ "Del", "Ctrl+Backspace" ] : "Del",   // never a bare ⌫ (Drive's rule)
           rank: 1, group: 3, danger: true, where: mine, run: ids => binPaths( ids ) }
     ];
 }
@@ -2721,12 +2757,7 @@ async function downloadPaths( paths )
     try
     {
         const r = JSON.parse( await NayiveMedia.postPaths( "/api/download", paths ) );
-        const a = document.createElement( "a" );
-        a.href     = "/api/download?id=" + encodeURIComponent( r.id );
-        a.download = r.name || "";
-        document.body.appendChild( a );
-        a.click();
-        a.remove();
+        Ayni.saveUrl( "/api/download?id=" + encodeURIComponent( r.id ), r.name || "" );
     }
     catch( err )
     {
@@ -2869,7 +2900,7 @@ async function newAlbum( parent )
     if( name == null ) return;
     if( ! okName( name ) ) { Ayni.toast( "err", Ayni.t( "drive.createFolderFailed" ) ); return; }
     setSync( "saving" );
-    try { await GumApi.makeDir( parent, name ); }
+    try { await AyniNet.makeDir( parent, name ); }
     catch( _ ) { setSync( "synced" ); Ayni.toast( "err", Ayni.t( "drive.createFolderFailed" ) ); return; }
     setSync( "synced" );
     treeOpen.add( parent );
@@ -2882,7 +2913,7 @@ async function newAlbum( parent )
 // failure: the server's own clash guard is the real backstop.
 async function destNameSet( dest )
 {
-    try { return await GumApi.namesIn( dest ); }
+    try { return await AyniNet.namesIn( dest ); }
     catch( _ ) { return new Set(); }
 }
 
@@ -2921,7 +2952,7 @@ async function movePaths( paths, dest )
         let skipped = 0;
         for( const p of paths )
         {
-            if( NayiveMedia.dirOf( p ) === dest ) { skipped++; continue; }     // already there
+            if( Ayni.dirOf( p ) === dest ) { skipped++; continue; }     // already there
             items.push( { from: p, to: dest + "/" + baseName( p ), clash: names.has( baseName( p ) ) } );
         }
         const clashes = items.filter( it => it.clash );
@@ -2947,7 +2978,7 @@ async function renameAlbum( path )
     const name = await askName( Ayni.t( "ui.rename" ), old, Ayni.t( "ui.rename" ) );
     if( name == null || name === old ) return;
     if( ! okName( name ) ) { Ayni.toast( "err", Ayni.tf( "drive.renameFailed", { err: name } ) ); return; }
-    const parent = NayiveMedia.dirOf( path );
+    const parent = Ayni.dirOf( path );
     if( ( await destNameSet( parent ) ).has( name ) ) { Ayni.toast( "warn", Ayni.t( "drive.nameExistsTitle" ) ); return; }
     if( moveBusy ) return;
     moveBusy = true;
@@ -2956,7 +2987,7 @@ async function renameAlbum( path )
 }
 
 // The moves themselves: `items` = [ { from, to, clash } ]. Drive's order: a
-// clash being replaced goes to the bin first, then GumApi.rename; whatever
+// clash being replaced goes to the bin first, then AyniNet.rename; whatever
 // did move takes its sidecars along (NayiveMedia.remapPaths) - after a
 // failure too. Each step is what the Undo walks back (runUndo).
 async function runMoves( items, replace, skipped, okMsg, failKey )
@@ -2973,10 +3004,10 @@ async function runMoves( items, replace, skipped, okMsg, failKey )
             steps.push( step );
             if( it.clash )
             {
-                step.bin = await GumApi.binPaths( [ it.to ] );     // the one in the way -> the bin
+                step.bin = await AyniNet.binPaths( [ it.to ] );     // the one in the way -> the bin
                 if( ! step.bin ) canUndo = false;                   // an old server: no way back
             }
-            await GumApi.rename( it.from, it.to );
+            await AyniNet.rename( it.from, it.to );
             step.moved = true;
             remapped.push( [ it.from, it.to ] );
             moved++;
@@ -2990,7 +3021,7 @@ async function runMoves( items, replace, skipped, okMsg, failKey )
     const undo = done.length && canUndo ? { kind: "moves", steps: done } : null;
     const msg  = failed ? Ayni.tf( failKey, { err: failed && failed.message || failed } )
                : okMsg || ( Ayni.tf( "drive.nMoved", { n: moved } ) + ( skipped ? " · " + Ayni.tf( "drive.nSkipped", { n: skipped } ) : "" ) );
-    settle( remapped.map( r => r[ 0 ] ), NayiveUI.followPath( DIR, remapped ), msg, undo, failed ? "err" : "ok" );
+    settle( remapped.map( r => r[ 0 ] ), Ayni.followPath( DIR, remapped ), msg, undo, failed ? "err" : "ok" );
 }
 
 // Copy photos (or an album) into `dest` - Drive's doCopy: one server copy per
@@ -3005,11 +3036,11 @@ async function copyPaths( paths, dest )
         const taken = await destNameSet( dest );
         for( const p of paths )
         {
-            const name = NayiveUI.uniqueName( baseName( p ), taken );
+            const name = Ayni.uniqueName( baseName( p ), taken );
             taken.add( name );
             const to  = dest + "/" + name;
             const q   = new URLSearchParams( { from: p, "new": to } ).toString();
-            const res = JSON.parse( await GumApi.fetchText( GumApi.API_FILES + "?" + q, { method: "POST" } ) );
+            const res = JSON.parse( await AyniNet.fetchText( AyniNet.API_FILES + "?" + q, { method: "POST" } ) );
             files += ( res && res.files ) || 0;
             copied.push( [ p, to ] );
         }
@@ -3017,7 +3048,7 @@ async function copyPaths( paths, dest )
     catch( err ) { failed = err; }
     await NayiveMedia.copyPaths( copied );
     setSync( "synced" );
-    if( failed ) Ayni.toast( "err", failed.status === 507 ? Ayni.t( "ui.room.none" )
+    if( failed ) Ayni.toast( "err", failed.status === 507 ? Ayni.t( "ayni.room.none" )
                                                        : Ayni.tf( "drive.copyFailed", { err: failed && failed.message || failed } ) );
     else Ayni.toast( "ok", Ayni.tf( "drive.nCopied", { n: files } ) );
     if( copied.length && dest === DIR ) reloadView();
@@ -3041,7 +3072,7 @@ async function binPaths( paths )
     if( ! went.length ) { Ayni.toast( "err", Ayni.t( "drive.trashFailed" ) ); return; }
     // The open album (or one it is in) went: the album above it opens.
     const gone = went.find( p => under( DIR, p ) );
-    settle( went, gone ? NayiveMedia.dirOf( gone ) : DIR, Ayni.t( failed ? "drive.trashFailed" : "ui.toast.binned" ),
+    settle( went, gone ? Ayni.dirOf( gone ) : DIR, Ayni.t( failed ? "drive.trashFailed" : "ui.toast.binned" ),
             ids && ids.length ? { kind: "bin", ids: ids } : null, failed ? "err" : "ok" );
 }
 
@@ -3080,7 +3111,7 @@ function dropPhotos( paths )
 async function reloadView()
 {
     let folder = null;
-    try { folder = await GumApi.listDir( DIR ); } catch( _ ) {}
+    try { folder = await AyniNet.listDir( DIR ); } catch( _ ) {}
     loadAlbums();
     const kids  = ( folder && folder.nodes ) || [];
     const subs  = kids.filter( n => Array.isArray( n.nodes ) );
@@ -3108,7 +3139,7 @@ async function runUndo( undo )
         {
             if( s.moved )
             {
-                try { await GumApi.rename( s.to, s.from ); }
+                try { await AyniNet.rename( s.to, s.from ); }
                 catch( e ) { err = err || e; continue; }
                 back.push( [ s.to, s.from ] );
             }
@@ -3153,6 +3184,8 @@ function offerCarriedUndo()
  * -------------------------------------------------------------------------*/
 async function boot()
 {
+    AyniPhoto.cameraWatch( showCamBtn );
+
     if( ! DIR )
     {
         const picked = await NayiveUI.launcherFolder( {
@@ -3169,10 +3202,10 @@ async function boot()
             // five times). Signed out: to the sign-in page, as every app;
             // offline / a server error: say so; the picker cancelled: say how.
             let who = null;
-            try { who = await GumApi.probeAccess(); }
+            try { who = await AyniNet.probeAccess(); }
             catch( err )
             {
-                if( err && err.status === 401 ) { GumApi.loginRedirect(); return; }
+                if( err && err.status === 401 ) { AyniNet.loginRedirect(); return; }
             }
             DEMO = false;                        // the crumb's folder picker works
             setGridMsg( Ayni.t( who ? 'photos.needFolder' : 'photos.loadFailed' ) );
@@ -3208,16 +3241,16 @@ async function boot()
     if( subs.length && ! imgs.length ) { renderAlbums( subs ); offerCarriedUndo(); return; }
 
     await loadFolder( folder );
-    GumApi.onFilesChanged( onFilesNews );        // Image saved a photo here, Drive changed the folder...
+    AyniNet.onFilesChanged( onFilesNews );        // Image saved a photo here, Drive changed the folder...
     offerCarriedUndo();                          // the open album moved / went a moment ago: its Undo
 
     // ?photo=<path> (Chat's "Abrir en Fotos"): that photo, straight in the lightbox.
     const want = PARAMS.get( "photo" );
     if( want && PHOTOS.some( p => p.id === want ) ) openLb( want );
 }
-// shared/gum-api.js, shared/ui.js and shared/photo.js load deferred now, so
+// shared/ayni/ayni-net.js, shared/ui.js and shared/ayni/ayni-photo.js load deferred now, so
 // wait for them (deferred scripts all run before DOMContentLoaded) before
-// boot() touches GumApi / NayiveUI / NayivePhoto.
+// boot() touches AyniNet / NayiveUI / AyniPhoto.
 Ayni.i18n.ready.then( () =>
 {
     // The install nudge lives in the launcher only (it is a full dialog now, too
@@ -3238,11 +3271,12 @@ function renderAlbums( subs )
     $( "#searchToggle" ).hidden = true;
     $( "#reloadBtn" ).hidden = true;
     $( "#addBtn" ).hidden = true;               // pick an album first, then upload into it
+    showCamBtn();
 
     setCrumbPath( dirLabel() );
     $( "#subStrip" ).textContent = Ayni.t( 'photos.pickAlbum' );
 
-    const FOLDER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+    const FOLDER_SVG = Ayni.icon( 'folder' );
 
     const box = document.createElement( "div" );
     box.className = "albums";

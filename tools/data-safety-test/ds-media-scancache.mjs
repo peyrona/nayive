@@ -21,17 +21,17 @@ fs.mkdirSync( path.join( s.home(), "files/G" ), { recursive: true } );
 
 const c = await browser( s );
 ok( await c.open( "/nayive/photos/index.html?dir=files/G" ), "a media page opens (Photos)" );
-ok( await c.until( "typeof NayiveMedia === 'object' && typeof GumApi === 'object'" ), "media.js is loaded" );
+ok( await c.until( "typeof NayiveMedia === 'object' && typeof AyniNet === 'object'" ), "media.js is loaded" );
 
 //------------------------------------------------------------------------//
 section( "THE READ FAILS: SET, PRUNE, SAVE, SAVENOW, FLUSH WRITE NOTHING" );
 {
     const r = await c.evaluate( `( async () => {
-        const read = GumApi.readJson;
-        GumApi.readJson = p => p === ${JSON.stringify( SCAN )} ? Promise.reject( Object.assign( new Error( "offline" ), { status: 0 } ) ) : read( p );
+        const read = AyniNet.readJson;
+        AyniNet.readJson = p => p === ${JSON.stringify( SCAN )} ? Promise.reject( Object.assign( new Error( "offline" ), { status: 0 } ) ) : read( p );
         window.__sc = NayiveMedia.scanCache( ${JSON.stringify( SCAN )} );
         await __sc.load();
-        GumApi.readJson = read;
+        AyniNet.readJson = read;
         const loaded = __sc.loaded;
         __sc.set( { path: "files/Music/new.mp3", size: 3, mtime: 3 }, { title: "New" } );
         const pruned = __sc.prune( new Set(), null );

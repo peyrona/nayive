@@ -76,7 +76,7 @@ let advSearch       = null;          // the advanced search in force: { draft, s
 let driveSearch     = null;          // the header search field: { open, close, isOpen, filtered } (Ayni.searchField, init.js)
 let bigMode         = false;         // the "Biggest files" list is on screen (listing.js, openBigFiles)
 let trashMode       = false;         // the "Papelera" view is open instead of the folder
-let trashItems      = [];            // entries from GumApi.trashList() while trashMode is on
+let trashItems      = [];            // entries from AyniNet.trashList() while trashMode is on
 let trashDays       = null;          // auto-delete period (days) shown in the Papelera bar
 
 // How the listing shows: 'grid' (icons, the default) or 'list' (rows with

@@ -1,6 +1,6 @@
 # `tools/locktest` — the locked-document tests
 
-What `shared/crypt.js` and the padlock in `shared/office.js` promise is that **no plaintext byte
+What `shared/crypt.js` and the padlock in `shared/ayni/ayni-doc.js` promise is that **no plaintext byte
 ever leaves the browser** for a protected document. That is a claim about bytes, so the tests
 check bytes: what lands in the "server", in the `.bak` beside it, in the papelera and in the
 device draft.
@@ -22,7 +22,7 @@ pre-deploy habit.
   (a `finally`), so a test page can never be rsynced to the VPS.
 - `../cdp.mjs` (shared by every tool) launches a headless Chromium and talks the DevTools protocol
   to it — no Puppeteer, no Playwright, no `node_modules`.
-- The page stubs only `GumApi` and `NayiveStore`, with an in-memory server, `.bak/` and papelera.
+- The page stubs only `AyniNet` and `AyniStore`, with an in-memory server, `.bak/` and papelera.
   Everything above them — `crypt.js`, `office.js`, `ui.js`, the real sheets — is the shipping code.
   The tests answer the real password dialog by typing into `#askPw1` and clicking the real button.
 

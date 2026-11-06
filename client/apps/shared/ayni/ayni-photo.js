@@ -9,9 +9,9 @@
  *
  * The whole job happens here, in the browser: the server only stores the bytes
  * it is given. Three places use it - the Photos app, the Drive app and the
- * share target (photos shared into Nayive from another Android app):
+ * share target (photos shared into the app from another Android app):
  *
- *     <script src="../shared/photo.js"></script>
+ *     <script src="../ayni-photo.js"></script>
  *
  * What it does NOT touch:
  *   - a user with no limit set (the file is uploaded exactly as it is);
@@ -29,7 +29,7 @@
  *
  * It also holds what the image editors (Image, Chat) share: loading and
  * building the editor (loadEditor, newEditor - the editor itself is
- * shared/image-editor.js), dataUrlBytes, keepExif() and the thumbnail an
+ * ayni-image-editor.js), dataUrlBytes, keepExif() and the thumbnail an
  * edit leaves behind (thumbOf, dropThumb).
  */
 ( function ()
@@ -53,7 +53,7 @@
     function limit()
     {
         if ( LIMIT !== undefined ) return Promise.resolve( LIMIT );
-        return GumApi.probeAccess().then( function ( me )
+        return AyniPhotoBackend.probeAccess().then( function ( me )
         {
             var px = me && me.photo_max;
             LIMIT = ( typeof px === "number" && px > 0 ) ? px : null;
@@ -65,7 +65,7 @@
     //  What is a photo
     //------------------------------------------------------------------------//
 
-    function extOf( name ) { return NayiveUI.extOf( name ); }
+    function extOf( name ) { return Ayni.extOf( name ); }
 
     var IMG_EXT = [ "jpg", "jpeg", "png", "webp", "heic", "heif", "avif", "bmp", "tif", "tiff" ];
 
@@ -328,14 +328,14 @@
         if ( ! /\.jpe?g$/i.test( srcPath ) ) return bytes;
         try
         {
-            var src = new Blob( [ await GumApi.readFileBytes( srcPath ) ] );
+            var src = new Blob( [ await AyniPhotoBackend.readFileBytes( srcPath ) ] );
             var out = await copyExif( src, new Blob( [ bytes ], { type: "image/jpeg" } ), newW, newH );
             return new Uint8Array( await out.arrayBuffer() );
         }
         catch ( e ) { return bytes; }
     }
 
-    /* The editor (shared/image-editor.js, on Fabric.js), loaded once, on the
+    /* The editor (ayni-image-editor.js, on Fabric.js), loaded once, on the
      * first edit - found from this file's own address, so every app asks for
      * the same URLs. Fabric must be in before the editor. A load that failed
      * is tried again next time. */
@@ -358,8 +358,8 @@
             } );
         }
 
-        editorLib = add( HERE + "lib/fabric_v7.4.0.min.js" )
-            .then( function () { return add( HERE + "image-editor.js" ); } )
+        editorLib = add( ( window.AyniFabricUrl || HERE + "lib/fabric.min.js" ) )
+            .then( function () { return add( HERE + "ayni-image-editor.js" ); } )
             .catch( function ( err ) { editorLib = null; throw err; } );
         return editorLib;
     }
@@ -370,7 +370,7 @@
      * (the app's header); opts.btnClass: their class there. */
     function newEditor( host, url, name, opts )
     {
-        return NayiveImageEditor.create( host, url, name, opts );
+        return AyniImageEditor.create( host, url, name, opts );
     }
 
     /* An editor's toDataURL() as bytes to write. "data:," is a canvas with
@@ -400,7 +400,7 @@
         try
         {
             var dir = path.slice( 0, path.lastIndexOf( "/" ) );
-            var n = ( ( await GumApi.listDir( dir ) ).nodes || [] ).filter( function ( x ) { return x.path === path; } )[ 0 ];
+            var n = ( ( await AyniPhotoBackend.listDir( dir ) ).nodes || [] ).filter( function ( x ) { return x.path === path; } )[ 0 ];
             return n && n.size && n.mtime ? thumbPath( n.size, n.mtime ) : null;
         }
         catch ( e ) { return null; }
@@ -409,7 +409,7 @@
     function dropThumb( thumb )
     {
         if ( ! thumb ) return Promise.resolve();
-        return GumApi.purgePaths( [ thumb ] ).catch( function () {} );
+        return AyniPhotoBackend.purgePaths( [ thumb ] ).catch( function () {} );
     }
 
     //------------------------------------------------------------------------//
@@ -495,7 +495,133 @@
 
     //------------------------------------------------------------------------//
 
-    window.NayivePhoto =
+    // ---- THE CAMERA ON A COMPUTER ----
+    // A phone's file picker opens its own camera (<input capture="environment">);
+    // a computer's only shows files. So a computer WITH a camera gets one here:
+    // a live view and a shutter.
+
+    var hasCamera = false, cameraWatchers = [];
+
+    function lookForCamera()
+    {
+        if( ! navigator.mediaDevices || ! navigator.mediaDevices.enumerateDevices ) return;
+        navigator.mediaDevices.enumerateDevices().then( function ( list )
+        {
+            hasCamera = list.some( function ( d ) { return d.kind === "videoinput"; } );
+            cameraWatchers.forEach( function ( fn ) { fn(); } );
+        }, function () {} );
+    }
+    lookForCamera();
+    if( navigator.mediaDevices && navigator.mediaDevices.addEventListener )
+        navigator.mediaDevices.addEventListener( "devicechange", lookForCamera );
+
+    // A computer: its main pointer is a mouse (a phone's or a tablet's is a finger).
+    function computer() { return ! ( window.matchMedia && matchMedia( "(pointer: coarse)" ).matches ); }
+
+    // True: use camera() below. False: a phone's picker, or no camera at all.
+    function ownCamera()
+    {
+        return computer() && hasCamera && !! ( navigator.mediaDevices && navigator.mediaDevices.getUserMedia );
+    }
+
+    // A photo can be taken here, one way or the other.
+    function canTakePhoto() { return ! computer() || ownCamera(); }
+
+    // fn() now, and again whenever a camera comes or goes.
+    function cameraWatch( fn ) { cameraWatchers.push( fn ); fn(); }
+
+    function camButton( cls, tip, icon )
+    {
+        var b = document.createElement( "button" );
+        b.type = "button";
+        b.className = cls;
+        b.setAttribute( "data-tip", tip );
+        b.setAttribute( "aria-label", tip );
+        b.innerHTML = Ayni.icon( icon );
+        return b;
+    }
+
+    // The live view, full screen. done( File ) on the shutter, done( null ) when
+    // closed. Returns a function that closes it WITHOUT calling done (for a
+    // page's own Back).
+    function camera( done )
+    {
+        var flip    = camButton( "btn on-media", Ayni.t( "ayni.camera.switch" ), "refresh" );
+        var closeB  = camButton( "btn on-media", Ayni.t( "ayni.close" ), "x" );
+        var shutter = camButton( "btn lg solid-ok", Ayni.t( "ayni.camera.shoot" ), "camera" );
+        flip.hidden = true;
+
+        var layer = document.createElement( "div" );
+        layer.className = "editor-backdrop open camera-view";
+        layer.setAttribute( "role", "dialog" );
+        layer.setAttribute( "aria-modal", "true" );
+        layer.innerHTML = '<div class="editor-bar"><div class="editor-title"></div><div class="editor-actions"></div></div>' +
+                          '<div class="editor-canvas"><video autoplay playsinline muted></video></div><div class="cam-bar"></div>';
+        layer.querySelector( ".editor-title" ).textContent = Ayni.t( "ayni.camera.title" );
+        layer.querySelector( ".editor-actions" ).append( flip, closeB );
+        layer.querySelector( ".cam-bar" ).appendChild( shutter );
+        var video = layer.querySelector( "video" );
+        video.muted = true;
+        document.body.appendChild( layer );
+
+        var stream = null, cams = [], at = 0;
+
+        function stop() { if( stream ) stream.getTracks().forEach( function ( t ) { t.stop(); } ); stream = null; }
+        function cancel() { layer.remove(); document.removeEventListener( "keydown", key, true ); stop(); }
+        function finish( file ) { cancel(); done( file ); }
+
+        // The page behind gets no keys while this is up.
+        function key( e )
+        {
+            e.stopPropagation();
+            if( e.key === "Escape" ) { e.preventDefault(); finish( null ); }
+        }
+
+        async function start( deviceId )
+        {
+            stop();
+            shutter.ariaDisabled = true;
+            try
+            {
+                stream = await navigator.mediaDevices.getUserMedia( { audio: false,
+                    video: deviceId ? { deviceId: { exact: deviceId } } : { width: { ideal: 1920 }, height: { ideal: 1080 } } } );
+            }
+            catch( _ ) { if( layer.isConnected ) { finish( null ); Ayni.toast( "err", Ayni.t( "ayni.camera.failed" ) ); } return; }
+            if( ! layer.isConnected ) { stop(); return; }                 // closed while it asked
+            video.srcObject = stream;
+            shutter.ariaDisabled = false;
+            // With the permission given, every camera is listed: more than one = a switch.
+            try { cams = ( await navigator.mediaDevices.enumerateDevices() ).filter( function ( d ) { return d.kind === "videoinput"; } ); }
+            catch( _ ) { cams = []; }
+            flip.hidden = cams.length < 2;
+            var cur = stream.getVideoTracks()[ 0 ].getSettings().deviceId;
+            at = Math.max( 0, cams.findIndex( function ( d ) { return d.deviceId === cur; } ) );
+        }
+
+        flip.addEventListener( "click", function () { if( cams.length > 1 ) { at = ( at + 1 ) % cams.length; start( cams[ at ].deviceId ); } } );
+        closeB.addEventListener( "click", function () { finish( null ); } );
+        shutter.addEventListener( "click", function ()
+        {
+            if( ! stream || ! video.videoWidth ) return;
+            var c = document.createElement( "canvas" );
+            c.width = video.videoWidth;
+            c.height = video.videoHeight;
+            c.getContext( "2d" ).drawImage( video, 0, 0 );
+            shutter.ariaDisabled = true;
+            c.toBlob( function ( b )
+            {
+                if( ! b ) { finish( null ); return; }
+                var stamp = new Date().toISOString().slice( 0, 19 ).replace( /[-:]/g, "" ).replace( "T", "_" );
+                finish( new File( [ b ], "foto_" + stamp + ".jpg", { type: "image/jpeg" } ) );
+            }, "image/jpeg", 0.92 );
+        } );
+
+        document.addEventListener( "keydown", key, true );
+        start( "" );
+        return cancel;
+    }
+
+    window.AyniPhoto =
     {
         face:         face,
         limit:        limit,
@@ -512,6 +638,10 @@
         exifAt:       exifAt,       // where a JPEG's Exif block is (Photos reads dates and places)
         jpegName:     jpegName,
         EDIT_EXT:     EDIT_EXT,     // what Image can edit (Drive opens these there)
-        isJpeg:       isJpeg
+        isJpeg:       isJpeg,
+        ownCamera:    ownCamera,
+        canTakePhoto: canTakePhoto,
+        cameraWatch:  cameraWatch,
+        camera:       camera
     };
 } )();

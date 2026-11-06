@@ -16,7 +16,7 @@ ok( await c.open( "/nayive/habits/" ) && await c.until( "! document.getElementBy
 ok( await startTour( c ), "the help card's «Ver el tour» starts it" );
 ok( ! await c.evaluate( "!! document.querySelector( 'dialog.panel[open]' )" ), "the help card closed" );
 await walk( c, "empty", {
-    1: s => /nayive-home-link/.test( s.lit ) || "starts at the app's name",
+    1: s => /home-link/.test( s.lit ) || "starts at the app's name",
     2: s => /addBtn/.test( s.lit ) || "lights +",
     3: s => s.ghost && !! s.note || "mark: a ghost over the empty list",
     5: s => s.ghost || "edit: a ghost",

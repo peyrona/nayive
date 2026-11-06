@@ -44,7 +44,7 @@ try
     await a.evaluate( `fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:'test',password:'test'})}).then(r=>r.status)` );
     await a.evaluate( `localStorage.setItem('balata-coach-seen','1');localStorage.setItem('nayive-install-snooze','never');localStorage.setItem('balata-intro-dismiss:launcher','1');localStorage.setItem('ayni-lang','en');localStorage.removeItem('nayive-locker');localStorage.removeItem('nayive-lock');1` );
     await a.go( "index.html" );
-    ok( await a.evaluate( "typeof NayiveLock" ) === "object", "NayiveLock loaded in launcher" );
+    ok( await a.evaluate( "typeof AyniLocker" ) === "object", "AyniLocker loaded in launcher" );
 
     // --- My account row
     await a.evaluate( "openAccountDialog(); 1" );
@@ -68,7 +68,7 @@ try
 
     // --- reload keeps it locked
     await a.go( "index.html" );
-    ok( await a.evaluate( "!!document.querySelector('dialog.lock-dlg[open]') && document.documentElement.classList.contains('nv-locked')" ), "still locked after reload" );
+    ok( await a.evaluate( "!!document.querySelector('dialog.lock-dlg[open]') && document.documentElement.classList.contains('ayni-locked')" ), "still locked after reload" );
 
     // --- a second tab (Drive) is locked too
     const b = await tab( "drive/index.html" );
@@ -113,13 +113,13 @@ try
     await a.send( "Input.insertText", { text: "test" } );
     await a.send( "Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", windowsVirtualKeyCode: 13 } );
     await sleep( 1200 );
-    ok( await a.evaluate( "!document.querySelector('dialog.lock-dlg') && !document.documentElement.classList.contains('nv-locked') && localStorage.getItem('nayive-lock')===null" ), "right password unlocks" );
-    ok( await b.evaluate( "!document.querySelector('dialog.lock-dlg') && !document.documentElement.classList.contains('nv-locked')" ), "the other tab unlocks too" );
+    ok( await a.evaluate( "!document.querySelector('dialog.lock-dlg') && !document.documentElement.classList.contains('ayni-locked') && localStorage.getItem('nayive-lock')===null" ), "right password unlocks" );
+    ok( await b.evaluate( "!document.querySelector('dialog.lock-dlg') && !document.documentElement.classList.contains('ayni-locked')" ), "the other tab unlocks too" );
 
     // --- the other two lockers draw something
     for( const id of [ "matrix", "stars", "life" ] )
     {
-        await a.evaluate( `NayiveLock.save({id:'${id}'});NayiveLock.lock();1` );
+        await a.evaluate( `AyniLocker.save({id:'${id}'});AyniLocker.lock();1` );
         await sleep( 2500 );
         const lit = await a.evaluate( `(()=>{var c=document.querySelector('.lock-host canvas');if(!c)return -1;var d=c.getContext('2d').getImageData(0,0,c.width,c.height).data,n=0;for(var i=0;i<d.length;i+=4)if(d[i]+d[i+1]+d[i+2]>60)n++;return n})()` );
         ok( lit > 50, id + " draws (" + lit + " lit px)" );
@@ -130,12 +130,12 @@ try
     }
 
     // --- desktop mode: only the top window draws
-    await a.evaluate( "NayiveLock.save({id:'stars'});1" );
+    await a.evaluate( "AyniLocker.save({id:'stars'});1" );
     await a.go( "desktop/index.html" );
     await sleep( 2000 );
-    await a.evaluate( "NayiveLock.lock();1" );
+    await a.evaluate( "AyniLocker.lock();1" );
     await sleep( 1500 );
-    const frames = await a.evaluate( `[...document.querySelectorAll('iframe')].map(f=>{try{return f.contentDocument.querySelectorAll('dialog.lock-dlg').length+':'+f.contentDocument.documentElement.classList.contains('nv-locked')}catch(e){return 'x'}}).join(',')` );
+    const frames = await a.evaluate( `[...document.querySelectorAll('iframe')].map(f=>{try{return f.contentDocument.querySelectorAll('dialog.lock-dlg').length+':'+f.contentDocument.documentElement.classList.contains('ayni-locked')}catch(e){return 'x'}}).join(',')` );
     ok( await a.evaluate( "document.querySelectorAll('dialog.lock-dlg[open]').length===1" ), "desktop: one locker on top; frames: " + frames );
     await a.shot( "desktop" );
 

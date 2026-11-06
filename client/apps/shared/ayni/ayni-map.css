@@ -1,0 +1,25 @@
+/* Ayni library 0.2.0: Leaflet in Ayni's colours. Plain CSS, no build step, evergreen browsers 2024+. Optional: load it after ayni-base.css. */
+
+/* -----------------------------------------------------------------------------
+ * LEAFLET CHROME  -  any Leaflet map
+ *
+ * Leaflet ships its own white popup, zoom buttons and attribution box, which look
+ * pasted-on in either scheme. These five rules put them on the Ayni tokens.
+ *
+ * EVERY selector is scoped under `.leaflet-container`, and that is not decoration:
+ * both apps load `lib/.../leaflet.css` AFTER this file, so an equal-specificity
+ * rule would lose to Leaflet's own (its link colour is `.leaflet-container a`).
+ * The extra class puts these ahead whatever the load order. The `!important`s are
+ * Leaflet's own, matched.
+ *
+ * The map TILES are desaturated per map (`.route-map`, `.lmap`), not here: only
+ * the app knows which element is a map, and a print stylesheet wants it too.
+ * ---------------------------------------------------------------------------*/
+.leaflet-container .leaflet-popup-content-wrapper,
+.leaflet-container .leaflet-popup-tip     { background: var(--card2); color: var(--text); }
+.leaflet-container a.leaflet-popup-close-button { color: var(--text-dim); }
+.leaflet-container .leaflet-control-zoom a { background: var(--card2) !important; color: var(--text) !important;
+                                            border-color: var(--line) !important; }
+.leaflet-container .leaflet-control-attribution { background: color-mix(in srgb, var(--bg) 78%, transparent) !important;
+                                            color: var(--text-dim) !important; }
+.leaflet-container .leaflet-control-attribution a { color: var(--text-dim); }

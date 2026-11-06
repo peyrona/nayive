@@ -668,7 +668,7 @@ section( "IMPORT · CSV FROM CHROME, KEEPASSXC, BITWARDEN; AN ENCRYPTED BACKUP" 
     ok( await c.until( `Object.keys( items ).length === ${total}`, 30000 ), "the backup brings back exactly what is missing" );
 
     // Plain CSV export: master password first; a Bitwarden-shaped file.
-    await c.evaluate( "window.__saved = null; NayiveUI.saveFile = function ( d, n, t ) { window.__saved = { d: d, n: n, t: t }; }; exportCsv(); true" );
+    await c.evaluate( "window.__saved = null; Ayni.saveFile = function ( d, n, t ) { window.__saved = { d: d, n: n, t: t }; }; exportCsv(); true" );
     await answerDialog( c, "wrong master password here" );
     await sleep( 2500 );
     ok( await c.evaluate( "window.__saved === null" ), "plain export with a wrong master password: nothing made" );

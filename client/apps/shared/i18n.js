@@ -14,7 +14,7 @@
  *     once, to Ayni's (language, light / dark, automatic = Sun mode, the place
  *     for the sun, the colour schemes), so nobody loses them. It runs before
  *     Ayni reads them, which is why it is the first script.
- *   - WHOSE PAGE: NayiveWho.now() / NayiveWho.atLoad (data-safety L5, below).
+ *   - WHOSE PAGE: AyniWho.now() / AyniWho.atLoad (data-safety L5, below).
  *   - ERROR REPORTS: at the end of the file.
  *
  * The language belongs to the PERSON, not to the screen: the account's choice
@@ -27,6 +27,16 @@
 {
     "use strict";
 
+    // The names Ayni uses for what it keeps: Nayive's, so nothing stored is lost.
+    window.AyniNames = { key: "nayive-", cookie: "nayive_", deskKey: "balata-", api: "/api/", home: "/nayive/", header: "X-Nayive-",
+                         mergingApps: [ [ "data/tasks.json", "Planner \u203a Tasks" ], [ "data/calendar.ics", "Planner \u203a Calendar" ], [ "data/contacts.vcf", "Contacts" ],
+                                       [ "data/habits/", "Planner \u203a Habits" ], [ "data/split/", "Split" ], [ "data/trips/", "Trips" ],
+                                       [ "data/games/", "Games" ], [ "data/bookmarks/", "Bookmarks" ] ] };
+
+    // What Ayni writes into files, as Nayive's files have always said it.
+    window.AyniCryptMagic = [ "NAYIVE-LOCK-BIN\n", "NAYIVE-LOCK-B64\n" ];
+    window.AyniIcalProdid = "-//Nayive//Personal Calendar//EN";
+
     // OLD SETTINGS - Nayive's old localStorage names -> Ayni's. Each is copied
     // only while Ayni's is still empty, then the old one goes, so this does its
     // work once per device and is a few reads after that.
@@ -37,7 +47,7 @@
     //   balata-lang        "es" ...          -> ayni-lang
     var OLD = [ [ "balata-theme", "ayni-theme" ], [ "balata-theme-auto", "ayni-theme-sun" ],
                 [ "balata-geo", "ayni-place" ], [ "balata-schemes", "ayni-schemes" ],
-                [ "balata-lang", "ayni-lang" ] ];
+                [ "balata-lang", "ayni-lang" ], [ "balata-fx", "ayni-fx" ], [ "nayive-sink", "ayni-sink" ] ];
     try
     {
         OLD.forEach( function ( p )
@@ -57,7 +67,7 @@
     // whoAtLoad is what it was as this page LOADED - this script runs first,
     // before gum-api / store / locker / office - so a tab left open across
     // another account's sign-in still names its own owner (data-safety L5).
-    // "" = unknown. shared/store.js keeps its own copy of the read: the
+    // "" = unknown. shared/ayni/ayni-store.js keeps its own copy of the read: the
     // data-safety harness loads it alone.
     function whoNow()
     {
@@ -66,7 +76,7 @@
     }
     var WHO_AT_LOAD = whoNow();
 
-    window.NayiveWho = {
+    window.AyniWho = {
         now:    whoNow,
         atLoad: WHO_AT_LOAD
     };

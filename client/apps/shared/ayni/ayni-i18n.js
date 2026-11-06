@@ -1,4 +1,4 @@
-/* Ayni library 0.1.0: the language layer. Plain JavaScript, no build step, evergreen browsers 2024+.
+/* Ayni library 0.2.0: the language layer. Plain JavaScript, no build step, evergreen browsers 2024+.
    Load it FIRST, in <head>, without defer, so the texts start loading before the rest of the page:
      <script src="ayni-i18n.js" data-dict="i18n/" data-langs="es en pt fr de"></script>
    data-dict is the folder with the app's own texts (<lang>.json), data-langs the languages the app offers; the

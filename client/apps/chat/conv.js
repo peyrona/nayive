@@ -32,7 +32,7 @@
         // In a desktop window as narrow as a phone the list's header is gone
         // while a chat is open: this bar is then the top row, and its empty
         // room drags the window (desktop/index.html, data-win-drag).
-        if( NayiveUI.windowed )
+        if( Ayni.frame.windowed )
         {
             var narrow = window.matchMedia( "(max-width: 640px)" );
             var mark = function () { head.toggleAttribute( "data-win-drag", narrow.matches ); };
@@ -649,7 +649,7 @@
     C.textNodes = function ( el, text )
     {
         var m = S.searching && Ayni.matcher( S.searching.q ), q = m ? m.terms.map( Ayni.fold ) : [];
-        window.NayiveChatMarks.parse( text ).forEach( function ( bl )
+        window.Ayni.marks.parse( text ).forEach( function ( bl )
         {
             if( bl.list )
             {

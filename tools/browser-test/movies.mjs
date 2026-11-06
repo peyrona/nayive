@@ -1,8 +1,8 @@
 // movies.mjs - Movies on the shared item browser: a mouse picks, a
 // double-click opens the film, one menu, the keys (W), "Mark watched" on a
 // pick with ONE Undo (checked in progress.json), "Find poster" on a pick
-// only (posters.json), the tree (Films, Genres, Folders); then a phone: tap
-// opens, long-press picks, the tree slides in.
+// only (posters.json), the header's view buttons and the folders tree; then a
+// phone: tap opens, long-press picks, Folders slides the tree in.
 import { server, browser, ok, section, done, sleep, mouse, key, finger, menuRows, seed, onDisk, fitState } from "./lib.mjs";
 
 const D = "files/Movies";
@@ -16,6 +16,7 @@ seed( s, { [ UNO ]: "not really a film", [ DOS ]: "not really a film", [ TRES ]:
            [ POSTERS ]: JSON.stringify( { key: "K1", items: {} } ) } );
 const c = await browser( s, { mouse: true } );
 const CARD = p => `#libContent .poster-card[data-open="${p}"]`;
+const VIEW = v => `.tb-modes .btn[data-view="${v}"]`;
 const NODE = id => `#tree [role=treeitem][data-id="${id}"] > .ti`;   // the row (the item holds its children too)
 const sel = () => c.evaluate( "browse.ids().join()" );
 const json = rel => { try { return JSON.parse( onDisk( s, rel ) ); } catch { return null; } };
@@ -29,7 +30,10 @@ async function disk( fn, ms = 8000 )
 section( "MOVIES · MOUSE" );
 ok( await c.open( `/nayive/movies/index.html?dir=${D}` ) && await c.until( "typeof st !== 'undefined' && st.movies.length === 3 && document.querySelectorAll('#libContent .poster-grid .poster-card').length === 3" ), "Movies lists the 3 films" );
 await c.evaluate( "document.head.insertAdjacentHTML( 'beforeend', '<style>.quota-card{display:none!important}</style>' ); true" );   // the scratch disk's "space almost full" card
-ok( await c.evaluate( "!! document.querySelector('#tree [role=treeitem][data-id=\"v:folders\"]') && ! document.getElementById('filterMovies')" ), "the tree holds Films / Genres / Folders; the old view buttons are gone" );
+ok( await c.evaluate( "document.querySelectorAll('.tb-modes .btn').length === 3 && document.querySelector('.tb-modes .btn[data-view=movies]').getAttribute('aria-pressed') === 'true'" ), "the header holds Films / Genres / Folders, Films lit" );
+ok( await c.evaluate( "getComputedStyle( document.getElementById('treePane') ).display === 'none'" ), "no panel in Films" );
+await key( c, "Tab" );
+ok( await c.evaluate( "! document.getElementById('tree').contains( document.activeElement )" ), "Tab does not step into the hidden tree" );
 await mouse( c, CARD( UNO ) + " .poster-title" );
 ok( await sel() === UNO && await c.evaluate( "! document.querySelector('.movie-detail')" ), "a click picks one film (it does not open)" );
 ok( await c.evaluate( "!document.getElementById('selActions').hidden && document.querySelector('#selActions .pick-count').textContent.trim() === '1'" ), "the header group shows, count 1" );
@@ -40,6 +44,10 @@ ok( await sel() === "", "Esc clears" );
 await mouse( c, CARD( UNO ) + " .poster-title" );
 await key( c, "a", 2 );
 ok( await c.evaluate( "browse.ids().length === 3" ), "Ctrl+A picks all" );
+await key( c, "Escape" );
+
+await mouse( c, "#folderInfoBtn" );
+ok( await c.until( "document.getElementById('folderMenu').matches(':popover-open')" ) && await c.evaluate( "( () => { const r = document.getElementById('folderMenu').getBoundingClientRect(), b = document.getElementById('folderInfoBtn'); return r.left >= 0 && r.right <= innerWidth && r.width > 0 && b.nextElementSibling.matches('[data-help-open]') && b.parentElement.matches('.tb-sys'); } )()" ), "the i sits before help and its popup fits the window" );
 await key( c, "Escape" );
 
 section( "MOVIES · ONE MENU" );
@@ -71,7 +79,7 @@ await c.evaluate( `( () => { const f = window.fetch; window.__tmdb = [];
     window.fetch = function ( u, o ) { if( String( u ).indexOf( 'api.themoviedb.org' ) !== -1 ) { window.__tmdb.push( String( u ) );
         return Promise.resolve( new Response( JSON.stringify( { results: [ { id: 7, poster_path: '/p.jpg', title: 'T' } ] } ), { status: 200 } ) ); }
         return f.apply( this, arguments ); };
-    GumApi.fetchBinary = () => Promise.reject( new TypeError( 'blocked' ) ); return true; } )()` );
+    AyniNet.fetchBinary = () => Promise.reject( new TypeError( 'blocked' ) ); return true; } )()` );
 await mouse( c, CARD( TRES ) + " .poster-title" );
 await c.evaluate( "browse.run('poster'); true" );
 ok( await disk( () => Object.keys( json( POSTERS ).items ).length === 1 && json( POSTERS ).items[ "tres|2003" ] ), "Find poster asks for the picked film only (posters.json)", json( POSTERS ) );
@@ -86,13 +94,15 @@ ok( await c.until( "! document.querySelector('.movie-detail')" ), "← goes back
 await mouse( c, CARD( TRES ) + " .poster-title" );
 await key( c, "Enter" );
 ok( await c.until( "st.selectedMovie === " + JSON.stringify( TRES ) ), "Enter opens the picked film" );
-await mouse( c, NODE( "v:folders" ), { dx: 60 } );
+await mouse( c, VIEW( "folders" ) );
 ok( await c.until( "st.filter === 'folders' && !! document.querySelector('#tree [role=treeitem][data-id=\"f:" + D + "/Drama\"]')" ), "Folders opens and lists the real folders" );
+ok( await c.evaluate( "getComputedStyle( document.getElementById('treePane') ).display !== 'none' && document.querySelector('.tb-modes .btn[data-view=folders]').getAttribute('aria-pressed') === 'true'" ), "…the panel shows, Folders lit" );
 await mouse( c, NODE( "f:" + D + "/Drama" ), { dx: 60 } );
 ok( await c.until( "document.querySelectorAll('#libContent .poster-card').length === 2" ), "a folder shows its films" );
-await mouse( c, NODE( "v:genres" ), { dx: 60 } );
+await mouse( c, VIEW( "genres" ) );
 ok( await c.until( "st.filter === 'genres' && document.querySelectorAll('#libContent .genre-card').length === 2" ), "Genres shows the genres" );
-await mouse( c, NODE( "v:movies" ), { dx: 40 } );
+ok( await c.evaluate( "getComputedStyle( document.getElementById('treePane') ).display === 'none'" ), "…the panel goes" );
+await mouse( c, VIEW( "movies" ) );
 await c.until( "st.filter === 'movies'" );
 
 section( "MOVIES · PHONE" );
@@ -100,6 +110,7 @@ await c.send( "Emulation.setDeviceMetricsOverride", { width: 390, height: 800, d
 await c.send( "Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 } );
 await c.evaluate( "browse.clear(); setFilter( 'movies' ); true" );
 await c.until( "document.querySelectorAll('#libContent .poster-grid .poster-card').length === 3" );
+ok( await c.until( `( () => { const t = getComputedStyle( document.querySelector( '${ CARD( UNO ).replace( /'/g, "\\'" ) } .pick-tick' ) ); return t.display !== 'none' && t.opacity === '1'; } )()` ), "icons: the ticks show without a long-press" );
 await finger( c, CARD( UNO ) + " .poster-title", 700 );
 ok( await c.until( "browse.ids().join() === " + JSON.stringify( UNO ) ) && await c.evaluate( "document.getElementById('libContent').classList.contains('picking') && ! document.querySelector('.movie-detail')" ), "a long-press picks (ticks on), it does not open" );
 fs = await fitState( c );
@@ -117,10 +128,15 @@ ok( await c.until( "browse.ids().length === 0" ), "the × stops picking" );
 await c.evaluate( "document.querySelector('" + CARD( DOS ).replace( /"/g, '\\"' ) + "').scrollIntoView( { block: 'center' } ); document.querySelectorAll( '#ayni-toasts .dismiss' ).forEach( b => b.click() ); true" );   // "1 poster added" lies over it
 await finger( c, CARD( DOS ) + " .poster-title" );
 ok( await c.until( "st.selectedMovie === " + JSON.stringify( DOS ) ), "a tap opens the film" );
+ok( await c.evaluate( "getComputedStyle( document.getElementById('treeBtn') ).display === 'none'" ), "no tree button outside Folders" );
+await finger( c, "#clearScopeBtn" );
+await c.until( "! document.querySelector('.movie-detail')" );
+await finger( c, VIEW( "folders" ) );
+ok( await c.until( "st.filter === 'folders' && document.getElementById('treePane').classList.contains('open')" ), "Folders slides the tree in" );
+await finger( c, NODE( "f:" + D + "/Drama" ) );
+ok( await c.until( "st.selectedFolder === " + JSON.stringify( D + "/Drama" ) + " && ! document.getElementById('treePane').classList.contains('open')" ), "…a row shows that folder and the sheet goes" );
 await finger( c, "#treeBtn" );
-ok( await c.until( "document.getElementById('treePane').classList.contains('open')" ), "the tree button slides the tree in" );
-await finger( c, NODE( "v:genres" ) );
-ok( await c.until( "st.filter === 'genres' && ! document.getElementById('treePane').classList.contains('open')" ), "…a row shows that view and the sheet goes" );
+ok( await c.until( "document.getElementById('treePane').classList.contains('open')" ), "the tree button brings the tree back" );
 
 const errs = c.logs.filter( l => /EXCEPTION/.test( l ) );
 ok( ! errs.length, "no page exceptions", errs );

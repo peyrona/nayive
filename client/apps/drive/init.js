@@ -21,7 +21,7 @@ async function _tryAutoAccess_()
     try
     {
         // Folders-only tree — also the auth gate (401 here => not signed in).
-        dirTreeRoot = scopeTree( await GumApi.dirTree() );
+        dirTreeRoot = scopeTree( await AyniNet.dirTree() );
 
         // A regular user's "Home" IS their files/ folder.
         computeFsRoot();
@@ -38,7 +38,7 @@ async function _tryAutoAccess_()
         // Only a 401 means "not signed in". Anything else - offline, a server
         // hiccup, a bad ?sel= - leaves Drive where it is and says so; a press
         // on the plug tries again (reload()).
-        if( err && err.status === 401 ) { GumApi.loginRedirect(); return; }
+        if( err && err.status === 401 ) { AyniNet.loginRedirect(); return; }
         console.error( err );
         document.getElementById( 'app' ).style.display = '';
         setSyncStatus( false );
@@ -60,7 +60,7 @@ function wireStaticUI()
     // New documents are created in the folder currently open in Drive
     // (?dir=), so they save where the user is looking, not the files/ root.
     document.getElementById( 'syncIndicator'     ).addEventListener( 'click', function() { reload(); } );
-    GumApi.onFilesChanged( onFilesNews );                         // another app saved here (toolbar.js)
+    AyniNet.onFilesChanged( onFilesNews );                         // another app saved here (toolbar.js)
     listenStoreSaves();                                           // Write/Calc/Text saves (toolbar.js)
     document.addEventListener( 'visibilitychange', catchUpNews );
     document.getElementById( 'trashViewBtn'      ).addEventListener( 'click', function() { trashMode ? closeTrash() : openTrash(); } );

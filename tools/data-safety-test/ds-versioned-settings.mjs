@@ -28,7 +28,7 @@ const c = await browser( s, { width: 1280, height: 900 } );
 section( "F6 · LOCKER SETTINGS: THE PHONE SAVES BETWEEN CLOSE'S READ AND ITS WRITE" );
 {
     ok( await c.open( "/nayive/desktop/index.html" ), "desktop page opens" );
-    ok( await c.until( "typeof NayiveUI !== 'undefined' && typeof NayiveLock !== 'undefined' && typeof NayiveWho !== 'undefined'" ), "ready" );
+    ok( await c.until( "typeof NayiveUI !== 'undefined' && typeof AyniLocker !== 'undefined' && typeof AyniWho !== 'undefined'" ), "ready" );
     ok( await c.evaluate( `( async () => {
         const load = src => new Promise( ( ok, no ) => { const sc = document.createElement( 'script' ); sc.src = src; sc.onload = ok; sc.onerror = no; document.head.appendChild( sc ); } );
         await load( '../shared/lockers/culture.js' ); await load( '../shared/lockers/science.js' ); await load( '../shared/lockers/culture-settings.js' );

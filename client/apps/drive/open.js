@@ -56,7 +56,7 @@ function openNode( node )
     if( AUDIO_VIEW.includes( ext ) ) { openMediaViewer( node.path, 'audio' ); return true; }
 
     // A PDF: hand it to the browser's own PDF viewer (zoom, print, pages).
-    if( ext === 'pdf' ) { openDoc( GumApi.fileUrl( node.path ) ); return true; }
+    if( ext === 'pdf' ) { openDoc( AyniNet.fileUrl( node.path ) ); return true; }
 
     // No app claims this extension: ask which one should have it.
     openWithDialog( node.path, OPEN_WITH_ALL, 'drive.openWithAny' );
@@ -120,7 +120,7 @@ async function officeTwin( path, replace )
 {
     const q = new URLSearchParams( { file: path } );
     if( replace ) q.set( 'replace', '1' );
-    return JSON.parse( await withBusy( GumApi.fetchText( '/api/office?' + q.toString(), { method: 'POST' } ) ) );
+    return JSON.parse( await withBusy( AyniNet.fetchText( '/api/office?' + q.toString(), { method: 'POST' } ) ) );
 }
 
 // What to say when the server said no (the codes: api_office.go).
@@ -149,7 +149,7 @@ async function openOffice( node, kind )
     // already shows it (sameDoc). A blank window pointed at it later was
     // always a second editor on the same file, each saving over the other (A1).
     const busyText = TF( 'drive.officeConverting', { name: name } );
-    const early    = ! isPhone() && ! NayiveUI.windowed;
+    const early    = ! isPhone() && ! Ayni.frame.windowed;
     const win      = early ? window.open( '', '_blank' ) : null;
     if( win ) try { win.document.title = name; win.document.body.textContent = busyText; } catch( _ ) {}
     setStatus( busyText );

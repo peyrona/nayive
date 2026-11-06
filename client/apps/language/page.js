@@ -40,15 +40,9 @@ const tr = new Translator( {
 const ui = () => Ayni.i18n.lang();
 const langName = ( c ) => languageName( c, ui() );
 
-function el( tag, cls, text )
-{
-    const e = document.createElement( tag );
-    if( cls ) e.className = cls;
-    if( text != null ) e.textContent = text;
-    return e;
-}
+const el = Ayni.h;
 
-function mb( bytes ) { return bytes >= 1e6 ? Math.round( bytes / 1e6 ) + ' MB' : Math.max( 1, Math.round( bytes / 1e3 ) ) + ' KB'; }
+const mb = Ayni.fmtBytes;
 
 //------------------------------------------------------------------------//
 // LANGUAGE ROW
@@ -225,7 +219,7 @@ async function translate( allowRemote )
     try
     {
         const r = await tr.translate( { text, source, target, allowRemote: !! allowRemote },
-                                      { signal: controller.signal, onEvent, confirmDownload } );
+                                      { signal: controller.signal, onEvent, confirmDownload, beforeRemote: allowRemote ? undefined : remoteNotice } );
         setResult( r.text, r.target );
         showDone( r );
     }
@@ -273,7 +267,7 @@ async function showError( err, allowRemote )
 async function copyResult()
 {
     if( ! lastResult ) return;
-    try { await NayiveUI.copyText( lastResult ); $( 'copy' ).classList.add( 'done' ); Ayni.toast( 'ok', T( 'language.copied' ) ); }
+    try { await Ayni.copyText( lastResult ); $( 'copy' ).classList.add( 'done' ); Ayni.toast( 'ok', T( 'language.copied' ) ); }
     catch( e ) { Ayni.toast( 'err', T( 'language.copyFailed' ) ); }
 }
 
@@ -481,17 +475,15 @@ async function deleteModel( m )
     renderModels();
 }
 
-// Local mode switched off: the one-time word about where the text goes.
-async function onLocalSwitch()
+// The one-time word about where the text goes, before it first leaves this
+// device. Not after "use online": that dialog has just named the engines.
+async function remoteNotice()
 {
-    const on = $( 'local' ).checked;
-    tr.setLocalMode( on );
-    if( on ) return;
     const p = tr.getPreferences();
     const remote = tr.getEngines().filter( ( e ) => e.enabled && e.location === 'remote' && ! p.remoteNoticeShown.includes( e.id ) );
     if( ! remote.length ) return;
     tr.setPreferences( { remoteNoticeShown: p.remoteNoticeShown.concat( remote.map( ( e ) => e.id ) ) } );
-    Ayni.alert( { title: T( 'language.remoteTitle' ), body: TF( 'language.remoteBody', { engines: remote.map( ( e ) => e.name ).join( ', ' ) } ) } );
+    await Ayni.alert( { title: T( 'language.remoteTitle' ), body: TF( 'language.remoteBody', { engines: remote.map( ( e ) => e.name ).join( ', ' ) } ) } );
 }
 
 //------------------------------------------------------------------------//
@@ -510,7 +502,7 @@ function wire()
     $( 'speak' ).addEventListener( 'click', speak );
     $( 'ocr-btn' ).addEventListener( 'click', () => { if( ocrBusy ) ocrBusy.abort(); else $( 'ocr-file' ).click(); } );
     $( 'ocr-file' ).addEventListener( 'change', ( e ) => { onImage( e.target.files && e.target.files[ 0 ] ); e.target.value = ''; } );
-    $( 'local' ).addEventListener( 'change', onLocalSwitch );
+    $( 'local' ).addEventListener( 'change', () => tr.setLocalMode( $( 'local' ).checked ) );
     // Enter or the Go magnifier (Ayni: the field is data-enter); its × empties it.
     Ayni.searchField( $( 'q' ).parentElement, { tip: false } );
     $( 'q' ).parentElement.addEventListener( 'ayni:search', () => lookup() );
@@ -554,5 +546,5 @@ Ayni.help( {
     tour: [ { sel: '#langbar', text: T( 'language.tourLangs' ) }, 'rows' ]
 } );
 
-await NayiveUI.bootWithStore( null, start );
+await AyniBoot.boot( null, start );
 window.nayiveLanguage = tr;           // the console's handle (and the tests')

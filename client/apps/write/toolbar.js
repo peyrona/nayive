@@ -9,7 +9,7 @@
  * whether the caret is somewhere a footnote may go.
  *
  * The drop-downs (aria-haspopup) open the pull-down menus' own panel
- * (NayiveMenus.openItems in shared/menubar.js) with the SAME item tables the
+ * (AyniMenus.openItems in shared/ayni/ayni-menutable.js) with the SAME item tables the
  * Formato / Insertar / Ver menus use - the colours, the styles, the zoom - so a
  * drop-down and its menu entry are one table and one set of handlers.
  *
@@ -23,7 +23,7 @@
  *       run      : ( slot, value ) => ...,        // runToolbarCommand + focus
  *       painter  : () => ...,                     // the format painter's on / off
  *       blocked  : slot => bool,                  // greyed although the engine would run it
- *       menus    : MENUBAR,                       // NayiveMenus.create( ... )
+ *       menus    : MENUBAR,                       // AyniMenus.create( ... )
  *       dropdowns: { stylesBtn: items | fn, ... },
  *       fonts    : [ 'Arial', ... ],  sizes: [ '8', ... ],  // points
  *       after    : () => ...                     // Write's own buttons, painted in the same frame

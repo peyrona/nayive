@@ -66,8 +66,8 @@ const cells = draft ? ( unzipText( draft, "xl/worksheets/sheet1.xml" ) || "" ) +
 ok( />77</.test( cells ), "and the draft holds the edit itself (77)", cells.slice( 0, 300 ) );
 ok( bytesOnDisk( s, "files/land.xlsx" ).equals( LAND ), "the file itself is untouched" );
 
-ok( await c.evaluate( "typeof window.nayiveBeforeClose === 'function'" ), "the page answers the desktop's close" );
-await c.evaluate( "window.__closing = window.nayiveBeforeClose && window.nayiveBeforeClose(), true" );
+ok( await c.evaluate( "typeof window.ayniBeforeClose === 'function'" ), "the page answers the desktop's close" );
+await c.evaluate( "window.__closing = window.ayniBeforeClose && window.ayniBeforeClose(), true" );
 ok( await c.until( "window.__sheet().indexOf( Ayni.t('drive.unsavedBody') ) !== -1" ), "and closing it asks first (held back, not in the file)" );
 
 //----------------------------------------------------------------------------//

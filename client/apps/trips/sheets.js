@@ -55,7 +55,7 @@ function sheetActions( sheet, bBusy, sDeleteTitle, fnDelete, fnCancel, fnSave )
 
     // While it saves: a spinner in the ✓, whose tooltip says so; clicks wait.
     const saveBtn = Ayni.dialogButton( 'primary', T( 'ui.save' ) );
-    if( bBusy ) Ayni.setBusy( saveBtn, T( 'ui.sync.saving' ) );
+    if( bBusy ) Ayni.setBusy( saveBtn, T( 'ayni.sync.saving' ) );
     saveBtn.addEventListener( 'click', fnSave );
 
     actions.appendChild( cancelBtn );

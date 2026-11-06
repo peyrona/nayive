@@ -1,4 +1,4 @@
-/* Ayni library 0.1.0, fields family: labels and forms, text areas, editing in place, fields in toolbars, field
+/* Ayni library 0.2.0, fields family: labels and forms, text areas, editing in place, fields in toolbars, field
    errors, the number field (spin button), sliders, the date and time fields and the calendar. Needs ayni-base.css (the
    field box itself: .input, .input-group) and ayni-buttons.css (the buttons inside fields). The rules are chapters 4.1-4.4,
    4.7, 4.8, 5.4 and 6 of the guidelines; the behaviour is in ayni-fields.js. */
@@ -37,7 +37,12 @@ textarea.input[data-autogrow] { resize: none; overflow-y: auto; max-height: var(
 legend > .err-mark, .static-label > .err-mark { margin-left: 6px; vertical-align: -1px; }
 .panel.popup.err-pop { position: fixed; inset: auto; margin: 0; padding: 6px 10px; max-width: min(280px, calc(100vw - 16px));
   font-size: .8rem; color: var(--text); border-color: var(--danger); }
-.spin { width: 150px; }
+/* RULE: a number field is only as wide as − value + (Frasquito, 2026-11-06): no room around the buttons or the digits, and
+   the box holds the longest value its limits allow (ayni-fields.js sets --spin-ch), or a page's width would be a guess.
+   The buttons are 24 px, the smallest target WCAG 2.5.8 accepts; touch keeps its 44 px areas and 8 px gaps. */
+.spin, .time-row .input-group { width: fit-content; gap: 0; padding-inline: 0; }
+.spin > .btn, .time-row .input-group > .btn { --btn: 24px; }
+.spin > .input, .time-row .input { flex: none; width: calc(var(--spin-ch, 2) * 1ch + 2px); padding-inline: 0; }
 .spin .input { text-align: center; font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
 .spin .input::-webkit-inner-spin-button { -webkit-appearance: none; }
 /* Fields stack 12 px apart by the gap of the Panel body they sit in; fields that belong together share a row,
@@ -64,6 +69,7 @@ legend > .err-mark, .static-label > .err-mark { margin-left: 6px; vertical-align
 [role="toolbar"] .input, [role="toolbar"] .input-group { min-height: 30px; }
 [role="toolbar"] .input-group > .input { min-height: 28px; }
 [role="toolbar"] .input-group > .btn:not(.sm) { --btn: 26px; }   /* buttons inside a field keep their size in a toolbar */
+[role="toolbar"] .spin > .btn:not(.sm) { --btn: 24px; }
 [role="toolbar"] .input:not(.input-group > .input) { padding-block: 0; }
 
 /* ---------- Errors in fields and groups ---------- */
@@ -89,7 +95,6 @@ input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(
 .panel.popup > .switch.no-year { padding: 8px 8px 4px; border-top: var(--panel-border); font-size: .85rem; }
 .time-row { display: flex; align-items: center; gap: 6px; padding: 10px 8px; border-top: var(--panel-border); }
 .time-row label { font-size: .8rem; font-weight: 500; color: var(--text-dim); margin-right: auto; }
-.time-row .input-group { width: 100px; }
 .time-row .input { text-align: center; font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
 .time-row .input::-webkit-inner-spin-button { -webkit-appearance: none; }
 .cal { display: inline-flex; flex-direction: column; gap: 6px; padding: 8px; }
@@ -149,4 +154,4 @@ html.touch .cal-title { min-height: var(--touch); }
   html.touch .cal td button:focus-visible { outline-offset: -3px; }
 }
 html.touch .time-row { flex-wrap: wrap; justify-content: space-between; padding: 10px 4px; gap: 6px 4px; } html.touch .time-row label { flex-basis: 100%; }
-html.touch .time-row .input-group { width: auto; } html.touch .time-row .input { width: 44px; flex: none; }
+html.touch .time-row .input-group { padding-inline: 3px; } html.touch .time-row .input { width: 44px; flex: none; }

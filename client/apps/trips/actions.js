@@ -243,7 +243,7 @@ async function deleteTrip()
     {
         // Its own folder (tripBase), never 'data/trips/' + dirName: a restored
         // copy's dirName named the OTHER trip's folder (H7).
-        ids = await GumApi.binPaths( tripBase( trip ) );
+        ids = await AyniNet.binPaths( tripBase( trip ) );
         await store.forget( tripBase( trip ) + '/trip.json' );
         trips = trips.filter( function( t ) { return t.id !== trip.id; } );
         setSyncStatus( 'synced' );
@@ -284,7 +284,7 @@ async function deleteTrip()
 
     Ayni.toast( 'ok', T( 'ui.toast.binned' ), { undo: function()
     {
-        GumApi.trashRestore( ids )
+        AyniNet.trashRestore( ids )
             .then( loadTrips )
             .catch( function() { setSyncStatus( 'error' ); Ayni.toast( 'err', T( 'trips.restoreFailed' ) ); } );
     } } );
@@ -505,7 +505,7 @@ async function deleteDocWithUndo( stageId, doc )
 
         // Straight to the bin (not syncDocFiles) so the Undo knows its bin id.
         // A failure is not fatal, as there: never uploaded / already gone.
-        try { ids = await GumApi.binPaths( tripBase( trip ) + '/' + file ); }
+        try { ids = await AyniNet.binPaths( tripBase( trip ) + '/' + file ); }
         catch( _ ) { ids = null; }
     }
 
@@ -522,7 +522,7 @@ async function deleteDocWithUndo( stageId, doc )
         });
 
         if( ids && ids.length )
-            GumApi.trashRestore( ids ).catch( function() { setSyncStatus( 'error' ); Ayni.toast( 'err', T( 'trips.restoreFailed' ) ); } );
+            AyniNet.trashRestore( ids ).catch( function() { setSyncStatus( 'error' ); Ayni.toast( 'err', T( 'trips.restoreFailed' ) ); } );
     } } );
 }
 

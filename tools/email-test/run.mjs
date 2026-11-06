@@ -495,14 +495,14 @@ try
     await shot( c, "20-adv-search" );
 
     // -----------------------------------------------------------------------
-    // A desktop window (html.is-windowed: the top page is under /nayive/desktop/)
+    // A desktop window (html.is-windowed: the frame carries data-ayni-window)
     // wide enough: the open message on the right of the list (read.js, SPLIT).
     console.log( "SPLIT (desktop window, wide)" );
     await c.send( "Page.bringToFront" );          // a tab in the back draws nothing: no resize events
     await c.send( "Emulation.setDeviceMetricsOverride", { width: 1400, height: 860, deviceScaleFactor: 1, mobile: false } );
     await nav( c, `${BASE}/nayive/manifest.json`, "/nayive/manifest.json" );
     await c.evaluate( `history.replaceState( null, '', '/nayive/desktop/split-host.html' );
-        document.body.innerHTML = '<iframe id="f" src="/nayive/email/index.html" style="border:0;width:1300px;height:800px"></iframe>'; true` );
+        document.body.innerHTML = '<iframe id="f" data-ayni-window src="/nayive/email/index.html" style="border:0;width:1300px;height:800px"></iframe>'; true` );
     const W = "document.getElementById('f').contentWindow", D = W + ".document", $ = id => `${D}.getElementById('${id}')`;
     const FROWS = `${D}.querySelectorAll('#list .mail-row')`;
     await waitFor( c, `${W}.NayiveMail && ${FROWS}.length > 1` );

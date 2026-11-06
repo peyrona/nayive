@@ -234,7 +234,7 @@ func ParseEvents(text string, loc *time.Location) []Event {
 // recurRule is one RRULE: FREQ DAILY / WEEKLY / MONTHLY / YEARLY with INTERVAL,
 // COUNT or UNTIL, BYDAY (with an ordinal - "2TU", "-1FR" - on a monthly or
 // yearly rule), BYMONTHDAY, BYMONTH, BYSETPOS and WKST. The occurrences are
-// the ones the calendar's own screen shows (rrule.js, shared/ical.js): a
+// the ones the calendar's own screen shows (rrule.js, shared/ayni/formats/ical.js): a
 // DTSTART the rule does not match is not one of them.
 type recurRule struct {
 	freq       string // DAILY, WEEKLY, MONTHLY or YEARLY

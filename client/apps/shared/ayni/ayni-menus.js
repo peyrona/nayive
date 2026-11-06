@@ -1,4 +1,4 @@
-/* Ayni library 0.1.0, menus family: menus and pop-up menus (markup or built in code), one level of submenus, the
+/* Ayni library 0.2.0, menus family: menus and pop-up menus (markup or built in code), one level of submenus, the
    menu bar, the long tap, toolbars (one Tab stop, tools that leave an overfull row by rank into one More menu), tool
    groups and popups with controls, placing them and closing them on scroll, resize and window blur.
    Plain JavaScript, no build step, evergreen browsers 2024+. Load it after ayni-base.js and ayni-buttons.js:
@@ -8,7 +8,7 @@
    The look is in ayni-menus.css; the rules are chapter 9 of the guidelines. */
 (() => {
 'use strict';
-const { $, $$, isMac, icon } = Ayni;
+const { $, $$, isMac, icon, setTip } = Ayni;
 const { fire, once, each, tx, iconName, layer, isTouch, HOLD_MS, retip } = Ayni.core;
 
 const PAD_SLACK = 8;            // the most a touch hit area sticks out past a 30 px tool: (44 - 30) / 2, rounded up
@@ -345,6 +345,17 @@ const keyLabel = (spec) => {
     alt: isMac ? '⌥' : tx('key.alt'), del: tx('key.del'), delete: tx('key.del'), enter: tx('key.enter'), esc: tx('key.esc') };
   return s.split('+').map((p) => words[p.toLowerCase()] || (p.length === 1 ? p.toUpperCase() : p)).join(isMac ? '' : '+');
 };
+
+/* Ayni.keyHints(list, phone): hangs " (Ctrl+P)" on the tooltip of each shortcut's button (list: { el: its id, label() }),
+   and takes it off on a phone. Safe to run again after a tooltip is rewritten. */
+const keyHints = (list, phone) => list.forEach((s) => {
+  const el = s.el && document.getElementById(s.el);
+  if (!el) return;
+  const hint = ` (${s.label()})`;
+  let tip = el.dataset.tip || '';
+  if (tip.endsWith(hint)) tip = tip.slice(0, -hint.length);
+  if (tip) setTip(el, phone ? tip : tip + hint);
+});
 
 /* ---------- Long tap and pop-up menus ---------- */
 /* RULE: a long tap means "more for this thing": on a button with a dot it runs the second action, on an area or a tree
@@ -705,7 +716,7 @@ const init = (root) => {
 
 Ayni.core.menus = { initMenu, initToolbar, contextMenu, place, iconHtml, invoker: () => invoker };
 Object.assign(Ayni, {
-  place, showPopup, menuAt, menuBar, fillMenu: fillPage, keyLabel, contextMenu, longTap, fitBar,
+  place, showPopup, menuAt, menuBar, fillMenu: fillPage, keyLabel, keyHints, contextMenu, longTap, fitBar,
   toolbar: (el) => { if (once('toolbar', el)) initToolbar(el); },
 });
 Ayni.core.family({ setup, init });

@@ -1,11 +1,11 @@
-// SEALED - a user-data write path (docs/sealed-crud.md): announce a change, keep it minimal, then `node tools/data-safety-test/run.mjs` must be ALL GREEN.
+// DATA: this code decides what is saved. Change it with care, and run your data tests.
 /*
  * ical.js - The .ics event model + DST-safe recurrence engine. Only the
  * Calendar app imports it now (Tasks used to, for its "what's on the calendar
  * today" sync).
  *
  * ES module - import what you need:
- *     import { icsToCalendar, expandEventDef, eventDefsToIcs } from '../shared/ical.js';
+ *     import { icsToCalendar, expandEventDef, eventDefsToIcs } from './ical.js';
  *
  * Dependencies, all loaded by the app BEFORE its module script:
  *   - luxon  (classic-script global `luxon`)   - all the wall-clock / DST math
@@ -39,9 +39,9 @@ const { DateTime } = luxon;
 const RRule        = rrule.RRule;
 
 // The viewer's current device zone - the anchor for floating events.
-const VIEWER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const VIEWER_TZ = Ayni.dates.zone();
 
-export const pad2 = NayiveUI.pad2;   // shared/ui.js (deferred, so loaded before this module)
+export const pad2 = Ayni.dates.pad;   // shared/ui.js (deferred, so loaded before this module)
 
 //------------------------------------------------------------------------//
 // ICS  <->  event-def MODEL
@@ -836,7 +836,7 @@ function patchEvent( src, def, eol )
 export function eventDefsToIcs( defs )
 {
     const comp = new ICAL.Component( [ 'vcalendar', [], [] ] );
-    comp.updatePropertyWithValue( 'prodid', '-//Nayive//Personal Calendar//EN' );
+    comp.updatePropertyWithValue( 'prodid', window.AyniIcalProdid || '-//Ayni//Calendar//EN' );
     comp.updatePropertyWithValue( 'version', '2.0' );
 
     for( const def of defs )

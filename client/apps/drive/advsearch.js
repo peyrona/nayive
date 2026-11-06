@@ -79,7 +79,7 @@ function sbWindow( d )
     return {};
 }
 
-// The draft as GumApi.search() wants it, or null when nothing is asked.
+// The draft as AyniNet.search() wants it, or null when nothing is asked.
 function sbSpec( d )
 {
     const spec  = {};
@@ -270,7 +270,7 @@ async function sbFetchCount( spec, key )
     const seq = ++sbSeq;
     try
     {
-        const r = await GumApi.search( spec, true );
+        const r = await AyniNet.search( spec, true );
         if( seq !== sbSeq ) return;
         sbPreview = { key: key, nodes: pruneNodes( r.nodes || [] ), truncated: !! r.truncated };
         sbShowCount( sbPreview );

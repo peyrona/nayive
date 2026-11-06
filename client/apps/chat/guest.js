@@ -27,7 +27,7 @@
 
     window.addEventListener( "beforeinstallprompt", function ( e ) { e.preventDefault(); installEvt = e; } );
 
-    var isIOS = NayiveUI.isIOS, standalone = NayiveUI.isStandalone;
+    var isIOS = Ayni.isIOS, standalone = Ayni.pwa.isStandalone;
     function pushable() { return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }
     function skipped()  { try { return localStorage.getItem( SKIP_KEY ) === "1"; } catch( _ ) { return false; } }
     function skip()     { try { localStorage.setItem( SKIP_KEY, "1" ); } catch( _ ) {} }
@@ -41,7 +41,7 @@
                                                                  function () { return null; } );
     };
 
-    var b64ToU8 = NayiveUI.b64ToU8, sameKey = NayiveUI.samePushKey;   // shared/ui.js
+    var b64ToU8 = Ayni.pwa.b64ToU8, sameKey = Ayni.pwa.samePushKey;   // shared/ui.js
 
     async function subscribe()
     {
@@ -128,12 +128,12 @@
             h( "h3", { text: C.TF( "chat.invites", { name: S.owner } ) } ),
             h( "p", { text: T( "chat.iosLead" ) } ),
             h( "ol", { class: "install-steps" },
-                step( "compass", NayiveUI.escapeHtml( T( "chat.iosStep1a" ) ) + " <b>" + NayiveUI.escapeHtml( T( "chat.iosStep1b" ) ) + "</b> " + NayiveUI.escapeHtml( T( "chat.iosStep1c" ) ) ),
-                step( "ios-share", NayiveUI.escapeHtml( T( "chat.iosStep2a" ) ) + " <b>" + NayiveUI.escapeHtml( T( "chat.iosStep2b" ) ) + "</b>" ) ),
+                step( "compass", Ayni.esc( T( "chat.iosStep1a" ) ) + " <b>" + Ayni.esc( T( "chat.iosStep1b" ) ) + "</b> " + Ayni.esc( T( "chat.iosStep1c" ) ) ),
+                step( "ios-share", Ayni.esc( T( "chat.iosStep2a" ) ) + " <b>" + Ayni.esc( T( "chat.iosStep2b" ) ) + "</b>" ) ),
             safari,
             h( "ol", { class: "install-steps", start: 3, style: "counter-reset: install-step 2" },
-                step( "plus-square", NayiveUI.escapeHtml( T( "chat.iosStep3a" ) ) + " <b>" + NayiveUI.escapeHtml( T( "chat.iosStep3b" ) ) + "</b>" ),
-                step( home, NayiveUI.escapeHtml( T( "chat.iosStep4" ) ) + " <b>" + NayiveUI.escapeHtml( S.owner ) + "</b>." ) ),
+                step( "plus-square", Ayni.esc( T( "chat.iosStep3a" ) ) + " <b>" + Ayni.esc( T( "chat.iosStep3b" ) ) + "</b>" ),
+                step( home, Ayni.esc( T( "chat.iosStep4" ) ) + " <b>" + Ayni.esc( S.owner ) + "</b>." ) ),
             h( "button", { class: "quiet", attrs: { type: "button" }, text: T( "chat.withoutPush2" ),
                            on: { click: function () { skip(); el.remove(); done(); } } } )
         ] );

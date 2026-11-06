@@ -13,6 +13,7 @@
          every inline script below may call Ayni.t(). -->
     <script src="../shared/i18n.js"></script>
     <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
+    <script src="../shared/ayni/ayni-util.js"></script>
     <title>Contacts</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='17' rx='2'/%3E%3Ccircle cx='9' cy='11' r='2.2'/%3E%3Cpath d='M5.5 17.5c0-2.2 1.7-3.3 3.5-3.3s3.5 1.1 3.5 3.3'/%3E%3Cline x1='14' y1='10' x2='18' y2='10'/%3E%3Cline x1='14' y1='14' x2='18' y2='14'/%3E%3C/svg%3E">
 
@@ -30,10 +31,26 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-share.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pwa.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-locker.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-status.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-shell.css">
     <link rel="stylesheet" href="../shared/app.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-doc.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-media.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-image.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-map.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-icons-more.js" defer></script>
+    <script src="../shared/ayni/ayni-shell.js" defer></script>
+    <script src="../shared/ayni/ayni-status.js" defer></script>
+    <script src="../shared/ayni/ayni-share.js" defer></script>
+    <script src="../shared/ayni/ayni-upload.js" defer></script>
+    <script src="../shared/ayni/ayni-pwa.js" defer></script>
+    <script src="../shared/ayni/ayni-boot.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
@@ -45,6 +62,7 @@
     <script src="../shared/ayni/ayni-pickers.js" defer></script>
     <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
+    <script src="../shared/ayni/ayni-locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
     <link rel="manifest" href="manifest.json">
@@ -57,7 +75,7 @@
     </script>
 
     <!-- File-API helpers: the access probe, retrying fetch. -->
-    <script src="../shared/gum-api.js" defer></script>
+    <script src="../shared/ayni/ayni-net.js" defer></script>
     <!-- Small shared UI helpers: backdrop open/close, toast, viewerTz. -->
     <script src="../shared/ui.js" defer></script>
     <script>
@@ -92,8 +110,8 @@
     </script>
 
     <!-- Offline-capable persistence: local last-known-good cache + write-behind sync. -->
-    <script src="../shared/store.js" defer></script>
-    <script src="../shared/photo.js" defer></script>
+    <script src="../shared/ayni/ayni-store.js" defer></script>
+    <script src="../shared/ayni/ayni-photo.js" defer></script>
 
     <style>
         /* Base reset, card shell (.page/.page-inner/.card), .header, .app-icon,
@@ -391,7 +409,7 @@
                                 <span class="icon" data-icon="help" style="--icon:18px"></span>
                             </button>
                         </div>
-                        <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="data-tip:ui.sync.synced"></button>
+                        <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="data-tip:ayni.sync.synced"></button>
                     </div>
                 </div>
 
@@ -458,7 +476,7 @@
                 <span class="face-box">
                 <button id="fPhotoBtn" class="face" type="button" data-i18n-attr="data-tip:contact.changePhoto, aria-label:contact.changePhoto">
                     <span id="fPhotoAv" class="avatar xl"></span>
-                    <span class="cam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span>
+                    <span class="cam"><span class="icon" data-icon="camera"></span></span>
                 </button>
                 <button id="fPhotoDrop" class="face-bin" type="button" data-i18n-attr="data-tip:contact.removePhoto, aria-label:contact.removePhoto"></button>
                 </span>
@@ -573,7 +591,7 @@
 
     <input type="file" id="importInput" accept=".vcf,text/vcard,text/x-vcard" style="display:none;">
 
-    <script src="../shared/vcard.js"></script>     <!-- NOT deferred: the script below takes it on its first lines -->
+    <script src="../shared/ayni/formats/vcard.js"></script>     <!-- NOT deferred: the script below takes it on its first lines -->
     <script>
         //------------------------------------------------------------------------//
         // STATE
@@ -581,20 +599,20 @@
         const CONTACTS_FILE  = 'data/contacts.vcf';
         const META_FILE      = 'data/contacts-meta.json';   // local UX state only, never contact data
 
-        // The vCard reading and writing every reader of the book shares (shared/vcard.js).
+        // The vCard reading and writing every reader of the book shares (shared/ayni/formats/vcard.js).
         const { contentLines, isQuotedPrintable, decodeValue, splitOnce, splitOutsideQuotes, splitEscaped,
-                parseParams, unescapeText, escapeText, foldLine, photoOf, cards: vcfCards } = NayiveVCard;
+                parseParams, unescapeText, escapeText, foldLine, photoOf, cards: vcfCards } = AyniVCard;
 
         // Interface strings: every one of them lives in shared/i18n/*.json.
         const T  = k           => Ayni.t( k );
         const TF = ( k, vars ) => Ayni.tf( k, vars );
 
-        // Filled in on DOMContentLoaded: shared/gum-api.js and shared/store.js
-        // now load deferred, so GumApi / NayiveStore are not defined yet while
+        // Filled in on DOMContentLoaded: shared/ayni/ayni-net.js and shared/ayni/ayni-store.js
+        // now load deferred, so AyniNet / AyniStore are not defined yet while
         // this script is parsed. Every reader runs later (DCL or an event), so
         // a plain `let` here is enough.
         let API_FILES;
-        let store;                    // offline-capable persistence (see ../shared/store.js)
+        let store;                    // offline-capable persistence (see ../shared/ayni/ayni-store.js)
 
         // Types offered in the editor selects. Imported cards with any other TYPE keep their
         // own value (it is prepended as an extra <option> so nothing is silently lost).
@@ -622,14 +640,14 @@
 
         Ayni.i18n.ready.then( function()
         {
-            API_FILES = GumApi.API_FILES;
-            store     = NayiveStore.createStore( { apiBase: API_FILES, conflicts: true, merge: mergeBook } );
+            API_FILES = AyniNet.API_FILES;
+            store     = AyniStore.createStore( { apiBase: API_FILES, conflicts: true, merge: mergeBook } );
             store.onMerged( onBookMerged );
 
             wireStaticUI();
 
             // The store's state machine drives the header plug for every read and write.
-            store.onState( NayiveUI.syncIndicator() );
+            store.onState( Ayni.plug.listener() );
 
             // The plug's click and the focus / visibilitychange re-reads, all on ONE guarded
             // path (shared/ui.js). `contacts` is this tab's private snapshot and every
@@ -637,12 +655,12 @@
             // open all day showed a stale agenda AND could upload it over a contact added on
             // the phone. The guard keeps the read out of an open dialog: loadContacts() ends
             // in render(), which would repaint under a detail / edit / duplicates sheet.
-            NayiveUI.wireRefresh( { store: store, read: loadContacts } );
+            AyniBoot.wireRefresh( { store: store, read: loadContacts } );
 
             // Probe the API, then load. On a failed probe the shared helper bounces to the
             // sign-in page only when we are really online with nothing cached; otherwise it
             // opens on the local cache and the store syncs once the connection is back.
-            NayiveUI.bootWithStore( store, async function( who )
+            AyniBoot.boot( store, async function( who )
             {
                 await loadContacts();
                 openAsked();
@@ -754,7 +772,7 @@
 
         function dismissKey( u1, u2 ) { return [ u1, u2 ].sort().join( ' ' ); }
 
-        // TWO DEVICES, ONE ADDRESS BOOK (shared/store.js MERGE). Both saved from
+        // TWO DEVICES, ONE ADDRESS BOOK (shared/ayni/ayni-store.js MERGE). Both saved from
         // the same copy: both changes are kept, card by card, by UID. A card is
         // compared as the text it is in the file - a card nobody touched is
         // written back line for line, so only real edits differ - and one
@@ -765,7 +783,7 @@
         // set. null = a side that is not an address book: nothing is merged over it.
         function mergeBook( path, base, mine, theirs )
         {
-            const S = NayiveStore;
+            const S = AyniStore;
 
             if( path === META_FILE )
             {
@@ -803,7 +821,7 @@
         // as vcfCards gives them.
         function mergeCard( b, m, t )
         {
-            const S      = NayiveStore;
+            const S      = AyniStore;
             const B      = cardItems( b.text ), M = cardItems( m.text ), T = cardItems( t.text );
             const newerT = revKey( t.rev ) > revKey( m.rev );
             const out    = S.mergeLists( B.items, M.items, T.items,
@@ -1016,7 +1034,7 @@
                             // second identical card gets "-2", and so on.
                             if( ! c.src.uidRead )
                             {
-                                const h = 'contact-h' + NayiveStore.hashText( [ begin ].concat( ...block.map( l => l.phys ), cl.phys[ 0 ] ).join( '\n' ) );
+                                const h = 'contact-h' + AyniStore.hashText( [ begin ].concat( ...block.map( l => l.phys ), cl.phys[ 0 ] ).join( '\n' ) );
                                 made[ h ] = ( made[ h ] || 0 ) + 1;
                                 c.uid = made[ h ] === 1 ? h : h + '-' + made[ h ];
                             }
@@ -1532,11 +1550,7 @@
         // Stable pastel-ish colour derived from the name, tuned for the dark theme.
         function avatarColor( sName )
         {
-            let h = 0;
-            for( let i = 0; i < sName.length; i++ )
-                h = ( h * 31 + sName.charCodeAt( i ) ) % 360;
-
-            return 'hsl(' + h + ', 42%, 42%)';
+            return 'hsl(' + Ayni.hash( sName, 360 ) + ', 42%, 42%)';
         }
 
         function byDisplayName( a, b )
@@ -2313,7 +2327,7 @@
         {
             if( ! list.length ) return;
             const f = cardsFile( list );
-            NayiveUI.saveFile( f, f.name );
+            Ayni.saveFile( f, f.name );
         }
 
         // Every picked card goes at once; "Deleted [Undo]" puts them back by
@@ -2400,7 +2414,7 @@
             { id: 'merge', label: T( 'contact.merge' ), icon: 'merge', rank: 7, hideOff: true, group: 2, when: ids => ids.length >= 2,
               run: ids => openMergeFor( cardsOf( ids ) ) },
             // Never a bare ⌫ (Drive's rule): ⌘⌫ on a Mac, Del elsewhere.
-            { id: 'delete', label: T( 'ui.delete' ), icon: 'trash', key: NayiveUI.isMac ? [ 'Del', 'Ctrl+Backspace' ] : 'Del', rank: 1, group: 3, danger: true,
+            { id: 'delete', label: T( 'ui.delete' ), icon: 'trash', key: Ayni.isMac ? [ 'Del', 'Ctrl+Backspace' ] : 'Del', rank: 1, group: 3, danger: true,
               run: deleteContacts }
         ]; }
 
@@ -2650,7 +2664,7 @@
         // takes one from this device, "From Nayive" from the user's files (the
         // Photos folder first), the bin drops it. Kept in the card itself, as
         // its PHOTO (see photoLines): a PNG or a JPEG of 300 x 300 px at most
-        // (NayivePhoto.face). Saved with the form, like every other field.
+        // (AyniPhoto.face). Saved with the form, like every other field.
         let formPhoto = '';
 
         const IMAGE_EXT = /\.(jpe?g|png|gif|webp|bmp|avif)$/i;   // what a browser can draw (no HEIC)
@@ -2666,7 +2680,7 @@
         {
             try
             {
-                const pic = await NayivePhoto.face( blob );
+                const pic = await AyniPhoto.face( blob );
                 formPhoto = await new Promise( ( ok, no ) =>
                 {
                     const r = new FileReader();
@@ -2682,13 +2696,13 @@
         async function formPhotoFromNayive()
         {
             let dir = 'files';
-            try { const cfg = await GumApi.readJson( 'data/photos/config.json' ); if( cfg && cfg.folder ) dir = cfg.folder; } catch( _ ) {}
+            try { const cfg = await AyniNet.readJson( 'data/photos/config.json' ); if( cfg && cfg.folder ) dir = cfg.folder; } catch( _ ) {}
 
             const f = await NayiveUI.pickFile( { title: T( 'contact.changePhoto' ), dir: dir, only: name => IMAGE_EXT.test( name ) } );
             if( ! f ) return;
             if( ! IMAGE_EXT.test( f.name ) ) { Ayni.toast( 'warn', T( 'contact.notImage' ) ); return; }
 
-            try   { await takeFormPhoto( new Blob( [ await GumApi.readFileBytes( f.path ) ] ) ); }
+            try   { await takeFormPhoto( new Blob( [ await AyniNet.readFileBytes( f.path ) ] ) ); }
             catch { Ayni.toast( 'err', T( 'ui.store.notRead' ) ); }
         }
 
@@ -2805,7 +2819,7 @@
             rm.type = 'button';
             rm.className = 'btn danger';
             Ayni.setTip( rm, T( 'contact.remove' ) );
-            rm.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+            rm.innerHTML = Ayni.icon( 'close', '', 15 );
             rm.addEventListener( 'click', () => row.remove() );
             row.appendChild( rm );
 
@@ -3095,7 +3109,7 @@
                     rm.type = 'button';
                     rm.className = 'btn sm danger';
                     Ayni.setTip( rm, T( 'contact.removeFromGroup' ) );
-                    rm.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>';
+                    rm.innerHTML = Ayni.icon( 'trash', '', 16 );
                     rm.addEventListener( 'click', e =>
                     {
                         e.stopPropagation();
@@ -3539,7 +3553,7 @@
                 return;
             }
 
-            NayiveUI.saveFile( contactsToVcf( contacts ), T( 'contact.exportFile' ), 'text/vcard;charset=utf-8' );
+            Ayni.saveFile( contactsToVcf( contacts ), T( 'contact.exportFile' ), 'text/vcard;charset=utf-8' );
         }
 
         async function importVcf( file )

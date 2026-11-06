@@ -3,7 +3,7 @@ package main
 // Data-safety seal (cleanup Phase 3, batch S8): L5, the server half. Two
 // accounts on one browser: ana's tab left open after beto signed in there
 // sends its changes with beto's cookie. The page names its owner in
-// X-Nayive-User (shared/gum-api.js); every route that changes files refuses
+// X-Nayive-User (shared/ayni/ayni-net.js); every route that changes files refuses
 // another account's page with 423 and does nothing - not only the PUT.
 
 import (

@@ -13,7 +13,7 @@
  * are optional (without them: the OSM pictures). All three are vendored in
  * trips/lib/ - Trips loads them in its <head>, Photos on first use of its map.
  *
- *     NayiveBaseMap.add( map, {
+ *     AyniBaseMap.add( map, {
  *         print:   true,    // keep the WebGL picture, so window.print() can capture it
  *         onReady: fn,      // the first view is fully drawn
  *         onFail:  fn       // not even the OSM pictures load (no real internet)
@@ -120,5 +120,5 @@
         tiles.addTo( map );
     }
 
-    window.NayiveBaseMap = { add: add };
+    window.AyniBaseMap = { add: add };
 } )();

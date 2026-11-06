@@ -1,0 +1,58 @@
+/* Ayni library 0.2.0, colour schemes: the dialog of Ayni.schemeDialog(). Plain CSS, no build step, evergreen browsers
+   2024+. Load it after ayni-dialogs.css and ayni-pickers.css. The rules are in chapter 2.1 of the guidelines. */
+.scm-h
+{
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-faint); margin: 18px 0 8px;
+}
+
+.scm-list { display: flex; flex-direction: column; gap: 6px; }
+.scm-msg { font-size: 0.8rem; color: var(--danger); margin: 10px 0 0; }
+.scm-msg[hidden] { display: none; }
+.scm-assign { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; font-size: 0.88rem; }
+.scm-assign .picker { min-width: 120px; max-width: 190px; }
+.scm-assign-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 8px 0; }
+.scm-assign-row .scm-assign { margin: 0; min-width: 0; }
+.scm-assign-row .scm-assign .picker { flex: 1 1 auto; min-width: 0; max-width: none; }
+
+.scm-row
+{
+    display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+    background: var(--card2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 10px; color: var(--text); font: inherit; font-size: 0.88rem; cursor: pointer;
+}
+.scm-row.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.scm-sw { display: flex; flex: 0 0 auto; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
+.scm-sw i { width: 10px; height: 18px; display: block; }
+.scm-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scm-kind { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); }
+.scm-badge
+{
+    font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;
+    background: var(--accent); color: var(--on-accent); border-radius: var(--radius-pill); padding: 1px 7px;
+}
+
+.scm-input { width: 100%; margin: 10px 0; }
+
+.scm-seg { display: flex; align-items: center; gap: 6px; }   /* a choice row of two */
+
+/* Name field and the Dark / Light switch share one row; both take the row's height. */
+.scm-name-row { display: flex; align-items: stretch; gap: 8px; margin: 10px 0; }
+.scm-name-row .scm-input { flex: 1 1 auto; min-width: 0; width: auto; margin: 0; }
+.scm-name-row .scm-seg { flex: 0 0 auto; }
+
+.scm-tok { display: flex; align-items: center; gap: 10px; margin: 9px 0; }
+.scm-tok input[type="color"]
+{
+    width: 32px; height: 32px; flex: 0 0 auto; border: none; background: none; padding: 0;
+    border-radius: 7px; cursor: pointer; box-shadow: inset 0 0 0 1px var(--line);
+}
+.scm-tok input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.scm-tok input[type="color"]::-webkit-color-swatch { border: none; border-radius: 7px; }
+.scm-tok code { flex: 1 1 auto; font-size: 0.82rem; color: var(--text-dim); font-family: ui-monospace, Menlo, Consolas, monospace; }
+.scm-tok input[type="text"]      /* a hex code's layout only */
+{
+    width: 96px; flex: 0 0 auto; text-align: center; text-transform: uppercase;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.scm-tok input[type="text"].bad { border-color: var(--danger); color: var(--danger); }

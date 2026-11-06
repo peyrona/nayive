@@ -16,9 +16,6 @@
     var laterSheet = null;     // the open list of scheduled texts: { render, close }
     var lastTyping = 0;
 
-    var EMOJIS = ( "😀 😃 😄 😁 😆 😅 😂 🤣 😊 😇 🙂 😉 😍 🥰 😘 😋 😜 🤪 🤗 🤔 🤐 😐 😏 😒 🙄 😬 😌 😔 😴 😷 🤒 🥳 " +
-                   "😎 🤓 😕 😟 😮 😲 😳 🥺 😢 😭 😱 😤 😡 👍 👎 👌 ✌️ 🤞 🤝 🙏 👏 🙌 💪 👋 ❤️ 🧡 💛 💚 💙 💜 " +
-                   "🖤 💔 💯 ✨ 🔥 🎉 🎂 🎁 ☀️ 🌧️ ⛄ 🌹 🍷 🍺 ☕ 🍕 🚗 ✈️ 🏠 ⚽ 📷 ⏰ ✅ ❌ ❓ ❗" ).split( " " );
     var QUICK = [ "👍", "❤️", "😂", "😮", "😢", "🙏" ];
 
     // ---------------------------------------------------------------------
@@ -50,10 +47,12 @@
         fmtBtn.id = "fmtBtn";
         // The emoji: a faint circle beside the "T", in a desktop window only
         // (a phone's or a tablet's keyboard has its own).
-        var emojiBtn = NayiveUI.windowed ? C.btn( "smile", "chat.emoji", function () { togglePanel( "emoji" ); }, "fmt-open emoji-open" ) : null;
+        var emojiBtn = Ayni.frame.windowed ? C.btn( "smile", "chat.emoji", function () { togglePanel( "emoji" ); }, "fmt-open emoji-open" ) : null;
         if( emojiBtn ) emojiBtn.id = "emojiBtn";
         composer = h( "div", { class: "composer", attrs: { id: "composer", "data-toasts-above": "" } }, fmtBtn, emojiBtn, fmtBar, attachBtn, cbox, sendBtn );
         wireSendHold();
+        // The hour's answer ends, or the night, or someone comes online.
+        if( ! sendModeTimer ) sendModeTimer = setInterval( showSendMode, 15000 );
 
         ta.addEventListener( "input", function ( e ) { if( ! marking ) smiley( e ); grow(); typing(); C.keepDraft(); } );
         // Once up, the format bar stays while the focus is in the bar at the
@@ -90,7 +89,7 @@
     // the format bar: *bold*, _italic_, ~strike~ and "- " lists (marks.js)
     // ---------------------------------------------------------------------
 
-    var ITEM_RE = window.NayiveChatMarks.ITEM_RE;     // a "- " list line
+    var ITEM_RE = window.Ayni.marks.ITEM_RE;     // a "- " list line
     var marking = false;       // a bar change is going in: no emoticon swap
 
     function buildFmtBar()
@@ -214,50 +213,8 @@
         C.api( "POST", "conv/" + S.open + "/typing" ).catch( function () {} );
     }
 
-    // Emoticons become emoji as you write: ":-) " turns into "🙂 " once the
-    // space (or a new line) after it is typed, and a trailing one on Send.
-    // Only a whole word counts, so "http://x" or "a:)b" stay as they are.
-    // A Backspace right after the swap gives the emoticon back.
-    var SMILEYS = { ":)": "🙂", ":-)": "🙂", ":(": "🙁", ":-(": "🙁", ":D": "😃", ":-D": "😃",
-                    ";)": "😉", ";-)": "😉", ":P": "😛", ":-P": "😛", ":p": "😛", ":-p": "😛",
-                    ":O": "😮", ":-O": "😮", ":o": "😮", ":-o": "😮", ":'(": "😢", ":'-(": "😢",
-                    ":*": "😘", ":-*": "😘", ":|": "😐", ":-|": "😐", ":/": "😕", ":-/": "😕",
-                    "B-)": "😎", "8-)": "😎", "XD": "😆", "xD": "😆", ">:(": "😠", ">:-(": "😠",
-                    "O:)": "😇", "O:-)": "😇", "^^": "😊", "^_^": "😊", "<3": "❤️", "</3": "💔" };
-    var lastSwap = null;       // { at: caret after the swap, emoji, word }
-
-    function smiley( e )
-    {
-        lastSwap = null;
-        if( ! e || ! e.inputType || e.inputType.indexOf( "insert" ) !== 0 || e.inputType === "insertFromPaste" ) return;
-        var pos = ta.selectionStart;
-        if( pos !== ta.selectionEnd || pos < 2 || ! /\s/.test( ta.value.charAt( pos - 1 ) ) ) return;
-        var m = /(^|\s)(\S+)$/.exec( ta.value.slice( 0, pos - 1 ) );
-        if( ! m || ! SMILEYS[ m[ 2 ] ] ) return;
-        var start = pos - 1 - m[ 2 ].length, emoji = SMILEYS[ m[ 2 ] ];
-        ta.setRangeText( emoji, start, pos - 1, "end" );
-        var at = start + emoji.length + 1;
-        ta.setSelectionRange( at, at );
-        lastSwap = { at: at, emoji: emoji, word: m[ 2 ] };
-    }
-
-    function unSmiley()
-    {
-        var s = lastSwap;
-        lastSwap = null;
-        if( ! s || ta.selectionStart !== s.at || ta.selectionEnd !== s.at ) return false;
-        var from = s.at - 1 - s.emoji.length;
-        if( ta.value.slice( from, s.at - 1 ) !== s.emoji ) return false;
-        ta.setRangeText( s.word, from, s.at - 1, "end" );
-        ta.setSelectionRange( from + s.word.length + 1, from + s.word.length + 1 );
-        return true;
-    }
-
-    function smileyTail( text )
-    {
-        var m = /(^|\s)(\S+)$/.exec( text );
-        return m && SMILEYS[ m[ 2 ] ] ? text.slice( 0, text.length - m[ 2 ].length ) + SMILEYS[ m[ 2 ] ] : text;
-    }
+    // Emoticons become emoji as you write (Ayni.smileys).
+    var swaps = Ayni.smileys( function () { return ta; } ), smiley = swaps.input, unSmiley = swaps.undo, smileyTail = swaps.tail;
 
     C.focusComposer = function () { try { ta.focus(); } catch( _ ) {} };
 
@@ -281,6 +238,7 @@
         if( ta ) { ta.value = ""; grow(); }
         closePanel();
         if( ! keep ) C.keepDraft();
+        showSendMode();     // another chat, or the edit given up
     };
 
     // ---------------------------------------------------------------------
@@ -363,6 +321,7 @@
     {
         S.editing = null;
         S.replyTo = m;
+        showSendMode();
         quoteBar( C.nameOf( m.from ), C.preview( m )[ 1 ], C.colorOf( m.from ) );
         C.focusComposer();
     };
@@ -371,6 +330,7 @@
     {
         S.replyTo = null;
         S.editing = m;
+        showSendMode();     // an edit makes no sound
         quoteBar( T( "chat.editing" ), C.preview( m )[ 1 ], 0 );
         ta.value = m.text || "";
         grow();
@@ -480,6 +440,23 @@
     // ---------------------------------------------------------------------
 
     var nightPick = {};   // conv -> { silent, until }
+    var sendQuiet = false, sendModeTimer = null;
+
+    // The Send button says what a plain send does now: a crossed speaker
+    // while this chat's answer sends without sound. Its look only - what is
+    // sent is decided by C.nightGate.
+    function showSendMode()
+    {
+        var conv = S.open, pick = conv && nightPick[ conv ];
+        var quiet = !! ( pick && pick.silent && pick.until > Date.now() && ! S.editing && nightFor( conv ).length );
+        if( ! sendBtn || quiet === sendQuiet ) return;
+        sendQuiet = quiet;
+        var label = T( quiet ? "chat.sendSilent" : "chat.sendMsg" );
+        sendBtn.classList.toggle( "quiet", quiet );
+        sendBtn.setAttribute( "data-tip", label );
+        sendBtn.setAttribute( "aria-label", label );
+        sendBtn.replaceChildren( C.ic( quiet ? "volume-x" : "send" ) );
+    }
 
     // The others in `conv` it is night for now: [ { name, time } ]. Their
     // zones come from their own pages (the server's zonesFor).
@@ -529,6 +506,7 @@
             {
                 nightPick[ conv ] = { silent: silent, until: Date.now() + 60 * 60 * 1000 };
                 go( silent );
+                showSendMode();
             } };
         }
         Ayni.menuAt( [
@@ -721,7 +699,7 @@
     // THE OUTBOX (data-safety J2, mail-chat #18)
     //
     // A message is kept on this device from the moment Send is pressed until
-    // the server has it: IndexedDB "nayive-drafts" (shared/office.js's
+    // the server has it: IndexedDB "nayive-drafts" (shared/ayni/ayni-doc.js's
     // database of device drafts - sign-out counts what still waits there,
     // asks, and empties it), one record per message, "chat:<cid>". With no
     // network (a lift, a tunnel) or a failing server it waits there, shown
@@ -752,7 +730,7 @@
             var rq;
             try { rq = indexedDB.open( "nayive-drafts", 1 ); }
             catch( _ ) { resolve( null ); return; }
-            // the same upgrade as GumApi.draftsDb (shared/gum-api.js): whoever opens it first
+            // the same upgrade as AyniNet.draftsDb (shared/ayni/ayni-net.js): whoever opens it first
             // makes it. Its own copy: the guest page loads no gum-api.js.
             rq.onupgradeneeded = function () { rq.result.createObjectStore( "drafts", { keyPath: "app" } ); };
             rq.onsuccess = function () { resolve( rq.result ); };
@@ -1027,23 +1005,14 @@
         ta.focus();
     }
 
-    function emojiPanel( pick )
-    {
-        var el = h( "div", { class: "emojis" } );
-        EMOJIS.forEach( function ( e )
-        {
-            el.appendChild( h( "button", { attrs: { type: "button" }, text: e,
-                                           on: { click: function ( ev ) { ev.stopPropagation(); pick( e ); } } } ) );
-        } );
-        return el;
-    }
+    var emojiPanel = Ayni.emojiPanel;
 
     function attachPanel()
     {
         // A document from this device, or (the owner, who has their files)
         // one already in Nayive - two buttons, no chooser.
         // Audio and video: files of this device, sent as files.
-        return NayiveUI.attachPanel( [
+        return Ayni.attachPanel( [
             [ "file", "chat.localDoc", 1, function () { C.pickFiles( "file" ); } ],
             C.canUseNayive() ? [ "nayive", "chat.nayiveDoc", 0, function () { C.pickFromNayive(); } ] : null,
             [ "image", "chat.gallery", 6, function () { C.pickFiles( "gallery" ); } ],

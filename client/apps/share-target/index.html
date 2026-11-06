@@ -22,6 +22,7 @@
          every inline script below may call Ayni.t(). -->
     <script src="../shared/i18n.js"></script>
     <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
+    <script src="../shared/ayni/ayni-util.js"></script>
     <title data-i18n="ui.shareToNayive"></title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300d1b2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6' y='2' width='16' height='16' rx='2'/%3E%3Ccircle cx='12' cy='8' r='2'/%3E%3Cpath d='M18 22H4a2 2 0 0 1-2-2V6'/%3E%3C/svg%3E">
 
@@ -38,10 +39,26 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-share.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pwa.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-locker.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-status.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-shell.css">
     <link rel="stylesheet" href="../shared/app.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-doc.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-media.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-image.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-map.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-icons-more.js" defer></script>
+    <script src="../shared/ayni/ayni-shell.js" defer></script>
+    <script src="../shared/ayni/ayni-status.js" defer></script>
+    <script src="../shared/ayni/ayni-share.js" defer></script>
+    <script src="../shared/ayni/ayni-upload.js" defer></script>
+    <script src="../shared/ayni/ayni-pwa.js" defer></script>
+    <script src="../shared/ayni/ayni-boot.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
@@ -53,9 +70,10 @@
     <script src="../shared/ayni/ayni-pickers.js" defer></script>
     <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
-    <script src="../shared/gum-api.js" defer></script>
+    <script src="../shared/ayni/ayni-locker.js"></script>
+    <script src="../shared/ayni/ayni-net.js" defer></script>
     <script src="../shared/ui.js" defer></script>
-    <script src="../shared/photo.js" defer></script>
+    <script src="../shared/ayni/ayni-photo.js" defer></script>
     <script>
         if( 'serviceWorker' in navigator )
             window.addEventListener( 'load', function () { navigator.serviceWorker.register( '../sw.js' ).catch( function () {} ); } );
@@ -110,7 +128,7 @@
 <body>
     <div class="app">
         <div class="st-head">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="16" height="16" rx="2"/><circle cx="12" cy="8" r="2"/><path d="M18 22H4a2 2 0 0 1-2-2V6"/></svg>
+            <span class="icon" data-icon="images"></span>
             <h1 data-i18n="ui.shareToNayive"></h1>
         </div>
 
@@ -263,12 +281,12 @@ function setDest( folder )
 // took after the listing answers 412 (409 in an album shared with us), and
 // the next free one is used - "IMG_1 (2).jpg" - never written over. (A 412
 // that is this very photo's first try, landed before a dropped connection
-// made the PUT go again, is a success already: GumApi's "our own first try".)
+// made the PUT go again, is a success already: AyniNet's "our own first try".)
 // `taken` gains every name tried; 50 names in a row taken is not a race any
 // more: an error.
 function sendNew( want, bytes, taken )
 {
-    return GumApi.createFresh( DEST, function () { const name = NayiveUI.uniqueName( want, taken ); taken.add( name ); return name; },
+    return AyniNet.createFresh( DEST, function () { const name = Ayni.uniqueName( want, taken ); taken.add( name ); return name; },
                                bytes, { on409: true } );
 }
 
@@ -281,13 +299,13 @@ async function upload()
     const need = ITEMS.reduce( ( n, it ) => n + ( ( it.blob && it.blob.size ) || 0 ), 0 );
     if( ! await NayiveUI.ensureRoom( need ) ) return;
 
-    Ayni.setBusy( $( "#goBtn" ), Ayni.t( "ui.sync.saving" ) );
+    Ayni.setBusy( $( "#goBtn" ), Ayni.t( "ayni.sync.saving" ) );
     $( "#cancelBtn" ).ariaDisabled = true;
     $( "#changeDest" ).ariaDisabled = true;
     $( "#bar" ).hidden = false;
 
     // If this user has a max photo size, shrink + convert to JPEG right here.
-    const maxPx = await NayivePhoto.limit();
+    const maxPx = await AyniPhoto.limit();
 
     // Names already in the destination, so a share never clobbers a file. A
     // listing that fails sends NOTHING (D4, drive-files #12): taken as "no
@@ -298,11 +316,11 @@ async function upload()
     let unread = false;
     try
     {
-        taken = await GumApi.namesIn( DEST );
+        taken = await AyniNet.namesIn( DEST );
     }
     catch ( err )
     {
-        if( err && err.status === 401 ) { GumApi.loginRedirect(); return; }
+        if( err && err.status === 401 ) { AyniNet.loginRedirect(); return; }
         if( ! err || err.status !== 404 ) unread = true;
     }
 
@@ -314,7 +332,7 @@ async function upload()
         const it    = ITEMS[ i ];
         if( quota || unread ) { failed.push( { it: it, why: "" } ); continue; }
 
-        const ready = await NayivePhoto.prepare(
+        const ready = await AyniPhoto.prepare(
                           it.blob && ! it.blob.name ? new File( [ it.blob ], it.name || "foto.jpg",
                                                                 { type: it.blob.type } )
                                                     : it.blob,
@@ -331,7 +349,7 @@ async function upload()
         catch ( err )
         {
             const status = err && err.status;
-            if( status === 401 ) { GumApi.loginRedirect(); return; }
+            if( status === 401 ) { AyniNet.loginRedirect(); return; }
             if( status === 507 ) quota = true;
             failed.push( { it: it, why: quota ? "" : err && err.status ? "HTTP " + err.status : Ayni.t( 'st.noConnection' ) } );
         }
@@ -370,10 +388,10 @@ async function upload()
     // Remember this album as the Photos folder, then open it there. Only
     // `folder` changes: the file's other keys are kept, and an unreadable one
     // (not a 404) is left as it is rather than written over. Version-checked
-    // (GumApi.updateJson): a setting saved meanwhile is kept, not put back.
+    // (AyniNet.updateJson): a setting saved meanwhile is kept, not put back.
     try
     {
-        await GumApi.updateJson( "data/photos/config.json", cfg =>   // null = no file yet
+        await AyniNet.updateJson( "data/photos/config.json", cfg =>   // null = no file yet
         {
             const next = ( cfg && typeof cfg === "object" && ! Array.isArray( cfg ) ) ? cfg : {};
             next.folder = DEST;
@@ -422,12 +440,12 @@ async function boot()
     let folder = null;
     try
     {
-        const cfg = await GumApi.readJson( "data/photos/config.json" );
+        const cfg = await AyniNet.readJson( "data/photos/config.json" );
         if( cfg && cfg.folder ) folder = cfg.folder;
     }
     catch ( err )
     {
-        if( err && err.status === 401 ) { GumApi.loginRedirect(); return; }
+        if( err && err.status === 401 ) { AyniNet.loginRedirect(); return; }
     }
     setDest( folder );
 
@@ -435,8 +453,8 @@ async function boot()
         Ayni.toast( 'info', Ayni.t( 'st.pickAlbumToast' ) );
 }
 
-// shared/gum-api.js + shared/ui.js load deferred; they run before
-// DOMContentLoaded, so wait for it before boot() touches GumApi / NayiveUI.
+// shared/ayni/ayni-net.js + shared/ui.js load deferred; they run before
+// DOMContentLoaded, so wait for it before boot() touches AyniNet / NayiveUI.
 Ayni.i18n.ready.then( boot );
 </script>
 </body>

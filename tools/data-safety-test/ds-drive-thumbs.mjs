@@ -110,19 +110,19 @@ section( "PHOTOS · THE SWEEP KEEPS DRIVE'S THUMBNAILS, DROPS ORPHANS" );
     const ORPHAN2 = "data/photos/thumbs/998_1.jpg";
     put( s, ORPHAN2, Buffer.from( "another orphan" ) );
     await c.evaluate( `( async () => {
-        const real = GumApi.search;
-        GumApi.search = () => Promise.resolve( { nodes: [], truncated: true } );
+        const real = AyniNet.search;
+        AyniNet.search = () => Promise.resolve( { nodes: [], truncated: true } );
         localStorage.removeItem( THUMB_SWEEP_KEY );
-        try { await sweepThumbs(); } finally { GumApi.search = real; }
+        try { await sweepThumbs(); } finally { AyniNet.search = real; }
         return true; } )()` );
     ok( bytesOnDisk( s, ORPHAN2 ) && bytesOnDisk( s, D ), "Home not listed in full: the sweep deletes nothing" );
 
     // The search fails (offline): nothing goes either.
     await c.evaluate( `( async () => {
-        const real = GumApi.search;
-        GumApi.search = () => Promise.reject( Object.assign( new Error( "offline" ), { status: 0 } ) );
+        const real = AyniNet.search;
+        AyniNet.search = () => Promise.reject( Object.assign( new Error( "offline" ), { status: 0 } ) );
         localStorage.removeItem( THUMB_SWEEP_KEY );
-        try { await sweepThumbs(); } finally { GumApi.search = real; }
+        try { await sweepThumbs(); } finally { AyniNet.search = real; }
         return true; } )()` );
     ok( bytesOnDisk( s, ORPHAN2 ) && bytesOnDisk( s, D ), "the search fails: the sweep deletes nothing" );
 }

@@ -119,7 +119,7 @@ try
     const shut = async () => { await ev( "( document.querySelectorAll( '[popover]' ).forEach( function ( p ) { if( p.matches( ':popover-open' ) ) p.hidePopover(); } ), true )" ); await settle(); };
     const FRONT = ".chip[aria-current=true]";
     const NAME = i => `#tasks > .chip:nth-child( ${i} )`;
-    const frontName = () => ev( `document.querySelector( '${FRONT} .chip-main span' ).textContent` );
+    const frontName = () => ev( `document.querySelector( '${FRONT} .chip-main span:not(.icon)' ).textContent` );
     const off = ( e, p, r ) => ( e === "bottom" ? p.b <= r.t : e === "top" ? p.t >= r.b : e === "left" ? p.l >= r.r : p.r <= r.l );
     const frame = i => `document.querySelectorAll( '#desk > .win iframe' )[ ${i} ]`;
     const fieldIn = async i => { const f = await ev( `( function () { var r = ${frame( i )}.getBoundingClientRect(); return [ r.left, r.top ]; } )()` ); return [ f[ 0 ] + 90, f[ 1 ] + 72 ]; };
@@ -139,14 +139,14 @@ try
     async function reload()
     {
         await c.send( "Page.navigate", { url: ORIGIN + DESK } );
-        await until( "window.NayiveDesktop && window.Ayni && document.readyState === 'complete'" );
+        await until( "window.AyniDesk && window.Ayni && document.readyState === 'complete'" );
         await ev( "Ayni.ready" ); await settle();
     }
     const openWin = async u =>
     {
-        const n = await ev( "NayiveDesktop.windows().length" );
-        await ev( `NayiveDesktop.open( ${JSON.stringify( u )} )` );
-        await until( `NayiveDesktop.windows().length === ${n + 1} && ${frame( n )}.contentDocument && ${frame( n )}.contentDocument.readyState === 'complete'` );
+        const n = await ev( "AyniDesk.windows().length" );
+        await ev( `AyniDesk.open( ${JSON.stringify( u )} )` );
+        await until( `AyniDesk.windows().length === ${n + 1} && ${frame( n )}.contentDocument && ${frame( n )}.contentDocument.readyState === 'complete'` );
         await settle();
     };
 
@@ -188,51 +188,51 @@ try
         await desk( 3 );
         check( "one chip per window, the last opened in front", await ev( "document.querySelectorAll( '#tasks > .chip' ).length" ) === 3 && await frontName() === "Box C", await frontName() );
         check( "only one chip is the front one", await ev( "document.querySelectorAll( '#tasks > .chip[aria-current]' ).length" ) === 1 );
-        check( "the front chip shows the document's name", await ev( `getComputedStyle( document.querySelector( '${FRONT} .chip-main span' ) ).display !== 'none'` ) );
-        check( "...the others only their icon", await ev( `getComputedStyle( document.querySelector( '${NAME( 1 )} .chip-main span' ) ).display === 'none'` ) );
+        check( "the front chip shows the document's name", await ev( `getComputedStyle( document.querySelector( '${FRONT} .chip-main span:not(.icon)' ) ).display !== 'none'` ) );
+        check( "...the others only their icon", await ev( `getComputedStyle( document.querySelector( '${NAME( 1 )} .chip-main span:not(.icon)' ) ).display === 'none'` ) );
         check( "...their name is in the tooltip and the group's label", await ev( `/Box A/.test( document.querySelector( '${NAME( 1 )} .chip-main' ).dataset.tip ) && document.querySelector( '${NAME( 1 )}' ).getAttribute( 'aria-label' ) === 'Box A'` ) );
         await press( `${NAME( 2 )} .chip-main` );
         check( "a click brings its window to the front", await frontName() === "Box B" );
         await press( `${NAME( 2 )} .chip-main` );
-        check( "a click on the front chip minimises", await ev( "NayiveDesktop.windows()[ 1 ].min" ) === true && await ev( `document.querySelector( '${NAME( 2 )}' ).classList.contains( 'min' )` ) );
+        check( "a click on the front chip minimises", await ev( "AyniDesk.windows()[ 1 ].min" ) === true && await ev( `document.querySelector( '${NAME( 2 )}' ).classList.contains( 'min' )` ) );
         await press( `${NAME( 2 )} .chip-main` );
-        check( "...and another brings it back", await ev( "NayiveDesktop.windows()[ 1 ].min" ) === false );
+        check( "...and another brings it back", await ev( "AyniDesk.windows()[ 1 ].min" ) === false );
         await ev( `document.querySelector( '${FRONT} [data-win="min"]' ).focus(), true` );
         check( "the window's buttons take the keyboard", await ev( "document.activeElement.getAttribute( 'data-win' )" ) === "min" );
         await key( "Enter" );
-        check( "...Enter on minimise minimises", await ev( "NayiveDesktop.windows()[ 1 ].min" ) === true );
+        check( "...Enter on minimise minimises", await ev( "AyniDesk.windows()[ 1 ].min" ) === true );
         await press( `${NAME( 2 )} .chip-main` );
         await press( `${FRONT} [data-win="max"]` );
-        check( "maximise from the chip", await ev( "NayiveDesktop.windows()[ 1 ].max" ) === true );
+        check( "maximise from the chip", await ev( "AyniDesk.windows()[ 1 ].max" ) === true );
         const maxBtn = `document.querySelector( '${FRONT} [data-win="max"]' )`;
         check( "...it then says Restore, with its icon", await ev( `${maxBtn}.dataset.tip === 'Restore' && ${maxBtn}.getAttribute( 'aria-label' ) === 'Restore' && ${maxBtn}.querySelector( '.icon' ).dataset.icon === 'restore'` ) );
         await press( `${FRONT} [data-win="max"]` );
         check( "...and Maximise again once restored", await ev( `${maxBtn}.dataset.tip === 'Maximise' && ! ${maxBtn}.querySelector( '.icon' )` ) );
         await press( `${FRONT} [data-win="scale"]` );
-        check( "Scale from the chip", await ev( "NayiveDesktop.windows()[ 1 ].scale" ) === true );
+        check( "Scale from the chip", await ev( "AyniDesk.windows()[ 1 ].scale" ) === true );
         await press( `${FRONT} [data-win="scale"]` );
 
         // Closing still asks the page: this is what keeps unsaved work.
-        await ev( `( ${frame( 1 )}.contentWindow.nayiveBeforeClose = function () { window.parent.__asked = ( window.parent.__asked || 0 ) + 1; return false; }, true )` );
+        await ev( `( ${frame( 1 )}.contentWindow.ayniBeforeClose = function () { window.parent.__asked = ( window.parent.__asked || 0 ) + 1; return false; }, true )` );
         await press( `${FRONT} [data-win="close"]` );
-        check( "close asks the page, and a no keeps the window", await ev( "window.__asked" ) === 1 && await ev( "NayiveDesktop.windows().length" ) === 3 );
-        await ev( `( ${frame( 1 )}.contentWindow.nayiveBeforeClose = function () { return new Promise( function ( r ) { setTimeout( function () { r( true ); }, 120 ); } ); }, true )` );
+        check( "close asks the page, and a no keeps the window", await ev( "window.__asked" ) === 1 && await ev( "AyniDesk.windows().length" ) === 3 );
+        await ev( `( ${frame( 1 )}.contentWindow.ayniBeforeClose = function () { return new Promise( function ( r ) { setTimeout( function () { r( true ); }, 120 ); } ); }, true )` );
         await press( `${FRONT} [data-win="close"]` );
-        check( "...it may take its time", await ev( "NayiveDesktop.windows().length" ) === 3 );
-        check( "...and a yes closes it, chip and all", await until( "NayiveDesktop.windows().length === 2 && document.querySelectorAll( '#tasks > .chip' ).length === 2" ) );
+        check( "...it may take its time", await ev( "AyniDesk.windows().length" ) === 3 );
+        check( "...and a yes closes it, chip and all", await until( "AyniDesk.windows().length === 2 && document.querySelectorAll( '#tasks > .chip' ).length === 2" ) );
 
         // The marks.
         await desk( 2 );
         await ev( "( document.dispatchEvent( new CustomEvent( 'nayive:chatunread', { detail: 3 } ) ), true )" );
-        check( "unread Chat with no Chat window: a plain dot on the menu button", await ev( "!! document.querySelector( '#menuBtn > .chat-dot:not(.has-count)' ) && ! document.querySelector( '#menuBtn > .chat-dot' ).textContent" ) );
+        check( "unread Chat with no Chat window: a plain dot on the menu button", await ev( "!! document.querySelector( '#menuBtn > .icon-badge:not(.has-count)' ) && ! document.querySelector( '#menuBtn > .icon-badge' ).textContent" ) );
         await openWin( "/nayive/chat/box.html?n=Chat" );
         await settle();
-        check( "...with one: the count on its chip", await ev( "document.querySelector( '#tasks .chip-main > .chat-dot.has-count' ).textContent" ) === "3" );
-        const dot = await box( "#tasks .chip-main > .chat-dot.has-count" ), icon = await box( `#tasks > .chip:nth-child( 3 ) .chip-main > svg` );
+        check( "...with one: the count on its chip", await ev( "document.querySelector( '#tasks .chip-main > .icon-badge.has-count' ).textContent" ) === "3" );
+        const dot = await box( "#tasks .chip-main > .icon-badge.has-count" ), icon = await box( `#tasks > .chip:nth-child( 3 ) .chip-main > svg` );
         check( "...over the app's icon", dot.l <= icon.r && dot.r >= icon.l && dot.t <= icon.b, { dot, icon } );
         await press( `${FRONT} [data-win="close"]` );
-        await until( "NayiveDesktop.windows().length === 2" );
-        check( "...and back on the menu button when it closes", await ev( "!! document.querySelector( '#menuBtn > .chat-dot' )" ) );
+        await until( "AyniDesk.windows().length === 2" );
+        check( "...and back on the menu button when it closes", await ev( "!! document.querySelector( '#menuBtn > .icon-badge' )" ) );
         await ev( `( ${frame( 0 )}.contentDocument.body.insertAdjacentHTML( 'beforeend', '<dialog class="panel" open>Q</dialog>' ), true )` );
         await settle();
         check( "a dialog open in a window behind: its chip is marked", await ev( `document.querySelector( '${NAME( 1 )}' ).classList.contains( 'has-dialog' ) && getComputedStyle( document.querySelector( '${NAME( 1 )} .chip-main' ), '::after' ).content !== 'none'` ) );
@@ -347,7 +347,7 @@ try
         check( "...its minutes and text at once", await ev( "( function () { var s = JSON.parse( localStorage.getItem( 'nayive-locker' ) ); return s.min === 7 && s.text === 'Hi'; } )()" ), await ev( "localStorage.getItem( 'nayive-locker' )" ) );
         await pick( "lockSel", "culture" );
         check( "Bellas artes: its settings button, with its icon and its words", await ev( "( function () { var b = document.getElementById( 'salonBtn' ); return ! b.hidden && !! b.querySelector( '.icon svg' ) && b.querySelector( '[data-i18n]' ).textContent.trim().length > 3; } )()" ), await ev( "document.getElementById( 'salonBtn' ).innerHTML.slice( 0, 120 )" ) );
-        await ev( "( window.__locked = 0, NayiveLock.lock = function () { window.__locked = 1; }, true )" );
+        await ev( "( window.__locked = 0, AyniLocker.lock = function () { window.__locked = 1; }, true )" );
         await pick( "lockSel", "clock" );
         await press( "#lockNowBtn" );
         check( "Lock now closes the popup and locks", await ev( "window.__locked" ) === 1 && ! await open( "moreMenu" ) );
@@ -363,23 +363,23 @@ try
         await openWin( "/nayive/fixture/box.html?n=A" ); await openWin( "/nayive/fixture/box.html?n=B" );
         await press( "#moreBtn" );
         check( "windows: it says Free", ! await ev( "document.getElementById( 'tileOn' ).disabled" ) && await ev( "document.getElementById( 'tileOff' ).checked" ) );
-        const opener = await ev( "JSON.stringify( NayiveDesktop.windows().map( function ( w ) { return w.box; } ) )" );
+        const opener = await ev( "JSON.stringify( AyniDesk.windows().map( function ( w ) { return w.box; } ) )" );
         await press( "#tileSw label:last-of-type" );
-        check( "the word Tile tiles", await ev( "NayiveDesktop.isTiled()" ) && await ev( "document.getElementById( 'tileOn' ).checked" ) );
+        check( "the word Tile tiles", await ev( "AyniDesk.isTiled()" ) && await ev( "document.getElementById( 'tileOn' ).checked" ) );
         check( "...and the popup stays", await open( "moreMenu" ) );
         await ev( "( document.querySelector( '#desk > .win' ).style.left = '300px', true )" );
-        await ev( "NayiveDesktop.windows()[ 0 ].box" );
+        await ev( "AyniDesk.windows()[ 0 ].box" );
         await shut();
-        await ev( "( function () { var w = NayiveDesktop.windows(); return w.length; } )()" );
+        await ev( "( function () { var w = AyniDesk.windows(); return w.length; } )()" );
         await press( "#moreBtn" );
         await press( "#tileSw label:last-of-type" );
         check( "the word Tile again deals the desk out again", await ev( "parseInt( document.querySelector( '#desk > .win' ).style.left )" ) === 0, await ev( "document.querySelector( '#desk > .win' ).style.left" ) );
         await press( "#tileSw .track" );
-        check( "the track flips it back: every window as it was", ! await ev( "NayiveDesktop.isTiled()" ) && await ev( "JSON.stringify( NayiveDesktop.windows().map( function ( w ) { return w.box; } ) )" ) === opener );
+        check( "the track flips it back: every window as it was", ! await ev( "AyniDesk.isTiled()" ) && await ev( "JSON.stringify( AyniDesk.windows().map( function ( w ) { return w.box; } ) )" ) === opener );
         await press( "#tileSw .track" );
-        check( "...and on", await ev( "NayiveDesktop.isTiled()" ) );
+        check( "...and on", await ev( "AyniDesk.isTiled()" ) );
         await press( "#tileSw label:first-of-type" );
-        check( "the word Free frees it", ! await ev( "NayiveDesktop.isTiled()" ) );
+        check( "the word Free frees it", ! await ev( "AyniDesk.isTiled()" ) );
     }
 
     // ----- 6. THE MONTH ------------------------------------------------------

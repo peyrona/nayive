@@ -1,4 +1,4 @@
-/* Ayni library 0.1.0, dialogs family: dialog.panel, small and big, modal and modeless. Load it after ayni-base.css
+/* Ayni library 0.2.0, dialogs family: dialog.panel, small and big, modal and modeless. Load it after ayni-base.css
    (the Panel) and ayni-buttons.css (its buttons are .btn). Behaviour: ayni-dialogs.js. Rules: guidelines ch. 10. */
 
 /* ---------- The dialog ---------- */
@@ -56,3 +56,34 @@ dialog.panel .body > p.text { margin: 0; white-space: pre-wrap; overflow-wrap: a
 dialog.panel.dragging, dialog.panel.dragging * { cursor: grabbing !important; user-select: none; }
 
 @media (prefers-reduced-motion: no-preference) { dialog.panel[open] { animation: dialog-rise .14s ease-out; } @keyframes dialog-rise { from { opacity: 0; transform: translateY(6px); } } }
+
+/* The clip's panel (Ayni.attachPanel): where it sits is the app's */
+.attach
+{
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px 6px;
+    max-width: 420px;
+    padding: 22px 10px 18px; border-radius: var(--radius-l);
+    background: var(--card); box-shadow: var(--elev-dialog);
+}
+.att
+{
+    display: flex; flex-direction: column; align-items: center; gap: 7px;
+    border: none; background: none; font: inherit; font-size: 0.8rem; color: var(--text-dim); cursor: pointer;
+}
+.att .ai
+{
+    width: 54px; height: 54px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--on-accent); background: var(--c);
+}
+.att .ai svg   { width: 24px; height: 24px; }
+.att:hover .ai { filter: brightness(1.08); }
+.att[data-c="0"] { --c: var(--accent); }
+.att[data-c="1"] { --c: #8B6FD6; }      /* purple */
+.att[data-c="2"] { --c: var(--warn); }
+.att[data-c="3"] { --c: var(--danger); }
+.att[data-c="4"] { --c: #E07B39; }      /* orange */
+.att[data-c="5"] { --c: var(--ok); }
+.att[data-c="6"] { --c: #D45C9A; }      /* pink */
+.att[data-c="7"] { --c: #1E9E9A; }      /* teal */
+.att[data-c="8"] { --c: #6E7F96; }      /* slate */

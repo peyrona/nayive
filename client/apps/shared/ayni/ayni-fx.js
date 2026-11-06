@@ -1,6 +1,6 @@
 /* fx.js - live exchange rates, cross-checked, for Calculator (and Trips through it).
  *
- * window.NayiveFx. The RATE is never hard-coded and never assumed: it comes from
+ * window.AyniFx. The RATE is never hard-coded and never assumed: it comes from
  * three independent free services (no key), each currency is cross-checked
  * between them, and a currency no pair agrees on has NO rate - this is money, so
  * a guessed number is worse than no number. Moved here from trips/currency.js
@@ -12,14 +12,14 @@
  * convert() are synchronous - they read only that copy - so Calculator calls
  * them on every key.
  *
- *   NayiveFx.start()               load the kept rates, refresh them in the background
- *   NayiveFx.onChange( fn )        fn() when new rates arrive or the connection state changes
- *   NayiveFx.rate( from, to )      1 `from` = this many `to`, or null (no verified rate)
- *   NayiveFx.convert( n, from, to )
- *   NayiveFx.check( code )         how `code` was checked, for the "rate check" sheet
- *   NayiveFx.date() / offline()    day of the rates ("2026-10-27") / last refresh failed
- *   NayiveFx.CODES                 the currencies offered (a traveller's set)
- *   NayiveFx.name( code ) / symbol( code ) / digits( code )   in the interface language
+ *   AyniFx.start()               load the kept rates, refresh them in the background
+ *   AyniFx.onChange( fn )        fn() when new rates arrive or the connection state changes
+ *   AyniFx.rate( from, to )      1 `from` = this many `to`, or null (no verified rate)
+ *   AyniFx.convert( n, from, to )
+ *   AyniFx.check( code )         how `code` was checked, for the "rate check" sheet
+ *   AyniFx.date() / offline()    day of the rates ("2026-10-27") / last refresh failed
+ *   AyniFx.CODES                 the currencies offered (a traveller's set)
+ *   AyniFx.name( code ) / symbol( code ) / digits( code )   in the interface language
  */
 ( function ()
 {
@@ -72,7 +72,7 @@
                     'THB', 'VND', 'IDR', 'MYR', 'SGD', 'PHP', 'INR', 'KRW', 'TWD', 'HKD', 'AUD', 'NZD',
                     'ILS', 'AED', 'QAR', 'SAR', 'EGP', 'MAD', 'ZAR', 'KES' ];
 
-    const KEY     = 'balata-fx';
+    const KEY     = 'ayni-fx';
     const MAX_AGE = 6 * 3600e3;
 
     // kept = { fetched, sources: [ { source, ok, asOf, rates: { CODE: n } } | { source, ok: false, reason } ] }
@@ -83,7 +83,7 @@
     let started   = false;
     const listeners = [];
 
-    function lang() { return window.NayiveUI ? Ayni.i18n.lang() : ( navigator.language || 'en' ); }
+    function lang() { return window.Ayni ? Ayni.i18n.lang() : ( navigator.language || 'en' ); }
 
     //------------------------------------------------------------------------//
     // THE CHECK - the protocol over the kept sources, for one currency. Same shape
@@ -280,7 +280,7 @@
     }
     catch( e ) {}
 
-    window.NayiveFx = {
+    window.AyniFx = {
         CODES: CODES,
         SOURCES: SOURCES,
         start: start,

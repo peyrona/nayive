@@ -19,11 +19,12 @@
      an absolute /nayive/ URL. All the data comes from /api/public/<token>,
      already trimmed there: no future stages, positions rounded to ~100 m, no
      documents or notes, full photos without their GPS. No service worker, no
-     session, no GumApi.
+     session, no AyniNet.
     ===========================================================================
     -->
     <script src="/nayive/shared/i18n.js"></script>
     <script src="/nayive/shared/ayni/ayni-i18n.js" data-dict="/nayive/shared/i18n/" data-langs="es en pt fr de"></script>
+    <script src="/nayive/shared/ayni/ayni-util.js"></script>
     <title>Nayive</title>
     <link rel="icon" type="image/png" href="/nayive/icons/icon-192.png">
     <link rel="stylesheet" href="/nayive/shared/ayni/ayni-base.css">
@@ -38,10 +39,26 @@
     <link rel="stylesheet" href="/nayive/shared/ayni/ayni-pickers.css">
     <link rel="stylesheet" href="/nayive/shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="/nayive/shared/theme.css">
+    <link rel="stylesheet" href="/nayive/shared/ayni/ayni-share.css">
+    <link rel="stylesheet" href="/nayive/shared/ayni/ayni-pwa.css">
+    <link rel="stylesheet" href="/nayive/shared/ayni/ayni-locker.css">
+    <link rel="stylesheet" href="/nayive/shared/ayni/ayni-status.css">
+    <link rel="stylesheet" href="/nayive/shared/ayni/ayni-shell.css">
     <link rel="stylesheet" href="/nayive/shared/app.css">
+    <link rel="stylesheet" href="/nayive/shared/ayni/ayni-doc.css">
+    <link rel="stylesheet" href="/nayive/shared/ayni/ayni-media.css">
+    <link rel="stylesheet" href="/nayive/shared/ayni/ayni-image.css">
+    <link rel="stylesheet" href="/nayive/shared/ayni/ayni-map.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="/nayive/shared/ayni/ayni-icons.js" defer></script>
     <script src="/nayive/shared/ayni/ayni-base.js" defer></script>
+    <script src="/nayive/shared/ayni/ayni-icons-more.js" defer></script>
+    <script src="/nayive/shared/ayni/ayni-shell.js" defer></script>
+    <script src="/nayive/shared/ayni/ayni-status.js" defer></script>
+    <script src="/nayive/shared/ayni/ayni-share.js" defer></script>
+    <script src="/nayive/shared/ayni/ayni-upload.js" defer></script>
+    <script src="/nayive/shared/ayni/ayni-pwa.js" defer></script>
+    <script src="/nayive/shared/ayni/ayni-boot.js" defer></script>
     <script src="/nayive/shared/ayni/ayni-buttons.js" defer></script>
     <script src="/nayive/shared/ayni/ayni-toasts.js" defer></script>
     <script src="/nayive/shared/ayni/ayni-dialogs.js" defer></script>
@@ -60,7 +77,7 @@
     <link rel="stylesheet" href="/nayive/trips/lib/maplibre-gl_v5.24.0/maplibre-gl.css">
     <script src="/nayive/trips/lib/maplibre-gl_v5.24.0/maplibre-gl.js" defer></script>
     <script src="/nayive/trips/lib/maplibre-gl-leaflet_v0.1.4/leaflet-maplibre-gl.js" defer></script>
-    <script src="/nayive/shared/basemap.js" defer></script>
+    <script src="/nayive/shared/ayni/ayni-map.js" defer></script>
     <!-- NayiveUI: translations, icons - and basemap.js reads Ayni.i18n.lang(). -->
     <script src="/nayive/shared/ui.js" defer></script>
     <!-- The map, drawn as a trip's Journey map is. -->
@@ -127,7 +144,7 @@
     </header>
 
     <div class="empty-state" id="msg" hidden>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 0 1 4 8"/><line x1="8" y1="12" x2="12" y2="12"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+        <span class="icon" data-icon="link-off"></span>
         <p class="empty-title" id="msgText"></p>
     </div>
 
@@ -169,7 +186,7 @@
     const TOKEN = match ? match[ 1 ] : "";
     const API   = "/api/public/" + TOKEN;
 
-    const NOTE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+    const NOTE_SVG = Ayni.icon( 'note' );
 
     const $  = function ( sel ) { return document.querySelector( sel ); };
     const T  = function ( key ) { return Ayni.t( key ); };
@@ -256,7 +273,7 @@
             if( ! place ) return;
             now.place = place;
             renderNow();
-            if( nowMarker ) nowMarker.setTooltipContent( NayiveUI.escapeHtml( nowText() ) );
+            if( nowMarker ) nowMarker.setTooltipContent( Ayni.esc( nowText() ) );
         } );
     }
 
@@ -340,7 +357,7 @@
             wheel:   false,
             padding: 30,
             pin:     function ( pin, s ) { pin.on( "click", function () { openViewer( s.first ); } ); },
-            nowTip:  NayiveUI.escapeHtml( nowText() )
+            nowTip:  Ayni.esc( nowText() )
         } );
         if( ! r ) { box.hidden = true; return; }
         nowMarker = r.now;

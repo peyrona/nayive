@@ -18,7 +18,7 @@
 // Nothing here happens on a phone: no keyboard, and a title there is also
 // the ⋮ menu's label and the help card's name, so the hints come off too.
 
-const IS_MAC = NayiveUI.isMac;
+const IS_MAC = Ayni.isMac;
 
 // "Ctrl+F" on a PC, "⌘F" on a Mac (Ayni.keyLabel: the modifier NAMES
 // translated - Strg in German - the Mac glyphs the same in every language).
@@ -34,7 +34,7 @@ const SHORTCUTS = [
     { el: 'uploadBtn',    label: () => Ayni.keyLabel( 'Ctrl+U' ), match: () => false }
 ];
 
-// Shortcut hints on the tooltips (NayiveUI.keyHints). updateToolbarState
+// Shortcut hints on the tooltips (Ayni.keyHints). updateToolbarState
 // rewrites some of these titles ("Descargar selección") on every selection
 // change and calls this right after.
-function applyKeyHints() { NayiveUI.keyHints( SHORTCUTS, isPhone() ); }
+function applyKeyHints() { Ayni.keyHints( SHORTCUTS, isPhone() ); }

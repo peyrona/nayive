@@ -184,7 +184,7 @@ func (s *Server) apiWhoami(w http.ResponseWriter, r *http.Request) {
 	if remembered {
 		w.Header().Set("Set-Cookie", sessionCookieHeader(tokenFrom(r), ttl, true, r.TLS != nil))
 	}
-	// Who this browser belongs to, for shared/store.js (store_owner.go) - set
+	// Who this browser belongs to, for shared/ayni/ayni-store.js (store_owner.go) - set
 	// here too so a session from before that cookie existed gets it, and an
 	// admin rename puts the new name in it.
 	w.Header().Add("Set-Cookie", whoCookieHeader(sess.Role, sess.User, ttl, remembered, r.TLS != nil))

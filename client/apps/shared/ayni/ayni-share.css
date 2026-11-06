@@ -1,0 +1,84 @@
+/* Ayni library 0.2.0, share: the look of Ayni.share. Plain CSS, no build step, evergreen browsers 2024+. Optional: load it after ayni-lists.css. */
+
+/* Who already has it: one row per person, with a round × to take it back. */
+.share-have
+{
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 12px 0;
+}
+.share-row
+{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 6px 6px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--card);
+}
+.share-drop
+{
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: none;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+.share-drop:hover  { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+.share-drop svg    { width: 16px; height: 16px; }
+.share-drop[disabled] { opacity: 0.5; cursor: default; }
+
+/* Who else could have it: an Ayni pick list (ul.lb), the names in three
+ * columns, the check square in front of each. A name too wide for its column
+ * ends in "..." (full name in the tooltip). */
+.share-pick
+{
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-content: start;
+    gap: 2px;
+    max-height: 44vh;
+    margin: 12px 0 4px;
+}
+.share-pick [role="option"]      { min-width: 0; padding-top: 8px; padding-bottom: 8px; }
+.share-pick [role="option"] span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* "May add files" - one tick under the people list. Deliberately not
+   inside the .share-pick box: it is a property of the share, not of a person. */
+.share-add
+{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 2px 0;
+    font-size: 0.86rem;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+.share-add input:not([role="switch"]) { flex: 0 0 auto; width: auto; margin: 0; }
+.share-add > .switch { margin-left: auto; }   /* an on / off row: the text, then the switch */
+/* "Everybody": the on / off row above the names (it greys them out). */
+.share-all { margin: 12px 2px 0; }
+
+/* The sheet's sections: "Anyone with the link", on top, and
+   the people. Each has a heading and a note; the divider goes only BETWEEN two
+   of them, so a sheet with just the people gets none. */
+.share-sect + .share-sect { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+.share-head { margin: 0 0 4px; font-size: 0.9rem; font-weight: 600; color: var(--text); }
+.share-note { margin: 0 0 10px; font-size: 0.8rem; line-height: 1.4; color: var(--text-dim); }
+
+/* The public link: a plain .share-row with .share-drop buttons; only the
+   long URL has to give way. The row keeps its height while the link is still
+   being made and has no buttons yet. */
+.share-link-url  { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.86rem; }
+.share-link .share-row { gap: 2px; min-height: 46px; }

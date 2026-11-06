@@ -119,7 +119,7 @@ function actionList() { return [
     { id: 'subfolder', label: T( 'passwords.newSubfolder' ), icon: 'folder-plus', rank: 9, hideOff: true, group: 2, when: oneFolder,
       run: function( ids ) { openFolderSheet( null, ids[ 0 ] ); } },
     // Never a bare ⌫ (Drive's rule): ⌘⌫ on a Mac, Del elsewhere.
-    { id: 'delete', label: T( 'ui.delete' ), icon: 'trash', key: NayiveUI.isMac ? [ 'Del', 'Ctrl+Backspace' ] : 'Del', rank: 1, group: 3, danger: true,
+    { id: 'delete', label: T( 'ui.delete' ), icon: 'trash', key: Ayni.isMac ? [ 'Del', 'Ctrl+Backspace' ] : 'Del', rank: 1, group: 3, danger: true,
       run: deleteNodes }
 ]; }
 
@@ -230,7 +230,7 @@ function wireSecrets()
         {
             const input = $( b.dataset.copyField );
             if( ! input.value ) return;
-            if( input.id === 'itUser' ) NayiveUI.copyText( input.value ).then( function() { Ayni.toast( 'ok', T( 'passwords.userCopied' ) ); }, function() {} );
+            if( input.id === 'itUser' ) Ayni.copyText( input.value ).then( function() { Ayni.toast( 'ok', T( 'passwords.userCopied' ) ); }, function() {} );
             else copySecret( input.value, input.id === 'itPass' ? 'passwords.passCopied' : 'passwords.secretCopied' );
         } );
     } );

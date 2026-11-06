@@ -1,4 +1,4 @@
-// ds-listapps-calendar-merge.mjs - Calendar's merge on a 412 (shared/ical.js
+// ds-listapps-calendar-merge.mjs - Calendar's merge on a 412 (shared/ayni/formats/ical.js
 // mergeIcs), under Node with the real ical.js. Edits are made through the
 // app's own model (icsToCalendar -> change the defs -> calendarToIcs), with a
 // fixed clock for DTSTAMP, as calendar/index.html makes them.

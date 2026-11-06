@@ -322,11 +322,8 @@ function copyLink( id )
 {
     const b = node( id );
     if( ! b ) return;
-    const done = function() { Ayni.toast( 'ok', T( 'bookmarks.linkCopied' ) ); };
-    if( navigator.clipboard && navigator.clipboard.writeText )
-        navigator.clipboard.writeText( b.url ).then( done, function() { Ayni.toast( "info", b.url ); } );
-    else
-        Ayni.toast( "info", b.url );
+    Ayni.copyText( b.url ).then( function() { Ayni.toast( 'ok', T( 'bookmarks.linkCopied' ) ); },
+                                 function() { Ayni.toast( "info", b.url ); } );
 }
 
 function openLink( id )

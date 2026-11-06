@@ -1,5 +1,5 @@
 /*
- * tiling.test.mjs - the desktop's window-sizing maths (client/apps/desktop/tiling.js)
+ * tiling.test.mjs - the desktop's window-sizing maths (client/apps/shared/ayni/ayni-tiling.js)
  * on its own, no browser: node tools/desktop-test/tiling.test.mjs
  */
 import fs from "node:fs";
@@ -8,10 +8,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname( fileURLToPath( import.meta.url ) );
-const src  = fs.readFileSync( path.join( here, "../../client/apps/desktop/tiling.js" ), "utf8" );
+const src  = fs.readFileSync( path.join( here, "../../client/apps/shared/ayni/ayni-tiling.js" ), "utf8" );
 const ctx  = { window: {} };
 vm.runInNewContext( src, ctx );
-const T = ctx.window.NayiveTiling;
+const T = ctx.window.AyniTiling;
 
 let fails = 0, passes = 0;
 function check( name, ok, info )

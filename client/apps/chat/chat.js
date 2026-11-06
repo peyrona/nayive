@@ -40,7 +40,7 @@
         initResizer( rz, side );
         C.buildList( side );
         C.buildMain( main );
-        if( NayiveUI.applySyncDots ) NayiveUI.applySyncDots( root );
+        if( Ayni.plug.draw ) Ayni.plug.draw( root );
         if( S.mode === "owner" && NayiveUI.applyHomeLinks ) NayiveUI.applyHomeLinks( root );
         C.setConn( "loading" );
 

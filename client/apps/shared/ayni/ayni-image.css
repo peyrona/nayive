@@ -1,0 +1,193 @@
+/* Ayni library 0.2.0: the image editor. Plain CSS, no build step, evergreen browsers 2024+. Optional: load it after ayni-base.css. */
+
+/* -----------------------------------------------------------------------------
+ * IMAGE EDITOR CHROME  (.editor-backdrop > .editor-bar / .editor-canvas /
+ *                        .editor-comment)  -  Image (which Drive and Photos open) and Chat
+ *
+ * The frame around the photo editor (ayni-image-editor.js), which the apps
+ * load on first use.
+ * It is a FIXED DARK surface in both schemes - literal colours on purpose, never
+ * the theme tokens: you judge a photo against a neutral dark ground, the same
+ * reason Drive's lightbox is always dark. That is the one place in the app where
+ * a hex colour is the right answer.
+ *
+ * Chat opens it over its own screens, so it sets a `z-index` on .editor-backdrop
+ * (170). Image uses only .editor-canvas + .editor-comment, under its own header.
+ * ---------------------------------------------------------------------------*/
+.editor-backdrop
+{
+    position: fixed;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    background: #1e1e1e;
+}
+.editor-backdrop.open { display: flex; }
+/* A computer's own camera (AyniPhoto.camera): the live view, the shutter under it. */
+.camera-view { z-index: 160; }
+.camera-view .editor-canvas { display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.camera-view video { max-width: 100%; max-height: 100%; object-fit: contain; background: #000; }
+.camera-view .cam-bar { flex: 0 0 auto; display: flex; justify-content: center; padding: 14px 0 calc(18px + env(safe-area-inset-bottom)); background: #151515; }
+
+.editor-bar
+{
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 44px;
+    padding: 0 8px 0 14px;
+    background: #151515;
+    border-bottom: 1px solid #000;
+}
+.editor-title
+{
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.9);
+}
+.editor-actions { flex: 0 0 auto; display: flex; gap: 6px; }
+/* Its buttons are Ayni's glass .btn.on-media. */
+.editor-canvas     { flex: 1 1 auto; min-height: 0; position: relative; }
+
+/* A free-text note for the picture, saved into the comments sidecar together
+   with the image. No label - the placeholder explains it. */
+.editor-comment
+{
+    flex: 0 0 auto;
+    resize: none;
+    border: none;
+    border-top: 1px solid #000;
+    outline: none;
+    padding: 8px 14px;
+    font: inherit;
+    font-size: var(--field-fs);
+    line-height: 1.4;
+    color: #fff;
+    background: #151515;
+}
+.editor-comment::placeholder { color: rgba(255, 255, 255, 0.4); }
+
+/* The editor itself (ayni-image-editor.js) fills the .editor-canvas: the
+   tools (.ie-tools, only when the app's header keeps no place for them - Chat),
+   a tool's options (.ie-opts) and, under them, the picture (.ie-main, with the
+   zoom box over its corner). It is a dark island in both schemes:
+   it sets the colour tokens the shared controls read (.btn, the
+   range), so they are the standard ones, on dark. */
+.ie
+{
+    color-scheme: dark;
+    --bg:         #151515;
+    --card2:      #2A2B2F;
+    --line:       #45464C;
+    --text:       #F2F2F3;
+    --text-dim:   #C9CBD1;
+    --text-faint: #8A8D96;
+    --accent:     #1F80B1;
+    --on-accent:  #FFFFFF;
+    --track:      #4A4B50;
+
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    color: var(--text);
+}
+.ie-main  { position: relative; flex: 1 1 auto; min-height: 0; }
+/* The scroll bars move the picture; the drawing (.ie-stage) stays put over
+   the visible part and Fabric draws what is under it. */
+.ie-view
+{
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+    touch-action: none;
+    overscroll-behavior: contain;
+}
+.ie-view.is-hand     { cursor: grab; }
+.ie-view.is-panning  { cursor: grabbing; }
+.ie-sizer            { position: relative; }
+.ie-stage            { position: sticky; left: 0; top: 0; overflow: hidden; }
+
+/* Hand · zoom out · % · zoom in · fit · 1:1 - over the picture's corner. */
+.ie-zoom
+{
+    position: absolute;
+    right: 22px;
+    bottom: 22px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: var(--radius-pill);
+    background: rgba(0, 0, 0, 0.62);
+}
+.ie-zoom-pct { min-width: 46px; text-align: center; font-size: 0.78rem; font-variant-numeric: tabular-nums; color: var(--text); }
+.ie-one span { font-size: 0.72rem; font-weight: 700; letter-spacing: -0.02em; }
+
+/* Its bars sit at the top, as every toolbar; groups of .tb-group, the line
+   between them the header's own (see HEADER). */
+.ie-bar
+{
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: safe center;
+    gap: 2px;
+    padding: 6px 10px;
+    overflow-x: auto;
+    border-bottom: 1px solid #000;
+}
+.ie-bar[hidden]      { display: none; }
+.ie-tools            { background: var(--bg); }
+.ie-opts             { min-height: 50px; background: #1A1A1A; }
+/* Adjust's slider drops under its pills when the row is short; Crop's ×
+   and ✓ never do - its pills scroll sideways instead. */
+.ie-opts:has(> .ie-range) { flex-wrap: wrap; row-gap: 6px; }
+.ie-pills            { flex: 0 1 auto; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.ie-pills .btn       { flex: 0 0 auto; }
+@media (max-width: 640px)
+{
+    .ie-pills .btn   { padding-inline: 10px; }
+}
+.ie-range            { display: flex; align-items: center; gap: 10px; width: min(320px, 70vw); margin-left: 10px; }
+.ie-val              { flex: 0 0 auto; min-width: 34px; text-align: right; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+/* Resize: width × height px and %, the standard inputs, sized to their digits. */
+.ie-size             { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--text-dim); }
+.ie-size .spin      { flex: 0 0 auto; }
+.ie-size .spin:has( [data-ie=size-pct] ) { margin-left: 8px; }
+
+/* The crop box: a corner sizes it, an edge too (only free), inside moves it;
+   the picture outside it goes dark. Chat's own crop (before a photo goes) is
+   the same box, with corners only. */
+.crop-box       { position: absolute; box-sizing: border-box; border: 2px solid #fff; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55); cursor: move; touch-action: none; }
+.crop-box span  { position: absolute; width: 44px; height: 44px; }
+.crop-box span::after { content: ""; position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4); }
+.crop-box .nw   { left: -22px;  top: -22px;    cursor: nwse-resize; }
+.crop-box .ne   { right: -22px; top: -22px;    cursor: nesw-resize; }
+.crop-box .sw   { left: -22px;  bottom: -22px; cursor: nesw-resize; }
+.crop-box .se   { right: -22px; bottom: -22px; cursor: nwse-resize; }
+.crop-box .n,
+.crop-box .s    { left: 50%; margin-left: -22px; cursor: ns-resize; }
+.crop-box .e,
+.crop-box .w    { top: 50%; margin-top: -22px; cursor: ew-resize; }
+.crop-box .n    { top: -22px; }
+.crop-box .s    { bottom: -22px; }
+.crop-box .e    { right: -22px; }
+.crop-box .w    { left: -22px; }
+.crop-box :is(.n, .s, .e, .w)::after { width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 3px; }
+/* The editor's box: the thirds, to frame by; no edges with a fixed ratio;
+   the hand on - the picture moves, the box does not. */
+.ie-crop
+{
+    background:
+        linear-gradient(to right, transparent calc(33.333% - 0.5px), rgba(255, 255, 255, 0.45) 0 calc(33.333% + 0.5px), transparent 0 calc(66.667% - 0.5px), rgba(255, 255, 255, 0.45) 0 calc(66.667% + 0.5px), transparent 0),
+        linear-gradient(to bottom, transparent calc(33.333% - 0.5px), rgba(255, 255, 255, 0.45) 0 calc(33.333% + 0.5px), transparent 0 calc(66.667% - 0.5px), rgba(255, 255, 255, 0.45) 0 calc(66.667% + 0.5px), transparent 0);
+}
+.ie-crop.fixed :is(.n, .s, .e, .w) { display: none; }
+.ie-crop.is-off                    { pointer-events: none; }
+.ie-crop.is-off span               { display: none; }

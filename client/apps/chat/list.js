@@ -119,11 +119,11 @@
     function setConn( state )
     {
         var dot = document.getElementById( "syncIndicator" );
-        if( dot && NayiveUI.applySyncState ) NayiveUI.applySyncState( dot, state, { tapHint: false } );
+        if( dot && Ayni.plug.set ) Ayni.plug.set( dot, state, { tapHint: false } );
     }
     C.setConn = setConn;
 
-    function sleep( ms ) { return new Promise( function ( ok ) { setTimeout( ok, ms ); } ); }
+    var sleep = Ayni.sleep;
 
     // One loop per world: this page's own, and every other home I read.
     C.startLoop = function ()
@@ -907,7 +907,7 @@
     C.copyText = function ( text )
     {
         var done = function () { C.toast( "ok", "chat.copied" ); };
-        NayiveUI.copyText( text ).then( done, done );
+        Ayni.copyText( text ).then( done, done );
     };
 
     // The QR code of a link (lib/qrcode, owner page only). Null without it.

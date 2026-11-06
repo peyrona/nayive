@@ -19,7 +19,7 @@
  *               (/api/files?file=)  copy (the trips page fills it with just the active
  *                                 trip's files) only when the network fails or is slow
  *               /api/*          -> passed straight through; the app and
- *                                 shared/store.js own the data path, never cached.
+ *                                 shared/ayni/ayni-store.js own the data path, never cached.
  *
  * The PRECACHE_SHELL / PRECACHE_REST lists and CACHE_VERSION between the
  * @generated markers are written by tools/build-precache - run it before
@@ -30,7 +30,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-eead07f249f3";
+var CACHE_VERSION = "nayive-49434811d0c8";
 /* @end */
 
 /* @generated:precache */
@@ -76,7 +76,6 @@ var PRECACHE_SHELL = [
     "chat/index.html",
     "chat/info.js",
     "chat/list.js",
-    "chat/marks.js",
     "chat/media.js",
     "chat/push-notice.js",
     "chat/watch.js",
@@ -85,7 +84,6 @@ var PRECACHE_SHELL = [
     "contact/index.html",
     "contact/manifest.json",
     "desktop/index.html",
-    "desktop/tiling.js",
     "device.html",
     "drive/actions.js",
     "drive/advsearch.js",
@@ -192,64 +190,88 @@ var PRECACHE_SHELL = [
     "shared/app.css",
     "shared/ayni/ayni-base.css",
     "shared/ayni/ayni-base.js",
+    "shared/ayni/ayni-boot.js",
     "shared/ayni/ayni-buttons.css",
     "shared/ayni/ayni-buttons.js",
+    "shared/ayni/ayni-calview.css",
+    "shared/ayni/ayni-compose.css",
+    "shared/ayni/ayni-compose.js",
+    "shared/ayni/ayni-crypt.js",
+    "shared/ayni/ayni-desk-rule.js",
+    "shared/ayni/ayni-deskpage.css",
+    "shared/ayni/ayni-deskpage.js",
+    "shared/ayni/ayni-desktop.css",
     "shared/ayni/ayni-dialogs.css",
     "shared/ayni/ayni-dialogs.js",
+    "shared/ayni/ayni-doc.css",
+    "shared/ayni/ayni-doc.js",
     "shared/ayni/ayni-fields.css",
     "shared/ayni/ayni-fields.js",
     "shared/ayni/ayni-help.css",
     "shared/ayni/ayni-help.js",
     "shared/ayni/ayni-i18n.js",
+    "shared/ayni/ayni-icons-more.js",
     "shared/ayni/ayni-icons.js",
-    "shared/ayni/ayni-lists.css",
-    "shared/ayni/ayni-lists.js",
-    "shared/ayni/ayni-menus.css",
-    "shared/ayni/ayni-menus.js",
-    "shared/ayni/ayni-pickers.css",
-    "shared/ayni/ayni-pickers.js",
-    "shared/ayni/ayni-desktop.css",
+    "shared/ayni/ayni-image-editor.js",
+    "shared/ayni/ayni-image.css",
     "shared/ayni/ayni-layout.css",
     "shared/ayni/ayni-layout.js",
+    "shared/ayni/ayni-lists.css",
+    "shared/ayni/ayni-lists.js",
+    "shared/ayni/ayni-locker.css",
+    "shared/ayni/ayni-locker.js",
+    "shared/ayni/ayni-map.css",
+    "shared/ayni/ayni-map.js",
+    "shared/ayni/ayni-media.css",
+    "shared/ayni/ayni-media.js",
+    "shared/ayni/ayni-menus.css",
+    "shared/ayni/ayni-menus.js",
+    "shared/ayni/ayni-menutable.js",
+    "shared/ayni/ayni-net.js",
+    "shared/ayni/ayni-photo.js",
+    "shared/ayni/ayni-pickers.css",
+    "shared/ayni/ayni-pickers.js",
+    "shared/ayni/ayni-playon.js",
+    "shared/ayni/ayni-pwa.css",
+    "shared/ayni/ayni-pwa.js",
+    "shared/ayni/ayni-schemes.css",
+    "shared/ayni/ayni-schemes.js",
     "shared/ayni/ayni-search.css",
     "shared/ayni/ayni-search.js",
+    "shared/ayni/ayni-share.css",
+    "shared/ayni/ayni-share.js",
+    "shared/ayni/ayni-shell.css",
+    "shared/ayni/ayni-shell.js",
+    "shared/ayni/ayni-status.css",
+    "shared/ayni/ayni-status.js",
+    "shared/ayni/ayni-store.js",
+    "shared/ayni/ayni-tiling.js",
     "shared/ayni/ayni-toasts.css",
     "shared/ayni/ayni-toasts.js",
+    "shared/ayni/ayni-upload.js",
+    "shared/ayni/ayni-util.js",
+    "shared/ayni/formats/ical.js",
+    "shared/ayni/formats/lib/ical_v2.2.1.esm.min.js",
+    "shared/ayni/formats/vcard.js",
     "shared/ayni/i18n/de.json",
     "shared/ayni/i18n/en.json",
     "shared/ayni/i18n/es.json",
     "shared/ayni/i18n/fr.json",
     "shared/ayni/i18n/pt.json",
     "shared/ayni/tz-geo.json",
-    "shared/basemap.js",
-    "shared/crypt.js",
-    "shared/desk-rule.js",
-    "shared/fx.js",
-    "shared/gum-api.js",
     "shared/i18n.js",
     "shared/i18n/de.json",
     "shared/i18n/en.json",
     "shared/i18n/es.json",
     "shared/i18n/fr.json",
     "shared/i18n/pt.json",
-    "shared/ical.js",
-    "shared/image-editor.js",
     "shared/locker.js",
-    "shared/lockers/clock.js",
     "shared/lockers/culture-settings.js",
     "shared/lockers/culture.js",
-    "shared/lockers/life.js",
-    "shared/lockers/matrix.js",
     "shared/lockers/science.js",
     "shared/media.js",
-    "shared/menubar.js",
-    "shared/office.js",
-    "shared/photo.js",
-    "shared/play-on.js",
-    "shared/store.js",
     "shared/theme.css",
     "shared/ui.js",
-    "shared/vcard.js",
     "split/icons/icon-192.png",
     "split/icons/icon-512.png",
     "split/index.html",
@@ -318,7 +340,6 @@ var PRECACHE_REST = [
     "passwords/lib/argon2id_v1.0.1/simd.wasm",
     "passwords/lib/eff-large-words.txt",
     "shared/lib/fabric_v7.4.0.min.js",
-    "shared/lib/ical_v2.2.1.esm.min.js",
     "shared/lib/luxon_v3.7.2.min.js",
     "shared/lib/rrule_v2.8.1.min.js",
     "trips/lib/leaflet_v1.9.4/images/layers-2x.png",
@@ -720,9 +741,9 @@ async function swText( req, key )
 // answers only when the network fails: no connection, a gateway's 5xx, or no
 // answer within TRIP_WAIT_MS (an airport's Wi-Fi - the boarding pass must
 // open at the gate). It says what it is (X-Nayive-Copy: offline):
-// shared/store.js reads it as "offline", not as the file's current version.
+// shared/ayni/ayni-store.js reads it as "offline", not as the file's current version.
 // Not a trip document: the network alone, and a failure stays a failure (a
-// rejected fetch), which is what shared/store.js reads as "offline" too.
+// rejected fetch), which is what shared/ayni/ayni-store.js reads as "offline" too.
 var TRIP_WAIT_MS = 4000;
 
 async function tripDocOrNetwork( req )

@@ -1,4 +1,4 @@
-/* Ayni library 0.1.0, buttons family: round buttons, toggles, the second action, busy and disabled buttons, switches,
+/* Ayni library 0.2.0, buttons family: round buttons, toggles, the second action, busy and disabled buttons, switches,
    check boxes and radio buttons. Plain JavaScript, no build step, evergreen browsers 2024+. Load it after ayni-base.js:
      <script src="ayni-base.js" defer></script>
      <script src="ayni-buttons.js" defer></script>

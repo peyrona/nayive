@@ -24,7 +24,7 @@ const RECENT_N = 15;
 
 let data    = emptyData();
 let loaded  = false;    // false = we do not know what is in the file: never write it
-let store   = null;     // NayiveStore, set by boot.js
+let store   = null;     // AyniStore, set by boot.js
 
 function T( k )     { return Ayni.t( k ); }
 function TF( k, v ) { return Ayni.tf( k, v ); }
@@ -574,12 +574,7 @@ function dupKey( url )
 }
 
 // A hue from the domain, like Contacts' initials.
-function hueOf( s )
-{
-    let h = 0;
-    for( let i = 0; i < s.length; i++ ) h = ( h * 31 + s.charCodeAt( i ) ) >>> 0;
-    return h % 360;
-}
+const hueOf = Ayni.hueOf;
 
 function initialOf( n )
 {

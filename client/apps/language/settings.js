@@ -18,7 +18,7 @@ import { LANGS } from './languages.js';
 export const SCHEMA_VERSION = 1;
 
 export const DEFAULT_PREFERENCES = {
-    source: 'es', target: 'fr', localMode: true, maxTextLength: 5000,
+    source: 'es', target: 'fr', localMode: false, maxTextLength: 5000,
     remoteNoticeShown: [], downloadsAllowed: []
 };
 

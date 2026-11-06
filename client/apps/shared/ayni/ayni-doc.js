@@ -1,13 +1,13 @@
-// SEALED - a user-data write path (docs/sealed-crud.md): announce a change, keep it minimal, then `node tools/data-safety-test/run.mjs` must be ALL GREEN.
+// DATA: this code decides what reaches the disk. Change it with care, and run your data tests.
 /*
  * office.js - what the three document editors (Calc, Text, Write) share.
  *
- * Classic script, one global `NayiveOffice`. Load it deferred, after ui.js and
- * crypt.js (it calls NayiveUI and NayiveCrypt at run time, never while it is
+ * Classic script, one global `AyniDoc`. Load it deferred, after ui.js and
+ * crypt.js (it calls the appUI and AyniCrypt at run time, never while it is
  * parsed):
- *     <script src="../shared/ui.js" defer></script>
- *     <script src="../shared/crypt.js" defer></script>
- *     <script src="../shared/office.js" defer></script>
+ *     <script src="../the app" defer></script>
+ *     <script src="../shared/ayni/ayni-crypt.js" defer></script>
+ *     <script src="../ayni-doc.js" defer></script>
  *
  * Each editor used to carry its own copy of the same plumbing: the path
  * helpers, the "Abrir documento" folder browser, the click-to-rename file
@@ -29,9 +29,11 @@
 {
     "use strict";
 
+    var NAMES = window.AyniNames || {}, KEYS = NAMES.key || "ayni-", COOKIE = NAMES.cookie || "ayni_", API = NAMES.api || "/api/", HDR = NAMES.header || "X-Ayni-";
+
     function byId( id ) { return document.getElementById( id ); }
-    function t( k )     { return window.NayiveUI ? Ayni.t( k ) : k; }
-    function tf( k, v ) { return window.NayiveUI ? Ayni.tf( k, v ) : k; }
+    function t( k )     { return window.Ayni ? Ayni.t( k ) : k; }
+    function tf( k, v ) { return window.Ayni ? Ayni.tf( k, v ) : k; }
 
     // ?new=1 - opened by New in a window of its own (newDocument): start blank,
     // never with a closed tab's draft. Dropped from the address at once, before
@@ -53,20 +55,11 @@
     //------------------------------------------------------------------------//
     // PATHS
 
-    function baseName( path ) { return NayiveUI.baseName( path ); }
-
-    function dirName( path )
-    {
-        var p = String( path || "" ), i = p.lastIndexOf( "/" );
-        return i > 0 ? p.slice( 0, i ) : "";
-    }
-
-    // "hoja.XLSX" -> "xlsx" (no dot, lower case); "" when there is none.
-    function extOf( path ) { return NayiveUI.extOf( path ); }
+    var baseName = Ayni.baseName, dirName = Ayni.dirOf, extOf = Ayni.extOf;
 
     function byBaseName( a, b )
     {
-        return baseName( a.path ).localeCompare( baseName( b.path ), window.NayiveUI ? Ayni.i18n.lang() : undefined );
+        return baseName( a.path ).localeCompare( baseName( b.path ), window.Ayni ? Ayni.i18n.lang() : undefined );
     }
 
     // The label shown in the top bar for an opened file: its path minus the
@@ -112,11 +105,11 @@
         catch ( _ ) { res = { body: null, source: "unknown" }; }
 
         if( res.source === "cache" )
-            Ayni.toast( ( navigator.onLine ? "info" : "warn" ), t( navigator.onLine ? "ui.recovered" : "ui.localCopy" ) );
+            Ayni.toast( ( navigator.onLine ? "info" : "warn" ), t( navigator.onLine ? "ayni.recovered" : "ayni.localCopy" ) );
         else if( res.source === "empty" )
-            Ayni.toast( "err", t( opts.emptyKey || "ui.fileGone" ) );
+            Ayni.toast( "err", t( opts.emptyKey || "ayni.fileGone" ) );
         else if( res.source === "unauth" || res.source === "unknown" )
-            Ayni.toast( "err", t( opts.failKey || "ui.openFailed" ) );
+            Ayni.toast( "err", t( opts.failKey || "ayni.openFailed" ) );
 
         return { body: res.body != null ? res.body : null, source: res.source };
     }
@@ -124,7 +117,7 @@
     //------------------------------------------------------------------------//
     // THE FILE LABEL  -  click the name in the top bar to rename in place
     //
-    //   var label = NayiveOffice.fileLabel( { onCommit: async function ( raw ) { ... } } );
+    //   var label = AyniDoc.fileLabel( { onCommit: async function ( raw ) { ... } } );
     //   label.set( "carta.docx" );   label.get();
     //
     // Enter commits (through blur), Escape cancels. `onCommit( raw )` receives
@@ -146,7 +139,7 @@
 
         function start()
         {
-            input.value = ( label.textContent === t( "ui.untitled" ) ) ? "" : label.textContent;
+            input.value = ( label.textContent === t( "ayni.untitled" ) ) ? "" : label.textContent;
             label.style.display = "none";
             input.style.display = "";
             input.focus();
@@ -183,16 +176,16 @@
     //
     // A document's FIRST save must ask for a folder, not silently drop the file
     // in the folder the app happens to have been opened in. The row is a button
-    // that looks like a field control and opens NayiveUI.pickFolder:
+    // that looks like a field control and opens AyniDocHost.pickFolder:
     //
     //   <div class="field">
-    //     <label data-i18n="ui.folder"></label>
+    //     <label data-i18n="ayni.folder"></label>
     //     <button type="button" id="saveDirBtn" class="folder-pick">
     //       <span class="fp-btn-ic"></span><span id="saveDirName" class="fp-btn-nm"></span>
     //     </button>
     //   </div>
     //
-    //   var dirField = NayiveOffice.folderField();   // + { btnId, nameId, dir }
+    //   var dirField = AyniDoc.folderField();   // + { btnId, nameId, dir }
     //   dirField.set( APP_DIR );   dirField.get();   // -> "files/Cartas"
     //
     // Paired CSS: the .folder-pick rule in the OFFICE CHROME block of app.css.
@@ -202,7 +195,7 @@
     function dirLabel( dir )
     {
         var parts = String( dir || "files" ).split( "/" );
-        parts[ 0 ] = t( "ui.filesRoot" );
+        parts[ 0 ] = t( "ayni.filesRoot" );
         return parts.join( " / " );
     }
 
@@ -226,7 +219,7 @@
         // closes only the innermost dialog (Ayni).
         btn.addEventListener( "click", function ()
         {
-            NayiveUI.pickFolder( { allowRoot: true, rootLabel: t( "ui.filesRoot" ) } )
+            AyniDocHost.pickFolder( { allowRoot: true, rootLabel: t( "ayni.filesRoot" ) } )
                     .then( function ( picked ) { if( picked ) set( picked ); } );
         } );
 
@@ -244,7 +237,7 @@
     // as newer documents push it out.
     function recentFiles( app )
     {
-        var KEY = "nayive-" + app + "-recent";
+        var KEY = KEYS + "" + app + "-recent";
         var MAX = 10;
 
         function list()
@@ -278,7 +271,7 @@
     //------------------------------------------------------------------------//
     // "ABRIR DOCUMENTO"  -  a plain folder browser over the user's files/
     //
-    //   var browser = NayiveOffice.openBrowser( {
+    //   var browser = AyniDoc.openBrowser( {
     //       backdropId: "openBackdrop",          // the dialog to open
     //       root:       OPEN_ROOT,               // never walks above this
     //       canOpen:    function ( path ) {...}, // which files are listed
@@ -343,7 +336,7 @@
                 var b = document.createElement( "button" );
                 b.type        = "button";
                 b.className   = "crumb-seg";
-                b.textContent = i === 0 ? t( "ui.filesRoot" ) : seg;
+                b.textContent = i === 0 ? t( "ayni.filesRoot" ) : seg;
                 b.disabled    = ( path === cwd );
                 b.addEventListener( "click", function () { cwd = path; render(); } );
                 crumb.appendChild( b );
@@ -357,13 +350,13 @@
             } );
 
             list.innerHTML = "";
-            list.appendChild( note( t( "ui.loading" ) ) );
+            list.appendChild( note( t( "ayni.loading" ) ) );
 
             var entries;
             try
             {
                 if( ! navigator.onLine ) throw new Error( "offline" );
-                var res = await GumApi.listDir( cwd );
+                var res = await AyniNet.listDir( cwd );
                 entries = ( res && res.nodes ) || [];
             }
             catch ( _ )
@@ -390,7 +383,7 @@
                 list.appendChild( li );
             } );
             if( ! folders.length && ! files.length )
-                list.appendChild( note( t( opts.emptyKey || "ui.nothingHere" ) ) );
+                list.appendChild( note( t( opts.emptyKey || "ayni.nothingHere" ) ) );
         }
 
         // No network: the folder tree cannot be walked. List what the offline
@@ -407,11 +400,11 @@
             }
             if( ! paths )
             {
-                crumb.textContent = t( "ui.offlineBrowse" );
+                crumb.textContent = t( "ayni.offlineBrowse" );
                 return;
             }
 
-            crumb.textContent = t( "ui.offlineLocalOnly" );
+            crumb.textContent = t( "ayni.offlineLocalOnly" );
             paths.sort( function ( a, b ) { return a.localeCompare( b, Ayni.i18n.lang() ); } );
             paths.forEach( function ( p )
             {
@@ -420,7 +413,7 @@
                 li.addEventListener( "click", function () { pick( p ); } );
                 list.appendChild( li );
             } );
-            if( ! paths.length ) list.appendChild( note( t( opts.emptyKey || "ui.nothingHere" ) ) );
+            if( ! paths.length ) list.appendChild( note( t( opts.emptyKey || "ayni.nothingHere" ) ) );
         }
 
         // "Recientes", above the folder listing. Hidden while there is none.
@@ -443,7 +436,7 @@
             btn.type      = "button";
             btn.className = "btn text bordered sm";
             btn.setAttribute( "aria-haspopup", "menu" );
-            btn.textContent = t( "ui.recent" );
+            btn.textContent = t( "ayni.recent" );
             btn.addEventListener( "click", function ( e )
             {
                 Ayni.menuAt( paths.map( function ( p ) { return { label: baseName( p ), why: p, run: function () { pick( p ); } }; } ),
@@ -605,9 +598,9 @@
     //------------------------------------------------------------------------//
     // AUTOSAVE  -  the one save pipeline of Calc, Text and Write
     //
-    //   var saver = NayiveOffice.autosave( {
+    //   var saver = AyniDoc.autosave( {
     //       app:      "calc",                                // key of this app's device draft
-    //       store:    store,                                 // a NayiveStore made with { conflicts: true }
+    //       store:    store,                                 // a AyniStore made with { conflicts: true }
     //       path:     function () { return currentPath; },   // null = untitled
     //       readOnly: function () { return readOnly; },      // someone else's file: never written
     //       name:     function () { return pendingName; },   // the name a draft is kept under
@@ -646,7 +639,7 @@
     //     with no edit or 60 min at most; what a closed tab left goes up at the
     //     next boot. Its .bak is made on the server, by whoever sends it.
     //   - a document with nowhere to save to (untitled, or someone else's) goes
-    //     to a DRAFT on this device only - IndexedDB "nayive-drafts", one per
+    //     to a DRAFT on this device only - IndexedDB KEYS + "drafts", one per
     //     app and tab (ONE DRAFT PER TAB below), never the store's own
     //     database (bumping its version would block on another open tab and
     //     silently turn the store online-only). The
@@ -663,7 +656,7 @@
     //     waiting or running, one that was refused, or edits the app holds
     //     back (Calc's loss gate - those are in the device draft meanwhile)
     //   - a desktop window asks its page before it closes (settle, and the
-    //     session's window.nayiveBeforeClose): what waits is kept first
+    //     session's window.ayniBeforeClose): what waits is kept first
     //
     // Paired CSS: .saved-at in the OFFICE CHROME block of app.css.
 
@@ -677,28 +670,28 @@
 
     // ---- the device draft store ---------------------------------------------
 
-    // "nayive-drafts" (GumApi.draftsDb). draftTx: fn( objectStore ) -> request;
+    // KEYS + "drafts" (AyniNet.draftsDb). draftTx: fn( objectStore ) -> request;
     // resolves with its result, null on any failure.
-    var drafts = GumApi.draftsDb();
+    var drafts = AyniNet.draftsDb();
 
     function draftTx( mode, fn ) { return drafts.tx( mode, fn ); }
 
     // The account this page belongs to, as store.js read it at load ("" = unknown).
-    function draftWho() { return ( window.NayiveStore && NayiveStore.me ) || ""; }
+    function draftWho() { return ( window.AyniStore && AyniStore.me ) || ""; }
 
     // THE PAGE'S OWNER IS STILL THE ONE SIGNED IN (L5, office #14). The
     // editor's side calls - the .bak's read and write, rename, the clean
-    // copy's delete and purge - go through GumApi with whatever session the
+    // copy's delete and purge - go through AyniNet with whatever session the
     // browser holds NOW. A tab left open after another account signed in on
     // this browser would read THAT account's .bak, write into its home and
-    // delete its file. So they run only while the "nayive_who" cookie still
+    // delete its file. So they run only while the "ayni_who" cookie still
     // names this page's owner. Unknown either way (no cookie): as before.
-    // (NayiveWho.now: shared/i18n.js WHOSE PAGE, loaded first.)
+    // (AyniWho.now: the app WHOSE PAGE, loaded first.)
     function ownerHere()
     {
         var me = draftWho();
         if( ! me ) return true;
-        var now = NayiveWho.now();
+        var now = AyniWho.now();
         return ! now || now === me;
     }
 
@@ -726,7 +719,7 @@
     // this browser: a do-nothing release, and no tab is ever known to be alive.
     function holdLock( name )
     {
-        return GumApi.tryLock( name, true ).catch( function () { return function () {}; } );
+        return AyniNet.tryLock( name, true ).catch( function () { return function () {}; } );
     }
 
     // id: the one to try first (null = a fresh one).
@@ -738,12 +731,12 @@
         for( var i = 0; i < 3 && ! release; i++ )
         {
             if( ! id ) id = newTabId();
-            release = await holdLock( "nayive-draft:" + app + ":" + id );
+            release = await holdLock( KEYS + "draft:" + app + ":" + id );
             if( ! release ) id = null;
         }
         if( ! id ) id = newTabId();
 
-        try { sessionStorage.setItem( "nayive-draft-tab:" + app, id ); } catch ( e ) {}
+        try { sessionStorage.setItem( KEYS + "draft-tab:" + app, id ); } catch ( e ) {}
         return { key: app + ":" + id, release: release || function () {} };
     }
 
@@ -752,7 +745,7 @@
         if( ! draftKeys[ app ] )
         {
             var id = null;
-            try { id = sessionStorage.getItem( "nayive-draft-tab:" + app ); } catch ( e ) {}
+            try { id = sessionStorage.getItem( KEYS + "draft-tab:" + app ); } catch ( e ) {}
             draftKeys[ app ] = claimDraftKey( app, id );
         }
         return draftKeys[ app ].then( function ( t ) { return t.key; } );
@@ -776,13 +769,13 @@
     // The draft keys whose tab is open now; null = not known (no Web Locks).
     function liveDraftKeys()
     {
-        return GumApi.heldLocks( "nayive-draft:" ).catch( function () { return null; } );
+        return AyniNet.heldLocks( KEYS + "draft:" ).catch( function () { return null; } );
     }
 
     function hhmm( at )
     {
         var d = new Date( at );
-        return NayiveUI.pad2( d.getHours() ) + ":" + NayiveUI.pad2( d.getMinutes() );
+        return Ayni.dates.pad( d.getHours() ) + ":" + Ayni.dates.pad( d.getMinutes() );
     }
 
     // ---- the saver ----------------------------------------------------------
@@ -800,7 +793,7 @@
         var savingAs = false;       // inside saveTo(): no conflict dialog on top of "Guardar como"
         var pristine = null;        // imported bytes: the .bak when the server has no copy yet
         var backedUp = new Set();   // paths already copied to .bak/ this session
-        var lock     = null;        // set = this document is written encrypted (shared/crypt.js)
+        var lock     = null;        // set = this document is written encrypted (shared/ayni/ayni-crypt.js)
         var held     = false;       // the app will not have it written now (Calc's loss gate): its edits go to the device draft
         var gen      = 0;           // which document is on screen (opened() counts them)
         var draftOk  = true;        // the last device draft of THIS document was written
@@ -850,7 +843,7 @@
             if( ! el ) return;
             if( ! el.firstChild ) el.innerHTML = Ayni.icon( "save" );
             el.dataset.state = state;
-            el.title = title || t( state === "saving" ? "write.savingTip" : state === "saved" ? "ui.saved" : "write.unsavedTip" );
+            el.title = title || t( state === "saving" ? "write.savingTip" : state === "saved" ? "ayni.saved" : "write.unsavedTip" );
             el.setAttribute( "aria-label", el.title );
         }
 
@@ -862,7 +855,7 @@
         function stamp( key, at, note )
         {
             var text = key ? tf( key, { time: hhmm( at ) } ) : "";
-            disk( key ? ( key === "write.savedAt" ? "saved" : key === "write.parkedAt" ? "here" : key === "ui.draftAt" ? "draft" : "unsaved" ) : ( dirty ? "unsaved" : "saved" ),
+            disk( key ? ( key === "write.savedAt" ? "saved" : key === "write.parkedAt" ? "here" : key === "ayni.draftAt" ? "draft" : "unsaved" ) : ( dirty ? "unsaved" : "saved" ),
                   note ? text + " - " + note : text );
         }
 
@@ -994,7 +987,7 @@
 
         function sealed( body )
         {
-            return lock ? NayiveCrypt.seal( lock, body ) : Promise.resolve( body );
+            return lock ? AyniCrypt.seal( lock, body ) : Promise.resolve( body );
         }
 
         // Put a password on the open document. The .bak beside it is the copy
@@ -1023,11 +1016,11 @@
 
             try
             {
-                var prev = await GumApi.readFileBytes( bakPath( p ) );
-                if( prev && prev.length && NayiveCrypt.looksLocked( prev ) )
+                var prev = await AyniNet.readFileBytes( bakPath( p ) );
+                if( prev && prev.length && AyniCrypt.looksLocked( prev ) )
                 {
-                    var plain = await NayiveCrypt.unseal( old, prev );
-                    await GumApi.writeFileBytes( bakPath( p ),
+                    var plain = await AyniCrypt.unseal( old, prev );
+                    await AyniNet.writeFileBytes( bakPath( p ),
                         typeof plain === "string" ? new TextEncoder().encode( plain ) : plain );
                 }
             }
@@ -1077,7 +1070,7 @@
                         failed = true;
                         sync( "error" );
                         disk( "unsaved" );
-                        Ayni.toast( "err", t( lock ? "lock.failed" : ( o.failKey || "ui.saveFailed" ) ) );
+                        Ayni.toast( "err", t( lock ? "lock.failed" : ( o.failKey || "ayni.saveFailed" ) ) );
                     }
                     return null;
                 }
@@ -1118,13 +1111,13 @@
                 // vanished before it was sent: neither is "Saved" (K2, K5).
                 failed = res.ok === false && ! res.offline && ! res.needsAuth && ! res.otherAccount;
                 if( failed ) disk( "unsaved" );
-                if( res.forbidden ) Ayni.toast( "err", t( "ui.saveFailed" ) );
+                if( res.forbidden ) Ayni.toast( "err", t( "ayni.saveFailed" ) );
                 if( res.pageOnly )
                 {
                     // The store goes on trying (and says so in a toast): the
                     // screen says it here too, until it is up (onSaved below).
                     onlyHere = true;
-                    stamp( "write.pageOnlyAt", Date.now(), t( "ui.store.pageOnly" ) );
+                    stamp( "write.pageOnlyAt", Date.now(), t( "ayni.store.pageOnly" ) );
                 }
                 else if( res.unknown )
                 {
@@ -1180,7 +1173,7 @@
                     return ok;
                 } );
                 if( g === gen ) draftOk = !! put;
-                if( put && mine === seq ) stamp( "ui.draftAt", at, t( "ui.draftNote" ) );
+                if( put && mine === seq ) stamp( "ayni.draftAt", at, t( "ayni.draftNote" ) );
                 return null;
             }
             finally { done(); }
@@ -1207,7 +1200,7 @@
                 // failure is thrown to the catch below: no .bak now, and the
                 // next save tries again - not "nothing to keep" for the session.
                 var prev = null;
-                try { prev = await GumApi.readFileBytes( p ); }
+                try { prev = await AyniNet.readFileBytes( p ); }
                 catch ( e )
                 {
                     if( ! e || e.status !== 404 ) throw e;
@@ -1218,15 +1211,15 @@
                 // The server copy of a locked document is already sealed;
                 // imported bytes never are. Either way what lands in .bak/ is
                 // what the document itself is, so a reader needs the same key.
-                if( prev && prev.length && lock && ! NayiveCrypt.looksLocked( prev ) )
-                    prev = await NayiveCrypt.seal( lock, prev );
+                if( prev && prev.length && lock && ! AyniCrypt.looksLocked( prev ) )
+                    prev = await AyniCrypt.seal( lock, prev );
 
                 if( prev && prev.length )
                 {
                     // The document can sit in any folder ("Guardar como" asks for
                     // one), so make its .bak/ first. Already there = a harmless refusal.
-                    try { await GumApi.makeDir( dirName( p ) || "files", ".bak" ); } catch ( e ) {}
-                    await GumApi.writeFileBytes( bakPath( p ),
+                    try { await AyniNet.makeDir( dirName( p ) || "files", ".bak" ); } catch ( e ) {}
+                    await AyniNet.writeFileBytes( bakPath( p ),
                         typeof prev === "string" ? new TextEncoder().encode( prev ) : prev );
                 }
 
@@ -1252,10 +1245,10 @@
             if( fresh.has( p ) && o.taken ) { o.taken( p ); return; }
 
             var copy = await Ayni.confirm( {
-                title:   t( "ui.conflictTitle" ),
-                body:    tf( why === "dismissed" ? "ui.park.dismissedBody" : "ui.conflictBody", { name: baseName( p ) } ),
-                confirm: t( "ui.conflictCopy" ),
-                cancel:  t( "ui.notNow" ) } );
+                title:   t( "ayni.conflictTitle" ),
+                body:    tf( why === "dismissed" ? "ayni.park.dismissedBody" : "ayni.conflictBody", { name: baseName( p ) } ),
+                confirm: t( "ayni.conflictCopy" ),
+                cancel:  t( "ayni.notNow" ) } );
 
             if( copy && p === path() ) o.saveAs( true );
         }
@@ -1433,7 +1426,7 @@
             drafted = true;
             dirty   = true;
             sync( "unsaved" );
-            stamp( "ui.draftAt", d.at, t( "ui.draftNote" ) );
+            stamp( "ayni.draftAt", d.at, t( "ayni.draftNote" ) );
         }
 
         // Only THIS document's own draft: a slot that still holds another
@@ -1522,9 +1515,9 @@
     //------------------------------------------------------------------------//
     // THE OPEN DOCUMENT  -  what Calc, Text and Write do with "the file"
     //
-    //   var session = NayiveOffice.session( {
+    //   var session = AyniDoc.session( {
     //       app:         "calc",                  // the device draft's key
-    //       store:       store,                   // a NayiveStore made with { conflicts: true }
+    //       store:       store,                   // a AyniStore made with { conflicts: true }
     //       appDir:      APP_DIR,                 // where "Guardar como" starts
     //       openRoot:    OPEN_ROOT,               // the label is relative to these two
     //       defaultName: "hoja.xlsx",             // "Guardar como" for a never-named document
@@ -1564,7 +1557,7 @@
     //   session.catchUp()                      keys typed while something was awaited: saved now (Write: a template)
     //   session.dropDraft()                    the untitled document was thrown away (Write: a template over it)
     //   session.openDialog()                   the "Abrir documento" sheet
-    //   session.recentItems()                  "Recientes" as menu entries (shared/menubar.js)
+    //   session.recentItems()                  "Recientes" as menu entries (shared/ayni/ayni-menutable.js)
     //   session.openPicked( path )             open a file the user picked (see openExts)
     //   session.locked()                       it is written encrypted
     //   session.keepUntitled()                 the untitled document about to go, for an Undo (null = none)
@@ -1573,7 +1566,7 @@
     //   session.offerUndo( msg, back )         an Undo toast the next key or edit makes final (Write: the dictionary)
     //
     // THE PADLOCK (#lockBtn, optional): a password on the open document. The
-    // key is derived once and kept in this tab only (shared/crypt.js), so a
+    // key is derived once and kept in this tab only (shared/ayni/ayni-crypt.js), so a
     // reload asks for it again and a forgotten one cannot be recovered by
     // anybody - us included. Everything read back (a file, an import, the
     // device draft, the .bak) is sniffed for the seal and asks by itself.
@@ -1605,7 +1598,7 @@
     // they are written once, here. Built when the session is made - before
     // anything looks them up - right after #app, in that order. Their buttons
     // get their look here (applySheetButtons) and their words from
-    // shared/i18n.js as they land, so they come out the same whenever the page
+    // the app as they land, so they come out the same whenever the page
     // makes its session. A page that wrote its own (tools/locktest) keeps them.
     function buildSheets( o )
     {
@@ -1631,11 +1624,11 @@
                 '</div>',
             '</dialog>',
             '<dialog id="saveAsBackdrop" class="panel">',
-                head( "ui.saveAs" ),
+                head( "ayni.saveAs" ),
                 '<div class="body">',
-                    field( "saveName", "ui.fileName", '<input class="input" type="text" id="saveName" data-i18n-attr="placeholder:' + o.nameKey + '" autocomplete="off">' ),
+                    field( "saveName", "ayni.fileName", '<input class="input" type="text" id="saveName" data-i18n-attr="placeholder:' + o.nameKey + '" autocomplete="off">' ),
                     o.formats ? field( "saveFormat", o.formatKey, '<div class="picker" id="saveFormat"></div>' ) : "",
-                    field( "saveDirBtn", "ui.folder", '<button type="button" id="saveDirBtn" class="folder-pick" data-i18n-attr="data-tip:ui.fp.pickFolder">\n' +
+                    field( "saveDirBtn", "ayni.folder", '<button type="button" id="saveDirBtn" class="folder-pick" data-i18n-attr="data-tip:ui.fp.pickFolder">\n' +
                                                       '<span class="fp-btn-ic"></span><span id="saveDirName" class="fp-btn-nm"></span>\n</button>' ),
                 '</div>',
                 '<footer>',
@@ -1645,7 +1638,7 @@
                 '</footer>',
             '</dialog>',
             '<dialog id="openBackdrop" class="panel">',
-                head( "ui.openDoc", "openCloseBtn" ),
+                head( "ayni.openDoc", "openCloseBtn" ),
                 '<div class="body">',
                     '<div id="openRecent" hidden></div>',          // the last ten documents opened, above the folder listing
                     '<div id="openCrumb" class="open-crumb"></div>',
@@ -1654,7 +1647,7 @@
             '</dialog>'
         ].filter( Boolean ).join( "\n" );
 
-        NayiveUI.applySheetButtons( box );
+        AyniDocHost.applySheetButtons( box );
 
         var app   = byId( "app" );
         var host  = app ? app.parentNode : document.body;
@@ -1677,7 +1670,7 @@
         var askTimer = null;
         var wipeAfter = null;    // "Copia limpia": the plain path to wipe after the save-as
 
-        var sync     = NayiveUI.syncIndicator( { titles: OFFICE_TITLES } );
+        var sync     = Ayni.plug.listener( { titles: OFFICE_TITLES } );
         var label    = fileLabel( { onCommit: rename } );
         var dirField = folderField( { dir: o.appDir } );
         var renaming = null;        // the old name while a rename is on its way: no save goes to it
@@ -1695,7 +1688,7 @@
                 if( renaming && p === renaming ) { renameHeld = true; return true; }
                 return !! ( o.blocked && o.blocked( p ) );
             },
-            failKey:  "ui.saveFailed",
+            failKey:  "ayni.saveFailed",
             setSync:  sync,
             saveAs:   openSaveAs,
             taken:    askTaken
@@ -1748,7 +1741,7 @@
         {
             var list = recent.list();
 
-            if( ! list.length ) return [ { key: "ui.noRecent", enabled: function () { return false; } } ];
+            if( ! list.length ) return [ { key: "ayni.noRecent", enabled: function () { return false; } } ];
 
             return list.map( function ( p )
             {
@@ -1763,7 +1756,7 @@
         function notOwner()
         {
             if( ownerHere() ) return false;
-            Ayni.toast( "warn", t( "ui.otherAccountHere" ) );
+            Ayni.toast( "warn", t( "ayni.otherAccountHere" ) );
             return true;
         }
 
@@ -1773,23 +1766,23 @@
         // True = open it.
         async function othersWaiting( p )
         {
-            if( NayiveUI.isShared( p ) || ! NayiveStore.pendingElsewhere ) return true;
+            if( AyniDocHost.isShared( p ) || ! AyniStore.pendingElsewhere ) return true;
             var list = [];
-            try { list = await NayiveStore.pendingElsewhere( p ); } catch ( e ) {}
+            try { list = await AyniStore.pendingElsewhere( p ); } catch ( e ) {}
             if( ! list.length ) return true;
-            var r = await Ayni.confirm( { title:     t( "ui.park.title" ),
-                                              body:      tf( "ui.park.body", { name: baseName( p ), list: NayiveStore.pendingText( list ) } ),
-                                              confirm:   t( "ui.park.open" ),
-                                              other:     t( "ui.park.forget" ),
+            var r = await Ayni.confirm( { title:     t( "ayni.park.title" ),
+                                              body:      tf( "ayni.park.body", { name: baseName( p ), list: AyniStore.pendingText( list ) } ),
+                                              confirm:   t( "ayni.park.open" ),
+                                              other:     t( "ayni.park.forget" ),
                                               otherIcon: "eye-off" } );
-            if( r === true || r === "other" ) try { await NayiveStore.dismissPending( p ); } catch ( e ) {}
+            if( r === true || r === "other" ) try { await AyniStore.dismissPending( p ); } catch ( e ) {}
             return r === true;
         }
 
         function showLabel()
         {
             label.set( path ? relLabel( path, o.appDir, o.openRoot ) + ( readOnly ? t( "text.readOnlySuffix" ) : "" )
-                            : ( pending || t( "ui.untitled" ) ) );
+                            : ( pending || t( "ayni.untitled" ) ) );
             showLock();
             showAddress();
             if( o.onChange ) o.onChange();
@@ -1799,7 +1792,7 @@
         // desktop brings back after a close opens it again - not only one Drive
         // opened. An untitled one has none: its device draft comes back instead.
         // ?import= is done with once anything is on screen. The desktop hears
-        // of it by "nayive-address" (it reads the address only on a load).
+        // of it by "ayni-address" (it reads the address only on a load).
         function showAddress()
         {
             try
@@ -1810,7 +1803,7 @@
                 var to = u.pathname + u.search + u.hash;
                 if( to === location.pathname + location.search + location.hash ) return;
                 history.replaceState( history.state, "", to );
-                window.dispatchEvent( new Event( "nayive-address" ) );
+                window.dispatchEvent( new Event( "ayni-address" ) );
             }
             catch ( e ) {}
         }
@@ -1835,12 +1828,12 @@
         // ---- a locked document ------------------------------------------------
         //
         // Anything read back - a file, an import, the device draft, the .bak -
-        // may be sealed (shared/crypt.js). Ask for its password and open it;
+        // may be sealed (shared/ayni/ayni-crypt.js). Ask for its password and open it;
         // null = the user gave up, and the caller must NOT put it on screen.
 
         async function unsealAsk( body, name )
         {
-            if( ! NayiveCrypt.available() ) { toast( "warn", "lock.noCrypto" ); return null; }
+            if( ! AyniCrypt.available() ) { toast( "warn", "lock.noCrypto" ); return null; }
 
             for( ;; )
             {
@@ -1851,8 +1844,8 @@
 
                 try
                 {
-                    var lock = await NayiveCrypt.lockFrom( pw, body );
-                    return { lock: lock, body: await NayiveCrypt.unseal( lock, body ) };
+                    var lock = await AyniCrypt.lockFrom( pw, body );
+                    return { lock: lock, body: await AyniCrypt.unseal( lock, body ) };
                 }
                 catch ( e )
                 {
@@ -1869,7 +1862,7 @@
         {
             settleUndo();                      // another document: the Undo of the last one is over
             path     = p;
-            readOnly = NayiveUI.isShared( p );
+            readOnly = AyniDocHost.isShared( p );
             pending  = null;
             saver.opened();
             showLabel();
@@ -1905,7 +1898,7 @@
             var body = res.body;
             var got  = null;
 
-            if( NayiveCrypt.looksLocked( body ) )
+            if( AyniCrypt.looksLocked( body ) )
             {
                 got = await unsealAsk( body, baseName( p ) );
                 if( ! got ) return false;                // no password, no document
@@ -1927,7 +1920,7 @@
             catch ( e )
             {
                 sync( "error" );
-                if( ! ( e && e.said ) ) toast( "err", "ui.openFailed" );   // said: the app told why already (Text: not text)
+                if( ! ( e && e.said ) ) toast( "err", "ayni.openFailed" );   // said: the app told why already (Text: not text)
                 return false;
             }
 
@@ -1945,7 +1938,7 @@
         {
             var got = null;
 
-            if( NayiveCrypt.looksLocked( bytes ) )
+            if( AyniCrypt.looksLocked( bytes ) )
             {
                 got = await unsealAsk( bytes, name );
                 if( ! got ) return false;
@@ -1981,13 +1974,13 @@
         async function importPath( p )
         {
             var bytes;
-            try { bytes = await GumApi.readFileBytes( p ); }
+            try { bytes = await AyniNet.readFileBytes( p ); }
             catch ( e ) { toast( "err", "text.importFailed" ); return false; }
 
             return importBytes( bytes, baseName( p ) );
         }
 
-        // The ?file= this page was opened on, until boot() has opened it (nayiveDocPath).
+        // The ?file= this page was opened on, until boot() has opened it (ayniDocPath).
         var booting = new URLSearchParams( location.search ).get( "file" );
 
         async function boot()
@@ -2011,7 +2004,7 @@
                 {
                     var lock = null;
 
-                    if( NayiveCrypt.looksLocked( d.body ) )
+                    if( AyniCrypt.looksLocked( d.body ) )
                     {
                         var got = await takeLockedDraft( d );
                         if( got ) { d = { name: d.name, body: got.body, at: d.at }; lock = got.lock; }
@@ -2026,7 +2019,7 @@
                         askSoon();                     // still nowhere to save it: ask for a name
                         return;
                     }
-                    catch ( e ) { toast( "err", "ui.openFailed" ); }
+                    catch ( e ) { toast( "err", "ayni.openFailed" ); }
                 }
             }
 
@@ -2041,12 +2034,12 @@
         {
             for( ;; )
             {
-                var got = await unsealAsk( d.body, d.name || t( "ui.untitled" ) );
+                var got = await unsealAsk( d.body, d.name || t( "ayni.untitled" ) );
                 if( got ) return got;
 
                 var drop = await Ayni.confirm( { title:   t( "lock.draftTitle" ),
                                                      body:    t( "lock.draftBody" ),
-                                                     confirm: t( "ui.discardDoc" ),
+                                                     confirm: t( "ayni.discardDoc" ),
                                                      cancel:  t( "lock.tryAgain" ),
                                                      danger:  true } );
                 if( drop ) { await saver.dropDraft( true ); return null; }
@@ -2060,9 +2053,8 @@
         // app - or the browser blocked it: New swaps there, as below.
         function newWindow()
         {
-            var framed = window.self !== window.top;
-            if( framed ? ! NayiveUI.windowed
-                       : NayiveUI.isStandalone() || ! matchMedia( "(hover: hover) and (pointer: fine)" ).matches ) return false;
+            if( Ayni.frame.embedded ? ! Ayni.frame.windowed
+                       : Ayni.pwa.isStandalone() || ! matchMedia( "(hover: hover) and (pointer: fine)" ).matches ) return false;
 
             var q = new URLSearchParams( location.search ), u = new URLSearchParams();
             if( q.get( "dir" ) ) u.set( "dir", q.get( "dir" ) );      // Write saves where Drive opened it
@@ -2112,7 +2104,7 @@
             if( dropping ) await saver.dropDraft();
 
             try { await o.blank(); }
-            catch ( e ) { toast( "err", "ui.openFailed" ); return false; }
+            catch ( e ) { toast( "err", "ayni.openFailed" ); return false; }
 
             untitled( null );
             o.store.resting();                 // nothing was read or written: settle the plug by hand
@@ -2182,7 +2174,7 @@
                 if( path !== on ) return;              // another document now: leave it be
 
                 try { await o.load( kept.body, kept.name, "draft" ); }
-                catch ( e ) { toast( "err", "ui.openFailed" ); return; }
+                catch ( e ) { toast( "err", "ayni.openFailed" ); return; }
 
                 untitled( kept.name, { dirty: true, pristine: kept.pristine } );
                 // Open / Import left its draft in this tab's slot: that one is
@@ -2323,7 +2315,7 @@
             // needs ANOTHER name: say so, keep the sheet open, write nothing.
             if( p === path && o.store.isBlocked && o.store.isBlocked( p ) === "bad" )
             {
-                Ayni.toast( "warn", o.sameNameRefused ? o.sameNameRefused( name ) : t( "ui.store.badFile" ) );
+                Ayni.toast( "warn", o.sameNameRefused ? o.sameNameRefused( name ) : t( "ayni.store.badFile" ) );
                 return;
             }
 
@@ -2343,7 +2335,7 @@
                 {
                     var taken = await nameTaken( p );
                     if( taken === true && ! await Ayni.confirm( { title:   t( "drive.nameExistsTitle" ),
-                                                                      body:    tf( "ui.saveAsExists", { name: name } ),
+                                                                      body:    tf( "ayni.saveAsExists", { name: name } ),
                                                                       confirm: t( "drive.replace" ),
                                                                       danger:  true } ) ) return;
                     how = taken === true ? "" : "create";
@@ -2400,7 +2392,7 @@
         {
             try
             {
-                var list = await GumApi.listDir( dirName( p ) );
+                var list = await AyniNet.listDir( dirName( p ) );
                 return ( ( list && list.nodes ) || [] ).some( function ( n ) { return n.path === p && ! Array.isArray( n.nodes ); } );
             }
             catch ( e )
@@ -2419,7 +2411,7 @@
         async function askTaken( p )
         {
             var r = await Ayni.confirm( { title:     t( "drive.nameExistsTitle" ),
-                                              body:      tf( "ui.saveAsAppeared", { name: baseName( p ) } ),
+                                              body:      tf( "ayni.saveAsAppeared", { name: baseName( p ) } ),
                                               confirm:   t( "drive.replace" ),
                                               danger:    true,
                                               other:     t( "drive.keepBoth" ),
@@ -2442,9 +2434,9 @@
         async function freeName( p )
         {
             var dir = dirName( p ), base = baseName( p ), names = new Set();
-            try { names = await GumApi.namesIn( dir ); }
+            try { names = await AyniNet.namesIn( dir ); }
             catch ( e ) {}
-            return dir + "/" + GumApi.uniqueName( base, { has: function ( n ) { return n === base || names.has( n ); } } );
+            return dir + "/" + AyniNet.uniqueName( base, { has: function ( n ) { return n === base || names.has( n ); } } );
         }
 
         // ---- the file label: rename in place ----------------------------------
@@ -2501,7 +2493,7 @@
                     return;
                 }
 
-                await GumApi.rename( path, to );
+                await AyniNet.rename( path, to );
                 // The new name is this page's file from the same version (the
                 // server keeps it across a move): its first save is checked,
                 // never blind (C6). Only now is the old cache entry stale.
@@ -2563,7 +2555,7 @@
             var p    = path;
             var bak  = bakPath( path );
             var prev = null;
-            try { prev = await GumApi.readFileBytes( bak ); } catch ( e ) { prev = null; }
+            try { prev = await AyniNet.readFileBytes( bak ); } catch ( e ) { prev = null; }
             if( ! prev || ! prev.length ) { toast( "warn", "write.noBackupYet" ); return; }
             var raw = prev;                    // the .bak's bytes as they are on the server
 
@@ -2579,13 +2571,13 @@
 
             // A copy sealed with a password, back into a document that has none
             // now: it is written without one (see below) - and the toast says so.
-            var doneKey = NayiveCrypt.looksLocked( prev ) && ! saver.lock() ? "write.restoredNoPassword" : "write.restored";
+            var doneKey = AyniCrypt.looksLocked( prev ) && ! saver.lock() ? "write.restoredNoPassword" : "write.restored";
 
-            var undoable = ! saver.lock() && ! NayiveCrypt.looksLocked( prev ) &&
+            var undoable = ! saver.lock() && ! AyniCrypt.looksLocked( prev ) &&
                            ! ( o.store.isBlocked && o.store.isBlocked( p ) ) && ( ! o.lossless || o.lossless() );
 
             if( ! undoable && ! await Ayni.confirm( { title:   t( "write.restore" ),
-                                                          body:    tf( "write.restoreBody", { size: NayiveUI.fmtBytes( prev.length ) } ),
+                                                          body:    tf( "write.restoreBody", { size: Ayni.fmtBytes( prev.length ) } ),
                                                           confirm: t( "write.restore" ) } ) ) return;
 
             // The copy coming back was sealed by the key of its day: the one we
@@ -2598,11 +2590,11 @@
             // padlock's key, as before the restore. Taking the old key on, as
             // this did, silently switched the document to a password the user
             // typed once - and a forgotten password is a lost document.
-            if( NayiveCrypt.looksLocked( prev ) )
+            if( AyniCrypt.looksLocked( prev ) )
             {
                 var plain = null;
                 if( saver.lock() )
-                    try { plain = await NayiveCrypt.unseal( saver.lock(), prev ); } catch ( e ) { plain = null; }
+                    try { plain = await AyniCrypt.unseal( saver.lock(), prev ); } catch ( e ) { plain = null; }
 
                 if( plain === null )
                 {
@@ -2627,8 +2619,8 @@
             {
                 // The copy going up takes the document's own state with it.
                 var now = await o.encode( path );
-                var up  = saver.lock() ? await NayiveCrypt.seal( saver.lock(), now ) : now;
-                await GumApi.writeFileBytes( bak, typeof up === "string" ? new TextEncoder().encode( up ) : up );
+                var up  = saver.lock() ? await AyniCrypt.seal( saver.lock(), now ) : now;
+                await AyniNet.writeFileBytes( bak, typeof up === "string" ? new TextEncoder().encode( up ) : up );
                 // The session's first save must not take a NEW .bak over it: it
                 // holds what was on screen - the way back (Undo, or Restore again).
                 saver.bakTaken( p );
@@ -2647,7 +2639,7 @@
                 if( path !== p || notOwner() ) return; // another document now / another account
                 try
                 {
-                    await GumApi.writeFileBytes( bak, bakWas );
+                    await AyniNet.writeFileBytes( bak, bakWas );
                     saver.bakTaken( p );        // or the next save's first-time copy would write over it
                     await o.load( now, p, "restore" );
                     saver.edited();
@@ -2666,7 +2658,7 @@
         // it is, an orphan the next Calc tab offers. Otherwise nothing is done.
         // Order: .bak first (a failure there changes nothing), then the file
         // through the store - its outbox holds the bytes before the PUT, and its
-        // server time stays right (a GumApi write left it stale: a false 412).
+        // server time stays right (a AyniNet write left it stale: a false 412).
         async function swapFiles( p, bak, raw, plain, undoable, doneKey )
         {
             await saver.settle( CLOSE_WAIT_MS );
@@ -2686,13 +2678,13 @@
             if( saver.dirty() ) { toast( "warn", "write.restoreSaveFirst" ); return; }
 
             var cur;
-            try { cur = await GumApi.readFileBytes( p ); }
+            try { cur = await AyniNet.readFileBytes( p ); }
             catch ( e ) { toast( "err", "write.actionFailed" ); return; }
 
             // Sealed with the document's own password, or none (see restorePrevious).
-            var back = saver.lock() ? await NayiveCrypt.seal( saver.lock(), plain ) : plain;
+            var back = saver.lock() ? await AyniCrypt.seal( saver.lock(), plain ) : plain;
 
-            try { await GumApi.writeFileBytes( bak, cur ); }
+            try { await AyniNet.writeFileBytes( bak, cur ); }
             catch ( e ) { toast( "err", "write.actionFailed" ); return; }
             saver.bakTaken( p );               // never a first-save copy over it: it is the way back
 
@@ -2702,7 +2694,7 @@
                 // Refused: the file still has `cur` - the .bak gets its own
                 // bytes back. Only in this page ("later"): the file may still
                 // become the copy, so the .bak keeps `cur`, the way back.
-                if( ! put ) try { await GumApi.writeFileBytes( bak, raw ); } catch ( e ) {}
+                if( ! put ) try { await AyniNet.writeFileBytes( bak, raw ); } catch ( e ) {}
                 toast( "err", "write.actionFailed" );
                 return;
             }
@@ -2714,7 +2706,7 @@
                 // back - the .bak only once the file has `cur` again, or `cur`
                 // would be nowhere.
                 if( await putFile( p, cur ) === "kept" )
-                    try { await GumApi.writeFileBytes( bak, raw ); } catch ( e2 ) {}
+                    try { await AyniNet.writeFileBytes( bak, raw ); } catch ( e2 ) {}
                 toast( "err", "write.actionFailed" );
                 return;
             }
@@ -2727,13 +2719,13 @@
                 if( path !== p || notOwner() ) return; // another document now / another account
                 try
                 {
-                    if( NayiveCrypt.looksLocked( cur ) ) throw new Error( "sealed" );   // undoable said no key is on either side
-                    await GumApi.writeFileBytes( bak, raw );
+                    if( AyniCrypt.looksLocked( cur ) ) throw new Error( "sealed" );   // undoable said no key is on either side
+                    await AyniNet.writeFileBytes( bak, raw );
                     saver.bakTaken( p );
                     if( await putFile( p, cur ) !== "kept" )
                     {
                         // `cur` is only in memory now: back into the .bak it came from.
-                        try { await GumApi.writeFileBytes( bak, cur ); } catch ( e2 ) {}
+                        try { await AyniNet.writeFileBytes( bak, cur ); } catch ( e2 ) {}
                         throw new Error( "not written" );
                     }
                     await o.load( cur, p, "restore" );
@@ -2775,7 +2767,7 @@
         {
             if( notReady() ) return;
             if( readOnly )                   { toast( "warn", "text.notYours" ); return; }
-            if( ! NayiveCrypt.available() )  { toast( "warn", "lock.noCrypto" ); return; }
+            if( ! AyniCrypt.available() )  { toast( "warn", "lock.noCrypto" ); return; }
 
             if( saver.lock() ) await removeLock();
             else               await addLock();
@@ -2817,7 +2809,7 @@
                                                    verify:  true } );
             if( pw === null ) return;
 
-            try { saver.lockDoc( await NayiveCrypt.newLock( pw ) ); }
+            try { saver.lockDoc( await AyniCrypt.newLock( pw ) ); }
             catch ( e ) { toast( "err", "lock.failed" ); return; }
 
             showLock();
@@ -2856,12 +2848,12 @@
                 for( var i = 0; i < paths.length; i++ )
                 {
                     var got = null;
-                    try { got = await GumApi.binPaths( [ paths[ i ] ] ); } catch ( e ) {}
+                    try { got = await AyniNet.binPaths( [ paths[ i ] ] ); } catch ( e ) {}
                     if( got ) ids = ids.concat( got );
                     if( i === 0 ) gone = !! ( got && got.length );
                 }
 
-                if( ids.length ) await GumApi.trashDelete( ids );
+                if( ids.length ) await AyniNet.trashDelete( ids );
                 toast( ( gone ? "ok" : "err" ), gone ? "lock.wiped" : "lock.wipeFailed" );
             }
             catch ( e ) { toast( "err", "lock.wipeFailed" ); }
@@ -2917,7 +2909,7 @@
         // running after CLOSE_WAIT_MS). Never throws: the desktop closes on a throw.
         var CLOSE_WAIT_MS = 10000;
 
-        window.nayiveBeforeClose = async function ()
+        window.ayniBeforeClose = async function ()
         {
             try { if( await saver.settle( CLOSE_WAIT_MS ) ) return true; }
             catch ( e ) {}
@@ -2931,7 +2923,7 @@
         // Which document this window shows, so the desktop opens a second
         // ?file= of it in THIS window, not in another editor that would save
         // over it. While boot() is still opening ?file=, that one.
-        window.nayiveDocPath = function () { return path || booting; };
+        window.ayniDocPath = function () { return path || booting; };
 
         return {
             path:       function () { return path; },
@@ -2960,7 +2952,7 @@
     //------------------------------------------------------------------------//
     // THE APP'S OWN SETTINGS FILE  (data/<app>/config.json)
     //
-    //   var cfg = NayiveOffice.appConfig( "data/write/config.json", "ui.prefsUnread" );
+    //   var cfg = AyniDoc.appConfig( "data/write/config.json", "ayni.prefsUnread" );
     //   ( await cfg.read() ).chrome        cfg.write( { chrome: "menus" } )
     //
     // One read-modify-write JSON object per app, so a key added later is never
@@ -2977,7 +2969,7 @@
 
         async function read()
         {
-            var cfg = await GumApi.readJson( path );
+            var cfg = await AyniNet.readJson( path );
             if( cfg !== null && ( typeof cfg !== "object" || Array.isArray( cfg ) ) ) throw new Error( path + " is not an object" );
             return cfg || {};
         }
@@ -2992,7 +2984,7 @@
                 return null;
             }
             Object.assign( cfg, patch );
-            try { await GumApi.writeJson( path, cfg ); } catch ( e ) {}
+            try { await AyniNet.writeJson( path, cfg ); } catch ( e ) {}
             return cfg;
         }
 
@@ -3016,7 +3008,7 @@
             } ) );
     }
 
-    //   NayiveOffice.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
+    //   AyniDoc.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
     //
     // Wires the two hidden buttons and fills the "?" menu (#helpBtn ->
     // #helpMenu) each time it opens. Returns the menu.
@@ -3043,7 +3035,7 @@
     //------------------------------------------------------------------------//
     // KEYBOARD SHORTCUTS  -  Help ▸ "Keyboard shortcuts" in Calc and Write
     //
-    //   NayiveOffice.showShortcuts( [ { text: "Guardar", keys: "Ctrl+S" }, ... ] );
+    //   AyniDoc.showShortcuts( [ { text: "Guardar", keys: "Ctrl+S" }, ... ] );
     //
     // Fills #scList in the page's #scBackdrop sheet - one row per shortcut, its
     // keys on the right - and opens it. Paired CSS: .sc-list / .sc-row in the
@@ -3074,7 +3066,7 @@
     //------------------------------------------------------------------------//
     // STATISTICS  -  Help > "Statistics" in Write, Calc and Text
     //
-    //   NayiveOffice.showStats( [ { text: "Words", value: 812 }, ... ], note );
+    //   AyniDoc.showStats( [ { text: "Words", value: 812 }, ... ], note );
     //
     // Same sheet in the three apps: #statsBackdrop, one #stList row per figure,
     // the number on the right (with the reader's own thousands separators), an
@@ -3277,10 +3269,7 @@
         write: async function( txt ) { try { await navigator.clipboard.writeText( txt ); return true; } catch ( e ) { return false; } }
     };
 
-    window.NayiveOffice = {
-        baseName:       baseName,
-        dirName:        dirName,
-        extOf:          extOf,
+    window.AyniDoc = {
         byBaseName:     byBaseName,
         appDirFromUrl:  appDirFromUrl,
         fileLabel:      fileLabel,

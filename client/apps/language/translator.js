@@ -10,7 +10,7 @@
  * exportConfig() / importConfig() of the documented API are left out
  * (2026-10-28): the admin's settings live on the server, one copy for all.
  *
- * Three additions to the documented API, all optional:
+ * Four additions to the documented API, all optional:
  *   - options.shared: the admin's engines and dictionaries
  *     ({ engines, custom, dictionaries }, from /api/translate/config). They
  *     replace this browser's copy at init(); the copy stays as the offline
@@ -18,6 +18,8 @@
  *   - CallOptions.confirmDownload( { engineId, engineName, source, target, bytes } )
  *     -> Promise<boolean>: asked before an engine downloads a model the
  *     first time for a pair; the answer is remembered (Preferences.downloadsAllowed).
+ *   - CallOptions.beforeRemote( engine ) -> Promise: awaited before the text
+ *     goes to a remote engine, so the page can say so first.
  *   - lookup( word, { allowRemote: true } ): a lookup past Local mode, once.
  */
 
@@ -186,7 +188,7 @@ export class Translator
             let source = req.source, detection = null;
             if( source === 'auto' )
             {
-                detection = await this._detect( req.text, signal, emit, req.allowRemote );
+                detection = await this._detect( req.text, signal, emit, req.allowRemote, false, options.beforeRemote );
                 source = detection.language;
                 if( source === req.target ) throw new TranslationError( 'invalid-input', 'Same language', { field: 'target', detected: source } );
             }
@@ -216,6 +218,7 @@ export class Translator
                             throw new TranslationError( 'unavailable', 'Download declined', { declined: true } );
                         await this._prepare( engine, adapter, source, target, signal, emit );
                     }
+                    if( engine.location === 'remote' && options.beforeRemote ) await options.beforeRemote( engine );
                     emit( 'translating', { engineId: engine.id } );
                     const text = await this._translateWith( engine, adapter, req.text, source, target, signal );
                     this._success( engine );
@@ -354,7 +357,7 @@ export class Translator
         return this._detect( text, options.signal, () => {}, false, true );
     }
 
-    async _detect( text, signal, emit, allowRemote, raw )
+    async _detect( text, signal, emit, allowRemote, raw, beforeRemote )
     {
         emit( 'detecting' );
         const remoteOk = allowRemote || ! this._prefs.localMode;
@@ -368,6 +371,7 @@ export class Translator
         {
             try
             {
+                if( e.location === 'remote' && beforeRemote ) await beforeRemote( e );
                 const r = await this._adapters.get( e.adapter ).detect( { text, options: e.options, signal } );
                 best = { language: r.language, confidence: r.confidence, detectorId: e.id };
                 break;

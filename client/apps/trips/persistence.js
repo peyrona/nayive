@@ -23,7 +23,7 @@ async function loadTrips()
         {
             // Just the data/trips subtree (one call), never the whole
             // account tree - that walked every photo folder too.
-            const tripAppNode = await GumApi.listDirRecursive( 'data/trips' );
+            const tripAppNode = await AyniNet.listDirRecursive( 'data/trips' );
             const tripDirs = (tripAppNode.nodes || []).filter( function( n ) { return Array.isArray( n.nodes ); } );
 
             paths = tripDirs
@@ -175,14 +175,14 @@ async function sharedTripPaths()
         .map( function( g ) { sharedOwners[ g.path ] = g.by; return g.path + '/trip.json'; } );
 }
 
-// TWO DEVICES, ONE TRIP (shared/store.js MERGE). Both saved trip.json from the
+// TWO DEVICES, ONE TRIP (shared/ayni/ayni-store.js MERGE). Both saved trip.json from the
 // same copy: both changes are kept - stages and documents one by one, by id; a
 // stage or document changed on both takes, field by field, the side that changed
 // it, mine when both did; the trip's own fields likewise. null = a side that is
 // not a trip: nothing is merged over it.
 function mergeTrip( path, base, mine, theirs )
 {
-    const S     = NayiveStore;
+    const S     = AyniStore;
     const parse = function( t ) { try { const v = JSON.parse( t ); return v && typeof v === 'object' && ! Array.isArray( v ) ? v : null; } catch( _ ) { return null; } };
     const m = parse( mine ), t = parse( theirs ), b = base == null ? null : parse( base );
     if( ! m || ! t ) return null;
@@ -245,7 +245,7 @@ function onTripMerged( path, body )
 // the draft changed (the sheet is drawn again from it).
 function patchDraft( draft, open, merged )
 {
-    const S      = NayiveStore;
+    const S      = AyniStore;
     const before = JSON.stringify( draft );
 
     Object.keys( merged ).forEach( function( k )
@@ -328,7 +328,7 @@ async function syncDocFiles( folder, newDocs, oldDocs, otherDocs )
         // alone (two lists once shared one, D2): it stays.
         if( f && ! kept.has( f ) && ! others.has( f ) )
         {
-            try { await GumApi.deletePaths( folder + '/' + f ); }
+            try { await AyniNet.deletePaths( folder + '/' + f ); }
             catch( _ ) { /* never uploaded / already gone - not fatal */ }
         }
     }
@@ -342,13 +342,13 @@ async function syncDocFiles( folder, newDocs, oldDocs, otherDocs )
     // And it goes up create-only: a name another device took after that
     // listing answers 412 and the next free one is used, never written over.
     const taken   = new Set( others );
-    for( const n of await GumApi.namesIn( folder ) ) taken.add( n );
+    for( const n of await AyniNet.namesIn( folder ) ) taken.add( n );
     for( const d of newDocs ) if( ! d._pending && docStoredFile( d ) ) taken.add( docStoredFile( d ) );
 
     for( const d of pending )
     {
         const bytes = new Uint8Array( await d._pending.arrayBuffer() );
-        await GumApi.createFresh( folder, function()
+        await AyniNet.createFresh( folder, function()
         {
             if( taken.has( d.file ) ) d.file = uniqueFileName( d.file, [], taken );
             taken.add( d.file );
@@ -383,7 +383,7 @@ const TRIP_DOCS_CACHE = 'nayive-trips-docs';
 
 function pickActiveTrip( list )
 {
-    const today = NayiveUI.todayIso();
+    const today = Ayni.dates.today();
 
     const current = list.find( function( t )
     {
@@ -479,7 +479,7 @@ function setSyncStatus( sState )
     const el = document.getElementById( 'syncIndicator' );
 
     if( el )
-        NayiveUI.applySyncState( el, sState );
+        Ayni.plug.set( el, sState );
 }
 
 // The header is rebuilt on every render, so the indicator is too - which is why the
@@ -492,7 +492,7 @@ function buildSyncIndicator()
     sync.type = 'button';
     sync.className = 'sync-indicator';   // shared/ui.js fills in the plug glyph
     sync.addEventListener( 'click', function() { if( refresher ) refresher.refreshNow(); } );
-    NayiveUI.applySyncState( sync, syncState );
+    Ayni.plug.set( sync, syncState );
     return sync;
 }
 
@@ -524,7 +524,7 @@ function resolveNewTripDirName( sDestination, sStartDate, alsoTaken )
 // has NOW too, and trip.json is made create-only: a name taken in between
 // answers 412 and the next one is tried. (A 412 that is this very claim's
 // first try, landed before a dropped connection made the PUT go again, is a
-// success already: GumApi's "our own first try" finds the same bytes there.)
+// success already: AyniNet's "our own first try" finds the same bytes there.)
 // `bodyFor( dirName )` is what goes in trip.json; the store
 // then takes the file over as usual. Throws when data/trips cannot be read
 // (a 404 is a fresh account: no folder yet) - the trip is then not created.
@@ -533,7 +533,7 @@ async function claimNewTripDir( sDestination, sStartDate, bodyFor )
     const onServer = [];
     try
     {
-        ( await GumApi.namesIn( 'data/trips' ) ).forEach( function( n ) { onServer.push( n ); } );
+        ( await AyniNet.namesIn( 'data/trips' ) ).forEach( function( n ) { onServer.push( n ); } );
     }
     catch( err ) { if( ! err || err.status !== 404 ) throw err; }
 
@@ -546,7 +546,7 @@ async function claimNewTripDir( sDestination, sStartDate, bodyFor )
         // No makeDir first: the PUT makes the folder itself, once its name
         // is found free - a name taken (412) or no connection leaves no
         // empty folder behind.
-        try { await GumApi.createFileBytes( path, bytes ); return dirName; }
+        try { await AyniNet.createFileBytes( path, bytes ); return dirName; }
         catch( err ) { if( ! err || err.status !== 412 || tries >= 50 ) throw err; }
         onServer.push( dirName );
     }

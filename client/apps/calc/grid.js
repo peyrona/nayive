@@ -185,19 +185,19 @@ function cmIcon( body )
 
 const CM_ICONS =
 {
-    row_above       : cmIcon( '<path d="M4 20h16M4 15h16"/><path d="M12 3v7"/><path d="M8.5 6.5 12 3l3.5 3.5"/>' ),
-    row_below       : cmIcon( '<path d="M4 4h16M4 9h16"/><path d="M12 21v-7"/><path d="M8.5 17.5 12 21l3.5-3.5"/>' ),
-    col_left        : cmIcon( '<path d="M20 4v16M15 4v16"/><path d="M3 12h7"/><path d="M6.5 8.5 3 12l3.5 3.5"/>' ),
-    col_right       : cmIcon( '<path d="M4 4v16M9 4v16"/><path d="M21 12h-7"/><path d="M17.5 8.5 21 12l-3.5 3.5"/>' ),
-    remove_row      : cmIcon( '<path d="M3 12h5M16 12h5"/><path d="M9.5 9.5 14.5 14.5M14.5 9.5 9.5 14.5"/>' ),
-    remove_col      : cmIcon( '<path d="M12 3v5M12 16v5"/><path d="M9.5 9.5 14.5 14.5M14.5 9.5 9.5 14.5"/>' ),
-    mergeCells      : cmIcon( '<rect x="3" y="4" width="8" height="7"/><rect x="13" y="4" width="8" height="7"/><rect x="3" y="14" width="18" height="7"/>' ),
-    undo            : cmIcon( '<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12H8"/>' ),
-    redo            : cmIcon( '<path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h6"/>' ),
-    cut             : cmIcon( '<circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/>' ),
-    copy            : cmIcon( '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>' ),
-    commentsAddEdit : cmIcon( '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v6M9 10h6"/>' ),
-    commentsRemove  : cmIcon( '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M9 10h6"/>' )
+    row_above       : cmIcon( '<use href="#i-row-above"/>' ),
+    row_below       : cmIcon( '<use href="#i-row-below"/>' ),
+    col_left        : cmIcon( '<use href="#i-col-left"/>' ),
+    col_right       : cmIcon( '<use href="#i-col-right"/>' ),
+    remove_row      : cmIcon( '<use href="#i-remove-row"/>' ),
+    remove_col      : cmIcon( '<use href="#i-remove-col"/>' ),
+    mergeCells      : cmIcon( '<use href="#i-merge-cells-2"/>' ),
+    undo            : cmIcon( '<use href="#i-undo-2"/>' ),
+    redo            : cmIcon( '<use href="#i-redo-2"/>' ),
+    cut             : cmIcon( '<use href="#i-cut-2"/>' ),
+    copy            : cmIcon( '<use href="#i-copy-3"/>' ),
+    commentsAddEdit : cmIcon( '<use href="#i-comments-add-edit"/>' ),
+    commentsRemove  : cmIcon( '<use href="#i-comments-remove"/>' )
 };
 
 function cmItem( key )

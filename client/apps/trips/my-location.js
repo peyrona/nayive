@@ -22,7 +22,7 @@ function locationSection()
     let loaded  = false;
 
     function isAndroid() { return /android/i.test( navigator.userAgent ); }
-    function isPC()      { return ! NayiveUI.isIOS() && ! isAndroid(); }
+    function isPC()      { return ! Ayni.isIOS() && ! isAndroid(); }
 
     const APPS = [
         {
@@ -32,7 +32,7 @@ function locationSection()
             about: 'trips.loc.overlandAbout',
             how:   'trips.loc.overlandHow',
             store: 'https://apps.apple.com/app/id1292426766',
-            mine:  NayiveUI.isIOS,
+            mine:  Ayni.isIOS,
             // The app reads its whole setup from this link: no typing on the phone.
             setup: function( url ) { return 'overland://setup?url=' + encodeURIComponent( url ) + '&device_id=nayive'; }
         }
@@ -99,9 +99,9 @@ function locationSection()
         text.className   = 'share-link-url';
         text.textContent = url;
         row.appendChild( text );
-        row.appendChild( NayiveUI.rowButton( 'copy', t( 'trips.loc.copy' ), function()
+        row.appendChild( Ayni.share.rowButton( 'copy', t( 'trips.loc.copy' ), function()
         {
-            return NayiveUI.copyText( url ).then( function() { Ayni.toast( 'ok', t( 'share.link.copied' ) ); },
+            return Ayni.copyText( url ).then( function() { Ayni.toast( 'ok', t( 'ayni.share.link.copied' ) ); },
                                                   function() { Ayni.toast( "info", url ); } );
         } ) );
         card.appendChild( row );
@@ -141,9 +141,9 @@ function locationSection()
 
         const how = document.createElement( 'p' );
         how.className   = 'share-note';
-        how.textContent = t( NayiveUI.inAndroidApp() ? 'trips.loc.apkHave' : 'trips.loc.apkHow' );
+        how.textContent = t( Ayni.pwa.inAndroidApp() ? 'trips.loc.apkHave' : 'trips.loc.apkHow' );
         card.appendChild( how );
-        if( NayiveUI.inAndroidApp() ) return card;
+        if( Ayni.pwa.inAndroidApp() ) return card;
 
         const links = document.createElement( 'p' );
         links.className = 'loc-links';

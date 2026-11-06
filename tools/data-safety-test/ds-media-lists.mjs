@@ -59,7 +59,7 @@ ok( ids().includes( "plB" ) && ids().includes( "plD" ) && ( json( LISTS ) || [] 
     "Undo: the phone's D (saved after the delete) stays", json( LISTS ) );
 
 // "Save list" whose write is reported failed (it did land: the answer was
-// lost on the way back - GumApi PUTs with XMLHttpRequest): the sheet stays
+// lost on the way back - AyniNet PUTs with XMLHttpRequest): the sheet stays
 // open with the name typed, and ✓ again saves ONE list, not two.
 await c.evaluate( `( () => { window.__lie = true; const open = XMLHttpRequest.prototype.open, send = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.open = function ( m, u ) { this.__lie = m === 'PUT' && String( u ).indexOf( 'playlists.json' ) !== -1; return open.apply( this, arguments ); };
@@ -85,7 +85,7 @@ await c.evaluate( `( () => { const f = window.fetch;
     window.fetch = function ( u, o ) { if( String( u ).indexOf( 'api.themoviedb.org' ) !== -1 )
         return Promise.resolve( new Response( JSON.stringify( { results: [ { id: 7, poster_path: '/p.jpg', title: 'T' } ] } ), { status: 200 } ) );
         return f.apply( this, arguments ); };
-    GumApi.fetchBinary = () => Promise.reject( new TypeError( 'blocked' ) ); return true; } )()` );
+    AyniNet.fetchBinary = () => Promise.reject( new TypeError( 'blocked' ) ); return true; } )()` );
 await put( POSTERS, { key: "K2", items: { "otra|1999": { tmdb: null } } } );
 await c.evaluate( "fetchPosters().then( () => true )" );
 let po = json( POSTERS );

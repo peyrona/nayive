@@ -12,7 +12,7 @@ import { appFns, loadStore, loadVcard } from "./listapps-fns.mjs";
 const S = loadStore(), V = loadVcard();
 const F = "data/contacts.vcf", META = "data/contacts-meta.json";
 const { mergeBook } = appFns( "client/apps/contact/index.html", [ "mergeBook", "mergeCard?", "cardItems?", "revKey" ], {
-    NayiveStore: S, META_FILE: META, dismissKey: ( a, b ) => [ a, b ].sort().join( " " ), vcfCards: V.cards,
+    AyniStore: S, META_FILE: META, dismissKey: ( a, b ) => [ a, b ].sort().join( " " ), vcfCards: V.cards,
     contentLines: V.contentLines, splitOnce: V.splitOnce, splitOutsideQuotes: V.splitOutsideQuotes,
     decodeValue: V.decodeValue, parseParams: V.parseParams, unescapeText: V.unescapeText } );
 

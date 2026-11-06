@@ -10,7 +10,7 @@
 //     wrote these settings into THAT account's home (L5).
 // shared/ui.js: an informational toast (Bookmarks' "Merged") made a pending
 //     Undo final; NayiveUI.loginRedirect left a desktop window's page without
-//     asking it first (window.nayiveBeforeClose).
+//     asking it first (window.ayniBeforeClose).
 import fs from "node:fs";
 import { server, browser, ok, section, done, onDisk } from "./lib.mjs";
 
@@ -18,7 +18,7 @@ const s = await server( { test: "test", beto: "bbb" } );
 fs.writeFileSync( `${s.run}/apps/outer.html`, `<!doctype html><meta charset=utf-8><title>outer</title>
 <iframe id="f" src="/nayive/inner.html"></iframe>` );
 fs.writeFileSync( `${s.run}/apps/inner.html`, `<!doctype html><meta charset=utf-8><title>inner</title>
-<body><script src="shared/i18n.js"></script><script src="shared/ayni/ayni-i18n.js" data-dict="shared/i18n/" data-langs="es en pt fr de"></script><script src="shared/ayni/ayni-icons.js"></script><script src="shared/ayni/ayni-base.js"></script><script src="shared/ayni/ayni-buttons.js"></script><script src="shared/ayni/ayni-toasts.js"></script><script src="shared/ui.js"></script>` );
+<body><script src="shared/i18n.js"></script><script src="shared/ayni/ayni-i18n.js" data-dict="shared/i18n/" data-langs="es en pt fr de"></script><script src="shared/ayni/ayni-util.js"></script><script src="shared/ayni/ayni-icons.js"></script><script src="shared/ayni/ayni-base.js"></script><script src="shared/ayni/ayni-icons-more.js"></script><script src="shared/ayni/ayni-shell.js" defer></script><script src="shared/ayni/ayni-status.js" defer></script><script src="shared/ayni/ayni-share.js" defer></script><script src="shared/ayni/ayni-upload.js" defer></script><script src="shared/ayni/ayni-pwa.js" defer></script><script src="shared/ayni/ayni-boot.js" defer></script><script src="shared/ayni/ayni-buttons.js"></script><script src="shared/ayni/ayni-toasts.js"></script><script src="shared/ui.js"></script>` );
 const c = await browser( s );
 const phone = await s.client();
 
@@ -87,7 +87,7 @@ section( "LOCKER SETTINGS · NEVER INTO ANOTHER ACCOUNT'S HOME" );
     // The lockers' code loads only when first needed - here AFTER beto signed
     // in: it must still name the page's owner as the page loaded (locker.js).
     await c.open( "/nayive/desktop/index.html" );
-    await c.until( "typeof NayiveUI !== 'undefined' && typeof NayiveLock !== 'undefined'" );
+    await c.until( "typeof NayiveUI !== 'undefined' && typeof AyniLocker !== 'undefined'" );
     ok( await c.evaluate( `fetch( '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify( { user: 'beto', password: 'bbb' } ) } ).then( r => r.status === 200 )` ), "beto signs in on this browser first" );
     ok( await c.evaluate( `new Promise( ( ok, no ) => { const sc = document.createElement( 'script' ); sc.src = '../shared/lockers/culture.js';
@@ -119,7 +119,7 @@ section( "UI · SIGN-IN FROM A DESKTOP WINDOW ASKS THE WINDOW FIRST" );
     await c.open( "/nayive/outer.html" );
     ok( await c.until( "document.getElementById( 'f' ).contentWindow.NayiveUI" ), "a framed page (a desktop window's)" );
     await c.evaluate( `( () => { const w = document.getElementById( 'f' ).contentWindow; window.__asked = 0;
-        w.nayiveBeforeClose = function () { window.__asked++; return new Promise( function ( r ) { window.__answer = r; } ); };
+        w.ayniBeforeClose = function () { window.__asked++; return new Promise( function ( r ) { window.__answer = r; } ); };
         w.NayiveUI.loginRedirect(); return true; } )()` );
     ok( await c.until( "window.__asked === 1", 5000 ), "it asks the window before leaving" );
     await c.evaluate( "window.__answer && window.__answer( false ), true" );                   // "stay"

@@ -12,8 +12,8 @@ async function openTrash()
     setStatus( T( 'drive.loadingTrash' ) );
     try
     {
-        trashItems = shownTrash( await withBusy( GumApi.trashList() ) );
-        try { trashDays = ( await GumApi.trashDays() ).days; }
+        trashItems = shownTrash( await withBusy( AyniNet.trashList() ) );
+        try { trashDays = ( await AyniNet.trashDays() ).days; }
         catch( _e ) { trashDays = null; }
         trashMode  = true;
         clearSel();
@@ -34,7 +34,7 @@ function closeTrash()
 
 async function refreshTrash()
 {
-    try { trashItems = shownTrash( await withBusy( GumApi.trashList() ) ); }
+    try { trashItems = shownTrash( await withBusy( AyniNet.trashList() ) ); }
     catch( _ ) { trashItems = []; }
     render();
 }
@@ -54,28 +54,27 @@ function binHeld( items ) { return items.reduce( function( sum, it ) { return su
 
 function renderTrashBar()
 {
-    const host = document.getElementById( 'breadcrumb' );
-    host.innerHTML = '';
-
-    const bar = document.createElement( 'div' );
-    bar.className = 'trash-bar';
-
-    // No "<-" here: the lit bin in the header is the way back (see render).
+    const bar = document.getElementById( 'trashTools' );
+    bar.innerHTML = '';
 
     // The bin shows the disk space it is holding, not how many rows: what
     // matters is the room emptying it would give back.
-    const held = binHeld( trashItems );
-
-    const title = document.createElement( 'span' );
-    title.className   = 'trash-title';
-    title.textContent = T( 'acct.trash' ) + ( trashItems.length ? ' (' + fmtSize( held ) + ')' : '' );
-    bar.appendChild( title );
+    if( trashItems.length )
+    {
+        const held = document.createElement( 'span' );
+        held.className   = 'trash-held';
+        held.textContent = fmtSize( binHeld( trashItems ) );
+        bar.appendChild( held );
+    }
 
     if( trashDays != null )
     {
         const dwrap = document.createElement( 'label' );
         dwrap.className   = 'trash-days';
-        dwrap.textContent = T( 'drive.deleteAfter' ) + ' ';
+        const before = document.createElement( 'span' );   // on a phone only the number and the (i) stay
+        before.className   = 'trash-words';
+        before.textContent = T( 'drive.deleteAfter' );
+        dwrap.appendChild( before );
 
         const dinput = document.createElement( 'input' );
         dinput.className = 'input';
@@ -90,7 +89,7 @@ function renderTrashBar()
             v = Math.max( 1, Math.min( 90, v ) );
             try
             {
-                const res = await GumApi.setTrashDays( v );
+                const res = await AyniNet.setTrashDays( v );
                 trashDays = res.days;
                 dinput.value = trashDays;
                 flashStatus( TF( 'drive.deleteAfterMsg', { n: trashDays } ) );
@@ -101,7 +100,10 @@ function renderTrashBar()
         dspin.className = 'input-group spin';
         dspin.appendChild( dinput );
         dwrap.appendChild( dspin );
-        dwrap.appendChild( document.createTextNode( ' ' + T( 'acct.days' ) ) );
+        const after = document.createElement( 'span' );
+        after.className   = 'trash-words';
+        after.textContent = T( 'acct.days' );
+        dwrap.appendChild( after );
 
         const dinfo = document.createElement( 'button' );
         dinfo.className = 'info-tip';
@@ -120,8 +122,6 @@ function renderTrashBar()
     empty.ariaDisabled    = ! trashItems.length;
     empty.addEventListener( 'click', emptyTrash );
     bar.appendChild( empty );
-
-    host.appendChild( bar );
 }
 
 function renderTrashListing()
@@ -150,7 +150,7 @@ function renderTrashListing()
 
         const meta = document.createElement( 'span' );
         meta.className = 'row-meta';
-        const where = fsRel( NayiveMedia.dirOf( item.orig ) ) || homeName();
+        const where = fsRel( Ayni.dirOf( item.orig ) ) || homeName();
         const bits = [ where, fmtDate( item.deleted ) ];
         if( ! item.dir ) bits.push( fmtSize( item.size ) );
         meta.textContent = bits.join( ' · ' );
@@ -189,7 +189,7 @@ async function restoreTrash( ids )
     setStatus( T( 'drive.restoring' ) );
     try
     {
-        const res = await withBusy( GumApi.trashRestore( ids ) );
+        const res = await withBusy( AyniNet.trashRestore( ids ) );
         await refreshTrash();
         restoredStatus( res );                          // actions.js
     }
@@ -208,7 +208,7 @@ async function purgeTrash( ids, name )
     setStatus( T( 'drive.deleting' ) );
     try
     {
-        await withBusy( GumApi.trashDelete( ids ) );
+        await withBusy( AyniNet.trashDelete( ids ) );
         await refreshTrash();
         flashStatus( T( 'drive.deletedForever' ) );
     }
@@ -234,7 +234,7 @@ function purgeOneLater( ids )
     {
         // Gone: the ids stay in the set, so a bin read that was already on
         // its way cannot draw the row again.
-        withBusy( GumApi.trashDelete( ids ) ).catch( function()
+        withBusy( AyniNet.trashDelete( ids ) ).catch( function()
         {
             forget();
             Ayni.toast( 'err', T( 'drive.deleteFailedMsg' ) );
@@ -254,7 +254,7 @@ const PURGE_BATCH = 2000;
 async function purgeBinIds( ids )
 {
     for( let i = 0; i < ids.length; i += PURGE_BATCH )
-        await withBusy( GumApi.trashDelete( ids.slice( i, i + PURGE_BATCH ) ) );
+        await withBusy( AyniNet.trashDelete( ids.slice( i, i + PURGE_BATCH ) ) );
 }
 
 async function emptyTrash()

@@ -1,4 +1,4 @@
-/* Ayni library 0.1.0, layout family: tabs, the splitter, the status bar and More fields. Plain JavaScript, no build step, evergreen
+/* Ayni library 0.2.0, layout family: tabs, the splitter, the status bar and More fields. Plain JavaScript, no build step, evergreen
    browsers 2024+. Load it after ayni-base.js:
      <script src="ayni-base.js" defer></script>
      <script src="ayni-layout.js" defer></script>
@@ -221,9 +221,9 @@ const initBar = (bar, o) => {
       + `<button type="button" tabindex="-1" data-to="last" aria-label="${tx('split.collapse.' + last)}" data-tip="${tx('split.collapse.' + last)}">${tri(rows ? 'down' : 'right')}</button>`;
     bar.append(ctl);
     [toStart, , toEnd] = $$('button', ctl);
-    /* Too short a bar for three targets: only the reset dot shows */
+    /* Too short a bar for three targets and a place to drag it: only the reset dot shows */
     new ResizeObserver(() => {
-      const len = rows ? bar.clientWidth : bar.clientHeight, need = isTouch() ? 3 * 10 + 68 + 16 : 3 * 10 + 16;
+      const len = rows ? bar.clientWidth : bar.clientHeight, need = isTouch() ? 5 * 44 : 3 * 10 + 2 * 4 + 16;
       ctl.classList.toggle('short', len < need);
     }).observe(bar);
     ctl.addEventListener('click', (e) => {

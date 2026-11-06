@@ -172,12 +172,17 @@ await c.until( "currentFolder === 'files' && ! listingLoading && document.queryS
 await finger( c, ROW( "files/Docs" ) );
 ok( await c.until( "currentFolder === 'files/Docs'" ), "a tap opens a folder" );
 await c.until( "! listingLoading && document.querySelectorAll('#listing .row[data-path]').length >= 1" );
+const driveTick = `( () => { const t = getComputedStyle( document.querySelector( '#listing .row[data-path] .pick-tick' ) ); return t.display !== 'none' && t.opacity === '1'; } )()`;
+await c.evaluate( "setViewMode( 'icons' ); true" );
+ok( await c.until( "document.querySelector('.list-rows.is-grid') !== null" ) && await c.until( driveTick ), "icons: the ticks show without a long-press" );
+await c.evaluate( "setViewMode( 'list' ); true" );
+ok( await c.until( "document.querySelector('.list-rows:not(.is-grid)') !== null" ) && await c.until( `! ( ${ driveTick } )` ), "…not in the list view" );
 await finger( c, ROW( "files/Docs/Work" ), 700 );
 ok( await c.until( "browse.ids().join() === 'files/Docs/Work'" ) && await c.evaluate( "document.getElementById('listing').classList.contains('picking') && currentFolder === 'files/Docs'" ), "a long-press picks (ticks on), it does not open" );
 fs = await fitState( c );
 ok( ! fs.crowded && fs.more && [ "move", "share", "bin" ].every( a => fs.acts.includes( a ) ) && ! fs.tools.includes( "trashViewBtn" ),
     "phone header: one row; the top ranks stay, the tools leave first, the ⋮ shows", fs );
-ok( fs.rows.filter( r => r !== "all" ).slice( 0, fs.out.length ).join() === fs.out.join() && fs.out.join() === [ "download", "copyTo", "rename", "link", "share", "compress", "props" ].filter( a => fs.out.includes( a ) ).join(),
+ok( fs.rows.filter( r => r !== "all" && r !== "trashViewBtn" ).slice( 0, fs.out.length ).join() === fs.out.join() && fs.out.join() === [ "download", "copyTo", "rename", "link", "share", "compress", "props" ].filter( a => fs.out.includes( a ) ).join(),
     "…its ⋮ lists the hidden actions in toolbar order (Select all first, when hidden), then the hidden tools", fs );
 await mouse( c, "#moreBtn" );
 let mrows = await menuRows( c );
@@ -205,6 +210,32 @@ await c.evaluate( "browse.set( [ document.querySelector('#listing .row[data-path
 await sleep( 200 );
 fs = await fitState( c );
 ok( ! fs.out.length && ! fs.more && fs.tools.includes( "trashViewBtn" ), "back to 1400 px: everything is a button again, no ⋮", fs );
+
+section( "DRIVE · THE BIN'S HEADER" );
+const binState = () => c.evaluate( `( () => { const b = document.getElementById('trashViewBtn'), t = document.getElementById('trashTools'), h = document.querySelector('.topbar');
+    return { after: document.querySelector('.topbar > .tb-modes').nextElementSibling === b, back: !! b.querySelector('[data-icon=back]'), tip: b.dataset.tip,
+             seen: b.getClientRects().length > 0 && ! b.classList.contains('fit-out'), tools: t.getClientRects().length > 0 && !! t.querySelector('input') && !! t.querySelector('.btn.danger'),
+             crumbs: document.getElementById('breadcrumb').getClientRects().length > 0, spills: h.scrollWidth > h.clientWidth, oneRow: h.ayniFitBar ? ! h.ayniFitBar.crowded() : null }; } )()` );
+await c.evaluate( "if( browse.ids().length ) browse.clear(); true" );
+let bs = await binState();
+ok( bs.after && ! bs.back && bs.tip === await c.evaluate( "T('acct.trash')" ), "the bin is the last view button, after List", bs );
+await mouse( c, "#trashViewBtn" );
+await c.until( "trashMode" );
+await sleep( 250 );
+bs = await binState();
+ok( bs.back && bs.seen && bs.tools && ! bs.crumbs && bs.tip === await c.evaluate( "T('drive.backToDrive')" ), "inside it: an arrow back, the same tooltip, its tools in the header, no row under it", bs );
+for( const w of [ 390, 320 ] )
+{
+    await c.send( "Emulation.setDeviceMetricsOverride", { width: w, height: 800, deviceScaleFactor: 1, mobile: true } );
+    await sleep( 300 );
+    bs = await binState();
+    ok( bs.seen && bs.tools && ! bs.spills && ( w < 360 || bs.oneRow ), w + " px: the arrow and the bin's tools all show" + ( w < 360 ? " (on two rows)" : ", on one row" ), bs );
+}
+await c.send( "Emulation.setDeviceMetricsOverride", { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false } );
+await mouse( c, "#trashViewBtn" );
+ok( await c.until( "! trashMode" ), "the arrow goes back to Drive" );
+bs = await binState();
+ok( ! bs.back && ! bs.tools && bs.crumbs, "…the bin icon and the breadcrumb return", bs );
 
 const errs = c.logs.filter( l => /EXCEPTION/.test( l ) );
 ok( ! errs.length, "no page exceptions", errs );

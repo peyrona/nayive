@@ -5,8 +5,8 @@
 
 Ayni.i18n.ready.then( function()
 {
-    API_FILES = GumApi.API_FILES;
-    store     = NayiveStore.createStore( { apiBase: API_FILES, conflicts: true, merge: mergeTrip } );
+    API_FILES = AyniNet.API_FILES;
+    store     = AyniStore.createStore( { apiBase: API_FILES, conflicts: true, merge: mergeTrip } );
     store.onMerged( onTripMerged );   // see persistence.js
 
     // Escape: Ayni presses the open dialog's × (its data-close button), which
@@ -23,7 +23,7 @@ Ayni.i18n.ready.then( function()
     {
         pane: document.getElementById( 'tripContent' ), other: document.getElementById( 'routePanel' ),
         key: 'trips-list-width', min: 300, max: 1200, def: 460,
-        off: function() { return ! wideMql.matches || ! document.documentElement.classList.contains( 'is-windowed' ); },
+        off: function() { return ! wideMql.matches || ! Ayni.frame.windowed; },
         set: function( w, fold )
         {
             if( w != null ) document.documentElement.style.setProperty( '--trip-list-w', w + 'px' );
@@ -42,7 +42,7 @@ Ayni.i18n.ready.then( function()
     // refreshLiveClocks() leaves the route panel alone. A deliberate tap on the plug
     // ("plug") is different: it happens because the user WANTS fresh data, so it is
     // allowed from either screen.
-    refresher = NayiveUI.wireRefresh(
+    refresher = AyniBoot.wireRefresh(
     {
         store: store,
         read:  loadTrips,
@@ -71,7 +71,7 @@ Ayni.i18n.ready.then( function()
     // Probe the API, then load. On a failed probe the shared helper bounces to the
     // sign-in page only when we are really online with nothing cached; otherwise it
     // opens on the local cache and the store syncs once the connection is back.
-    NayiveUI.bootWithStore( store, loadTrips );
+    AyniBoot.boot( store, loadTrips );
 });
 
 function refreshLiveClocks()

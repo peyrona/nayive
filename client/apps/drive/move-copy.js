@@ -81,7 +81,7 @@ async function doShortcuts( paths, dest )
     {
         for( const p of paths )
         {
-            await withBusy( GumApi.makeShortcut( p, dest ) );
+            await withBusy( AyniNet.makeShortcut( p, dest ) );
             made++;
         }
         clearSel();
@@ -90,7 +90,7 @@ async function doShortcuts( paths, dest )
     }
     catch( err )
     {
-        if( err && err.status === 507 ) Ayni.toast( 'err', T( 'ui.room.none' ) );
+        if( err && err.status === 507 ) Ayni.toast( 'err', T( 'ayni.room.none' ) );
         else                            Ayni.toast( 'err', TF( 'drive.shortcutFailed', { err: err && err.message || err } ) );
         await reload();
     }
@@ -100,14 +100,14 @@ async function doShortcuts( paths, dest )
 // — the server's own clobber guard is the real backstop.
 async function destNameSet( dest )
 {
-    try { return await GumApi.namesIn( dest ); }
+    try { return await AyniNet.namesIn( dest ); }
     catch( _ ) { return new Set(); }
 }
 
 async function doMove( paths, dest )
 {
     // Changes of these files still on a device first (actions.js parkedFirst).
-    const going = paths.filter( function( p ) { return NayiveMedia.dirOf( p ) !== dest; } );
+    const going = paths.filter( function( p ) { return Ayni.dirOf( p ) !== dest; } );
     if( going.length && ! await parkedFirst( going ) ) return;
     setStatus( T( 'drive.moving' ) );
 
@@ -117,7 +117,7 @@ async function doMove( paths, dest )
     const destNames = await destNameSet( dest );
     const clashes = paths.filter( function( p )
     {
-        return NayiveMedia.dirOf( p ) !== dest && destNames.has( p.split( '/' ).pop() );
+        return Ayni.dirOf( p ) !== dest && destNames.has( p.split( '/' ).pop() );
     } );
 
     let replace = false;
@@ -142,7 +142,7 @@ async function doMove( paths, dest )
         for( const p of paths )
         {
             const name   = p.split( '/' ).pop();
-            const parent = NayiveMedia.dirOf( p );
+            const parent = Ayni.dirOf( p );
 
             if( parent === dest ) { skipped++; continue; }      // already there
 
@@ -156,11 +156,11 @@ async function doMove( paths, dest )
 
             if( clash )
             {
-                step.bin = await withBusy( GumApi.binPaths( [ to ] ) );   // existing -> papelera
+                step.bin = await withBusy( AyniNet.binPaths( [ to ] ) );   // existing -> papelera
                 if( ! step.bin ) canUndo = false;
             }
 
-            await withBusy( GumApi.rename( p, to ) );
+            await withBusy( AyniNet.rename( p, to ) );
             step.moved = true;
             remapped.push( [ p, to ] );
             moved++;
@@ -212,7 +212,7 @@ async function undoMoves( steps, failKey )
     {
         if( s.moved )
         {
-            try { await withBusy( GumApi.rename( s.to, s.from ) ); }
+            try { await withBusy( AyniNet.rename( s.to, s.from ) ); }
             catch( e ) { err = err || e; continue; }
             back.push( [ s.to, s.from ] );
         }
@@ -225,12 +225,12 @@ async function undoMoves( steps, failKey )
     // find the path free and land there, under its note - restored first, it
     // would come back as "(restaurado …)" and its note stay on the old name.
     await NayiveMedia.remapPaths( back );
-    currentFolder = NayiveUI.followPath( currentFolder, back );
+    currentFolder = Ayni.followPath( currentFolder, back );
 
     let res = null;
     if( ids.length )
     {
-        try { res = await withBusy( GumApi.trashRestore( ids ) ); }
+        try { res = await withBusy( AyniNet.trashRestore( ids ) ); }
         catch( e ) { err = err || e; }
     }
 
@@ -257,14 +257,14 @@ async function doCopy( paths, dest )
             const node = rowNode( p );
             if( ! node ) continue;
 
-            const topName = GumApi.uniqueName( nameOf( node ), taken, T( 'drive.copyWord' ) );
+            const topName = AyniNet.uniqueName( nameOf( node ), taken, T( 'drive.copyWord' ) );
             taken.add( topName );
 
             // A folder comes whole, sub-folders and all. The server never
             // copies over anything: a name taken meanwhile is a 409.
             const to  = joinPath( dest, topName );
             const q   = new URLSearchParams( { from: p, 'new': to } ).toString();
-            const res = JSON.parse( await withBusy( GumApi.fetchText( GumApi.API_FILES + '?' + q, { method: 'POST' } ) ) );
+            const res = JSON.parse( await withBusy( AyniNet.fetchText( AyniNet.API_FILES + '?' + q, { method: 'POST' } ) ) );
             files += ( res && res.files ) || 0;
 
             // ONE pair per item: copyPaths() re-keys by prefix, so a
@@ -282,7 +282,7 @@ async function doCopy( paths, dest )
     catch( err )
     {
         await NayiveMedia.copyPaths( copied );      // same as doMove: keep what did copy
-        if( err && err.status === 507 ) Ayni.toast( 'err', T( 'ui.room.none' ) );
+        if( err && err.status === 507 ) Ayni.toast( 'err', T( 'ayni.room.none' ) );
         else                            Ayni.toast( 'err', TF( 'drive.copyFailed', { err: err && err.message || err } ) );
         await reload();
     }

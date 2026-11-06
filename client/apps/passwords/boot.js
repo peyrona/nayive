@@ -10,15 +10,15 @@ applyTreeWidth();
 
 // merge: a save over a file another device changed since is merged by the
 // store with mergeFile (vault.js MERGE: sealed entries moved, never opened).
-store = NayiveStore.createStore( { apiBase: GumApi.API_FILES, conflicts: true, merge: mergeFile } );
+store = AyniStore.createStore( { apiBase: AyniNet.API_FILES, conflicts: true, merge: mergeFile } );
 
 wireAll();
-store.onState( NayiveUI.syncIndicator() );
+store.onState( Ayni.plug.listener() );
 store.onMerged( onFileMerged );
 
 // The plug's click and the focus / visibility re-reads. Not while a sheet is
 // open, something is being dragged, or Argon2id is running.
-NayiveUI.wireRefresh( { store: store, read: loadData, guard: function()
+AyniBoot.wireRefresh( { store: store, read: loadData, guard: function()
 {
     return gateBusy || !! document.querySelector( 'dialog.panel[open]' ) || !! Ayni.dragIds();
 } } );
@@ -42,4 +42,4 @@ Ayni.help( {
     }
 } );
 
-await NayiveUI.bootWithStore( store, loadData );
+await AyniBoot.boot( store, loadData );

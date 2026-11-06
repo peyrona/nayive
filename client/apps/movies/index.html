@@ -10,9 +10,9 @@
      header re-opens that picker to change folder. Only if the visitor cancels
      the picker (or isn't signed in) does the "open me from Drive" hint show.
 
-     Real folders only: the file list comes from GumApi.listDirRecursive(dir)
+     Real folders only: the file list comes from AyniNet.listDirRecursive(dir)
      (GET /api/files?dir=&recursive=1 - the whole subtree in one call), each
-     film plays straight from GumApi.fileUrl(path) through a real <video>
+     film plays straight from AyniNet.fileUrl(path) through a real <video>
      element (the server streams it with Range support - the same endpoint
      Drive's own built-in A/V player uses). There is no reliable in-browser way
      to read a title / year out of an MKV or MP4 container with a small Range
@@ -49,6 +49,7 @@
          every inline script below may call Ayni.t(). -->
     <script src="../shared/i18n.js"></script>
     <script src="../shared/ayni/ayni-i18n.js" data-dict="../shared/i18n/" data-langs="es en pt fr de"></script>
+    <script src="../shared/ayni/ayni-util.js"></script>
     <title>Movies</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='2' width='20' height='20' rx='2.18'/%3E%3Cline x1='7' y1='2' x2='7' y2='22'/%3E%3Cline x1='17' y1='2' x2='17' y2='22'/%3E%3Cline x1='2' y1='12' x2='22' y2='12'/%3E%3Cline x1='2' y1='7' x2='7' y2='7'/%3E%3Cline x1='2' y1='17' x2='7' y2='17'/%3E%3Cline x1='17' y1='17' x2='22' y2='17'/%3E%3Cline x1='17' y1='7' x2='22' y2='7'/%3E%3C/svg%3E">
 
@@ -65,10 +66,26 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-pickers.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-share.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-pwa.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-locker.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-status.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-shell.css">
     <link rel="stylesheet" href="../shared/app.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-doc.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-media.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-image.css">
+    <link rel="stylesheet" href="../shared/ayni/ayni-map.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
+    <script src="../shared/ayni/ayni-icons-more.js" defer></script>
+    <script src="../shared/ayni/ayni-shell.js" defer></script>
+    <script src="../shared/ayni/ayni-status.js" defer></script>
+    <script src="../shared/ayni/ayni-share.js" defer></script>
+    <script src="../shared/ayni/ayni-upload.js" defer></script>
+    <script src="../shared/ayni/ayni-pwa.js" defer></script>
+    <script src="../shared/ayni/ayni-boot.js" defer></script>
     <script src="../shared/ayni/ayni-buttons.js" defer></script>
     <script src="../shared/ayni/ayni-toasts.js" defer></script>
     <script src="../shared/ayni/ayni-dialogs.js" defer></script>
@@ -80,7 +97,8 @@
     <script src="../shared/ayni/ayni-pickers.js" defer></script>
     <script src="../shared/ayni/ayni-layout.js" defer></script>
     <script src="../shared/locker.js"></script>
-    <script src="../shared/gum-api.js" defer></script>
+    <script src="../shared/ayni/ayni-locker.js"></script>
+    <script src="../shared/ayni/ayni-net.js" defer></script>
     <script src="../shared/ui.js" defer></script>
     <script>
     Ayni.i18n.ready.then( function () {
@@ -89,16 +107,17 @@
             title: 'Movies',
             lead:  Ayni.t( 'movies.introLead' ),
             rows: [
-                { sel: '#folderInfoBtn', text: Ayni.t( 'movies.introFolder' ) },
+                { sel: '#folderInfoBtn', text: Ayni.t( 'movies.introFolder' ), tour: false },   // last in the tour
                 { sel: '#searchToggle', text: Ayni.t( 'movies.introSearch' ) },
                 { sel: '#reloadBtn',   text: Ayni.t( 'movies.introRescan' ) },
-                { icon: 'folder',       name: Ayni.t( 'movies.library' ), text: Ayni.t( 'movies.introTree' ), tour: { sel: '#treePane, #treeBtn' } },
+                { icon: 'folder',       name: Ayni.t( 'movies.library' ), text: Ayni.t( 'movies.introTree' ), tour: { sel: '.tb-modes' } },
                 { sel: '#postersBtn',   text: Ayni.t( 'movies.introPosters' ) }
             ],
             // The guided tour ("Ver el tour" in the card): the card's rows, picking
             // films (the shared item list), the player.
             tour: [ 'rows', { use: 'pick', ghost: '#libContent' }, { use: 'picked', ghost: '#libContent' },
-                    { sel: '#playerBar', text: Ayni.t( 'movies.tourPlayer' ) } ]
+                    { sel: '#playerBar', text: Ayni.t( 'movies.tourPlayer' ) },
+                    { sel: '#folderInfoBtn', text: Ayni.t( 'movies.introFolder' ), optional: true } ]
         } );
     } );
     </script>
@@ -117,17 +136,19 @@
        comes from shared/app.css (folder-backed viewers), search field included. */
 
     /* ---- main row: the tree and the library --------------------------- */
-    /* The tree: Films, Genres, Folders (the real folders under it). Its rows
-       are Ayni's navigation tree (data-fit); on a phone it slides in
+    /* The tree: the real folders, in the Folders view only (body[data-tree]). Its
+       rows are Ayni's navigation tree (data-fit); on a phone it slides in
        from #treeBtn (Ayni's .tree-sheet). */
     .tree-pane  { flex: 0 0 auto; width: 200px; overflow: auto; padding: 14px 6px 16px;
                   border-right: 1px solid var(--line); }
     #treeBtn    { display: none; }
+    body:not([data-tree]) :is(.tree-pane, #treeBtn) { display: none; }
     .view-head  { margin: 0 0 14px; }    /* the rest: app.css MEDIA VIEWER */
     @media (max-width: 640px)
     {
         #treeBtn { display: inline-flex; }
         .tree-pane:not(.tree-sheet) { display: none; }     /* until the tree is made (boot) */
+        .topbar:has(.has-selection) .tb-modes { display: none; }   /* the picked group takes its room */
     }
 
     .lib-pane   { position: relative; flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden; }
@@ -143,7 +164,7 @@
     .continue-thumb { position: relative; width: 100%; aspect-ratio: 16 / 10; border-radius: var(--radius-s);
                       display: flex; align-items: center; justify-content: center;
                       color: rgba(255,255,255,.30); overflow: hidden; background-size: cover; background-position: center; }
-    .continue-thumb > svg { width: 26px; height: 26px; }
+    .continue-thumb > .icon { --icon: 26px; }
     .continue-thumb .resume { position: absolute; width: 36px; height: 36px; border-radius: 50%;
                               background: color-mix(in srgb, #000 42%, transparent); color: #fff;
                               display: flex; align-items: center; justify-content: center; }
@@ -171,7 +192,7 @@
     .poster-art  { position: relative; width: 100%; aspect-ratio: 2 / 3;
                    display: flex; align-items: center; justify-content: center;
                    color: rgba(255,255,255,.28); background-size: cover; background-position: center; }
-    .poster-art > svg { width: 34%; height: 34%; }
+    .poster-art > .icon { width: 34%; height: 34%; --icon: 100%; }
     .poster-scrim{ position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
                    background: color-mix(in srgb, #000 44%, transparent); opacity: 0; transition: opacity var(--tr-fast); }
     .poster-card:hover .poster-scrim { opacity: 1; }
@@ -284,11 +305,20 @@
         <h1>Movies</h1>
         <!-- The toolbar, shown once a folder is open (display: contents). -->
         <div class="tb-tools" id="tools" hidden>
-            <button class="btn" id="folderInfoBtn" type="button" data-rank="22" popovertarget="folderMenu" data-i18n-attr="data-tip:ui.folderInfo, aria-label:ui.folderInfo">
-                <span class="icon" data-icon="folder-info"></span>
-            </button>
+            <!-- What is shown: films, genres, folders. -->
+            <div class="tb-modes" role="group" data-i18n-attr="aria-label:movies.library">
+                <button class="btn" data-view="movies" data-rank="15" type="button" aria-pressed="true" data-i18n-attr="data-tip:movies.movies, aria-label:movies.movies">
+                    <span class="icon" data-icon="film-strip" style="--icon:18px"></span>
+                </button>
+                <button class="btn" data-view="genres" data-rank="16" type="button" aria-pressed="false" data-i18n-attr="data-tip:movies.genres, aria-label:movies.genres">
+                    <span class="icon" data-icon="tag-plain" style="--icon:18px"></span>
+                </button>
+                <button class="btn" data-view="folders" data-rank="17" type="button" aria-pressed="false" data-i18n-attr="data-tip:movies.folders, aria-label:movies.folders">
+                    <span class="icon" data-icon="folder-plain" style="--icon:18px"></span>
+                </button>
+            </div>
 
-            <!-- Phones only (<= 640 px): the tree (films, genres, folders) slides in. -->
+            <!-- Phones only (<= 640 px), in the Folders view: the tree slides in. -->
             <button class="btn" id="treeBtn" type="button" data-rank="23" data-i18n-attr="data-tip:movies.library, aria-label:movies.library">
                 <span class="icon" data-icon="sidebar"></span>
             </button>
@@ -305,18 +335,21 @@
                     <span class="icon" data-icon="search"></span>
                 </button>
                 <button class="btn" id="postersBtn" type="button" data-rank="24" data-i18n-attr="data-tip:movies.findPostersTip, aria-label:movies.findPosters">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="m21 15-4.35-4.35a2 2 0 0 0-2.83 0L4 21"/></svg>
+                    <span class="icon" data-icon="image-search" style="--icon:18px"></span>
                 </button>
                 <button class="btn" id="reloadBtn" data-rank="25" data-i18n-attr="data-tip:ui.rescanFolder, aria-label:ui.rescanFolder">
                     <span class="icon" data-icon="refresh"></span>
                 </button>
             </div>
             <div class="tb-group tb-sys" data-tools hidden>
+                <button class="btn" id="folderInfoBtn" type="button" data-rank="22" popovertarget="folderMenu" data-i18n-attr="data-tip:ui.folderInfo, aria-label:ui.folderInfo">
+                    <span class="icon" data-icon="info"></span>
+                </button>
                 <button class="btn" data-help-open data-rank="31" type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help">
                     <span class="icon" data-icon="help"></span>
                 </button>
             </div>
-            <div class="sync-indicator synced" data-i18n-attr="title:ui.sync.synced"></div>
+            <div class="sync-indicator synced" data-i18n-attr="title:ayni.sync.synced"></div>
         </div>
     </header>
 
@@ -327,7 +360,7 @@
     </div>
 
     <div class="main-row" id="mainRow" hidden>
-        <!-- The tree: Films, Genres, Folders (Ayni.tree, see BROWSER below). -->
+        <!-- The tree: the real folders, in the Folders view (Ayni.tree, see BROWSER below). -->
         <nav class="tree-pane" id="treePane" data-i18n-attr="aria-label:movies.library"><ul id="tree" data-fit data-i18n-attr="aria-label:movies.library"></ul></nav>
         <div class="lib-pane">
             <div class="lib-content" id="libContent"></div>
@@ -337,18 +370,18 @@
                     <video id="stageVideo" playsinline controlslist="nofullscreen"></video>
                     <div class="stage-overlay">
                         <button class="stage-play" id="stagePlayBtn" data-i18n-attr="data-tip:media.play, aria-label:media.play">
-                            <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7-11-7Z"/></svg>
+                            <span class="icon" data-icon="play-round"></span>
                         </button>
                     </div>
                     <span class="stage-badge" id="stageBadge">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M8 21h8M12 17v4"/></svg>
+                        <span class="icon" data-icon="monitor-play"></span>
                         <span id="stagePath"></span>
                     </span>
                     <button class="btn on-media stage-btn stage-full" id="stageFullBtn" data-i18n-attr="data-tip:movies.fullscreen, aria-label:movies.fullscreen">
                         <span class="icon" data-icon="expand"></span>
                     </button>
                     <button class="btn on-media stage-btn stage-collapse" id="stageCollapseBtn" data-i18n-attr="data-tip:movies.collapse, aria-label:movies.collapse">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                        <span class="icon" data-icon="collapse" style="--icon:18px"></span>
                     </button>
                 </div>
             </div>
@@ -356,7 +389,7 @@
     </div>
 
     <div class="empty-hint" id="noDirHint" hidden>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+        <span class="icon" data-icon="film"></span>
         <p data-i18n="movies.needFolder"></p>
         <a class="btn text primary" href="../drive/index.html" data-i18n="ui.openDrive"></a>
     </div>
@@ -364,7 +397,7 @@
     <div class="player-bar" id="playerBar" data-toasts-above hidden>
         <div class="player-now">
             <span class="player-art" id="playerArt">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="19" height="19" rx="2.5"/><line x1="7.5" y1="2.5" x2="7.5" y2="21.5"/><line x1="16.5" y1="2.5" x2="16.5" y2="21.5"/><line x1="2.5" y1="12" x2="21.5" y2="12"/></svg>
+                <span class="icon" data-icon="film-card"></span>
             </span>
             <span class="player-meta">
                 <div class="player-title" id="playerTitle" data-i18n="movies.nothingPlaying"></div>
@@ -374,14 +407,14 @@
 
         <div class="transport">
             <button class="btn transport-btn" id="back10Btn" aria-disabled="true" data-i18n-attr="data-tip:movies.back10, aria-label:movies.back10">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4 3 12l8 8"/><path d="M3 12h13a5 5 0 0 1 0 10h-3"/></svg>
+                <span class="icon" data-icon="back-10" style="--icon:18px"></span>
                 <span class="skip-n">10</span>
             </button>
             <button class="btn primary transport-btn play-btn" id="playBtn" data-i18n-attr="data-tip:media.play, aria-label:media.play" aria-disabled="true">
                 <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" id="playIcon"><path d="M8 5v14l11-7-11-7Z"/></svg>
             </button>
             <button class="btn transport-btn" id="fwd30Btn" aria-disabled="true" data-i18n-attr="data-tip:movies.fwd30, aria-label:movies.fwd30">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4l8 8-8 8"/><path d="M21 12H8a5 5 0 0 0 0 10h3"/></svg>
+                <span class="icon" data-icon="forward-30" style="--icon:18px"></span>
                 <span class="skip-n">30</span>
             </button>
         </div>
@@ -394,7 +427,7 @@
 
         <div class="player-extra">
             <button class="btn" id="subsBtn" hidden data-i18n-attr="data-tip:movies.subtitles, aria-label:movies.subtitles">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="12" x2="9" y2="12"/><line x1="12" y1="12" x2="17" y2="12"/><line x1="7" y1="16" x2="13" y2="16"/><line x1="16" y1="16" x2="17" y2="16"/></svg>
+                <span class="icon" data-icon="subtitles" style="--icon:18px"></span>
             </button>
             <button class="btn" id="stageBtn" aria-disabled="true" data-i18n-attr="data-tip:movies.openVideo, aria-label:movies.openVideo">
                 <span class="icon" data-icon="expand"></span>
@@ -403,7 +436,7 @@
                 <span class="icon" data-icon="volume"></span>
                 <input type="range" id="volumeRange" min="0" max="100" value="90">
             </div>
-            <!-- Play on: a paired speaker or Cast / AirPlay (shared/play-on.js). -->
+            <!-- Play on: a paired speaker or Cast / AirPlay (shared/ayni/ayni-playon.js). -->
             <button class="btn" id="outBtn" type="button" hidden aria-haspopup="menu" aria-expanded="false" data-i18n-attr="data-tip:media.outBtn, aria-label:media.outBtn">
                 <span class="icon" data-icon="speaker"></span>
             </button>
@@ -429,8 +462,9 @@
     </footer>
 </dialog>
 
+<script src="../shared/ayni/ayni-media.js"></script>
 <script src="../shared/media.js"></script>
-<script src="../shared/play-on.js"></script>
+<script src="../shared/ayni/ayni-playon.js"></script>
 <script>
 "use strict";
 
@@ -453,10 +487,10 @@ var SUB_EXT   = [ "vtt", "srt" ];
 var POSTER_NAMES = [ "poster", "folder", "cover", "fanart" ];
 
 // The helpers shared with Photos / Music live in shared/media.js (one copy).
-var esc = NayiveMedia.esc, cssEsc = NayiveMedia.cssEsc, cssUrl = NayiveMedia.cssUrl,
-    extOf = NayiveMedia.extOf, baseName = NayiveMedia.baseName, dirOf = NayiveMedia.dirOf,
-    stripExt = NayiveMedia.stripExt, norm = NayiveMedia.norm, colorFor = NayiveMedia.colorFor,
-    fmtRuntime = NayiveMedia.fmtRuntime, sleep = NayiveMedia.sleep;
+var esc = Ayni.esc, cssEsc = Ayni.cssEsc, cssUrl = Ayni.cssUrl,
+    extOf = Ayni.extOf, baseName = Ayni.baseName, dirOf = Ayni.dirOf,
+    stripExt = Ayni.stripExt, norm = NayiveMedia.norm, colorFor = Ayni.colorFor,
+    fmtRuntime = Ayni.fmtRuntime, sleep = Ayni.sleep;
 
 /* ---------------------------------------------------------------------------
  * TITLE / YEAR / GENRE FROM THE PATH
@@ -678,9 +712,9 @@ async function applyDurations()
 async function loadDurations()
 {
     var pending = st.movies.filter( function ( mv ) { return mv.duration == null; } );
-    await NayiveMedia.pool( pending, 2, async function ( mv )
+    await Ayni.pool( pending, 2, async function ( mv )
     {
-        var d = await NayiveMedia.probeDuration( "video", GumApi.fileUrl( mv.path ) );
+        var d = await Ayni.media.probeDuration( "video", AyniNet.fileUrl( mv.path ) );
         if( d == null ) return;
         mv.duration = d;
         SCAN_CACHE.set( mv, { duration: d } );
@@ -698,7 +732,7 @@ async function loadSynopses()
         if( ! mv.synopsis || typeof mv.synopsis !== "string" ) continue;
         try
         {
-            var txt = await GumApi.readFile( mv.synopsis );
+            var txt = await AyniNet.readFile( mv.synopsis );
             mv.synopsis = ( txt || "" ).trim().slice( 0, 1200 ) || null;
         }
         catch( e ) { mv.synopsis = null; }
@@ -757,7 +791,7 @@ async function loadPosters()
 {
     try
     {
-        var raw = await GumApi.readJson( POSTERS_PATH );
+        var raw = await AyniNet.readJson( POSTERS_PATH );
         st.posters = {
             key:   raw && typeof raw.key === "string" ? raw.key : "",
             items: raw && raw.items && typeof raw.items === "object" ? raw.items : {}
@@ -781,7 +815,7 @@ async function postersReady()
 // back a TMDB key changed there). It reads the file again and lays over it
 // only what THIS page found (st.postersMine) and the key, when it was typed
 // here (st.postersKeyMine); what the others found is kept, here too - and
-// version-checked (GumApi.updateJson): posters saved between that read and
+// version-checked (AyniNet.updateJson): posters saved between that read and
 // this write make it read again. A file that cannot be read now is not
 // written: the marks stay for the next save. Never throws.
 async function savePosters()
@@ -792,7 +826,7 @@ async function savePosters()
     var disk;
     try
     {
-        disk = await GumApi.updateJson( POSTERS_PATH, function ( d )
+        disk = await AyniNet.updateJson( POSTERS_PATH, function ( d )
         {
             if( d === null ) d = {};
             if( typeof d !== "object" || Array.isArray( d ) ) throw new SyntaxError( "posters.json is not a map" );
@@ -882,9 +916,9 @@ async function downloadPoster( mv, remoteUrl )
 {
     try
     {
-        var bytes = await GumApi.fetchBinary( remoteUrl );
+        var bytes = await AyniNet.fetchBinary( remoteUrl );
         var path  = "data/movies/posters/" + posterFileName( mv ) + ".jpg";
-        await GumApi.writeFileBytes( path, bytes );
+        await AyniNet.writeFileBytes( path, bytes );
         return path;
     }
     catch( e )
@@ -914,7 +948,7 @@ function parseProgress( raw )
 // written - a save re-reads the file and lays only this tab's films over it.
 async function loadProgress()
 {
-    try { st.prog = parseProgress( await GumApi.readJson( PROGRESS_PATH ) ); st.progBlocked = false; }
+    try { st.prog = parseProgress( await AyniNet.readJson( PROGRESS_PATH ) ); st.progBlocked = false; }
     catch( e )
     {
         st.prog = { version: 1, watched: {}, resume: {} };
@@ -952,12 +986,12 @@ async function writeProgress()
     st.progDirty = {};
     try
     {
-        // Version-checked (GumApi.updateJson): another device's save between
+        // Version-checked (AyniNet.updateJson): another device's save between
         // the read and the write (a pagehide save racing this one) makes it
         // read again and lay these films again - never written over. Worked
         // out afresh on each read, `theirs` too.
         var theirs = [];
-        var disk = await GumApi.updateJson( PROGRESS_PATH, function ( raw )
+        var disk = await AyniNet.updateJson( PROGRESS_PATH, function ( raw )
         {
             var d = parseProgress( raw );
             theirs = [];
@@ -1085,13 +1119,13 @@ function filteredMovies()
 /* ---------------------------------------------------------------------------
  * RENDER
  * -------------------------------------------------------------------------*/
-var FILM_ICON   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="19" height="19" rx="2.5"/><line x1="7.5" y1="2.5" x2="7.5" y2="21.5"/><line x1="16.5" y1="2.5" x2="16.5" y2="21.5"/><line x1="2.5" y1="12" x2="21.5" y2="12"/><line x1="2.5" y1="7.25" x2="7.5" y2="7.25"/><line x1="2.5" y1="16.75" x2="7.5" y2="16.75"/><line x1="16.5" y1="7.25" x2="21.5" y2="7.25"/><line x1="16.5" y1="16.75" x2="21.5" y2="16.75"/></svg>';
-var FOLDER_ICON = NayiveMedia.ICONS.folder;
-var GENRE_ICON  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>';
-var PLAY_ICON   = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7-11-7Z"/></svg>';
-var CHECK_ICON  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>';
-var BACK_ICON   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>';
-var SEARCH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
+var FILM_ICON   = Ayni.icon( 'film-strip' );
+var FOLDER_ICON = Ayni.media.ICONS.folder;
+var GENRE_ICON  = Ayni.icon( 'tag-plain' );
+var PLAY_ICON   = Ayni.icon( 'play-round' );
+var CHECK_ICON  = Ayni.icon( 'check-plain' );
+var BACK_ICON   = Ayni.icon( 'back' );
+var SEARCH_ICON = Ayni.icon( 'search' );
 
 function setLibMsg( text )
 {
@@ -1113,7 +1147,7 @@ function setCrumb() { if( DIR ) NayiveMedia.setCrumb( NayiveMedia.dirLabel( DIR 
 
 // A poster is either a file path in the user's storage (a sibling image, or one
 // we downloaded from TMDB) or - when the download was blocked - a full TMDB URL.
-function posterUrl( p ) { return /^https?:\/\//i.test( p ) ? p : GumApi.fileUrl( p ); }
+function posterUrl( p ) { return /^https?:\/\//i.test( p ) ? p : AyniNet.fileUrl( p ); }
 
 // cssUrl() writes url("..."): its quotes are escaped here, or the first one
 // ends the style attribute and no poster ever shows.
@@ -1155,7 +1189,7 @@ function posterGridHtml( list )
     return '<div class="poster-grid">' + list.map( posterCardHtml ).join( "" ) + '</div>';
 }
 
-var scopeBarHtml = NayiveMedia.scopeBarHtml;
+var scopeBarHtml = Ayni.media.scopeBarHtml;
 
 function findMovie( path ) { return st.movies.filter( function ( m ) { return m.path === path; } )[ 0 ] || null; }
 
@@ -1195,6 +1229,7 @@ function renderLibrary()
     var mv;
     var html = '<div class="lib-inner">';
 
+    syncView();
     NayiveMedia.searchCount( filteredMovies().length, st.movies.length );
 
     if( st.filter === "movies" )
@@ -1345,7 +1380,7 @@ function playMovie( mv )
 
     st.current = mv;
     clearTrack();
-    video.src = GumApi.fileUrl( mv.path );
+    video.src = AyniNet.fileUrl( mv.path );
 
     var r = resumeOf( mv );
     st._seekOnLoad = r ? r.t : 0;
@@ -1454,7 +1489,7 @@ async function loadSubtitle( mv )
     if( ! mv.subtitle ) { updatePlayerBar(); return; }
     try
     {
-        var text = decodeSubtitle( await GumApi.readFileBytes( mv.subtitle.path ) );
+        var text = decodeSubtitle( await AyniNet.readFileBytes( mv.subtitle.path ) );
         // Another film was picked while this file loaded: the track is not
         // for the film on screen now (and its blob URL would never be freed).
         if( st.current !== mv ) return;
@@ -1497,7 +1532,7 @@ function toggleSubs()
 function updateMediaSession( mv )
 {
     if( ! mv ) return;
-    NayiveMedia.mediaSession(
+    Ayni.media.mediaSession(
         {
             title:  mv.title,
             artist: genreName( mv ) + ( mv.year ? " · " + mv.year : "" ),
@@ -1513,40 +1548,42 @@ function updateMediaSession( mv )
         } );
 }
 
-function updatePositionState() { NayiveMedia.positionState( video ); }
+function updatePositionState() { Ayni.media.positionState( video ); }
 
 /* ---------------------------------------------------------------------------
- * BROWSER - the tree (Films, Genres, Folders with the real folders) and the
+ * BROWSER - the view buttons, the tree (the real folders) and the
  * poster cards as rows of the shared item list (Ayni.list): a
  * click picks (Ctrl / Shift add), a double-click, Enter or a tap opens the
  * film, a long-press picks on touch. One action list feeds the header group,
  * the menu (right-click) and the keys; what does not fit the header goes
  * into its one ⋮ (Ayni.fitBar).
  * -------------------------------------------------------------------------*/
-var treeView = null, browse = null;
+var treeView = null, browse = null, listCfg = null;
 var treeOpen = {};                               // the open rows, this visit
 
 function treeRoots()
 {
-    var T = Ayni.t;
-    return [
-        { id: "v:movies",  name: T( "movies.movies" ),  icon: FILM_ICON,   noMenu: true },
-        { id: "v:genres",  name: T( "movies.genres" ),  icon: GENRE_ICON,  noMenu: true },
-        { id: "v:folders", name: T( "movies.folders" ), icon: FOLDER_ICON, noMenu: true, children: NayiveMedia.folderNodes( st.folderTree, FOLDER_ICON ) }
-    ];
+    return NayiveMedia.folderNodes( st.folderTree, FOLDER_ICON );
+}
+
+// The header's view buttons and the tree follow the view. Hidden, the tree must
+// leave the list's keys too (Tab and <- would move into nothing).
+function syncView()
+{
+    var tree = st.filter === "folders" && treeRoots().length > 0;
+    document.body.toggleAttribute( "data-tree", tree );
+    document.querySelectorAll( ".tb-modes .btn" ).forEach( function ( b ) { b.setAttribute( "aria-pressed", b.dataset.view === st.filter ); } );
+    if( listCfg ) listCfg.tree = tree ? treeView : null;
 }
 
 function currentNode()
 {
-    if( st.filter === "folders" ) return st.selectedFolder ? "f:" + st.selectedFolder : "v:folders";
-    return "v:" + st.filter;
+    return st.selectedFolder ? "f:" + st.selectedFolder : null;
 }
 
 function goNode( id )
 {
-    if( id === "v:folders" ) treeOpen[ id ] = true;
-    if( id.indexOf( "v:" ) === 0 ) setFilter( id.slice( 2 ) );
-    else if( id.indexOf( "f:" ) === 0 ) setFilter( "folders", id.slice( 2 ) );
+    setFilter( "folders", id.slice( 2 ) );
 }
 
 // Watched / not watched on a pick: each film through toggleWatched, as its
@@ -1610,7 +1647,7 @@ function wireBrowser()
         current: currentNode,
         go:      goNode
     } );
-    browse = Ayni.list( $( "#libContent" ), {
+    listCfg = {
         main:    true,
         row:     ".poster-card",
         idOf:    function ( el ) { return el.getAttribute( "data-open" ); },
@@ -1620,7 +1657,8 @@ function wireBrowser()
         grid:    function () { return true; },
         active:  function () { return ! st.stageOpen; },
         open:    function ( id ) { openMovie( id ); }
-    } );
+    };
+    browse = Ayni.list( $( "#libContent" ), listCfg );
 }
 
 /* ---------------------------------------------------------------------------
@@ -1648,6 +1686,16 @@ function wireStaticUI()
 
     NayiveMedia.wireSearchToggle();                     // the search fold
     NayiveMedia.wireCrumbPicker( { app: "movies" } );   // crumb -> folder picker
+
+    document.querySelectorAll( ".tb-modes .btn" ).forEach( function ( b )
+    {
+        b.addEventListener( "click", function ()
+        {
+            setFilter( b.dataset.view );
+            // A phone has no panel: Folders goes straight to the list of folders.
+            if( document.body.hasAttribute( "data-tree" ) && matchMedia( "(max-width: 640px)" ).matches ) treeView.openSheet();
+        } );
+    } );
 
     $( "#reloadBtn" ).addEventListener( "click", function ()
     {
@@ -1696,7 +1744,7 @@ function wireStaticUI()
 
     // The seek / volume / time / play icon wiring (shared/media.js).
     var lastTick = 0;
-    NayiveMedia.wirePlayer( video, {
+    Ayni.media.wirePlayer( video, {
         finiteSeek: true,
         loaded: function ()
         {
@@ -1731,7 +1779,7 @@ function wireStaticUI()
         if( ! mv ) return;
         // A film Drive is converting to MP4 cannot play yet: say that, not
         // "cannot play" (/api/convert lists this user's queued conversions).
-        GumApi.fetchText( "/api/convert" )
+        AyniNet.fetchText( "/api/convert" )
             .then( function ( txt ) { return ( ( JSON.parse( txt ) || {} ).jobs || [] ).some( function ( j ) { return j.path === mv.path; } ); } )
             .catch( function () { return false; } )
             .then( function ( converting ) { Ayni.toast( ( converting ? "warn" : "err" ), Ayni.t( converting ? 'movies.converting' : 'movies.cantPlay' ) ); } );
@@ -1781,7 +1829,7 @@ function wireStaticUI()
 async function boot()
 {
     wireStaticUI();
-    NayivePlayOn.wire( video, $( "#outBtn" ) );
+    AyniPlayOn.wire( video, $( "#outBtn" ) );
 
     DIR = await NayiveMedia.openLibrary( DIR, { app: "movies", title: Ayni.t( 'movies.whereFolder' ), note: Ayni.t( 'movies.whereFolderNote' ) } );
     if( ! DIR ) return;

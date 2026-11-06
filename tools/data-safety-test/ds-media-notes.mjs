@@ -101,10 +101,10 @@ const n2 = notes();
 n2[ "files/F/gone2.png" ] = "dead note 2";
 ok( ( await phone.put( NOTES, JSON.stringify( n2 ) ) ).status === 200, "...and adds a note of a photo gone for good" );
 await P.front();
-await P.evaluate( `( () => { const real = GumApi.trashList;
-    GumApi.trashList = async function () {
+await P.evaluate( `( () => { const real = AyniNet.trashList;
+    AyniNet.trashList = async function () {
         await fetch( '/api/files?trash=restore&ids=' + encodeURIComponent( ${JSON.stringify( ( binned || [] ).join( ";" ) )} ), { method: 'POST' } );
-        GumApi.trashList = real; return real(); };
+        AyniNet.trashList = real; return real(); };
     document.getElementById( 'reloadBtn' ).click(); return true; } )()` );
 ok( await disk( () => ! ( "files/F/gone2.png" in notes() ) ), "Reload: the sweep ran (the dead note is gone)" );
 ok( exists( "files/F/b.png" ) && notes()[ "files/F/b.png" ] === "note b", "b.png, restored while the sweep read the bin, keeps its note", notes() );
@@ -123,7 +123,7 @@ n3[ LENT + "/s1.png" ] = "my note s1";
 n3[ LENT + "/s2.png" ] = "my note s2";
 ok( ( await phone.put( NOTES, JSON.stringify( n3 ) ) ).status === 200, "test has notes on both of her photos" );
 ok( ( await ana.del( "/api/files?paths=" + encodeURIComponent( "files/Album/s1.png" ) ) ).status === 200, "Ana bins s1.png (her bin, not test's)" );
-// Counts the page's writes of the notes from its first line on (GumApi PUTs
+// Counts the page's writes of the notes from its first line on (AyniNet PUTs
 // with XMLHttpRequest): the disk is read only once every one has landed.
 await P.send( "Page.addScriptToEvaluateOnNewDocument", { source: `( () => { window.__xp = { on: 0, off: 0 };
     const open = XMLHttpRequest.prototype.open, send = XMLHttpRequest.prototype.send;
@@ -161,10 +161,10 @@ ok( ! ( "#aside" in n ), "Undo: nothing is left parked", n );
 
 // A copy onto the name of a photo in the bin: the binned photo's note is
 // parked, not written over (a restore must not find someone else's).
-await D.evaluate( "GumApi.binPaths( [ 'files/D/p.png' ] ).then( () => NayiveMedia.purgePaths( [ 'files/D/p.png' ] ) ).then( () => true )" );
+await D.evaluate( "AyniNet.binPaths( [ 'files/D/p.png' ] ).then( () => NayiveMedia.purgePaths( [ 'files/D/p.png' ] ) ).then( () => true )" );
 ok( ! exists( "files/D/p.png" ) && notes()[ "files/D/p.png" ] === "note DP", "D/p.png binned, its note kept at its path" );
 // What Drive's doCopy does (it copies only rows of the folder on screen).
-await D.evaluate( `GumApi.fetchText( GumApi.API_FILES + '?' + new URLSearchParams( { from: 'files/E/p.png', 'new': 'files/D/p.png' } ), { method: 'POST' } )
+await D.evaluate( `AyniNet.fetchText( AyniNet.API_FILES + '?' + new URLSearchParams( { from: 'files/E/p.png', 'new': 'files/D/p.png' } ), { method: 'POST' } )
                    .then( () => NayiveMedia.copyPaths( [ [ 'files/E/p.png', 'files/D/p.png' ] ] ) ).then( () => true )` );
 ok( await disk( () => onDisk( s, "files/D/p.png" ) === "EP" ), "E/p.png copied to D/p.png" );
 n = notes();

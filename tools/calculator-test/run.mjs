@@ -1,4 +1,4 @@
-// run.mjs - Calculator (client/apps/calculator) and its rates (shared/fx.js), in a
+// run.mjs - Calculator (client/apps/calculator) and its rates (shared/ayni/ayni-fx.js), in a
 // real browser on a phone-sized screen:
 //
 //   node tools/calculator-test/run.mjs
@@ -108,7 +108,7 @@ ok( same( await modeNow(), [ "fx", true ] ), "→ picks the right side", await m
 ok( await c.evaluate( "document.getElementById( 'calc' ).getBoundingClientRect().bottom <= innerHeight" ), "the calculator fits the screen" );
 
 section( "CURRENCY - THE CROSS-CHECK" );
-ok( await c.until( "window.NayiveFx && NayiveFx.date()" ), "the rates arrive" );
+ok( await c.until( "window.AyniFx && AyniFx.date()" ), "the rates arrive" );
 await pick( "fxFrom", "EUR" ); await pick( "fxTo", "USD" );
 await c.evaluate( "calcPress( 'clear' ); true" );
 for( const k of [ "1", "0", "0" ] ) await click( `#keys [data-k="${k}"]` );
@@ -116,7 +116,7 @@ ok( await txt( "displayTo" ) === "108.00", "EUR → USD", await txt( "displayTo"
 ok( await txt( "fxNote" ) === "1 EUR = 1.08 USD · 2026-10-27", "the note: rate and day", await txt( "fxNote" ) );
 await click( "#fxSwap" );
 ok( await txt( "displayTo" ) === "92.59" && await txt( "fxNote" ) === "1 USD = 0.92593 EUR · 2026-10-27", "⇄ swaps", [ await txt( "displayTo" ), await txt( "fxNote" ) ] );
-const r = await c.evaluate( "[ NayiveFx.rate( 'EUR', 'JPY' ), NayiveFx.rate( 'EUR', 'GBP' ), NayiveFx.rate( 'EUR', 'ARS' ), NayiveFx.rate( 'EUR', 'BRL' ) ]" );
+const r = await c.evaluate( "[ AyniFx.rate( 'EUR', 'JPY' ), AyniFx.rate( 'EUR', 'GBP' ), AyniFx.rate( 'EUR', 'ARS' ), AyniFx.rate( 'EUR', 'BRL' ) ]" );
 ok( r[ 0 ] === 160.1, "1st pair agrees: their average (JPY 160.1)", r[ 0 ] );
 ok( r[ 1 ] === 0.8505, "1st pair off, 2nd agrees (GBP 0.8505)", r[ 1 ] );
 ok( r[ 2 ] === 1000.5, "a currency only two sources have (ARS 1000.5)", r[ 2 ] );
@@ -130,20 +130,20 @@ ok( await c.until( "document.getElementById( 'fxCheckBackdrop' ).open" ), "the n
 const chk = await c.evaluate( "[ document.querySelectorAll( '#fxCheckBody .fx-source-row' ).length, !! document.querySelector( '#fxCheckBody .warn-box' ) ]" );
 ok( same( chk, [ 3, true ] ), "...with the three sources and the warning", chk );
 await click( "#fxCheckBackdrop header [data-close]" );
-ok( await c.evaluate( "NayiveFx.rate( 'EUR', 'XXX' ) === null && ! /1INCH/.test( localStorage.getItem( 'balata-fx' ) )" ), "only the offered currencies are kept" );
+ok( await c.evaluate( "AyniFx.rate( 'EUR', 'XXX' ) === null && ! /1INCH/.test( localStorage.getItem( 'balata-fx' ) )" ), "only the offered currencies are kept" );
 
 section( "CURRENCY - OFFLINE" );
 const kept = { fetched: 0, sources: [ { ok: true, source: "A", asOf: "2026-10-20", rates: { USD: 1.1 } }, { ok: true, source: "B", asOf: "2026-10-20", rates: { USD: 1.1 } } ] };
 await reset( { offline: true, rates: kept, prefs: { mode: "fx", from: "EUR", to: "USD" } } );
 await open();
 await c.evaluate( "calcPress( [ '5', '0' ] ); true" );
-ok( await c.until( "NayiveFx.offline()" ), "the refresh fails" );
+ok( await c.until( "AyniFx.offline()" ), "the refresh fails" );
 const off = [ await txt( "display" ), await txt( "displayTo" ), await txt( "fxNote" ) ];
 ok( same( off, [ "50", "55.00", "1 EUR = 1.1 USD · 2026-10-20 · offline" ] ), "kept rates still convert, and the note says offline", off );
 await reset( { offline: true, prefs: { mode: "fx", from: "EUR", to: "USD" } } );
 await open();
 await c.evaluate( "calcPress( '7' ); true" );
-await c.until( "NayiveFx.offline()" );
+await c.until( "AyniFx.offline()" );
 const none = [ await txt( "displayTo" ), await txt( "fxNote" ) ];
 ok( same( none, [ "—", "No rates yet: offline" ] ), "first visit offline: no rates at all", none );
 

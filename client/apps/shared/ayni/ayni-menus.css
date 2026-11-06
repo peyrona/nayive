@@ -1,4 +1,4 @@
-/* Ayni library 0.1.0, menus family: menus, submenus, the menu bar, toolbars and their groups, tool groups and popups
+/* Ayni library 0.2.0, menus family: menus, submenus, the menu bar, toolbars and their groups, tool groups and popups
    with controls. Load it after ayni-base.css (the Panel) and ayni-buttons.css (tools are .btn). Behaviour:
    ayni-menus.js. Rules: guidelines ch. 9. */
 
@@ -81,3 +81,18 @@ html.touch [role="menubar"] > button { min-width: var(--touch); min-height: var(
 html.touch .menu [role^="menuitem"] { min-height: var(--touch); padding: 8px 12px; font-size: .95rem; }
 /* Shortcuts mean nothing without a keyboard */
 html.touch .menu [role^="menuitem"] > kbd { display: none; }
+
+/* Rows of buttons in a tool group's popup: .panel.popup.tools > .popup-row > .btn.pop-btn */
+.popup-row               { display: flex; gap: 2px; }
+.popup-row + .popup-row  { margin-top: 2px; }
+.popup-row-sep           { margin-top: 5px; padding-top: 6px; border-top: 1px solid var(--line); }
+
+.btn.pop-btn             { --btn: 32px; }
+
+/* Groups in a row: .tb-modes switches what is shown, .tb-actions acts on it, with its .tb-sep inside, so a group with
+   nothing showing takes the line with it. .tb-tools is a group that does not box its buttons. */
+.tb-modes,
+.tb-actions       { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.tb-actions:not(:has(> button:not([hidden]))) { display: none; }
+.tb-actions > .tb-sep { width: 1px; align-self: stretch; margin: 4px; background: var(--line); flex: 0 0 auto; }
+.tb-tools:not([hidden]) { display: contents; }

@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * shared/menubar.js  -  NayiveMenus
+ * ayni-menutable.js  -  AyniMenus
  *
  * The classic pull-down menu bar (Archivo · Edición · Ver …) that Write and Calc
  * offer as an ALTERNATIVE to their icon toolbar, plus the little switch that
@@ -17,7 +17,7 @@
  * cfg.exec). So there is only ever ONE set of handlers, whichever chrome shows.
  *
  * -----------------------------------------------------------------------------
- * NayiveMenus.create( cfg ) -> { build, close, isOpen, openAt, openItems, anchorRect, rect }
+ * AyniMenus.create( cfg ) -> { build, close, isOpen, openAt, openItems, anchorRect, rect }
  *
  *   cfg.bar                   the bar's id (default menuBar); its menus get
  *                             the ids menuBar-0, menuBar-1 ...
@@ -62,9 +62,9 @@
  * right-click menu at the pointer (Write's spelling suggestions).
  *
  * -----------------------------------------------------------------------------
- * NayiveMenus.chrome( cfg ) -> { on, mode, set, apply, sync, wire }
+ * AyniMenus.chrome( cfg ) -> { on, mode, set, apply, sync, wire }
  *
- *   cfg.key       localStorage key            ('nayive-calc-chrome')
+ *   cfg.key       localStorage key            ('app-chrome')
  *   cfg.root      element to carry .is-menus  (default 'app')
  *   cfg.bar       the menu bar to show / hide (default 'menuBar')
  *   cfg.menus     the object create() returned - closed on every switch
@@ -80,13 +80,13 @@
  * The bar's place - #menuBar - is in shared/app.css; the bar and its menus are Ayni's.
  *
  * -----------------------------------------------------------------------------
- * NayiveMenus.COLORS   the text colours both menus offer (Word's and Excel's
+ * AyniMenus.COLORS   the text colours both menus offer (Word's and Excel's
  *                      own first row, plus white): [ swatch, name key ], the
  *                      name as 'ui.color.' + key - no interface string lives
  *                      in the source (docs/i18n.md).
  * ---------------------------------------------------------------------------*/
 
-const NayiveMenus = ( function ()
+const AyniMenus = ( function ()
 {
     "use strict";
 

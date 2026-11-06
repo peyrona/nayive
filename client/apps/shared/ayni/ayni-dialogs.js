@@ -1,4 +1,4 @@
-/* Ayni library 0.1.0, dialogs family: dialog.panel opened from markup or code, Esc, the first field, moving a
+/* Ayni library 0.2.0, dialogs family: dialog.panel opened from markup or code, Esc, the first field, moving a
    dialog, confirmation / message / question dialogs built in code, and fields saved as they change.
    Plain JavaScript, no build step, evergreen browsers 2024+. Load it after ayni-base.js and ayni-buttons.js:
      <script src="ayni-base.js" defer></script>
@@ -398,6 +398,28 @@ const setup = () => {
 /* Every dialog in the page: the browser focuses the dialog itself on open (see The first field) */
 const init = (root) => each(root, 'dialog.panel', 'dialog', (d) => { if (!d.hasAttribute('autofocus')) d.setAttribute('autofocus', ''); if (!d.hasAttribute('tabindex')) d.tabIndex = -1; });
 
-Object.assign(Ayni, { dialog, dialogButton, confirm, alert, ask, autoSave });
+/* The clip's panel: a round coloured button per choice, its name under it, three to a row. items: [{ icon: a node, label,
+   color: 0-8, act }]. A tap runs onPick (the caller closes the panel), then the choice. The caller places it. */
+const attachPanel = (items, onPick) => {
+  const el = document.createElement('div');
+  el.className = 'attach';
+  items.forEach((a) => {
+    const ai = document.createElement('span');
+    ai.className = 'ai';
+    ai.appendChild(a.icon);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'att';
+    b.setAttribute('data-c', String(a.color));
+    b.appendChild(ai);
+    b.appendChild(document.createTextNode(a.label));
+    b.addEventListener('click', () => { if (onPick) onPick(); a.act(); });
+    el.appendChild(b);
+  });
+  return el;
+};
+
+Object.assign(Ayni, {
+  attachPanel, dialog, dialogButton, confirm, alert, ask, autoSave });
 Ayni.core.family({ setup, init });
 })();

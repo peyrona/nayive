@@ -134,6 +134,7 @@
             S.only = null;
             E.$( "list" ).textContent = "";
             E.$( "listEmpty" ).hidden = true;
+            E.$( "veilBar" ).hidden = true;
             E.$( "listView" ).parentNode.scrollTop = 0;
         }
         document.body.classList.toggle( "in-label", !! S.label );
@@ -195,6 +196,7 @@
             E.showProblem( null );
             E.plug( "synced" );
             appendRows( items );
+            S.veilDry = items.some( function ( m ) { return ! E.veiled( m ); } ) ? 0 : ( more ? S.veilDry : 0 ) + 1;
         }
         catch( err )
         {
@@ -211,8 +213,7 @@
                 moreBox.hidden = ! S.next;
                 moreBox.textContent = S.next ? E.T( "mail.loading" ) : "";
                 E.showEmpty();
-                if( S.next && E.advPaused() ) pauseMore();
-                else if( S.next ) watchMore();
+                E.moreGate();
                 E.syncBar();
             }
         }
@@ -247,6 +248,9 @@
         var empty = ( ! S.items.length || veiled ) && E.$( "acctProblem" ).hidden;
         E.$( "listEmpty" ).hidden = ! empty;
         E.$( "listEmptyText" ).textContent = E.T( veiled ? "mail.allHidden" : S.label ? "mail.labelEmpty" : S.query || S.adv ? "mail.noResults" : "mail.empty" );
+        var hid = S.items.filter( E.veiled ).length;     // only the pages read: "+" while there are more
+        E.$( "veilBar" ).hidden = ! hid || empty;
+        if( hid ) E.$( "veilBar" ).textContent = E.TF( "mail.hiddenCount", { n: hid + ( S.next ? "+" : "" ) } );
     };
 
     var rowSeq = 0;
@@ -317,6 +321,8 @@
 
     // The next page loads when the "Loading…" line under the list scrolls in.
     var io = null;
+    var DRY_PAGES = 10;
+    S.veilDry = 0;       // pages in a row that closed eyes hid whole
     function watchMore()
     {
         if( ! ( "IntersectionObserver" in window ) ) return;
@@ -329,14 +335,32 @@
         io.observe( E.$( "listMore" ) );
     }
 
-    // An advanced search found nothing in many pages in a row (search.js):
-    // the list stops reading by itself, and a button reads on.
+    // May the list read on by itself? With every eye closed it stops: nothing
+    // could show. Many pages in a row with nothing to show (closed eyes here,
+    // an advanced search in search.js) wait for the button.
+    E.moreGate = function ()
+    {
+        if( ! S.next || S.loading ) return;
+        var box = E.$( "listMore" );
+        if( E.allVeiled() )
+        {
+            if( io ) io.disconnect();
+            box.hidden = true;
+            return;
+        }
+        if( E.advPaused() || S.veilDry >= DRY_PAGES ) { pauseMore(); return; }
+        box.hidden = false;
+        box.textContent = E.T( "mail.loading" );
+        watchMore();
+    };
+
+    // The list stops reading by itself, and a button reads on.
     function pauseMore()
     {
         if( io ) io.disconnect();
         var box = E.$( "listMore" );
         box.textContent = "";
         box.appendChild( E.h( "button", { class: "btn text sm bordered", text: E.T( "mail.advKeep" ), attrs: { type: "button" },
-            on: { click: function () { S.advDry = 0; E.loadList( true ); } } } ) );
+            on: { click: function () { S.advDry = 0; S.veilDry = 0; E.loadList( true ); } } } ) );
     }
 } )();

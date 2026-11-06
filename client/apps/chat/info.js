@@ -138,7 +138,7 @@
         var of = function ( kind ) { return msgs.filter( function ( m ) { return m.kind === kind; } ); };
         var files = of( "file" );
         var links = [];
-        msgs.forEach( function ( m ) { window.NayiveChatMarks.urls( m.text ).forEach( function ( u ) { links.push( { m: m, url: u } ); } ); } );
+        msgs.forEach( function ( m ) { window.Ayni.marks.urls( m.text ).forEach( function ( u ) { links.push( { m: m, url: u } ); } ); } );
         return [
             { key: "chat.kPhotos",   icon: "image",   kind: "photo", items: of( "photo" ) },
             { key: "chat.kVideos",   icon: "video",   kind: "file",  items: files.filter( function ( m ) { return VIDEO_EXT.test( m.file.name ); } ) },

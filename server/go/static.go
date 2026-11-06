@@ -69,6 +69,34 @@ var publicStatic = map[string]bool{
 	// texts every page paints with, the sign-in screen too. Library code and
 	// a time-zone table - nothing private.
 	"shared/ayni/ayni-i18n.js":     true,
+	"shared/ayni/ayni-util.js":     true,
+	"shared/ayni/ayni-boot.js":     true,
+	"shared/ayni/ayni-deskpage.js": true,
+	"shared/ayni/ayni-deskpage.css": true,
+	"shared/ayni/ayni-tiling.js": true,
+	"shared/ayni/ayni-desk-rule.js": true,
+	"shared/ayni/ayni-doc.css": true,
+	"shared/ayni/ayni-media.css": true,
+	"shared/ayni/ayni-media.js": true,
+	"shared/ayni/ayni-image.css": true,
+	"shared/ayni/ayni-map.css": true,
+	"shared/ayni/ayni-pwa.css": true,
+	"shared/ayni/ayni-pwa.js": true,
+	"shared/ayni/ayni-locker.css": true,
+	"shared/ayni/ayni-locker.js": true,
+	"shared/ayni/ayni-calview.css": true,
+	"shared/ayni/ayni-compose.css": true,
+	"shared/ayni/ayni-compose.js":  true,
+	"shared/ayni/ayni-share.css":  true,
+	"shared/ayni/ayni-share.js":   true,
+	"shared/ayni/ayni-upload.js":  true,
+	"shared/ayni/ayni-status.css": true,
+	"shared/ayni/ayni-status.js":  true,
+	"shared/ayni/ayni-shell.css":  true,
+	"shared/ayni/ayni-shell.js":   true,
+	"shared/ayni/ayni-icons-more.js": true,
+	"shared/ayni/ayni-schemes.css": true,
+	"shared/ayni/ayni-schemes.js":  true,
 	"shared/ayni/ayni-base.css":    true,
 	"shared/ayni/ayni-base.js":     true,
 	"shared/ayni/ayni-buttons.css": true,
@@ -112,13 +140,13 @@ var publicStatic = map[string]bool{
 	// The vendored map libraries under trips/lib/ are public too (isPublicStatic).
 	"trips/public.html":     true,
 	"trips/journey-draw.js": true, // its map, drawn as the Journey tab draws it
-	"shared/basemap.js":     true,
+	"shared/ayni/ayni-map.js":     true,
 	// A Chat link (/c/<token>/, api_chat.go): the page is served there, but its
 	// scripts, look and photo shrinking come from here. No messages live in
 	// them - those come from /api/c/<token>, token-checked. chat/*.js,
 	// chat/*.css and chat/icons/ are public too (isPublicStatic).
 	"shared/photo.js": true,
-	"shared/vcard.js": true, // a shared contact's "Save" (.vcf) on a Chat link
+	"shared/ayni/formats/vcard.js": true, // a shared contact's "Save" (.vcf) on a Chat link
 	// The Android app's first step (devices.go): it only moves the phone's token
 	// from the URL's #fragment into this browser, then goes to the launcher.
 	"device.html": true,

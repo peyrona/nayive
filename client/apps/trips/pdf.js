@@ -347,7 +347,7 @@ function buildTripPrintDoc( trip )
         doc._initMap = mapSec._initMap || null;   // exportTripPdf() runs this once the node is laid out
     }
 
-    doc.appendChild( prEl( 'div', 'pr-foot', TF( 'trips.generatedOn', { date: NayiveUI.todayIso() } ) + ' · Trips — Nayive' ) );
+    doc.appendChild( prEl( 'div', 'pr-foot', TF( 'trips.generatedOn', { date: Ayni.dates.today() } ) + ' · Trips — Nayive' ) );
 
     return doc;
 }
@@ -400,7 +400,7 @@ function buildPrintRouteMap( trip )
 
         let fired = false;
         const ready = function() { if( fired ) return; fired = true; onReady(); };
-        NayiveBaseMap.add( map, { print: true, onReady: ready } );
+        AyniBaseMap.add( map, { print: true, onReady: ready } );
 
         if( pts.length )
         {
@@ -413,7 +413,7 @@ function buildPrintRouteMap( trip )
             pts.forEach( function( p )
             {
                 L.marker( [ p.lat, p.lon ] )
-                    .bindTooltip( NayiveUI.escapeHtml( p.index + '. ' + ( p.label || '' ) ),
+                    .bindTooltip( Ayni.esc( p.index + '. ' + ( p.label || '' ) ),
                                   { permanent: true, direction: 'top', offset: [ 0, -6 ] } )
                     .addTo( map );
             });
@@ -424,7 +424,7 @@ function buildPrintRouteMap( trip )
         {
             map.setView( [ trip.lat, trip.lon ], 9 );
             L.marker( [ trip.lat, trip.lon ] )
-                .bindTooltip( NayiveUI.escapeHtml( trip.destination || '' ), { permanent: true, direction: 'top', offset: [ 0, -6 ] } )
+                .bindTooltip( Ayni.esc( trip.destination || '' ), { permanent: true, direction: 'top', offset: [ 0, -6 ] } )
                 .addTo( map );
         }
 

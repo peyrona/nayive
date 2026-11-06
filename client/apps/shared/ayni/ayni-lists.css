@@ -1,4 +1,4 @@
-/* Ayni library 0.1.0, lists family: pick lists (list box), item lists (Ayni.list: ticks, picked rows, the picked
+/* Ayni library 0.2.0, lists family: pick lists (list box), item lists (Ayni.list: ticks, picked rows, the picked
    group in the title row), drag and drop markers, the tree view (editable or navigation, its phone sheet) and Move to….
    Load it after ayni-base.css, ayni-buttons.css and ayni-menus.css. The rules are chapters 8 (lists) and 16 (tree
    view) of the guidelines. */
@@ -75,16 +75,17 @@ html.touch .tree-ghost { translate: -50% calc(-100% - 32px); }
 
 /* ---------- Item lists (Ayni.list) ----------
    The tick: a square at the start of each row. With a mouse it shows on hover and on picked rows; on touch only while
-   picking (.picking on the list). A card grid places it itself (in a corner) */
+   picking (.picking on the list). A card grid places it itself (in a corner) and, outside a desktop window, always
+   shows it (.ticks-shown on the list) */
 .pick-tick { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; margin: 0;
   border: 1.5px solid var(--text-faint); border-radius: 5px; background: transparent; color: transparent; cursor: pointer; opacity: 0; transition: opacity var(--tr-fast); }
 .pick-tick .icon { --icon: 13px; }
 .item-list [aria-selected="true"] { background: var(--accent-soft); }
-.item-list [aria-selected="true"] .pick-tick, .item-list.picking .pick-tick { opacity: 1; }
+.item-list [aria-selected="true"] .pick-tick, .item-list.picking .pick-tick, .item-list.ticks-shown .pick-tick { opacity: 1; }
 .item-list [aria-selected="true"] .pick-tick { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .item-list.picking .pick-tick { border-color: var(--text-dim); }
 @media (hover: hover) and (pointer: fine) { .item-list [aria-selected]:hover .pick-tick { opacity: 1; } }
-@media (hover: none), (pointer: coarse) { .item-list:not(.picking) .pick-tick { display: none; } }
+@media (hover: none), (pointer: coarse) { .item-list:not(.picking, .ticks-shown) .pick-tick { display: none; } }
 /* The keyboard's row */
 .item-list [aria-selected]:focus { outline: none; }
 .item-list [aria-selected]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }

@@ -1,0 +1,165 @@
+/* Ayni library 0.2.0: document apps: the menu bar, the file label, the open list, the folder field, the shortcuts and statistics lists. Plain CSS, no build step, evergreen browsers 2024+. Optional: load it after ayni-base.css. */
+
+/* -----------------------------------------------------------------------------
+ * PULL-DOWN MENU BAR  (#menuBar)  -  ayni-menutable.js, Ayni.menuBar
+ *
+ * The classic "Archivo · Edición · Ver …" row Write and Calc offer instead of
+ * their icon toolbar: an Ayni menu bar of text buttons, across the window
+ * under the header. Its drop-downs are Ayni menus (shortcut column, ticks,
+ * one level of submenus); a row whose glyph is a character (Calc's "∑")
+ * shows it in the icon slot (.mi-char).
+ *
+ * Each app keeps its own `#app.is-menus …` rule for collapsing its toolbar -
+ * what has to disappear differs, and Write's strip must collapse with
+ * visibility:hidden rather than display:none (its buttons stay in the DOM,
+ * measured, for the menu entries that click them).
+ * ---------------------------------------------------------------------------*/
+#menuBar
+{
+    flex: 0 0 auto;
+    display: flex; align-items: center; flex-wrap: wrap;
+    gap: 1px; padding: 2px 6px;
+    border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--card);
+}
+
+
+
+
+
+
+/* -----------------------------------------------------------------------------
+ * OFFICE CHROME  (.file-label, .open-list, .folder-pick, .sc-list, .st-list)  -  Calc, Text, Write
+ *
+ * The three document editors share one header shape: after the app name, the
+ * open document's name (.file-label - click it to rename in place, which swaps
+ * in .file-label-input), then the sync plug. Their "Abrir documento" dialog is
+ * one plain folder browser: a breadcrumb (.open-crumb) over a one-level list
+ * (.open-list) of folders and openable files. Their "Guardar como" dialog asks
+ * where the document goes with .folder-pick - a button dressed as a field
+ * control that opens the appUI.pickFolder. shared/office.js builds all three.
+ * ---------------------------------------------------------------------------*/
+/* The document name is an EDIT IN PLACE pair: .file-label (span, at rest) swaps
+ * for .file-label-input (the box). Both carry Ayni's .inline-text /
+ * .input.inline look - only the header layout is set here. A name too long to fit
+ * loses its START ("...informe 2026.docx"): the end, with the extension, is what
+ * tells documents apart. rtl puts the ellipsis on the left; the name itself sits
+ * in a <bdi> so it still reads left to right. */
+.file-label
+{
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--text-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: rtl;
+    text-align: left;
+}
+.file-label-input        { flex: 1 1 auto; min-width: 0; }
+
+/* The two phone toggles of Calc and Write (each app shows them in its own
+ * phone block): the header's "Aa" (#fmtBtn) folds the toolbar away while you
+ * type - a TEXT button, not an icon one: "Aa" says "formato" at a glance - and
+ * the toolbar's own "⋮" (#moreToolsBtn) opens the rest of it in place; open,
+ * it takes the tint of a property that is on. Write's is also matched inside
+ * #toolbarRow, to outweigh that row's own button rule. */
+#fmtBtn
+{
+    font-family: var(--font-sans);
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.5px;
+}
+#moreToolsBtn[aria-expanded="true"],
+#toolbarRow #moreToolsBtn[aria-expanded="true"] { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
+
+/* The save floppy before the sync plug (the appOffice.autosave): a readout, not
+ * a control. Plain text colour while edits wait, blue saving, green saved;
+ * "here" = green with a blue dot: saved on this device, not sent yet
+ * (store.js PARKED SAVES); amber "draft" = on this device only; red only when
+ * something went wrong. Its title says "Guardado 12:04" / "Borrador 12:04".
+ * Empty (no state) until a document is open. */
+.saved-at                { display: inline-flex; align-items: center; margin-left: 6px; color: var(--danger); position: relative; }
+.saved-at:not([data-state]) { display: none; }
+.saved-at svg            { width: 18px; height: 18px; }
+.saved-at[data-state="pending"] { color: var(--text); }
+.saved-at[data-state="draft"]   { color: var(--warn); }
+.saved-at[data-state="saving"] { color: var(--busy); }
+.saved-at[data-state="saved"],
+.saved-at[data-state="here"]   { color: var(--ok); }
+.saved-at[data-state="here"]::after { content: ""; position: absolute; top: -1px; right: -3px; width: 7px; height: 7px;
+                                      border-radius: 50%; background: var(--busy); }
+
+.open-crumb              { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin-bottom: 8px;
+                           font-size: 0.85rem; color: var(--text-dim); }
+.open-crumb.is-note      { display: block; font-style: italic; }
+.open-crumb .crumb-seg   { background: none; border: none; padding: 3px 5px; border-radius: var(--radius-s);
+                           color: var(--accent); font: inherit; cursor: pointer; }
+.open-crumb .crumb-seg:disabled { color: var(--text-dim); cursor: default; }
+.open-crumb .crumb-seg:not(:disabled):hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.open-crumb .crumb-sep   { color: var(--text-dim); }
+
+.open-list               { list-style: none; margin: 0 0 14px; padding: 0; min-height: 120px; max-height: 46vh;
+                           overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius-s); }
+.open-list li            { display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer;
+                           border-bottom: 1px solid var(--line); font-size: 0.92rem; }
+.open-list li:last-child { border-bottom: none; }
+.open-list li:hover      { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.open-list li.is-loading,
+.open-list li.is-empty   { cursor: default; color: var(--text-dim); }
+.open-list li.is-loading:hover,
+.open-list li.is-empty:hover { background: none; }
+.open-list li.is-empty   { justify-content: center; padding: 16px; font-size: 0.88rem; }
+.open-list .open-ic      { flex: 0 0 auto; display: flex; color: var(--text-dim); }
+.open-list .open-ic svg  { width: 17px; height: 17px; }
+.open-list .open-nm      { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.open-list li.is-folder .open-nm { font-weight: 600; }
+.open-list li.is-folder::after   { content: "\203A"; color: var(--text-dim); flex: 0 0 auto; padding-right: 2px; }
+
+/* The folder row of a save-as dialog. It sits inside a .field, so it has to
+ * look exactly like Ayni's .input above it - only the folder icon and the
+ * pointer say it opens something. */
+.folder-pick
+{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: var(--ctl-h);
+    padding: 5px 8px;
+    font: inherit;
+    font-size: var(--field-fs);
+    text-align: left;
+    color: var(--text);
+    background: var(--card2);
+    border: 1px solid var(--field-line);
+    border-radius: var(--ctl-radius);
+    cursor: pointer;
+}
+.folder-pick:hover         { border-color: var(--text-dim); }
+.folder-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+.folder-pick .fp-btn-ic     { flex: 0 0 auto; display: flex; color: var(--text-dim); }
+.folder-pick .fp-btn-ic svg { width: 16px; height: 16px; }
+.folder-pick .fp-btn-nm     { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+
+/* Help ▸ "Keyboard shortcuts" (Calc, Write): one row per shortcut, its keys on
+   the right. the appOffice.showShortcuts fills #scList. */
+.sc-list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 10px; }
+.sc-row  { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; padding: 5px 0; }
+.sc-row + .sc-row { border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent); }
+.sc-row kbd
+{
+    font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap;
+    color: var(--text-dim); border: 1px solid var(--line);
+    border-radius: var(--radius-s); padding: 1px 6px; background: var(--card2);
+}
+
+/* Help ▸ "Statistics" (Calc, Text, Write): label left, number right, the same
+   rhythm as the shortcut sheet above. the appOffice.showStats fills #stList. */
+.st-list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 6px; }
+.st-row  { display: flex; align-items: baseline; justify-content: space-between; gap: 32px; padding: 5px 0; }
+.st-row + .st-row { border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent); }
+.st-row b { font-variant-numeric: tabular-nums; }
+.st-note { font-size: 0.78rem; color: var(--text-dim); margin: 0 0 4px; }

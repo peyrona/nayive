@@ -1,26 +1,27 @@
 /*
  * desk-rule.js - the one "desktop or the simple view" rule, for the launcher
- * (index.html, which sends a big screen to the desktop) and the desktop
- * (desktop/index.html, which sends it back when the rule no longer holds).
+ * (which sends a big screen to the desktop) and the desktop
+ * (which sends it back when the rule no longer holds).
  * One copy: a size changed in only one of them would bounce a screen back and
  * forth. A plain script, loaded before the launcher's redirect - so before
- * shared/i18n.js, and it needs nothing.
+ * anything else, and it needs nothing.
  *
- *   nayiveDeskMode()        this device's choice (localStorage balata-desktop
+ *   ayniDeskMode()        this device's choice (localStorage, data-key on this script
  *                           `mode`): "auto" (the default), "always" or "never"
- *   nayiveWantDesk( mode )  does this screen get the desktop under `mode`?
+ *   ayniWantDesk( mode )  does this screen get the desktop under `mode`?
  *       auto    at least 1024 x 600 with a mouse or touchpad;
  *       always  at least 1024 x 600 either way up (a tablet held upright too),
  *               with or without a mouse;
  *       never   the simple view, always. A phone-sized screen never does.
  */
-function nayiveDeskMode()
+var AYNI_DESK_KEY = ( document.currentScript && document.currentScript.dataset.key ) || 'ayni-desktop';
+function ayniDeskMode()
 {
-    try { var m = ( JSON.parse( localStorage.getItem( 'balata-desktop' ) || 'null' ) || {} ).mode; }
+    try { var m = ( JSON.parse( localStorage.getItem( AYNI_DESK_KEY ) || 'null' ) || {} ).mode; }
     catch( e ) {}
     return m === 'always' || m === 'never' ? m : 'auto';
 }
-function nayiveWantDesk( mode )
+function ayniWantDesk( mode )
 {
     var mq = function ( q ) { return window.matchMedia( q ).matches; };
     if( mode === 'never' || mq( '(max-width: 640px)' ) ) return false;

@@ -1,4 +1,4 @@
-/* Ayni library 0.1.0, layout family: tabs, the status bar, group boxes, More fields, tags and the splitter. Plain CSS,
+/* Ayni library 0.2.0, layout family: tabs, the status bar, group boxes, More fields, tags and the splitter. Plain CSS,
    no build step, evergreen browsers 2024+. Load it after ayni-base.css. The behaviour is in ayni-layout.js; the rules
    are chapters 11.4, 12, 13 and 14.3 of the guidelines. */
 
@@ -82,12 +82,19 @@ fieldset.group legend { padding: 0 4px; margin: 0; }
 .split .pane { overflow: auto; padding: 10px; min-width: 0; font-size: .85rem; }
 .split .pane:first-child { flex: none; width: var(--split, 35%); }
 .split .pane:last-child { flex: 1; }
-.splitter { flex: none; width: 7px; background: var(--card-head); border-inline: var(--panel-border); cursor: col-resize; touch-action: none;
+.splitter { --grip-gap: 26px; --grip-len: 132px; flex: none; width: 11px; background-color: var(--card-head);
+  background-image: linear-gradient(to right, rgb(255 255 255 / .16), transparent 40%, rgb(0 0 0 / .07)); border-inline: var(--panel-border); cursor: col-resize; touch-action: none;
   position: relative; display: grid; place-items: center; z-index: 1; }
-.splitter:hover, .splitter:focus-visible, .splitter.dragging { background: var(--accent-soft); outline-offset: -2px; }
+.splitter:hover, .splitter:focus-visible, .splitter.dragging { background-color: var(--accent-soft); outline-offset: -2px; }
+/* The grip: a soft raised bar with two strips of fine dots, above and below the glyphs; --grip-gap keeps the glyphs clear */
+.splitter::after { content: ""; position: absolute; inset: 50% 1px auto; height: min(var(--grip-len), 100%); translate: 0 -50%; opacity: .55; pointer-events: none;
+  background: radial-gradient(circle, var(--text-dim) 1px, transparent 1.2px) -.5px 0 / 4px 4px;
+  mask: linear-gradient(#000 0 calc(50% - var(--grip-gap)), transparent 0 calc(50% + var(--grip-gap)), #000 0); }
+.splitter.rows::after { inset: 1px auto 1px 50%; width: min(var(--grip-len), 100%); height: auto; translate: -50% 0; background-position: 0 -.5px;
+  mask: linear-gradient(to right, #000 0 calc(50% - var(--grip-gap)), transparent 0 calc(50% + var(--grip-gap)), #000 0); }
 /* Splitter controls (Frasquito, 2026-10-22): small filled glyphs drawn on the bar, close together (no circle, no background); two small arrows send the bar to either end
    (collapsing that pane) and a small ring in the middle resets both panes. The rest of the bar is dragged. */
-.split-ctl { display: flex; flex-direction: column; align-items: center; gap: 1px; position: relative; z-index: 2; }
+.split-ctl { display: flex; flex-direction: column; align-items: center; gap: 4px; position: relative; z-index: 2; }
 .splitter.rows .split-ctl { flex-direction: row; }
 .split-ctl button { width: 9px; height: 10px; padding: 0; border: 0; background: none; color: var(--text-dim);
   display: grid; place-items: center; cursor: pointer; position: relative; }
@@ -102,7 +109,7 @@ fieldset.group legend { padding: 0 4px; margin: 0; }
 .split-ctl.short [data-to="first"], .split-ctl.short [data-to="last"] { display: none; }
 .split.rows { flex-direction: column; height: 240px; }
 .split.rows .pane:first-child { width: auto; height: var(--split, 50%); }
-.splitter.rows { width: auto; height: 7px; border-inline: 0; border-block: var(--panel-border); cursor: row-resize; }
+.splitter.rows { width: auto; height: 11px; background-image: linear-gradient(to bottom, rgb(255 255 255 / .16), transparent 40%, rgb(0 0 0 / .07)); border-inline: 0; border-block: var(--panel-border); cursor: row-resize; }
 .split .pane { overflow: auto; }
 .split, .split .pane, .splitter { box-sizing: border-box; }
 /* A collapsed pane is hidden; the one left takes the room, whatever the page sized it to */
@@ -115,11 +122,12 @@ html.ayni-dragging iframe { pointer-events: none; }
 html.touch [role="tab"] { min-height: var(--touch); }
 html.touch [role="tab"] .tab-close { position: relative; margin-left: 6px; }
 html.touch [role="tab"] .tab-close::before { content: ""; position: absolute; inset: -13px; }
-html.touch .splitter { position: relative; }
-html.touch .splitter::before { content: ""; position: absolute; inset: 0 -19px; z-index: 1; }
-html.touch .splitter.rows::before { inset: -19px 0; }
-/* Touch: the glyphs stay close; their invisible areas reach 19 px across the bar, and the arrows' reach 34 px past the ends (44 px); the reset dot's area stays small, and a double-tap on the bar also resets */
-html.touch .split-ctl button::before { content: ""; position: absolute; inset: 0 -19px; }
-html.touch .split-ctl button:first-child::before { top: -34px; } html.touch .split-ctl button:last-child::before { bottom: -34px; }
-html.touch .splitter.rows .split-ctl button::before { inset: -19px 0; }
-html.touch .splitter.rows .split-ctl button:first-child::before { left: -34px; } html.touch .splitter.rows .split-ctl button:last-child::before { right: -34px; }
+html.touch .splitter { position: relative; --grip-gap: 72px; --grip-len: 232px; }
+html.touch .splitter::before { content: ""; position: absolute; inset: 0 -16px; z-index: 1; }
+html.touch .splitter.rows::before { inset: -16px 0; }
+/* Touch: each glyph has its own 44 px along the bar, so a finger cannot land on the wrong one; the invisible areas reach 44 px across it too */
+html.touch .split-ctl { gap: 0; }
+html.touch .split-ctl button { height: var(--touch); }
+html.touch .splitter.rows .split-ctl button { width: var(--touch); height: 9px; }
+html.touch .split-ctl button::before { content: ""; position: absolute; inset: 0 -18px; }
+html.touch .splitter.rows .split-ctl button::before { inset: -18px 0; }

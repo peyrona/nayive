@@ -3,7 +3,7 @@
  * with the user's line under it (My account), drifts across the screen and
  * bounces off the edges, changing colour at each bounce.
  */
-NayiveLock.define( "clock", function ( host, opts )
+AyniLocker.define( "clock", function ( host, opts )
 {
     "use strict";
 

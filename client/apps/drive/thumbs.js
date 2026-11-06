@@ -3,7 +3,7 @@
  * thumbs.js - Drive: a picture's own preview in the icons view.
  *
  * The thumbnails are Photos' (photos/index.html, "THUMBNAILS"): one small
- * JPEG per picture, data/photos/thumbs/<size>_<mtime>.jpg (NayivePhoto.
+ * JPEG per picture, data/photos/thumbs/<size>_<mtime>.jpg (AyniPhoto.
  * thumbPath), made by the browser - never by the server. Drive shows the
  * one there is and makes the one there is not, the same way Photos does:
  *
@@ -38,7 +38,7 @@ function thumbable( node )
 
 function canMakeThumb( node ) { return ! NayiveUI.isShared( node.path ) && node.size <= THUMB_MAX; }
 
-function thumbUrl( path ) { return GumApi.fileUrl( path ) + '&immutable=1'; }   // the name IS the content
+function thumbUrl( path ) { return AyniNet.fileUrl( path ) + '&immutable=1'; }   // the name IS the content
 
 // Puts the preview into an icon-view tile (renderListing). The file-type
 // glyph stays underneath, shown again if no preview can be had.
@@ -46,7 +46,7 @@ function addThumb( row, node )
 {
     if( ! thumbable( node ) ) return;
 
-    const path = NayivePhoto.thumbPath( node.size, node.mtime );
+    const path = AyniPhoto.thumbPath( node.size, node.mtime );
     const st   = thumbState.get( path );
     const make = canMakeThumb( node );
     if( st === 'failed' || ( ! make && ( st === 'missing' || st === 'pending' ) ) ) return;
@@ -62,7 +62,7 @@ function addThumb( row, node )
     // Known to be missing: straight to the picture (it makes the thumbnail).
     const full = st === 'missing' || st === 'pending';
     img.dataset.stage = full ? 'full' : 'thumb';
-    img.src = full ? GumApi.fileUrl( node.path ) + '&v=' + node.mtime : thumbUrl( path );
+    img.src = full ? AyniNet.fileUrl( node.path ) + '&v=' + node.mtime : thumbUrl( path );
 
     const giveUp = function()
     {
@@ -77,11 +77,11 @@ function addThumb( row, node )
             if( ! thumbState.has( path ) || thumbState.get( path ) === 'ok' ) thumbState.set( path, 'missing' );
             if( ! make ) { giveUp(); return; }
             img.dataset.stage = 'full';
-            img.src = GumApi.fileUrl( node.path ) + '&v=' + node.mtime;
+            img.src = AyniNet.fileUrl( node.path ) + '&v=' + node.mtime;
             return;
         }
         // The thumbnail just made does not load: keep showing the picture.
-        if( img.dataset.stage === 'made' ) { img.dataset.stage = 'done'; img.src = GumApi.fileUrl( node.path ) + '&v=' + node.mtime; return; }
+        if( img.dataset.stage === 'made' ) { img.dataset.stage = 'done'; img.src = AyniNet.fileUrl( node.path ) + '&v=' + node.mtime; return; }
         if( img.dataset.stage === 'full' ) thumbState.set( path, 'failed' );   // the picture itself will not show
         giveUp();
     } );
@@ -116,8 +116,8 @@ async function makeThumb( img, path )
 {
     try
     {
-        const blob = await NayivePhoto.shrinkToJpeg( img, { maxW: THUMB_W, quality: THUMB_Q } );
-        try { await GumApi.writeFileBytes( path, blob, { createOnly: true } ); }
+        const blob = await AyniPhoto.shrinkToJpeg( img, { maxW: THUMB_W, quality: THUMB_Q } );
+        try { await AyniNet.writeFileBytes( path, blob, { createOnly: true } ); }
         catch( err )
         {
             // Another page (Photos, a second Drive) made it meanwhile: as good.

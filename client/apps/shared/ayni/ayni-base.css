@@ -1,4 +1,4 @@
-/* Ayni library 0.1.0, base: the colours, sizes, type and icons every Ayni page and family builds on. Plain CSS, no
+/* Ayni library 0.2.0, base: the colours, sizes, type and icons every Ayni page and family builds on. Plain CSS, no
    build step, evergreen browsers 2024+. Load it before any family stylesheet. Fonts: the system's own, nothing is
    loaded from the network. */
 /* RULE: colour. Each scheme (light, dark) sets its colours by hand; each has one job, written beside it. A few more
@@ -133,3 +133,14 @@ html.touch { --touch: 44px; --ctl-h: 44px; }
 
 /* ---------- Motion shared by the families ---------- */
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Identity colours: people, habits, anything told apart at a glance, one of eight by its index. The same in light and
+   dark, and white text reads on all of them. <i data-c="3">, and the page paints with var(--id-color). */
+[data-c="0"] { --id-color: hsl(170 40% 38%); }
+[data-c="1"] { --id-color: hsl(215 45% 50%); }
+[data-c="2"] { --id-color: hsl(345 45% 52%); }
+[data-c="3"] { --id-color: hsl(35 55% 46%); }
+[data-c="4"] { --id-color: hsl(275 35% 52%); }
+[data-c="5"] { --id-color: hsl(95 35% 40%); }
+[data-c="6"] { --id-color: hsl(15 50% 52%); }
+[data-c="7"] { --id-color: hsl(200 25% 45%); }

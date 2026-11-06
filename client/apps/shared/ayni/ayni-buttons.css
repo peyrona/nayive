@@ -1,4 +1,4 @@
-/* Ayni library 0.1.0, buttons family: the look of round buttons, toggles, the second action, busy and disabled
+/* Ayni library 0.2.0, buttons family: the look of round buttons, toggles, the second action, busy and disabled
    buttons, buttons over pictures, text buttons, switches, check boxes and radio buttons. Plain CSS, no build step,
    evergreen browsers 2024+. Load it after ayni-base.css. The rules are chapters 3 and 5 of the guidelines. */
 /* ---------- Round buttons ---------- */
@@ -41,12 +41,12 @@
 .btn[data-alt] { position: relative; touch-action: manipulation; -webkit-touch-callout: none; user-select: none; }
 .btn[data-alt]::after { content: ""; position: absolute; right: -2px; bottom: -2px; width: 10px; height: 10px; border-radius: 50%;
   background: var(--accent); border: 2px solid var(--panel-bg); }
-/* Popup button (opens a menu or popover): a small down-pointing triangle in the same corner, like a combo box. One
+/* Popup button (opens a menu or popover): a small down-pointing triangle in the icon's colour, in the same corner, like a combo box. One
    pseudo element only (a border triangle, ringed in the panel colour by drop shadows), so ::before stays free for the
    touch hit area */
 .btn[popovertarget], .btn[aria-haspopup] { position: relative; }
 .btn[popovertarget]::after, .btn[aria-haspopup]::after { content: ""; position: absolute; right: -2px; bottom: 0; width: 0; height: 0;
-  border-style: solid; border-width: 6px 4.5px 0; border-color: var(--accent) transparent transparent; pointer-events: none;
+  border-style: solid; border-width: 6px 4.5px 0; border-color: currentColor transparent transparent; pointer-events: none;
   filter: drop-shadow(1.5px 0 0 var(--panel-bg)) drop-shadow(-1.5px 0 0 var(--panel-bg)) drop-shadow(0 1.5px 0 var(--panel-bg)) drop-shadow(0 -1.5px 0 var(--panel-bg)); }
 /* RULE: the "more" button (⋮) shows no triangle: its three dots already say "a menu of more things" */
 .btn:is([popovertarget], [aria-haspopup]):has(> .icon[data-icon="more"])::after { content: none; }
@@ -101,13 +101,25 @@ legend { font-size: .8rem; font-weight: 500; color: var(--text-dim); padding: 0;
 /* RULE: only for a wide call to action an icon cannot say ("Extract here"); never in a toolbar or a title row. A pill with
    a short label and an optional icon before it, with the round button's states. */
 .btn.text { width: auto; height: auto; min-height: var(--btn); border-radius: var(--radius-pill); padding: 0 16px; gap: 6px;
-  display: inline-flex; align-items: center; justify-content: center; font-weight: 600; white-space: nowrap; }
+  display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
 .btn.text .icon { --icon: 16px; }
 .btn.text.dashed { border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent); color: var(--accent); width: 100%;
   background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .btn.text.dashed:hover:not([aria-disabled="true"]) { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .btn.text.sm { --btn: 30px; padding: 0 12px; font-size: .82rem; }
 
+/* ---------- Large buttons ---------- */
+/* RULE: for the main choices of a launcher or a home screen, never in a toolbar or a title row. A big Accent icon with its
+   name under it, in a rounded box, with the round button's states; the name is visible, so no tooltip. A page sets
+   --large-w to change the width's top limit. */
+.btn.large { position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px;
+  width: clamp(88px, 27vw, var(--large-w, 110px)); height: auto; padding: 16px 8px 12px;
+  border: 0; border-radius: var(--radius-l); text-decoration: none; }
+.btn.large.bordered { border: 1px solid var(--line); }
+.btn.large .icon { --icon: 40px; }
+.btn.large svg { width: 40px; height: 40px; color: var(--accent); flex: 0 0 auto; }
+.btn.large span { font-size: 0.85rem; text-align: center; line-height: 1.2; }
+.btn.large:is([popovertarget], [aria-haspopup])::after { right: 6px; bottom: 6px; border-top-color: var(--accent); } /* its icon's colour */
 /* ---------- Touch ---------- */
 /* RULE: a button keeps its drawn size on touch; an invisible hit area takes it to at least 44 x 44 px (a dialog's bottom
    row is drawn at 44 px). The hold ring of a second action takes the same place while the finger holds. */

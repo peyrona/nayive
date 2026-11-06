@@ -306,16 +306,16 @@ function fetchTagged( file, ms )
     } );
 }
 
-// Whose page this is: the "nayive_who" cookie as the PAGE loaded, as GumApi
-// and shared/store.js send it (X-Nayive-User) - this file loads only when a
+// Whose page this is: the "nayive_who" cookie as the PAGE loaded, as AyniNet
+// and shared/ayni/ayni-store.js send it (X-Nayive-User) - this file loads only when a
 // locker is first shown, maybe after another account signed in, so their
 // name is asked first. A dialog left open while another account signed in
 // on this browser gets 423 - never writes these settings into that other
 // person's home (L5).
-var OWNER = ( window.NayiveStore && typeof NayiveStore.me === "string" && NayiveStore.me ) ||
-            ( window.GumApi && GumApi.owner && GumApi.owner() ) ||
-            ( window.NayiveLock && NayiveLock.who ) ||
-            ( window.NayiveWho && NayiveWho.atLoad ) || "";
+var OWNER = ( window.AyniStore && typeof AyniStore.me === "string" && AyniStore.me ) ||
+            ( window.AyniNet && AyniNet.owner && AyniNet.owner() ) ||
+            ( window.AyniLocker && AyniLocker.who ) ||
+            ( window.AyniWho && AyniWho.atLoad ) || "";
 
 // ✓ of the settings dialog: `fn( now )` gets the settings as they are on the
 // server NOW (`readNow()` -> { s, tag }) and returns what to save. That goes
@@ -377,7 +377,7 @@ window.NayiveSalon =
 };
 
 // The locker: the settings first (4 s at most), then the screen.
-NayiveLock.define( "culture", function ( host )
+AyniLocker.define( "culture", function ( host )
 {
     var stop = null, gone = false;
     read().then( function ( s ) { if( ! gone ) stop = start( host, s ); } );

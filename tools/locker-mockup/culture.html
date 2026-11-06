@@ -26,7 +26,7 @@
   N = another painting, L = next language for the hour. Any other key or a
   click shows the password box (any password works here).
 
-  The locker is written as NayiveLock.define( "culture", ... ) so it can move
+  The locker is written as AyniLocker.define( "culture", ... ) so it can move
   to client/apps/shared/lockers/culture.js almost as is.
 -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -204,7 +204,7 @@ body { font-family: var(--serif-text); color: var(--ivory); -webkit-font-smoothi
 
 <script>
 /* Stub of shared/locker.js: just enough to run a locker here. */
-var NayiveLock = { defs: {}, define: function ( id, fn ) { this.defs[ id ] = fn; } };
+var AyniLocker = { defs: {}, define: function ( id, fn ) { this.defs[ id ] = fn; } };
 </script>
 
 <script>
@@ -213,7 +213,7 @@ var NayiveLock = { defs: {}, define: function ( id, fn ) { this.defs[ id ] = fn;
  * weather on the left, a painting chosen for today's sky in the centre, the
  * word of the day and a verse for today's sky on the right. Live data only.
  */
-NayiveLock.define( "culture", function ( host, opts )
+AyniLocker.define( "culture", function ( host, opts )
 {
     "use strict";
 
@@ -855,7 +855,7 @@ NayiveLock.define( "culture", function ( host, opts )
     var stop = null, hideT = 0;
     var city = new URLSearchParams( location.search ).get( "city" ) || "";
 
-    function lock() { unlocked.classList.remove( "on" ); stop = NayiveLock.defs.culture( host, { city: city } ); }
+    function lock() { unlocked.classList.remove( "on" ); stop = AyniLocker.defs.culture( host, { city: city } ); }
     function showCard()
     {
         card.classList.add( "on" ); pw.focus();

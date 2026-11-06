@@ -110,10 +110,10 @@ section( "D1 · A FOLDER DROPPED AGAIN" );
     await c.evaluate( `( () => { window.__twins = []; window.__toasts = []; window.__stubTwin = window.officeTwin;
         window.officeTwin = async function( p, r )
         { window.__twins.push( [ p, !! r ] ); const q = new URLSearchParams( { file: p } ); if( r ) q.set( 'replace', '1' );
-          return JSON.parse( await GumApi.fetchText( '/api/office?' + q.toString(), { method: 'POST' } ) ); };
-        const prep = NayivePhoto.prepare; let once = true;
-        NayivePhoto.prepare = async function( f, m ) { if( once ) { once = false; await GumApi.writeFileBytes( 'files/Trabajo5/Nota.docx', new TextEncoder().encode( 'APPEARED' ) ); }
-                                                       NayivePhoto.prepare = prep; return prep( f, m ); }; return true; } )()` );
+          return JSON.parse( await AyniNet.fetchText( '/api/office?' + q.toString(), { method: 'POST' } ) ); };
+        const prep = AyniPhoto.prepare; let once = true;
+        AyniPhoto.prepare = async function( f, m ) { if( once ) { once = false; await AyniNet.writeFileBytes( 'files/Trabajo5/Nota.docx', new TextEncoder().encode( 'APPEARED' ) ); }
+                                                       AyniPhoto.prepare = prep; return prep( f, m ); }; return true; } )()` );
     await upload( [ [ "Trabajo5/Nota.odt", "nota v2" ] ] );
     const asked = await replaceAsked();
     const names = asked ? await listed() : [];
@@ -132,8 +132,8 @@ section( "D1 · A FOLDER DROPPED AGAIN" );
     // for A/IMG_1.jpg - B/IMG_1.jpg is never touched.
     await c.evaluate( "navigateTo( 'files/A' ); true" );
     ok( await c.until( "currentFolder === 'files/A' && ! listingLoading && curListing.path === 'files/A'" ), "(in folder A)" );
-    await c.evaluate( `( () => { const real = NayivePhoto.prepare; let n = 0;
-        NayivePhoto.prepare = async function( f, m ) { if( ++n === 2 ) { navigateTo( 'files/B' ); NayivePhoto.prepare = real; } return real( f, m ); }; return true; } )()` );
+    await c.evaluate( `( () => { const real = AyniPhoto.prepare; let n = 0;
+        AyniPhoto.prepare = async function( f, m ) { if( ++n === 2 ) { navigateTo( 'files/B' ); AyniPhoto.prepare = real; } return real( f, m ); }; return true; } )()` );
     await upload( [ [ "x0.txt", "zero" ], [ "IMG_1.jpg", "PC NEW" ] ] );
     ok( await replaceAsked(), "A/IMG_1.jpg gets the question" );
     await c.evaluate( "document.getElementById('replaceOverwrite').checked = true; document.getElementById('replaceConfirmBtn').click(); true" );
@@ -159,9 +159,9 @@ section( "D3 · A FILE ANOTHER DEVICE PUT THERE AFTER DRIVE LOOKED" );
 {
     // The name is taken between the check and the PUT (another window saves
     // it while this one prepares the photo): create-only gets a 412 -> asked.
-    await c.evaluate( `( () => { const real = NayivePhoto.prepare; let once = true;
-        NayivePhoto.prepare = async function( f, m ) { if( once ) { once = false; await GumApi.writeFileBytes( 'files/race.jpg', new TextEncoder().encode( 'OTHER WINDOW' ) ); }
-                                                       NayivePhoto.prepare = real; return real( f, m ); }; return true; } )()` );
+    await c.evaluate( `( () => { const real = AyniPhoto.prepare; let once = true;
+        AyniPhoto.prepare = async function( f, m ) { if( once ) { once = false; await AyniNet.writeFileBytes( 'files/race.jpg', new TextEncoder().encode( 'OTHER WINDOW' ) ); }
+                                                       AyniPhoto.prepare = real; return real( f, m ); }; return true; } )()` );
     await upload( [ [ "race.jpg", "THIS WINDOW" ] ] );
     const asked = await sheetUp();
     const body  = asked ? await c.evaluate( "document.querySelector( 'dialog.panel[open]:not([id]) .body > p.text' ).textContent" ) : "";
@@ -175,8 +175,8 @@ section( "D3 · A FILE ANOTHER DEVICE PUT THERE AFTER DRIVE LOOKED" );
 {
     // A 412 against this very upload's first try (a re-sent PUT after a drop):
     // the same bytes are there - no question, nothing doubled. The first PUT
-    // lands, but its answer is lost (as a dropped connection would): GumApi
-    // sends it again (C4b: the check lives in GumApi, after a re-send only).
+    // lands, but its answer is lost (as a dropped connection would): AyniNet
+    // sends it again (C4b: the check lives in AyniNet, after a re-send only).
     await c.evaluate( `( () => { const X = XMLHttpRequest.prototype, send = X.send; let once = true;
         X.send = function( b ) { if( once ) { once = false; X.send = send; const x = this; x.onload = function() { x.onerror(); }; }
                                  return send.apply( this, arguments ); }; return true; } )()` );
@@ -189,9 +189,9 @@ section( "D3 · A FILE ANOTHER DEVICE PUT THERE AFTER DRIVE LOOKED" );
     // A DIFFERENT file of the same size (too big to read back) takes the name:
     // it is not taken for this upload's own - the user is asked.
     const N = 9 * 1024 * 1024 + 7;
-    await c.evaluate( `( () => { const real = NayivePhoto.prepare; let once = true;
-        NayivePhoto.prepare = async function( f, m ) { if( once ) { once = false; await GumApi.writeFileBytes( 'files/big.bin', new Blob( [ 'B'.repeat( ${N} ) ] ) ); }
-                                                       NayivePhoto.prepare = real; return real( f, m ); }; return true; } )()` );
+    await c.evaluate( `( () => { const real = AyniPhoto.prepare; let once = true;
+        AyniPhoto.prepare = async function( f, m ) { if( once ) { once = false; await AyniNet.writeFileBytes( 'files/big.bin', new Blob( [ 'B'.repeat( ${N} ) ] ) ); }
+                                                       AyniPhoto.prepare = real; return real( f, m ); }; return true; } )()` );
     await c.evaluate( `( () => { window.__up = null; uploadItems( [ { relPath: 'big.bin', file: new File( [ 'A'.repeat( ${N} ) ], 'big.bin' ) } ] )
         .then( function() { window.__up = 'done'; }, function( e ) { window.__up = 'error ' + e; } ); return true; } )()` );
     const asked = await sheetUp( 20000 );
@@ -203,8 +203,8 @@ section( "D3 · A FILE ANOTHER DEVICE PUT THERE AFTER DRIVE LOOKED" );
 }
 {
     // Cancel on that question stops the rest: the last message names what was not sent.
-    await c.evaluate( `( () => { window.__toasts = []; const real = NayivePhoto.prepare; let n = 0;
-        NayivePhoto.prepare = async function( f, m ) { if( ++n === 2 ) { await GumApi.writeFileBytes( 'files/r2.txt', new TextEncoder().encode( 'OTHER' ) ); NayivePhoto.prepare = real; }
+    await c.evaluate( `( () => { window.__toasts = []; const real = AyniPhoto.prepare; let n = 0;
+        AyniPhoto.prepare = async function( f, m ) { if( ++n === 2 ) { await AyniNet.writeFileBytes( 'files/r2.txt', new TextEncoder().encode( 'OTHER' ) ); AyniPhoto.prepare = real; }
                                                        return real( f, m ); }; return true; } )()` );
     await upload( [ [ "r1.txt", "one" ], [ "r2.txt", "two" ], [ "r3.txt", "three" ] ] );
     ok( await sheetUp(), "r2.txt gets the question" );
@@ -248,17 +248,17 @@ section( "A1 · THE TWIN ALREADY OPEN IN A DESKTOP WINDOW" );
         localStorage.setItem( 'balata-intro-dismiss:drive', '1' ); localStorage.setItem( 'balata-intro-dismiss:calc', '1' );
         localStorage.setItem( 'balata-intro-dismiss:desktop', '1' ); true` );
     await d.open( "/nayive/desktop/", "/nayive/desktop/" );
-    ok( await d.until( "window.NayiveDesktop && typeof NayiveDesktop.open === 'function'", 20000 ), "the desktop is up" );
+    ok( await d.until( "window.AyniDesk && typeof AyniDesk.open === 'function'", 20000 ), "the desktop is up" );
     const WINS  = "document.querySelectorAll('#desk > .win').length";
     const frame = app => `Array.from( document.querySelectorAll('#desk > .win iframe') ).map( function( f ) { return f.contentWindow; } )
         .find( function( w ) { try { return w.location.pathname.indexOf( '/nayive/${app}/' ) === 0; } catch( e ) { return false; } } )`;
 
-    await d.evaluate( "NayiveDesktop.open( '/nayive/calc/index.html?file=files/hoja.xlsx' ), true" );
+    await d.evaluate( "AyniDesk.open( '/nayive/calc/index.html?file=files/hoja.xlsx' ), true" );
     ok( await d.until( `${WINS} === 1 && ${frame( "calc" )}`, 20000 ), "hoja.xlsx open in a Calc window" );
-    await d.evaluate( "NayiveDesktop.open( '/nayive/drive/' ), true" );
+    await d.evaluate( "AyniDesk.open( '/nayive/drive/' ), true" );
     const DRIVE = frame( "drive" );
     ok( await d.until( `${WINS} === 2 && ${DRIVE} && ${DRIVE}.eval( "FS_ROOT" ) === 'files' && typeof ${DRIVE}.openOffice === 'function'`, 20000 ), "Drive in a window" );
-    ok( await d.evaluate( `${DRIVE}.NayiveUI.windowed && ! ${DRIVE}.isPhone()` ), "(Drive's window is a wide desktop window)" );
+    ok( await d.evaluate( `${DRIVE}.Ayni.frame.windowed && ! ${DRIVE}.isPhone()` ), "(Drive's window is a wide desktop window)" );
 
     // Double-click hoja.ods: its twin hoja.xlsx is the answer (already made,
     // no LibreOffice needed). openOffice resolves once the window is opened.

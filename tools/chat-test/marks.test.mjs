@@ -1,5 +1,5 @@
 /*
- * marks.test.mjs - Chat's text marks (client/apps/chat/marks.js) on their
+ * marks.test.mjs - Chat's text marks (client/apps/shared/ayni/ayni-compose.js) on their
  * own, no browser: node tools/chat-test/marks.test.mjs
  * The strip cases are the same as server/go/chat_marks_test.go's.
  */
@@ -9,10 +9,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname( fileURLToPath( import.meta.url ) );
-const src  = fs.readFileSync( path.join( here, "../../client/apps/chat/marks.js" ), "utf8" );
+const src  = fs.readFileSync( path.join( here, "../../client/apps/shared/ayni/ayni-compose.js" ), "utf8" );
 const ctx  = { window: {} };
 vm.runInNewContext( src, ctx );
-const M = ctx.window.NayiveChatMarks;
+const M = ctx.window.Ayni.marks;
 
 let fails = 0, passes = 0;
 function check( name, got, want )

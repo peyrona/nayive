@@ -5,7 +5,7 @@
 "use strict";
 
 //------------------------------------------------------------------------//
-// CHANGES STILL ON A DEVICE  (shared/store.js PARKED SAVES)
+// CHANGES STILL ON A DEVICE  (shared/ayni/ayni-store.js PARKED SAVES)
 //
 // Before Drive deletes, moves or renames: a document with changes saved on
 // ANOTHER device and not sent yet is asked about - going on tells that
@@ -15,18 +15,18 @@
 // its new place. False = stop.
 async function parkedFirst( paths )
 {
-    if( ! window.NayiveStore || ! NayiveStore.pendingElsewhere ) return true;
+    if( ! window.AyniStore || ! AyniStore.pendingElsewhere ) return true;
     let list = [];
-    try { list = await NayiveStore.pendingElsewhere( paths ); } catch( e ) {}
+    try { list = await AyniStore.pendingElsewhere( paths ); } catch( e ) {}
     if( list.length )
     {
         const one = paths.length === 1 && list.every( function( m ) { return m.path === paths[0]; } );
         const r = await Ayni.confirm( {
             title: T( 'ui.park.title' ),
             body: TF( 'ui.park.body', { name: one ? paths[0].split( '/' ).pop() : TF( 'drive.nItems', { n: paths.length } ),
-                                        list: NayiveStore.pendingText( list ) } ),
+                                        list: AyniStore.pendingText( list ) } ),
             confirm: T( 'ui.park.goOn' ), other: T( 'ui.park.forget' ), otherIcon: 'eye-off' } );
-        if( r === true || r === 'other' ) try { await NayiveStore.dismissPending( paths ); } catch( e ) {}
+        if( r === true || r === 'other' ) try { await AyniStore.dismissPending( paths ); } catch( e ) {}
         if( r !== true ) return false;
     }
     try { await withBusy( appStore().unpark( paths ) ); } catch( e ) {}
@@ -89,7 +89,7 @@ async function confirmRename()
     setBackdrop( 'renameBackdrop', false );
 
     // A shortcut is renamed by the name shown: its ending stays (tree.js LINK_EXT).
-    const parent  = NayiveMedia.dirOf( oldPath );
+    const parent  = Ayni.dirOf( oldPath );
     const newPath = joinPath( parent, isLink( rowNode( oldPath ) ) ? newName + LINK_EXT : newName );
     if( newPath !== oldPath && ! await parkedFirst( [ oldPath ] ) ) return;
     setStatus( T( 'drive.renaming' ) );
@@ -112,14 +112,14 @@ async function confirmRename()
             setStatus( '' );
             return;
         }
-        try { step.bin = await withBusy( GumApi.binPaths( [ newPath ] ) ); }
+        try { step.bin = await withBusy( AyniNet.binPaths( [ newPath ] ) ); }
         catch( _ ) { Ayni.toast( 'err', T( 'drive.moveExistingFailed' ) ); setStatus( '' ); return; }
         if( ! step.bin ) canUndo = false;     // an old server: nothing to restore it by
     }
 
     try
     {
-        await withBusy( GumApi.rename( oldPath, newPath ) );
+        await withBusy( AyniNet.rename( oldPath, newPath ) );
         step.moved = true;
         await NayiveMedia.remapPaths( [ [ oldPath, newPath ] ] );
         if( oldPath === currentFolder ) currentFolder = newPath;   // renamed the folder we're in — stay in it
@@ -233,7 +233,7 @@ async function fillFolderTotals( token, nodes, files, sizeDd, countDd )
     {
         for( const dir of nodes.filter( isDir ) )
         {
-            const sub = await withBusy( GumApi.listDirRecursive( dir.path ) );
+            const sub = await withBusy( AyniNet.listDirRecursive( dir.path ) );
 
             walkTotals( sub.nodes || [], function( n )
             {
@@ -293,7 +293,7 @@ function fileKind( node )
 
 function parentLabel( path )
 {
-    return fsRel( NayiveMedia.dirOf( path ) ) || homeName();
+    return fsRel( Ayni.dirOf( path ) ) || homeName();
 }
 
 // Where a multi-selection lives, or null when it is spread over several folders.
@@ -359,7 +359,7 @@ async function copySelectionLink()
 
     try
     {
-        await NayiveUI.copyText( url );
+        await Ayni.copyText( url );
         flashStatus( T( 'drive.linkCopied' ) );
     }
     catch( _ )
@@ -433,7 +433,7 @@ async function applyDeepLink()
 // shortcut's "Go to the original" (menus.js).
 async function revealItem( sel )
 {
-    const parent = NayiveMedia.dirOf( sel );
+    const parent = Ayni.dirOf( sel );
 
     if( parent && ! findNode( parent ) )
     {
@@ -525,7 +525,7 @@ async function shortcutsLeftOk( targets )
 {
     const under = function( p, t ) { return p === t || p.indexOf( t + '/' ) === 0; };
     let links;
-    try { links = ( await GumApi.shortcuts() ).links || []; }
+    try { links = ( await AyniNet.shortcuts() ).links || []; }
     catch( _ ) { return true; }
 
     const n = links.filter( function( l )
@@ -625,12 +625,7 @@ async function downloadSelection()
     updateToolbarState();
 
     // The browser fetches it itself: a plain link, clicked.
-    const a = document.createElement( 'a' );
-    a.href     = '/api/download?id=' + encodeURIComponent( job.id );
-    a.download = job.name;
-    document.body.appendChild( a );
-    a.click();
-    a.remove();
+    Ayni.saveUrl( '/api/download?id=' + encodeURIComponent( job.id ), job.name );
 
     job.timer = setTimeout( pollDownload, DL_POLL_MS );
 }
@@ -652,7 +647,7 @@ async function pollDownload()
     let p;
     try
     {
-        p = JSON.parse( await GumApi.fetchText( '/api/download?progress=1&id=' + encodeURIComponent( job.id ) ) );
+        p = JSON.parse( await AyniNet.fetchText( '/api/download?progress=1&id=' + encodeURIComponent( job.id ) ) );
         job.fails = 0;
     }
     catch( err )
@@ -681,7 +676,7 @@ async function stopDownload()
     if( ! job ) return;
     job.stopped = true;
     clearTimeout( job.timer );
-    try { await GumApi.fetchText( '/api/download?id=' + encodeURIComponent( job.id ), { method: 'DELETE' } ); }
+    try { await AyniNet.fetchText( '/api/download?id=' + encodeURIComponent( job.id ), { method: 'DELETE' } ); }
     catch( _ ) {}
     if( dlJob === job ) endDownload( 'stopped' );
 }

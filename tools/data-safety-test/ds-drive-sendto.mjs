@@ -30,7 +30,7 @@ section( "D4 · SHARE TO NAYIVE WHILE THE ALBUM CANNOT BE READ" );
     ok( await c.until( "ITEMS.length === 1 && DEST === 'files/Album' && document.getElementById('goBtn').ariaDisabled !== 'true'" ), "the page shows it, album chosen" );
 
     // The listing fails (a 5xx, a hiccup); the PUTs would work.
-    await c.evaluate( `GumApi.listDir = function() { const e = new Error( 'HTTP 502: Bad Gateway' ); e.status = 502; return Promise.reject( e ); }; true` );
+    await c.evaluate( `AyniNet.listDir = function() { const e = new Error( 'HTTP 502: Bad Gateway' ); e.status = 502; return Promise.reject( e ); }; true` );
     await c.evaluate( "document.getElementById('goBtn').click(); true" );
     ok( await c.until( "document.querySelector( 'dialog.panel[open] .body > p.text' )" ), "it says so" );
     const said = await c.evaluate( "( document.querySelector( 'dialog.panel[open] .body > p.text' ) || {} ).textContent || ''" );
@@ -42,7 +42,7 @@ section( "D4 · SHARE TO NAYIVE WHILE THE ALBUM CANNOT BE READ" );
 
     // Again, with a listing that does not know the name yet (another device
     // put it there after the look): create-only gets a 412 -> the next free name.
-    await c.evaluate( `GumApi.listDir = function() { return Promise.resolve( { nodes: [] } ); }; true` );
+    await c.evaluate( `AyniNet.listDir = function() { return Promise.resolve( { nodes: [] } ); }; true` );
     await c.until( "document.getElementById('goBtn').ariaDisabled !== 'true'" );
     await c.evaluate( "document.getElementById('goBtn')?.click(); true" );
     ok( await disk( () => onDisk( s, "files/Album/IMG_1 (2).jpg" ) === "THE SHARED PHOTO" ), "the shared photo goes up under the next free name",
@@ -76,14 +76,14 @@ section( "D7 · A NEW TRIP NAMED LIKE ONE ANOTHER DEVICE MADE" );
     // The name taken after the listing (a stale one here): trip.json is made
     // create-only, the 412 moves on to the next name.
     await seed( "data/trips/peru-2026/trip.json", trip( 9100, "peru-2026", "Peru (phone)" ) );
-    const stale = "const real = GumApi.listDir; GumApi.listDir = function( p ) { return p === 'data/trips' ? Promise.resolve( { nodes: [] } ) : real( p ); };";
+    const stale = "const real = AyniNet.listDir; AyniNet.listDir = function( p ) { return p === 'data/trips' ? Promise.resolve( { nodes: [] } ) : real( p ); };";
     ok( await create( "Peru", stale ) === "", "a new trip \"Peru\" is saved" );
     ok( await disk( () => json( "data/trips/peru-2026-2/trip.json" )?.destination === "Peru" ), "it gets the next free folder",
         onDisk( s, "data/trips/peru-2026-2/trip.json" ) );
     ok( json( "data/trips/peru-2026/trip.json" )?.destination === "Peru (phone)", "the phone's trip is untouched" );
 
     // data/trips cannot be read: the trip is not made (nothing is guessed).
-    const broken = "GumApi.listDir = function() { const e = new Error( 'HTTP 502: Bad Gateway' ); e.status = 502; return Promise.reject( e ); };";
+    const broken = "AyniNet.listDir = function() { const e = new Error( 'HTTP 502: Bad Gateway' ); e.status = 502; return Promise.reject( e ); };";
     const err = await create( "Chile", broken );
     ok( err === await c.evaluate( "T( 'trips.createFailed' )" ), "a failed listing: \"could not create\"", err );
     ok( onDisk( s, "data/trips/chile-2026/trip.json" ) === null, "...and nothing was written" );

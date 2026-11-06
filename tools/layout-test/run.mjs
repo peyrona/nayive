@@ -97,7 +97,7 @@ const RULES = `( async () => { const o = [];
             if( b.getAttribute( 'role' ) !== 'separator' ) { if( ! b.hidden ) o.push( 'a bar Ayni did not wire: ' + b.id ); continue; }   // hidden: its app has nothing to divide yet
             if( ! b.getAttribute( 'aria-label' ) || /\bayni\./.test( b.getAttribute( 'aria-label' ) ) ) o.push( 'a bar with no name: ' + b.id );
             const r = b.getBoundingClientRect(), side = b.classList.contains( 'rows' ) ? r.height : r.width;
-            if( b.checkVisibility() && Math.round( side ) !== 7 ) o.push( 'bar ' + b.id + ' is ' + side + ' px' );
+            if( b.checkVisibility() && Math.round( side ) !== 13 ) o.push( 'bar ' + b.id + ' is ' + side + ' px' );
         }
         for( const b of document.querySelectorAll( '.more-toggle' ) )
         {
@@ -219,7 +219,7 @@ try
         await open( "planner", 1280, 900 );
         await sleep( 800 );
         ok( await ev( "document.getElementById('habitsPane').hidden" ), "…still folded after a reload" );
-        ok( await ev( "Math.abs( document.getElementById('tasksPane').getBoundingClientRect().bottom - document.getElementById('rightCol').getBoundingClientRect().bottom ) < 9" ), "…Tasks reaches the bar at the bottom" );
+        ok( await ev( "Math.abs( document.getElementById('tasksPane').getBoundingClientRect().bottom - document.getElementById('rightCol').getBoundingClientRect().bottom ) < 15" ), "…Tasks reaches the bar at the bottom" );
         await open( "planner", 390, 800 );
         // A fold is kept per screen: this one's, to show a phone layout ignores it
         await ev( "( localStorage.setItem( 'planner.tasksPct.' + Math.min( screen.width, screen.height ) + 'x' + Math.max( screen.width, screen.height ) + ( matchMedia( '(orientation: portrait)' ).matches ? '-p' : '-l' ) + '.fold', 'last' ), true )" );

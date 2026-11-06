@@ -16,6 +16,7 @@
          every inline script below may call Ayni.t(). -->
     <script src="shared/i18n.js"></script>
     <script src="shared/ayni/ayni-i18n.js" data-dict="shared/i18n/" data-langs="es en pt fr de"></script>
+    <script src="shared/ayni/ayni-util.js"></script>
     <title>Nayive · Admin</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3Cpath d='m9 12 2 2 4-4'/%3E%3C/svg%3E">
 
@@ -32,10 +33,26 @@
     <link rel="stylesheet" href="shared/ayni/ayni-pickers.css">
     <link rel="stylesheet" href="shared/ayni/ayni-layout.css">
     <link rel="stylesheet" href="shared/theme.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-share.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-pwa.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-locker.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-status.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-shell.css">
     <link rel="stylesheet" href="shared/app.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-doc.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-media.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-image.css">
+    <link rel="stylesheet" href="shared/ayni/ayni-map.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
     <script src="shared/ayni/ayni-icons.js" defer></script>
     <script src="shared/ayni/ayni-base.js" defer></script>
+    <script src="shared/ayni/ayni-icons-more.js" defer></script>
+    <script src="shared/ayni/ayni-shell.js" defer></script>
+    <script src="shared/ayni/ayni-status.js" defer></script>
+    <script src="shared/ayni/ayni-share.js" defer></script>
+    <script src="shared/ayni/ayni-upload.js" defer></script>
+    <script src="shared/ayni/ayni-pwa.js" defer></script>
+    <script src="shared/ayni/ayni-boot.js" defer></script>
     <script src="shared/ayni/ayni-buttons.js" defer></script>
     <script src="shared/ayni/ayni-toasts.js" defer></script>
     <script src="shared/ayni/ayni-dialogs.js" defer></script>
@@ -47,10 +64,11 @@
     <script src="shared/ayni/ayni-pickers.js" defer></script>
     <script src="shared/ayni/ayni-layout.js" defer></script>
     <script src="shared/locker.js"></script>
+    <script src="shared/ayni/ayni-locker.js"></script>
     <script src="shared/ui.js" defer></script>
     <!-- Only for signing a regular account out (the 403 below): its saves
          still waiting here, as the launcher's sign-out does. -->
-    <script src="shared/store.js" defer></script>
+    <script src="shared/ayni/ayni-store.js" defer></script>
     <!-- The Language tab: the app's own engine code, saving to the server. -->
     <link rel="stylesheet" href="language/language.css">
     <script src="language/admin.js" type="module"></script>
@@ -135,10 +153,7 @@
         td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
         .col-user  { font-weight: 600; white-space: nowrap; }
         .col-user input { width: 100%; min-width: 96px; font-weight: 600; }
-        .col-quota { width: 124px; }
-        .col-quota .spin { width: 116px; }
-        .col-photo { width: 132px; }
-        .col-photo .spin { width: 124px; }
+        .col-quota, .col-photo { width: 1%; }
         .col-use   { width: 118px; color: var(--text-dim); font-size: 0.86rem; white-space: nowrap; }
         .col-use .pct { display: block; font-size: 0.78rem; }
         .col-use .over { color: var(--danger); }
@@ -177,8 +192,6 @@
             #usersSec td { border: none; padding: 4px 0; }
             #usersSec td.col-user  { padding-right: 96px; }
             #usersSec td.col-act   { position: absolute; top: 10px; right: 0; padding: 0; }
-            #usersSec td.col-quota .spin,
-            #usersSec td.col-photo .spin { width: 100%; }
             #usersSec td.col-quota::before,
             #usersSec td.col-photo::before,
             #usersSec td.col-use::before,
@@ -362,12 +375,12 @@
         }
         return fetch( '/api/admin', opt ).then( function ( r )
         {
-            // The admin panel does not load shared/gum-api.js, so raise the
+            // The admin panel does not load shared/ayni/ayni-net.js, so raise the
             // shared "tu sesión ha caducado" bar here instead - otherwise a form
             // submitted after the session died just fails silently. load()'s own
             // 401 branch redirects, so the bar is only ever seen mid-session.
-            if ( r.status === 401 && window.NayiveUI && NayiveUI.sessionExpired )
-                NayiveUI.sessionExpired();
+            if ( r.status === 401 && window.NayiveUI && Ayni.pwa.sessionExpired )
+                Ayni.pwa.sessionExpired();
             return r;
         } );
     }
@@ -382,13 +395,13 @@
         var q = ( quota === null || quota === undefined || quota === '' ) ? null : Number( quota );
         if ( !q )
         {
-            td.textContent = NayiveUI.fmtBytes( usage );
+            td.textContent = Ayni.fmtBytes( usage );
             return;
         }
         var qBytes = q * GIB;
         var pct    = usage / qBytes * 100;
         var over   = usage > qBytes;
-        td.innerHTML = NayiveUI.fmtBytes( usage ) + ' / ' + NayiveUI.fmtBytes( qBytes ) +
+        td.innerHTML = Ayni.fmtBytes( usage ) + ' / ' + Ayni.fmtBytes( qBytes ) +
             '<span class="pct' + ( over ? ' over' : '' ) + '">' +
             ( pct < 0.1 && pct > 0 ? '<0.1' : pct.toFixed( pct < 10 ? 1 : 0 ) ) + '%</span>';
     }

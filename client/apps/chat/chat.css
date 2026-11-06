@@ -583,6 +583,7 @@ html.touch .filters { gap: 8px; }
 /* held down (touch) it opens its menu: no text selection, no phone callout */
 .send          { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
 .send svg      { width: 21px; height: 21px; margin-left: -2px; }
+.send.quiet svg { margin-left: 0; }
 .send:disabled { opacity: 0.5; cursor: default; }
 
 /* the Send button's menu (held down): over the button, inside the composer */
@@ -607,21 +608,6 @@ dialog.later-sheet      { max-width: min(280px, calc(100vw - 32px)); }
 /* the clip's panel: its look is shared (app.css, NayiveUI.attachPanel); here
    only where it sits - over the writer */
 .attach { position: absolute; left: 10px; right: 10px; bottom: calc(100% + 4px); z-index: 5; }
-
-/* the emoji panel (writing, or "+" in the reactions) */
-.emojis
-{
-    position: absolute; left: 8px; bottom: calc(100% + 4px); z-index: 6;
-    width: min(340px, calc(100vw - 16px)); max-height: 260px; overflow-y: auto;
-    display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px;
-    padding: 8px; border-radius: var(--radius-l);
-    background: var(--head); box-shadow: var(--elev-dialog);
-}
-.emojis button
-{
-    padding: 4px 0; border: none; border-radius: 50%;
-    font-size: 1.45rem; line-height: 1.2; cursor: pointer;
-}
 
 /* ---- holding a message down ---------------------------------------------- */
 .ctx
@@ -708,7 +694,6 @@ dialog.later-sheet      { max-width: min(280px, calc(100vw - 32px)); }
 .hint              { margin: -6px 0 14px; font-size: 0.8rem; line-height: 1.45; color: var(--text-dim); }
 /* Auto-delete: the days box and "Días (0 = nunca)" on one row */
 .days-field        { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; font-size: 0.9rem; }
-.days-field input  { flex: 0 0 auto; width: 6em; text-align: center; }
 /* ...and how many messages that would delete now (J7: a typo shows) */
 .days-count        { margin: -6px 0 14px; min-height: 1.45em; font-size: 0.85rem; font-weight: 600; color: var(--danger); }
 .days-count.none   { font-weight: 400; color: var(--text-dim); }
@@ -811,9 +796,6 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
 .editor-backdrop[popover] { width: auto; height: auto; margin: 0; padding: 0; border: 0; color: inherit; overflow: visible; }
 .full .editor-canvas { display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .full .editor-canvas img { max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; }
-/* a computer's own camera (C.openCamera): the live view, the shutter under it */
-.full.camera video { max-width: 100%; max-height: 100%; object-fit: contain; background: #000; }
-.full .cam-bar  { flex: 0 0 auto; display: flex; justify-content: center; padding: 14px 0 calc(18px + env(safe-area-inset-bottom)); background: #151515; }
 .full .nav      { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2; }
 .full .nav.prev { left: 10px; }
 .full .nav.next { right: 10px; }

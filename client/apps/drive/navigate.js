@@ -106,7 +106,7 @@ async function loadListing( path )
 
     try
     {
-        const r = await GumApi.listDir( path, true );      // shortcuts too (tree.js isLink)
+        const r = await AyniNet.listDir( path, true );      // shortcuts too (tree.js isLink)
         if( seq !== listingSeq ) return;
         curListing     = { path: path, nodes: pruneNodes( r.nodes || [] ) };
         listingLoading = false;
@@ -118,7 +118,7 @@ async function loadListing( path )
         listingLoading = false;
         curListing = { path: path, nodes: [] };
         render();
-        if( err && err.status === 401 ) { GumApi.loginRedirect(); return; }
+        if( err && err.status === 401 ) { AyniNet.loginRedirect(); return; }
         Ayni.toast( 'err', T( 'drive.openFolderFailed' ) );
     }
 }

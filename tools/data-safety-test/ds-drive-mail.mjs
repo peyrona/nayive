@@ -76,14 +76,14 @@ section( "D5 · SAVE TO DRIVE ONTO A NAME THAT IS TAKEN" );
     ok( await c.until( "document.querySelector('#readParts .mail-part')" ), "the mail with informe.pdf is open" );
 
     // The folder's listing fails (a 5xx, a hiccup): nothing is saved.
-    await c.evaluate( `window.__realList = GumApi.listDir; GumApi.listDir = function() { const e = new Error( 'HTTP 502: Bad Gateway' ); e.status = 502; return Promise.reject( e ); }; true` );
+    await c.evaluate( `window.__realList = AyniNet.listDir; AyniNet.listDir = function() { const e = new Error( 'HTTP 502: Bad Gateway' ); e.status = 502; return Promise.reject( e ); }; true` );
     ok( await saveToRoot(), "Save to Nayive -> Files" );
     ok( await c.until( "window.__toasts.includes( Ayni.t( 'ui.saveFailed' ) )", 8000 ), "it says it could not save", await c.evaluate( "window.__toasts" ) );
     ok( await onServer( "files/informe.pdf" ) === "LAST MONTH'S INVOICE", "last month's informe.pdf is untouched", await onServer( "files/informe.pdf" ) );
 
     // A listing that does not know the name yet (taken after the look): the
     // create-only PUT gets a 412 and the next free name is used.
-    await c.evaluate( "GumApi.listDir = function() { return Promise.resolve( { nodes: [] } ); }; true" );
+    await c.evaluate( "AyniNet.listDir = function() { return Promise.resolve( { nodes: [] } ); }; true" );
     ok( await saveToRoot(), "Save to Nayive -> Files, again" );
     ok( await c.until( "window.__toasts.some( t => /^Guardado en /.test( t ) )", 8000 ), "saved", await c.evaluate( "window.__toasts" ) );
     ok( await onServer( "files/informe.pdf" ) === "LAST MONTH'S INVOICE", "last month's informe.pdf is still untouched" );

@@ -50,7 +50,9 @@ try
     const status = () => c.evaluate( "document.getElementById('status').textContent" );
 
     ok( await c.evaluate( "document.getElementById('from').options.length === 6 && document.getElementById('to').options.length === 5" ), "language lists filled" );
-    ok( await c.evaluate( "document.getElementById('local').checked" ), "Local mode on by default" );
+    ok( ! await c.evaluate( "document.getElementById('local').checked" ), "Local mode off by default" );
+    await c.evaluate( "document.getElementById('local').click(); true" );
+    ok( await c.evaluate( "nayiveLanguage.isLocalMode()" ), "Local switch on: saved" );
 
     // es -> fr on the device (Bergamot): asks to download, then translates.
     await translate( "Hola, ¿cómo estás? ¿Dónde está la estación de tren más cercana?", "es", "fr" );
@@ -84,6 +86,8 @@ try
     // Local mode off, Bergamot off: MyMemory.
     await c.evaluate( "nayiveLanguage.setEngineEnabled( 'bergamot', false ); nayiveLanguage.setLocalMode( false ); true" );
     await translate( "Hola, ¿cómo estás?", "es", "de" );
+    ok( await until( "document.querySelector('dialog.panel[open]:not([id])')", 30000 ), "first online translation: the notice comes first" );
+    await c.evaluate( "(() => { const b = document.querySelector( 'dialog.panel[open]:not([id]) footer button' ); b && b.click(); return true; })()" );
     await settled();
     s = await status();
     ok( ( await out() ).length > 3 && /MyMemory/.test( s ), "MyMemory over the internet", JSON.stringify( await out() ) + " | " + s );

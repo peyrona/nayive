@@ -16,7 +16,7 @@ async function textPage( url )
 {
     await c.open( url, "/nayive/text/" );
     await c.evaluate( PW + "( window )" );
-    return c.until( "document.querySelector('.CodeMirror') && window.NayiveCrypt && document.getElementById('fileLabel').textContent", 20000 );
+    return c.until( "document.querySelector('.CodeMirror') && window.AyniCrypt && document.getElementById('fileLabel').textContent", 20000 );
 }
 
 //----------------------------------------------------------------------------//
@@ -24,8 +24,8 @@ section( "A6 · RESTORE A COPY SEALED WITH AN OLDER PASSWORD" );
 
 ok( await textPage( "/nayive/text/?new=1" ), "Text is up" );
 const sealedPair = await c.evaluate( `( async function () {
-    var kNew = await NayiveCrypt.newLock( 'clave-nueva-123' ), kOld = await NayiveCrypt.newLock( 'clave-vieja-123' );
-    return { cur: await NayiveCrypt.seal( kNew, 'texto nuevo\\n' ), old: await NayiveCrypt.seal( kOld, 'texto viejo\\n' ) };
+    var kNew = await AyniCrypt.newLock( 'clave-nueva-123' ), kOld = await AyniCrypt.newLock( 'clave-vieja-123' );
+    return { cur: await AyniCrypt.seal( kNew, 'texto nuevo\\n' ), old: await AyniCrypt.seal( kOld, 'texto viejo\\n' ) };
 } )()` );
 put( s, "files/n.txt", sealedPair.cur );
 put( s, "files/.bak/n.txt", sealedPair.old );
@@ -47,7 +47,7 @@ ok( await c.evaluate( "document.getElementById('lockBtn').getAttribute('aria-pre
 const saved = await untilDisk( s, "files/n.txt", t => t && t !== sealedPair.cur, 20000 );
 const opens = await c.evaluate( `( async function () {
     var body = ${JSON.stringify( saved )};
-    async function tryPw( pw ) { try { var k = await NayiveCrypt.lockFrom( pw, body ); return await NayiveCrypt.unseal( k, body ); } catch ( e ) { return null; } }
+    async function tryPw( pw ) { try { var k = await AyniCrypt.lockFrom( pw, body ); return await AyniCrypt.unseal( k, body ); } catch ( e ) { return null; } }
     return { mine: await tryPw( 'clave-nueva-123' ), old: await tryPw( 'clave-vieja-123' ) };
 } )()` );
 ok( opens.mine === "texto viejo\n", "the file now holds the old text, sealed with the document's OWN password", opens );
@@ -57,7 +57,7 @@ section( "A6 · A SEALED COPY BACK INTO A DOCUMENT WITH NO PASSWORD NOW" );
 
 ok( await textPage( "/nayive/text/?new=1" ), "Text is up" );
 const oldSealed = await c.evaluate( `( async function () {
-    return NayiveCrypt.seal( await NayiveCrypt.newLock( 'clave-de-antes-1' ), 'texto sellado\\n' ); } )()` );
+    return AyniCrypt.seal( await AyniCrypt.newLock( 'clave-de-antes-1' ), 'texto sellado\\n' ); } )()` );
 put( s, "files/m.txt", "texto ahora\n" );
 put( s, "files/.bak/m.txt", oldSealed );
 ok( await textPage( "/nayive/text/?file=files/m.txt" ), "m.txt (no password) is open" );

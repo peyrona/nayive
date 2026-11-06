@@ -173,7 +173,7 @@ try
     await store( "balata-coach-seen" );
     await open( "drive", 1280, 800, 300 );
     ok( await until( "document.querySelectorAll( '.coach-overlay .coach-bubble' ).length === 2", 6000 ), "a new user: two bubbles (the app's name, the \"?\")" );
-    ok( await ev( "( ( h, r ) => r.left <= h.left && r.right >= h.right )( document.querySelector( 'h1.nayive-home-link' ).getBoundingClientRect(), document.querySelector( '.coach-ring' ).getBoundingClientRect() )" ), "…the first ring is round the app's name" );
+    ok( await ev( "( ( h, r ) => r.left <= h.left && r.right >= h.right )( document.querySelector( 'h1.home-link' ).getBoundingClientRect(), document.querySelector( '.coach-ring' ).getBoundingClientRect() )" ), "…the first ring is round the app's name" );
     ok( await ev( "[ ...document.querySelectorAll( '.coach-close' ) ].every( x => x.getAttribute( 'aria-disabled' ) === 'true' && /^[1-9]$/.test( x.textContent ) )" ), "…their × counts down, dead" );
     await shot( "coach" );
     await esc();
@@ -218,7 +218,7 @@ try
     await press( `${CARD} .help-tour` );
     ok( await until( "!! document.querySelector( '.tour-overlay .tour-bubble:not([hidden])' )", 4000 ), "Take the tour starts it" );
     await sleep( 400 );
-    ok( await ev( "( r => [ ...document.querySelectorAll( '.app-icon.nayive-home-link, h1.nayive-home-link' ) ].some( e => { const h = e.getBoundingClientRect(); return h.width && r.left <= h.left + 1 && r.right >= h.right - 1 && r.top <= h.top + 1 && r.bottom >= h.bottom - 1; } ) )( document.querySelector( '.tour-ring' ).getBoundingClientRect() )" ), "…its first step rings the app's icon / name" );
+    ok( await ev( "( r => [ ...document.querySelectorAll( '.app-icon.home-link, h1.home-link' ) ].some( e => { const h = e.getBoundingClientRect(); return h.width && r.left <= h.left + 1 && r.right >= h.right - 1 && r.top <= h.top + 1 && r.bottom >= h.bottom - 1; } ) )( document.querySelector( '.tour-ring' ).getBoundingClientRect() )" ), "…its first step rings the app's icon / name" );
     ok( await ev( "/^1 of \\d+$/.test( document.querySelector( '.tour-count' ).textContent )" ), "…\"1 of N\"", await ev( "document.querySelector( '.tour-count' )?.textContent" ) );
     await shot( "tour-home" );
     await esc();
@@ -245,7 +245,7 @@ try
     ok( await until( "!! document.querySelector( '.tour-overlay .tour-bubble:not([hidden])' )", 4000 ), "the tour row starts the tour" );
     await esc();
     await until( "! document.querySelector( '.tour-overlay' )", 2000 );
-    ok( await ev( "NayiveOffice.helpItems().map( i => i.el || i.cmd ).join() === 'statsBtn,scBtn,help-card,help-tour'" ), "the menu bar's Help shows the same rows" );
+    ok( await ev( "AyniDoc.helpItems().map( i => i.el || i.cmd ).join() === 'statsBtn,scBtn,help-card,help-tour'" ), "the menu bar's Help shows the same rows" );
     ok( ! errors().length, "no errors", errors() );
 
     console.log( "THE INFO \"i\" - in a dialog, and one added later" );
@@ -275,7 +275,7 @@ try
     await c.send( "Emulation.setUserAgentOverride", { userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1" } );
     await open( "", 390 );
     await store( "nayive-install-snooze" );
-    await ev( "NayiveUI.offerInstall(); true" );
+    await ev( "Ayni.pwa.offerInstall(); true" );
     const INST = "dialog.panel.install-sheet[open]";
     ok( await until( `!! document.querySelector( '${INST}' )`, 3000 ), "the install nudge opens its dialog" );
     ok( await ev( `( d => ! d.classList.contains( 'help-card' ) && !! d.querySelector( 'header .install-close' ) && d.querySelectorAll( '.help-list li .install-ico svg, .install-steps li .install-ico svg' ).length >= 3 )( document.querySelector( '${INST}' ) )` ),

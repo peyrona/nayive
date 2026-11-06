@@ -1,0 +1,65 @@
+/* Ayni library 0.2.0: FullCalendar in Ayni's look. The calendar engine is FullCalendar, under its own licence: the app brings it, Ayni only
+   dresses it. Plain CSS, no build step. Optional: load it after ayni-base.css. */
+
+.fc { --fc-border-color: var(--line); --fc-page-bg-color: transparent; --fc-neutral-bg-color: color-mix(in srgb, var(--text) 5%, transparent); height: 100%; }
+.fc
+        {
+            --fc-event-bg-color:     #3273B3;
+            --fc-event-border-color: #3273B3;
+            --fc-event-text-color:   #FFFFFF;
+        }
+.fc .fc-toolbar { display: none; }
+.fc-theme-standard td, .fc-theme-standard th { border-color: var(--line); }
+.fc .fc-scrollgrid { border: none; }
+.fc .fc-scrollgrid-section-header .fc-scroller,
+        .fc .fc-scrollgrid-section-body:not(.fc-scrollgrid-section-liquid) .fc-scroller
+        { scrollbar-color: transparent transparent; }
+.fc-col-header-cell { color: var(--text-dim); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; padding: 6px 0; }
+.fc-timegrid .fc-daygrid-day-frame { min-height: 1.5em; }
+.fc-timegrid .fc-daygrid-body-unbalanced .fc-daygrid-day-events,
+        .fc-timegrid .fc-daygrid-body-natural .fc-daygrid-day-events { min-height: 0; margin-top: 0; margin-bottom: 0; }
+.fc-timegrid-slot-label { color: var(--text-dim); font-size: 0.78rem; }
+.fc-timegrid-axis { color: var(--text-dim); }
+.fc-scrollgrid-section-header .fc-timegrid-axis { vertical-align: middle; }
+.fc-scrollgrid-section-header .fc-timegrid-axis-frame { display: flex; align-items: center; justify-content: center; }
+.fc-daygrid-day-number { color: var(--text); font-size: 0.86rem; padding: 6px; }
+.fc-day-today { background: color-mix(in srgb, var(--accent) 8%, transparent) !important; }
+.fc-daygrid-day.fc-day-today .fc-daygrid-day-number { color: var(--accent); font-weight: 700; }
+.fc-event { border-radius: 6px; border: none; padding: 2px 5px; font-size: 0.85rem; cursor: pointer;
+                    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.fc-timegrid-event { padding: 3px 6px; }
+.fc-daygrid-event { padding: 2px 4px; overflow: hidden; }
+.fc-daygrid-event .fc-event-main-frame { display: flex; min-width: 0; overflow: hidden; }
+.fc-daygrid-event .fc-event-title      { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-event .tz-tag { opacity: 0.75; font-size: 0.78em; margin-left: 4px; }
+.fc-list-event-dot { display: none; }
+.fc-list-day-cushion { background: color-mix(in srgb, var(--text) 5%, transparent) !important; color: var(--text-dim); }
+.fc-list-event td { color: var(--text); border-color: var(--line); }
+.fc-timegrid-now-indicator-line { border-color: var(--accent); }
+.fc-timegrid-now-indicator-arrow { border-color: var(--accent); color: var(--accent); }
+.fc-daygrid-event .fc-event-resizer { width: 14px !important; height: 14px !important; }
+.fc-timegrid-event .fc-event-resizer-start { display: none !important; }
+.fc-timegrid-event .fc-event-resizer-end
+        {
+            display: block !important;
+            height: 4px !important; bottom: 0 !important; left: 0 !important; right: 0 !important; width: auto !important;
+            background-color: var(--link) !important;
+            border-radius: 0 0 5px 5px !important;
+            cursor: ns-resize !important;
+        }
+@media (max-width: 640px)
+{
+    .fc-daygrid-event .tz-tag { display: none; }
+}
+@media (max-width: 640px)
+{
+    .phone-month .fc-daygrid-day-frame { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px; padding: 3px 0; }
+    .phone-month .fc-daygrid-day-top { flex-direction: row; justify-content: center; }
+    .phone-month .fc-daygrid-day-number { padding: 3px 4px; font-size: 0.9rem; line-height: 1.2; text-decoration: none; }
+    .phone-month .fc-daygrid-day-events,
+            .phone-month .fc-daygrid-day-bottom { display: none; }
+    .phone-month .fc-day-other .fc-daygrid-day-number { opacity: 0.45; }
+    .phone-month .fc-daygrid-day.is-picked .fc-daygrid-day-frame { background: var(--accent); border-radius: var(--radius-s); }
+    .phone-month .fc-daygrid-day.is-picked .fc-daygrid-day-number { color: var(--on-accent); font-weight: 700; opacity: 1; }
+    .phone-month .fc-daygrid-day.is-picked .pm-dots i { background: var(--on-accent); }
+}
