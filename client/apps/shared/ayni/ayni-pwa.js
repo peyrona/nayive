@@ -534,7 +534,7 @@
     // than forcing one - the page may hold unsaved work, or be
     // mid-upload.
 
-    var updateBar = null;
+    var updateBar = null, sessionBar = null;
 
     function showUpdateBar()
     {

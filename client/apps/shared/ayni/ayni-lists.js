@@ -284,9 +284,11 @@ const list = (el, cfg = {}) => {
     painting = false;
   };
   /* A redraw of the list by the page puts the ticks and states back on its own */
+  /* Only rows and ticks count: a tile swapping its icon for a thumbnail would otherwise lay out the whole list, once per tile */
   let pending = false;
-  new MutationObserver(() => {
-    if (painting || pending) return;
+  const rowChange = (n) => n.nodeType === 1 && (n.matches(`${rowSel}, .pick-tick`) || !!n.querySelector(`${rowSel}, .pick-tick`));
+  new MutationObserver((recs) => {
+    if (painting || pending || !recs.some((m) => [...m.addedNodes, ...m.removedNodes].some(rowChange))) return;
     pending = true; Promise.resolve().then(() => { pending = false; refresh(); });
   }).observe(box, { childList: true, subtree: true });
 

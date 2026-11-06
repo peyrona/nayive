@@ -64,6 +64,7 @@ window.idbPut = function ( store, rec ) {
     } );
 };
 </script>
+<script src="shared/i18n.js"></script>
 <script src="shared/ayni/ayni-store.js"></script>
 <script>
 window.mergeList = function ( p, base, mine, theirs ) {

@@ -132,7 +132,7 @@ section( "PHOTOS · VIDEOS: A FRAME BECOMES THE THUMBNAIL, ADD UPLOADS ONE, THE 
 {
     const CLIP = fs.readFileSync( path.join( path.dirname( new URL( import.meta.url ).pathname ), "fixtures", "clip.webm" ) );
     put( s, "files/Vids/clip.webm", CLIP );
-    put( s, "files/Elsewhere/far.webm", CLIP );
+    put( s, "files/Elsewhere/far.webm", Buffer.concat( [ CLIP, Buffer.from( [ 0 ] ) ] ) );     // another size: a thumbnail key is size + second
     const FAR = thumbOf( "files/Elsewhere/far.webm" );
     put( s, FAR, Buffer.from( "a video thumbnail of a folder Photos never opened" ) );
     const T = thumbOf( "files/Vids/clip.webm" );
