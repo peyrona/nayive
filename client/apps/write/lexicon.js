@@ -9,7 +9,10 @@
  * key, no account. The request carries no cookies (credentials: 'omit') and
  * no referrer, so Wiktionary only sees the word and the IP. ONE request per
  * word: the page is read once and its synonyms, antonyms, senses and
- * etymology all come from it (cached for the session). The page comes through
+ * etymology all come from it (cached for the session); Synonyms / Antonyms add
+ * one search for the pages that name the word (reverse(), es and en). RAE was
+ * looked at and left out: Cloudflare refuses scripts, no CORS, no open API.
+ * The page comes through
  * the MediaWiki parse API as HTML and is read in an inert DOMParser document:
  * nothing in it runs, only its text is kept, and it is shown with textContent.
  *
@@ -250,6 +253,39 @@ function lookup( lang, word )
     return p;
 }
 
+// THE OTHER WAY ROUND. A page often lacks a synonym list ("despacio" in
+// es.wiktionary has none) while other pages name it in theirs: "lentamente"
+// says {{sinónimo|despacio}}. One search finds those pages - their titles are
+// the synonyms. Only where the wiki marks synonyms with a template a search
+// can match (es, en); one request per word and kind, cached like the page.
+const REVERSE = {
+    es: { syn: 'sin[oó]nimos?',        ant: 'ant[oó]nimos?' },
+    en: { syn: '(syn|synonyms)\\|en', ant: '(ant|antonyms)\\|en' }
+};
+// es.wiktionary uses the same template in its other languages' sections
+// ("rápido" -> Portuguese "preguiçoso"): keep words Spanish can spell.
+const SPELLS = { es: /^[a-záéíóúüñ' -]+$/i };
+
+function reverse( lang, kind, word )
+{
+    const tpl = REVERSE[ lang ] && REVERSE[ lang ][ kind ];
+    if( ! tpl ) return Promise.resolve( [] );
+    const key = lang + '|' + kind + '|' + word;
+    if( cache.has( key ) ) return cache.get( key );
+    const w = word.replace( /["\\]/g, '' );
+    const re = w.replace( /[.?+*|{}[\]()#@&<>~\\-]/g, '\\$&' );
+    const q = new URLSearchParams( { action: 'query', list: 'search', srnamespace: '0', srlimit: '30', srprop: '',
+                                     format: 'json', formatversion: '2', origin: '*',
+                                     srsearch: 'insource:"' + w + '" insource:/\\{\\{' + tpl + '\\|([^}]*\\|)?' + re + '[|}]/' } );
+    const p = fetch( 'https://' + lang + '.wiktionary.org/w/api.php?' + q, { credentials: 'omit', referrerPolicy: 'no-referrer', mode: 'cors' } )
+        .then( ( r ) => ( r.ok ? r.json() : null ) )
+        .then( ( j ) => ( ( j && j.query && j.query.search ) || [] ).map( ( x ) => x.title )
+                        .filter( ( t ) => t.toLowerCase() !== word.toLowerCase() && ( ! SPELLS[ lang ] || SPELLS[ lang ].test( t ) ) ) )
+        .catch( () => { cache.delete( key ); return []; } );
+    cache.set( key, p );
+    return p;
+}
+
 //---- the panel -------------------------------------------------------------//
 
 export function createLexicon( o )
@@ -303,16 +339,20 @@ export function createLexicon( o )
         if( ! word ) { note( t( 'typeWord' ) ); field.focus(); return; }
         const my = ++seq;
         note( t( 'busy' ) );
-        let r;
-        try { r = await lookup( lang(), word ); }
+        const nym = kind === 'syn' || kind === 'ant';
+        let r, back = [];
+        try { [ r, back ] = await Promise.all( [ lookup( lang(), word ), nym ? reverse( lang(), kind, word.toLowerCase() ) : [] ] ); }
         catch( _ ) { if( my === seq ) note( t( 'offline' ) ); return; }
         if( my !== seq ) return;                    // a newer question was asked meanwhile
-        if( ! r ) { note( t( 'none' ) ); return; }
+        if( ! r && ! back.length ) { note( t( 'none' ) ); return; }
+        r = r || { groups: [], syn: [], ant: [], ety: [], ex: [], title: word,
+                   url: 'https://' + lang() + '.wiktionary.org/wiki/' + encodeURIComponent( word ) };
 
         const box = [];
-        if( kind === 'syn' || kind === 'ant' )
+        if( nym )
         {
-            const list = r[ kind ];
+            const list = r[ kind ].slice();
+            for( const w of back ) if( list.length < MAX_WORDS && ! list.some( ( x ) => x.toLowerCase() === w.toLowerCase() ) ) list.push( w );
             if( ! list.length ) box.push( el( 'p', 'lex-note', t( 'none' ) ) );
             else
             {
@@ -376,4 +416,4 @@ export function createLexicon( o )
 }
 
 // For tools/: the reader alone, on a parsed section.
-export const _test = { section, read, fetchPage };
+export const _test = { section, read, fetchPage, reverse };
