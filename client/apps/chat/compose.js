@@ -37,7 +37,7 @@
         attachBtn.id = "attachBtn";
         var row1 = h( "div", { class: "row1" }, ta, laterBtn );
         cbox = h( "div", { class: "cbox" }, quoteSlot, row1 );
-        sendBtn = h( "button", { class: "send", attrs: { type: "button", "data-tip": T( "chat.sendMsg" ), "aria-label": T( "chat.sendMsg" ) },
+        sendBtn = h( "button", { class: "send", attrs: { type: "button", "data-alt": "", "data-tip": T( "chat.sendMsg" ), "aria-label": T( "chat.sendMsg" ) },
                                  on: { click: function () { send(); } } } );
         sendBtn.appendChild( C.ic( "send" ) );
         fmtBar = buildFmtBar();
