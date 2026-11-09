@@ -637,6 +637,8 @@
             if( w.frame.contentWindow !== cw ) { mo.disconnect(); return; }
             if( ! head || ! head.isConnected ) head = findHead( doc );
             if( ! head ) return;
+            // mark it: in a window it gets a title bar's own colour (app.css)
+            if( ! head.hasAttribute( 'data-win-head' ) ) head.setAttribute( 'data-win-head', '' );
             // a finger on it drags the window: the browser must not take it for a scroll
             if( head.style.touchAction !== 'none' ) head.style.touchAction = 'none';
             if( ! w.el.classList.contains( 'chromeless' ) ) { w.el.classList.add( 'chromeless' ); paint(); }

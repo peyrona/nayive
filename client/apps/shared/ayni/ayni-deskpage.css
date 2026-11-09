@@ -105,6 +105,17 @@ html.win-grab, html.win-grab * { cursor: grabbing !important; }
     flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     font-size: 0.9rem; font-weight: 600; color: var(--text);
 }
+/* The bar's own colour, as an app's title row in a window (app.css): accent-tinted
+   in front, grey behind. */
+.win-bar                       { background: color-mix(in oklab, var(--card) 93%, var(--text));
+                                 border-radius: calc(var(--radius-m) - 2px) calc(var(--radius-m) - 2px) 0 0; }
+.win.max .win-bar              { border-radius: 0; }
+.win.focused .win-bar          { background: color-mix(in oklab, var(--card) 80%, var(--accent)); }
+html.bevel .win.focused .win-bar
+{
+    background-image: var(--bevel);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / .35), inset 0 -1px 0 rgb(0 0 0 / .12);
+}
 /* A window behind: its icon + name keep their colour, softer. The app's own
    title row gets the same (html[data-win-behind], see paint + app.css). */
 .win:not(.focused) .win-bar > svg,

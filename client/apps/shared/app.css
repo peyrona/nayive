@@ -126,6 +126,32 @@ html[data-win-behind] .header h1,
 html[data-win-behind] .trip-header .app-icon,
 html[data-win-behind] .app-title     { opacity: 0.55; }
 
+/* Desktop mode: the window's title row has its own colour, apart from the page
+   under it - accent-tinted on the window in front, grey on one behind. Only in
+   a desktop window (html.is-windowed - a phone never has one); the desktop marks
+   the app's own title row data-win-head (adoptHead, ayni-deskpage.js). A layer
+   under the row's content, so a row that paints its own background (Trips, a
+   card's sticky .header) still shows it; :where keeps a sticky row sticky. */
+html.is-windowed [data-win-head]          { isolation: isolate; }
+html.is-windowed :where([data-win-head])  { position: relative; }
+html.is-windowed [data-win-head]::before
+{
+    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: color-mix(in oklab, var(--card) 80%, var(--accent));
+}
+html.is-windowed[data-win-behind] [data-win-head]::before
+{
+    background: color-mix(in oklab, var(--card) 93%, var(--text));
+}
+/* "Raised controls" on (html.bevel): the front title row is raised too - the
+   buttons' soft edge, light on top and dark under it - with no border, so it
+   never passes for a button. */
+html.is-windowed.bevel:not([data-win-behind]) [data-win-head]::before
+{
+    background-image: var(--bevel);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / .35), inset 0 -1px 0 rgb(0 0 0 / .12);
+}
+
 
 /* The right-hand groups (see HEADER) are Ayni's: the header's actions are an
    Ayni toolbar (role="toolbar" .tall: one Tab stop, the arrows move) whose
