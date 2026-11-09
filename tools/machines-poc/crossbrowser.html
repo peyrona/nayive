@@ -1,0 +1,14 @@
+<!doctype html><meta charset="utf-8"><title>Machines physics hash</title>
+<script src="vendor/nape.min.js"></script><script src="sim.js"></script><script src="scenes.js"></script>
+<script>
+// Runs every stored solution and sends one exact hash per second of sim time.
+var out = {};
+Machines.scenes.forEach( function ( sc )
+{
+    if( ! sc.solution.length ) return;
+    var s = new Machines.Sim( sc, sc.solution ), t = [];
+    for( var i = 0; i < 120 * 6; i++ ) { s.step(); if( i % 120 === 119 ) t.push( s.hash() ); }
+    out[ sc.id ] = t.join( ' ' ) + ' ' + s.state;
+} );
+fetch( '/report?ua=' + encodeURIComponent( navigator.userAgent ), { method: 'POST', body: JSON.stringify( out ) } );
+</script>

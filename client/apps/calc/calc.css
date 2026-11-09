@@ -141,6 +141,8 @@ html, body { height: 100%; overflow: hidden; }
 #statusBar { background: var(--calc-chrome); flex: 0 0 auto; min-height: 26px; --tab-page: var(--calc-paper); }
 #selStats b { color: var(--text); font-weight: 600; }
 #selStats:empty { display: none; }
+/* A phone has no room for the totals: the bar keeps only the sheet tabs. */
+@media (max-width: 640px) { #selStats { display: none; } #statusBar:has( > #sheetTabs[hidden] ) { display: none; } }
 /* Renaming a tab (grid.js, editSheetName): the tab becomes this field, in place. */
 .sheet-tab-edit { height: auto; align-self: stretch; min-width: 6ch; max-width: 33ch; border-radius: 0 0 var(--radius-s) var(--radius-s); }
 /* Dragging a tab (grid.js, dragTab): it fades, and a line marks where it lands. */

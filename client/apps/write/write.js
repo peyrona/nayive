@@ -28,6 +28,7 @@ import { createDocxEditor, packagedFonts, runToolbarCommand, toolbarCommandState
 import { createToolbar } from './toolbar.js';
 import { createPatcher } from './docx-patch.js';
 import { createFindBar } from './find.js';
+import { createLexicon } from './lexicon.js';
 import { PROOF_LANGS, setPersonalWords, isPersonalWord, makeSpellProvider, suggestionsFor, resetProofing } from './proofing.js';
 import { createSpellOverlay } from './proofing-overlay.js';
 // Every place Write works around the engine, as data - see quirks.js.
@@ -295,6 +296,7 @@ function wireStaticUI()
     document.getElementById( 'imageBtn'            ).addEventListener( 'click', pickImage );
     document.getElementById( 'tableBordersBtn'     ).addEventListener( 'click', openTableBorders );
     document.getElementById( 'findBtn'             ).addEventListener( 'click', function() { openFind( false ); } );
+    document.getElementById( 'lexBtn'              ).addEventListener( 'click', toggleLexicon );
 
     wireTableBorders();
     restoreTbStyle();
@@ -380,6 +382,17 @@ function wireStaticUI()
         focus : focusEditor
     } );
 
+    // ---- the dictionary panel (lexicon.js) ----
+    lexicon = createLexicon(
+    {
+        word: selectedWord,
+        lang: function() { return proofLangs[ 0 ] || ( Ayni.i18n && Ayni.i18n.lang() ) || 'en'; }
+    } );
+    new MutationObserver( function()
+    {
+        document.getElementById( 'lexBtn' ).setAttribute( 'aria-pressed', String( lexicon.isOpen() ) );
+    } ).observe( document.getElementById( 'lexPanel' ), { attributes: true, attributeFilter: [ 'hidden' ] } );
+
     document.getElementById( 'imgInput'      ).addEventListener( 'change', function( e ) { insertPickedImage( e.target.files[0] ); e.target.value = ''; } );
     document.getElementById( 'linkCancelBtn' ).addEventListener( 'click', function() { setBackdrop( 'linkBackdrop', false ); } );
     document.getElementById( 'linkConfirmBtn' ).addEventListener( 'click', confirmLink );
@@ -413,6 +426,7 @@ function wireStaticUI()
             if( open ) { if( open.id ) setBackdrop( open.id, false ); return; }   // no id: Ayni's own (the help card) closes itself
 
             if( find && find.isOpen() ) { find.close(); return; }
+            if( lexicon && lexicon.isOpen() && document.getElementById( 'lexPanel' ).contains( document.activeElement ) ) { lexicon.close(); focusEditor(); return; }
         }
     });
 }
@@ -2269,6 +2283,7 @@ const MENUS = [
         { sep: true },
         { key: 'write.sc.find',    run: function() { openFind( false ); }, sc: 'write.sc.find',    iconOf: '#findBtn' },
         { key: 'write.sc.replace', run: function() { openFind( true );  }, sc: 'write.sc.replace', iconOf: '#findBtn' },
+        { key: 'write.lex.title',  run: toggleLexicon, iconOf: '#lexBtn', checked: function() { return !! lexicon && lexicon.isOpen(); } },
         { sep: true },
         { key: 'ui.settings', sub: toolsItems, iconOf: '#settingsBtn' } ] )
 },
@@ -2549,6 +2564,26 @@ function caretAfterPaste( text )
     } )();
 }
 
+// DICCIONARIO (lexicon.js): the panel asks for "the selected word" - the
+// selection when it sits in one paragraph, else the word the caret is in. Read
+// from the painted text, as the paste fix reads it; nothing is changed.
+function toggleLexicon() { if( lexicon ) lexicon.toggle(); }
+
+function selectedWord()
+{
+    const sel = ready && editor ? caretNow() : null;
+    if( ! sel || sel.anchor.paragraphId !== sel.head.paragraphId ) return '';
+    const chars = paintedText( sel.anchor.paragraphId );
+    let a = Math.min( sel.anchor.offset, sel.head.offset ), b = Math.max( sel.anchor.offset, sel.head.offset );
+    if( a === b )
+    {
+        const isL = function( c ) { return !! c && /[\p{L}\p{M}'’-]/u.test( c ); };
+        while( a > 0 && isL( chars[ a - 1 ] ) ) a--;
+        while( b < chars.length && isL( chars[ b ] ) ) b++;
+    }
+    return chars.slice( a, b ).join( '' ).replace( /^[\s'’-]+|[\s'’-]+$/g, '' ).slice( 0, 80 );
+}
+
 // The caret with offsets. The command contract's selection names paragraphs
 // only; the surface's has the offsets (the same seam the links use).
 function caretNow()    { try { return editor.surface.state().selection; } catch( _ ) { return null; } }
@@ -2587,6 +2622,7 @@ async function onContextMenu( e )
 // BUSCAR / REEMPLAZAR  (find.js draws the bar; Ctrl+F, Ctrl+H, Edicion)
 
 let find = null;     // made in wireStaticUI
+let lexicon = null;  // made in wireStaticUI (lexicon.js)
 
 function openFind( replace )
 {
@@ -3103,7 +3139,9 @@ function saveNow() { session.saveNow(); }
 // Throws when the engine refuses it - the session says "could not be opened".
 async function loadBody( body )
 {
-    await loadIntoEditor( await toBytes( body ) );
+    const bytes = await toBytes( body );
+    NayiveUI.refuseOfficeLocked( bytes );     // a Word password: says so, throws
+    await loadIntoEditor( bytes );
 }
 
 // A blank document with Nayive's page setup (A4, the margins above). Made once

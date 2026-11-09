@@ -441,6 +441,51 @@ function editSheetName( i )
 // Insert > Rename sheet: the sheet on screen.
 function renameActiveSheet() { editSheetName( doc.active ); }
 
+// Insert > Delete sheet: the sheet on screen, after a yes. Refused when it is
+// the last one shown, when a formula or a name elsewhere points at it (they
+// would turn into #REF!), or when parts Calc keeps verbatim may name it.
+async function deleteActiveSheet()
+{
+    if( ! table ) return;
+
+    const i  = doc.active;
+    const sh = doc.sheets[ i ];
+    if( ! sh ) return;
+
+    if( doc.sheets.filter( function( o ) { return ! o.hidden; } ).length < 2 )
+        return Ayni.toast( 'warn', T( 'calc.sheetLastOne' ) );
+
+    if( doc.sheets.some( function( o ) { return o.raw && ( o.raw.refs.length || o.raw.cf || o.raw.dv ); } ) )
+        return Ayni.toast( 'warn', T( 'calc.sheetDeleteKept' ) );
+
+    stashActiveSheet();
+    const names = function( f ) { return typeof f === 'string' && renameInFormula( f, sh.name, '\u0001' ) !== f; };
+    const used  = doc.sheets.some( function( o, k )
+    {
+        return k !== i && ( o.data || [] ).some( function( row ) { return ( row || [] ).some( function( v ) { return typeof v === 'string' && v.charAt( 0 ) === '=' && names( v ); } ); } );
+    } ) || ( doc.names || [] ).some( function( n ) { return n && n.Sheet !== i && names( n.Ref ); } );
+    if( used ) return Ayni.toast( 'warn', T( 'calc.sheetInUse' ) );
+
+    if( ! await Ayni.confirm( { title: T( 'calc.deleteSheet' ), body: Ayni.tf( 'calc.deleteSheetBody', { name: sh.name } ),
+                                confirm: T( 'calc.deleteSheet' ), danger: true } ) ) return;
+    if( doc.sheets[ i ] !== sh ) return;             // the book changed while the question was open
+
+    doc.sheets.splice( i, 1 );
+
+    // A name kept for one sheet counts sheets by position: the deleted
+    // sheet's own names go with it, the later ones move down by one.
+    doc.names = ( doc.names || [] ).filter( function( n ) { return ! n || n.Sheet !== i; } );
+    doc.names.forEach( function( n ) { if( n && n.Sheet != null && n.Sheet > i ) n.Sheet--; } );
+
+    // The sheet shown next: the one after it, else the one before (never a hidden one).
+    let next = Math.min( i, doc.sheets.length - 1 );
+    for( let k = 0; doc.sheets[ next ].hidden && k < doc.sheets.length; k++ ) next = ( next + 1 ) % doc.sheets.length;
+    doc.active = next;
+
+    initGrid( doc );
+    scheduleAutosave();
+}
+
 // Excel's rules: 1-31 characters, none of \ / ? * [ ] :, no ' at either
 // end, and not another sheet's name (whatever its case). True = done (or
 // nothing to do); false = refused, said in a toast. `quiet`: no toast.
@@ -2834,6 +2879,6 @@ function printSheet( pdfHint )
 export
 {
     table, newSheet, newDoc, doc, activeSheet, defaultSheetName, gridBooting, lastSelection, htThemeName,
-    CM_ICONS, addSheet, renameActiveSheet, switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles,
+    CM_ICONS, addSheet, renameActiveSheet, deleteActiveSheet, switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles,
     editText, localMarks, undoStep, lineStyle, styleOf, blankDoc, calcPrefs, setCalcPrefs, numberLocale, printSheet
 };

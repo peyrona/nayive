@@ -26,6 +26,8 @@ function closeTrash()
 {
     trashMode  = false;
     trashItems = [];
+    if( binList ) binList.clear();
+    document.getElementById( 'trashListing' ).innerHTML = '';
     render();
     reload();                        // refresh the tree + disk gauge
 }
@@ -35,6 +37,28 @@ async function refreshTrash()
     try { trashItems = shownTrash( await withBusy( AyniNet.trashList() ) ); }
     catch( _ ) { trashItems = []; }
     render();
+}
+
+// Picking in the bin: the same shared list as the folder (click, Ctrl,
+// Shift, ticks, long tap, Ctrl+A), on its own box and its own bar, so the
+// picks are bin ids. Restore and Delete forever then work on the picks.
+let binList = null;
+
+function wireTrashList()
+{
+    binList = Ayni.list( document.getElementById( 'trashListing' ), {
+        main:    true,
+        row:     '.row[data-bin]',
+        idOf:    function( el ) { return el.dataset.bin; },
+        bar:     document.getElementById( 'trashSel' ),
+        active:  function() { return trashMode; },
+        actions: [
+            { id: 'restore', label: T( 'drive.restore' ), icon: SVG_RESTORE, group: 1,
+              run: function( ids ) { restoreTrash( ids ); } },
+            { id: 'purge', label: T( 'drive.deleteForever' ), icon: SVG_TRASH, key: 'Del', danger: true, group: 2,
+              run: function( ids ) { purgeTrash( ids ); } }
+        ]
+    } );
 }
 
 // Bin ids deleted for good once their Undo is gone (purgeTrash). Until
@@ -79,17 +103,22 @@ function renderTrashListing()
 {
     if( ! trashItems.length )
     {
-        document.getElementById( 'listing' ).innerHTML =
+        document.getElementById( 'trashListing' ).innerHTML =
             '<div class="empty-hint" data-i18n="drive.trashEmptyMsg"></div>';
         return;
     }
 
-    const host = listRowsHost();
+    const box  = document.getElementById( 'trashListing' );
+    box.innerHTML = '';
+    const host = document.createElement( 'div' );
+    host.className = 'list-rows';
+    box.appendChild( host );
 
     trashItems.forEach( function( item )
     {
         const row = document.createElement( 'div' );
-        row.className = 'row';
+        row.className   = 'row';
+        row.dataset.bin = item.id;
 
         const ic = document.createElement( 'span' );
         ic.className = 'row-ic';
@@ -122,7 +151,7 @@ function renderTrashListing()
         Ayni.setTip( delBtn, T( 'drive.deleteForever' ) );
         delBtn.setAttribute( 'aria-label', T( 'drive.deleteForever' ) );
         delBtn.innerHTML   = SVG_TRASH;
-        delBtn.addEventListener( 'click', function() { purgeTrash( [ item.id ], item.name ); } );
+        delBtn.addEventListener( 'click', function() { purgeTrash( [ item.id ] ); } );
 
         actions.appendChild( restoreBtn );
         actions.appendChild( delBtn );
@@ -147,19 +176,19 @@ async function restoreTrash( ids )
     catch( _ ) { setStatus( '' ); Ayni.toast( 'err', T( 'drive.restoreFailed' ) ); }
 }
 
-async function purgeTrash( ids, name )
+async function purgeTrash( ids )
 {
     if( ids.length === 1 ) { purgeOneLater( ids ); return; }
 
     // Several at once: the question stays, and they go at once, no Undo.
     if( ! await Ayni.confirm( {
         title: T( 'drive.deleteForever' ),
-        body: TF( 'drive.deleteForeverBody', { name: name } ),
+        body: TF( 'drive.emptyTrashBody', { n: ids.length } ),
         confirm: T( 'drive.delete' ), danger: true } ) ) return;
     setStatus( T( 'drive.deleting' ) );
     try
     {
-        await withBusy( AyniNet.trashDelete( ids ) );
+        await purgeBinIds( ids );
         await refreshTrash();
         flashStatus( T( 'drive.deletedForever' ) );
     }

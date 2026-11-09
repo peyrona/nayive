@@ -184,6 +184,8 @@
                 <div class="picker" id="setBar"><input type="hidden" value="bottom"><div class="panel popup picker-pop" popover="manual"><ul role="listbox"><li role="option" data-value="top" data-i18n="desktop.barTop"></li><li role="option" data-value="bottom" data-i18n="desktop.barBottom"></li><li role="option" data-value="left" data-i18n="desktop.barLeft"></li><li role="option" data-value="right" data-i18n="desktop.barRight"></li></ul></div></div></div>
             <div class="set-row"><label for="setBarH" data-i18n="desktop.barHeight"></label>
                 <span class="slider-row"><input type="range" id="setBarH" min="36" max="72" step="2"><output id="setBarHOut" for="setBarH"></output></span></div>
+            <!-- BEVEL - set.bevel (2026-11-08, default on): buttons, tabs, switches and splitters look raised, here and in every window. -->
+            <label class="switch end"><span data-i18n="desktop.bevel"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.bevelInfo"></span><input role="switch" type="checkbox" id="bevelChk"></label>
             <!-- SCREEN LOCKER (shared/locker.js): which one + after how many idle
                  minutes (ONE value for every locker, his rule 2026-09-30); the clock's own line of text only shows with the clock.
                  DEVICE state (localStorage "nayive-locker"); moved here from My account 2026-09-28. -->
@@ -293,6 +295,7 @@
             openMenu: function () { return openMenu.apply( null, arguments ); },
             openMoreHere: function () { return openMoreHere.apply( null, arguments ); },
             placeMail: function () { return placeMail.apply( null, arguments ); },
+            placePlanner: function () { return placePlanner.apply( null, arguments ); },
             placeUnread: function () { return placeUnread.apply( null, arguments ); },
             pokeUnread: function () { return pokeUnread.apply( null, arguments ); },
             weatherEngine: function ()
@@ -600,6 +603,43 @@
     {
         if( e.data && e.data.mail === 'new' ) askMail();
     } );
+
+    //------------------------------------------------------------------------//
+    // PLANNER - today's events still to come on this device's clock (the
+    // launcher's Planner number, /api/calendar/today): the count, green, on
+    // Planner's bar button while Planner is open. Not on the menu button: it is
+    // not news, just the day. Asked at load, every minute (events go by) and on
+    // coming back. The admin (403) stops asking.
+
+    var planDot = document.createElement( 'span' ), planN = 0, planStopped = false, planAsking = false;
+    planDot.className = 'icon-badge plan-dot';
+    planDot.hidden = true;
+    planDot.setAttribute( 'aria-hidden', 'true' );
+
+    function placePlanner()
+    {
+        var pl = wins.filter( function ( w ) { return w.app === 'planner'; } )[ 0 ];
+        if( ! pl || ! ( planN > 0 ) ) { planDot.hidden = true; return; }
+        showDot( planDot, pl.main, planN );
+    }
+    function askPlanner()
+    {
+        if( planStopped || planAsking || document.hidden ) return;
+        planAsking = true;
+        fetch( '/api/calendar/today?tz=' + encodeURIComponent( Ayni.dates.zone( '' ) ),
+               { credentials: 'same-origin', headers: { Accept: 'application/json' } } )
+            .then( function ( r )
+            {
+                if( r.status === 401 || r.status === 403 ) planStopped = true;
+                return r.ok ? r.json() : null;
+            } )
+            .then( function ( j ) { if( j ) { planN = j.n || 0; placePlanner(); } } )
+            .catch( function () {} )
+            .then( function () { planAsking = false; } );
+    }
+    askPlanner();
+    setInterval( askPlanner, 60000 );
+    document.addEventListener( 'visibilitychange', askPlanner );
 
     // A tapped notification: the worker (sw.js) hands its page to the desktop.
     function openTarget( url ) { appsReady.then( function () { openApp( url, { nav: true } ); } ); }

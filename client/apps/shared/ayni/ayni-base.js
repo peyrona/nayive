@@ -417,6 +417,16 @@ let embedded = false;
 try { embedded = window.self !== window.top; } catch { embedded = true; }
 const windowed = !!window.frameElement?.hasAttribute('data-ayni-window');
 if (embedded) document.documentElement.classList.add(windowed ? 'is-windowed' : 'is-embedded');
+/* A window copies the desktop's look switches from its <html>: .bevel (raised controls) or .flat (none), live. A pane
+   copies them from the page that holds it (Planner's Calendar, Tasks, Habits), which copies them from the desktop. */
+if (embedded) try {
+  const top = window.parent.document.documentElement;
+  const look = () => { for (const c of ['bevel', 'flat']) document.documentElement.classList.toggle(c, top.classList.contains(c)); };
+  look();
+  const mo = new MutationObserver(look);
+  mo.observe(top, { attributes: true, attributeFilter: ['class'] });
+  addEventListener('pagehide', () => mo.disconnect());
+} catch { /* a foreign host: not ours to copy */ }
 if (embedded && !windowed) try {
   const wide = window.top.matchMedia('(min-width: 641px)');
   const sync = () => { document.documentElement.classList.toggle('is-embedded-wide', wide.matches); };

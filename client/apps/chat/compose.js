@@ -51,8 +51,6 @@
         if( emojiBtn ) emojiBtn.id = "emojiBtn";
         composer = h( "div", { class: "composer", attrs: { id: "composer", "data-toasts-above": "" } }, fmtBtn, emojiBtn, fmtBar, attachBtn, cbox, sendBtn );
         wireSendHold();
-        // The hour's answer ends, or the night, or someone comes online.
-        if( ! sendModeTimer ) sendModeTimer = setInterval( showSendMode, 15000 );
 
         ta.addEventListener( "input", function ( e ) { if( ! marking ) smiley( e ); grow(); typing(); C.keepDraft(); } );
         // Once up, the format bar stays while the focus is in the bar at the
@@ -238,7 +236,6 @@
         if( ta ) { ta.value = ""; grow(); }
         closePanel();
         if( ! keep ) C.keepDraft();
-        showSendMode();     // another chat, or the edit given up
     };
 
     // ---------------------------------------------------------------------
@@ -321,7 +318,6 @@
     {
         S.editing = null;
         S.replyTo = m;
-        showSendMode();
         quoteBar( C.nameOf( m.from ), C.preview( m )[ 1 ], C.colorOf( m.from ) );
         C.focusComposer();
     };
@@ -330,7 +326,6 @@
     {
         S.replyTo = null;
         S.editing = m;
-        showSendMode();     // an edit makes no sound
         quoteBar( T( "chat.editing" ), C.preview( m )[ 1 ], 0 );
         ta.value = m.text || "";
         grow();
@@ -440,23 +435,6 @@
     // ---------------------------------------------------------------------
 
     var nightPick = {};   // conv -> { silent, until }
-    var sendQuiet = false, sendModeTimer = null;
-
-    // The Send button says what a plain send does now: a crossed speaker
-    // while this chat's answer sends without sound. Its look only - what is
-    // sent is decided by C.nightGate.
-    function showSendMode()
-    {
-        var conv = S.open, pick = conv && nightPick[ conv ];
-        var quiet = !! ( pick && pick.silent && pick.until > Date.now() && ! S.editing && nightFor( conv ).length );
-        if( ! sendBtn || quiet === sendQuiet ) return;
-        sendQuiet = quiet;
-        var label = T( quiet ? "chat.sendSilent" : "chat.sendMsg" );
-        sendBtn.classList.toggle( "quiet", quiet );
-        sendBtn.setAttribute( "data-tip", label );
-        sendBtn.setAttribute( "aria-label", label );
-        sendBtn.replaceChildren( C.ic( quiet ? "volume-x" : "send" ) );
-    }
 
     // The others in `conv` it is night for now: [ { name, time } ]. Their
     // zones come from their own pages (the server's zonesFor).
@@ -506,7 +484,6 @@
             {
                 nightPick[ conv ] = { silent: silent, until: Date.now() + 60 * 60 * 1000 };
                 go( silent );
-                showSendMode();
             } };
         }
         Ayni.menuAt( [

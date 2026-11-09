@@ -1,0 +1,40 @@
+/* ssh/ssh-tab.css - the Admin panel's SSH tab (ssh/ssh-tab.js). */
+
+.ssh-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; }
+.ssh-status { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; color: var(--text-dim); font-size: 0.9rem; }
+.ssh-status::before
+{
+    content: ""; flex: none; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--text-faint);
+}
+.ssh-status[data-state="on"]   { color: var(--text); }
+.ssh-status[data-state="on"]::before   { background: var(--ok, var(--accent) ); }
+.ssh-status[data-state="busy"]::before { background: var(--warn, var(--accent) ); }
+#sshStatusText { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ssh-warn { margin: 0 0 10px; }
+
+/* The terminal box: always dark, as terminals are; full screen keeps the key bar. */
+.ssh-box
+{
+    display: flex; flex-direction: column; gap: 8px;
+    background: #16181d; border-radius: var(--radius-s); padding: 8px;
+}
+.ssh-box:fullscreen { border-radius: 0; padding: 10px; }
+#sshTerm { height: min( 60vh, 520px ); min-height: 220px; }
+.ssh-box:fullscreen #sshTerm { height: auto; flex: 1; }
+#sshTerm .xterm { height: 100%; }
+#sshTerm .xterm-viewport { scrollbar-color: #4a4f5a transparent; }
+
+/* The key bar: what a phone keyboard lacks. Only on touch screens. */
+.ssh-keys { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.ssh-keys .btn { flex: none; font-family: ui-monospace, Menlo, Consolas, monospace; }
+.ssh-keys .btn[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+@media ( pointer: fine ) { .ssh-keys { display: none; } }
+
+/* The connect dialog's passkey step */
+.ssh-step { text-align: center; }
+.ssh-step p { margin: 0 0 10px; }
+.ssh-big-icon { color: var(--accent); margin: 4px 0 8px; }
+.ssh-big-icon .icon, .ssh-big-icon svg { --icon: 44px; width: 44px; height: 44px; }
+.ssh-step .btn { margin: 6px auto 0; }

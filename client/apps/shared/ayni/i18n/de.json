@@ -296,6 +296,7 @@
   "ayni.split.reset": "Größen zurücksetzen",
   "ayni.split.resetTip": "Größen zurücksetzen (Doppelklick auf die Leiste)",
   "ayni.split.restored": "Bereich wiederhergestellt",
+  "ayni.dock.grip": "Zum Verschieben ziehen; an einem Fensterrand loslassen, um es anzudocken",
   "ayni.split.wasReset": "Größen zurückgesetzt",
   "ayni.stop": "Anhalten",
   "ayni.tab.close": "{name} schließen",

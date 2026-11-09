@@ -63,9 +63,28 @@ function renderBreadcrumb()
                             : i === 1 ? displayName( rowNode( path ) || { path: path } )
                             : seg )
                           : seg;
+        if( ! inShared ) crumbShareMark( crumb, path );
         crumb.addEventListener( 'click', function() { navigateTo( path ); } );
         host.appendChild( crumb );
     });
+}
+
+// The crumb of a folder the user shared gets the same people / globe icon
+// its row has (listing.js FOLDER_MARKS): inside a shared folder the path
+// shows where the share starts. Its subfolders get nothing of their own.
+function crumbShareMark( crumb, path )
+{
+    const m   = folderMarks.get( markPath( path ) );
+    const def = m && m.share && FOLDER_MARKS[ m.share ];
+    if( ! def ) return;
+
+    const text = document.createElement( 'span' );
+    text.textContent  = crumb.textContent;
+    crumb.textContent = '';
+    crumb.classList.add( 'crumb-shared', def.cls );
+    crumb.title     = T( def.tip );
+    crumb.innerHTML = Ayni.icon( def.icon );
+    crumb.appendChild( text );
 }
 
 // True while the open folder is one somebody shared with us AND they let us

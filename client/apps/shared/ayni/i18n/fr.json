@@ -296,6 +296,7 @@
   "ayni.split.reset": "Rétablir les tailles",
   "ayni.split.resetTip": "Rétablir les tailles (double-clic sur la barre)",
   "ayni.split.restored": "Panneau rétabli",
+  "ayni.dock.grip": "Faites glisser pour le déplacer ; lâchez-le sur un bord de la fenêtre pour l’ancrer",
   "ayni.split.wasReset": "Tailles rétablies",
   "ayni.stop": "Arrêter",
   "ayni.tab.close": "Fermer {name}",

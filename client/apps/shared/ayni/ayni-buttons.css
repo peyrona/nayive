@@ -129,3 +129,14 @@ html.touch .panel > footer .btn, html.touch .panel > form > footer .btn { --btn:
 html.touch .choice, html.touch .switch, html.touch .switch-pair, html.touch .switch-pair > label { min-height: var(--touch); }
 html.touch .switch-pair > label { display: flex; align-items: center; justify-content: center; min-width: var(--touch); }   /* an icon side too */
 html.touch .switch-pair > .track::before { content: ""; position: absolute; inset: -12px -4px; }
+
+/* ---------- Bevel ---------- */
+/* The splitter's soft raised edge (light on top, dark under it), on every control that has a face of its own: framed and
+   default buttons, a pressed or hovered one, tiles, tabs, switches and the desktop's chips. Only with html.bevel (the
+   desktop's "Raised controls" switch, which its windows copy); html.flat takes it off the splitter too. !important: the
+   controls' own states set the whole background, and would wipe the edge on hover */
+:root { --bevel: linear-gradient(to bottom, rgb(255 255 255 / .16), transparent 40%, rgb(0 0 0 / .07)); }
+html.bevel :is(.btn.bordered, .btn.primary:not(.danger), .btn.text.dashed, .btn[aria-pressed="true"], .btn.large.bordered,
+  .btn:hover:not([aria-disabled="true"]), [role="tab"], [role="menubar"] > button[aria-expanded="true"],
+  .switch input, .switch-pair > .track, .chip:hover, .chip[aria-current="true"]) { background-image: var(--bevel) !important; }
+html.flat .splitter { background-image: none; }

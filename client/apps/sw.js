@@ -30,7 +30,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-069c4d70396d";
+var CACHE_VERSION = "nayive-c0e0a260db23";
 /* @end */
 
 /* @generated:precache */
@@ -278,6 +278,8 @@ var PRECACHE_SHELL = [
     "split/index.html",
     "split/manifest.json",
     "split/money.js",
+    "ssh/ssh-tab.css",
+    "ssh/ssh-tab.js",
     "tasks/icons/icon-192.png",
     "tasks/icons/icon-512.png",
     "tasks/index.html",
@@ -314,6 +316,7 @@ var PRECACHE_SHELL = [
     "write/icons/icon-192.png",
     "write/icons/icon-512.png",
     "write/index.html",
+    "write/lexicon.js",
     "write/manifest.json",
     "write/proofing-overlay.js",
     "write/proofing-worker.js",

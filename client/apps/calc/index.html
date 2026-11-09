@@ -106,7 +106,7 @@
                 { sel: '#saveAsBtn',  text: Ayni.t( 'calc.introSaveAs' ), tour: { open: '#moreBtn' } },
                 { sel: '#restoreBtn', text: Ayni.t( 'write.introRestore' ), tour: { open: '#moreBtn' } },
                 { sel: '#lockBtn',    text: Ayni.t( 'write.introLock' ), tour: { open: '#moreBtn' } },
-                { sel: '#scBtn',      text: Ayni.t( 'write.introShortcuts' ), tour: { open: '#moreBtn' } }
+                { sel: '#scBtn',      text: Ayni.t( 'write.introShortcuts' ), tour: { open: '#helpBtn' } }
             ],
             // The guided tour (Ayuda ▸ Ver el tour): the sheet, then the card's rows;
             // `tour: { open }` lights a row inside the File menu.
@@ -259,6 +259,9 @@
             <button id="addSheetBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:calc.addSheet, aria-label:calc.addSheet">
                 <span class="icon" data-icon="sheet-add" style="--icon:17px"></span>
             </button>
+            <button id="delSheetBtn" class="btn fmt-btn" type="button" data-i18n-attr="data-tip:calc.deleteSheet, aria-label:calc.deleteSheet">
+                <span class="icon" data-icon="sheet-remove" style="--icon:17px"></span>
+            </button>
             <button id="fmtTableBtn" class="btn fmt-btn" type="button" popovertarget="tablePopup" data-i18n-attr="data-tip:calc.grpTable, aria-label:calc.grpTable" aria-haspopup="true">
                 <span class="icon" data-icon="table-plus" style="--icon:17px"></span>
             </button>
@@ -308,7 +311,7 @@
         </div>
 
         <!-- FILE: new, open, recent, save, import, "guardar como", restore,
-             password and the shortcut sheet. Not on the toolbar and not visible anywhere: the
+             password and the shortcut sheet (Help menu only). Not on the toolbar and not visible anywhere: the
              header's "..." menu is built FROM these buttons (glyph and title
              cloned) and an entry clicks the one it came from, so there is a
              single set of handlers and the menu can never drift. -->

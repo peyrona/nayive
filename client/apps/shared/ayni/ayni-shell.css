@@ -218,6 +218,21 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
         white-space: nowrap;
         clip-path: inset(50%);
     }
+
+    /* With its name gone the icon stands alone: On-accent, in a 32 px Accent circle. Only the circle is drawn: the box stays the
+       hit area (--hit on touch), and the row does not grow. The two tests stay apart: a :has() inside a :has() drops the whole rule */
+    html:not(.is-windowed) .app-icon.home-link:has(~ :is(h1, .app-title).home-link):not(:has(~ :is(h1, .app-title) button))
+    {
+        --pad: calc((var(--hit, 32px) - 20px) / 2);
+        box-sizing: content-box;
+        width: 20px;
+        height: 20px;
+        padding: var(--pad);
+        margin: calc(-1 * var(--pad)) calc(6px - var(--pad)) calc(-1 * var(--pad)) calc(-1 * var(--pad));
+        border-radius: 50%;
+        color: var(--on-accent);
+        background: radial-gradient(circle 16px, var(--accent) 15.5px, transparent 16px);
+    }
 }
 
 /* Export to PDF with no library: Ayni.printPage fills the hidden #printRoot and prints it. .printing stays on <html> until it is

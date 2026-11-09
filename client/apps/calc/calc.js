@@ -21,7 +21,7 @@ from './lib/xlsx-format_v2.4.5.js';
 import
 {
     table, doc, activeSheet, gridBooting, lastSelection, htThemeName, CM_ICONS,
-    addSheet, renameActiveSheet, switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles, editText, styleOf,
+    addSheet, renameActiveSheet, deleteActiveSheet, switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles, editText, styleOf,
     blankDoc, calcPrefs, setCalcPrefs, numberLocale, printSheet
 }
 from './grid.js';
@@ -124,7 +124,7 @@ const session = O.session( {
 const PHONE = window.matchMedia( '(max-width: 640px)' );
 
 O.fileMenu( { btn: 'moreBtn', menu: 'topMenu',
-              ids: [ 'newBtn', 'openBtn', 'recentBtn', 'saveBtn', 'importBtn', 'saveAsBtn', 'restoreBtn', 'lockBtn', 'printBtn', 'pdfBtn', 'scBtn' ] } );
+              ids: [ 'newBtn', 'openBtn', 'recentBtn', 'saveBtn', 'importBtn', 'saveAsBtn', 'restoreBtn', 'lockBtn', 'printBtn', 'pdfBtn' ] } );
 
 // Help on the "?" - the rows O.helpItems names (the menu bar's Help menu
 // shows the same ones).
@@ -355,6 +355,7 @@ function wireStaticUI()
     document.getElementById( 'insColBtn' ).addEventListener( 'click', function() { if( lastSelection ) table.alter( 'insert_col_end', lastSelection.c1 ); } );
     document.getElementById( 'delColBtn' ).addEventListener( 'click', function() { if( lastSelection ) table.alter( 'remove_col', lastSelection.c1, lastSelection.c2 - lastSelection.c1 + 1 ); } );
     document.getElementById( 'addSheetBtn' ).addEventListener( 'click', addSheet );
+    document.getElementById( 'delSheetBtn' ).addEventListener( 'click', deleteActiveSheet );
 
     // Ayni list pickers in the toolbar; the size is a combo box: a typed size that is not one (or out of
     // Excel's 1-409) changes nothing, and the cell's own size comes back
@@ -523,6 +524,7 @@ function registerUiLocale()
 // the .bak copy. A file Calc cannot read throws, and the session says so.
 async function loadSheet( body, name, how )
 {
+    NayiveUI.refuseOfficeLocked( body );      // an Excel password: says so, throws
     initGrid( await decodeToDoc( body, how === 'draft' ? 'xlsx' : Ayni.extOf( name ) ) );
 
     // A sheet the codec could not read opens EMPTY (codec.js, sh.unread), and
@@ -1315,6 +1317,7 @@ const MENUS =
         { sep: true },
         { key: 'calc.addSheet', el: 'addSheetBtn' },
         { key: 'calc.renameSheet', run: renameActiveSheet },
+        { key: 'calc.deleteSheet', el: 'delSheetBtn' },
         { sep: true },
         { key: 'calc.insertFx', el: 'fxBtn' },
         ADD_COMMENT

@@ -296,6 +296,7 @@
   "ayni.split.reset": "Repor tamanhos",
   "ayni.split.resetTip": "Repor tamanhos (duplo clique na barra)",
   "ayni.split.restored": "Painel reposto",
+  "ayni.dock.grip": "Arraste para o mover; largue-o numa margem da janela para o fixar",
   "ayni.split.wasReset": "Tamanhos repostos",
   "ayni.stop": "Parar",
   "ayni.tab.close": "Fechar {name}",

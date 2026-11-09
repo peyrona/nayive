@@ -201,6 +201,9 @@
                 </div>
 
                 <!-- The bin's own tools (renderTrashBar, trash.js): only while it is open. -->
+                <!-- What you do to the picked bin rows (Ayni.list, trash.js). -->
+                <div id="trashSel" class="tb-group" hidden></div>
+
                 <div id="trashTools" class="tb-group" hidden></div>
 
                 <div class="tb-group tb-sys">
@@ -228,6 +231,8 @@
             <div id="listPane" class="list-pane">
                 <div id="breadcrumb" class="breadcrumb"></div>
                 <div id="listing" class="listing"></div>
+                <!-- The bin's rows (trash.js): its own box, so its picks never mix with the folder's. -->
+                <div id="trashListing" class="listing"></div>
                 <div id="dropCover" class="drop-cover"><span data-i18n="drive.dropHere"></span></div>
             </div>
         </div>

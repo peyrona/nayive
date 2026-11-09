@@ -296,6 +296,7 @@
   "ayni.split.reset": "Reset sizes",
   "ayni.split.resetTip": "Reset sizes (double-click the bar)",
   "ayni.split.restored": "Pane restored",
+  "ayni.dock.grip": "Drag to move it; let go at a window edge to dock it",
   "ayni.split.wasReset": "Panes reset",
   "ayni.stop": "Stop",
   "ayni.tab.close": "Close {name}",

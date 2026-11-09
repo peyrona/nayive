@@ -147,6 +147,7 @@ Ayni.icons.add( {
     "format-painter": '<svg viewBox="0 -960 960 960" fill="currentColor" stroke="none"><path d="M440-80q-33 0-56.5-23.5T360-160v-160H240q-33 0-56.5-23.5T160-400v-280q0-66 47-113t113-47h480v440q0 33-23.5 56.5T720-320H600v160q0 33-23.5 56.5T520-80h-80ZM240-560h480v-200h-40v160h-80v-160h-40v80h-80v-80H320q-33 0-56.5 23.5T240-680v120Zm0 160h480v-80H240v80Zm0 0v-80 80Z"/></svg>',
     "clear-format": '<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/><line x1="5" y1="19" x2="19" y2="5"/>',
     "sheet-add": '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>',
+    "sheet-remove": '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="12" x2="16" y2="12"/>',
     "merge-cells": '<rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="18" height="8"/>',
     "split-cells": '<rect x="3" y="4" width="18" height="16"/><line x1="12" y1="4" x2="12" y2="20"/><polyline points="8 9.5 5.5 12 8 14.5"/><polyline points="16 9.5 18.5 12 16 14.5"/>',
     borders: '<rect x="3" y="3" width="18" height="18"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/>',

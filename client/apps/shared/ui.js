@@ -1100,8 +1100,35 @@
     else
         uiInit();
 
+    // An Office file with a password set in Word / Excel is no zip but an OLE
+    // box (D0 CF 11 E0) holding an "EncryptedPackage" stream: no engine here
+    // reads it. Write and Calc call this before loading: it says why, and
+    // throws an error marked .said, so ayni-doc adds no "could not be opened".
+    // Read-only: it only looks at the bytes.
+    function refuseOfficeLocked( body )
+    {
+        var b = body instanceof Uint8Array ? body
+              : body instanceof ArrayBuffer ? new Uint8Array( body ) : null;
+        if( ! b || b.length < 512 || b[ 0 ] !== 0xD0 || b[ 1 ] !== 0xCF || b[ 2 ] !== 0x11 || b[ 3 ] !== 0xE0 ) return;
+
+        var tag = "EncryptedPackage", n = tag.length, found = false;
+        for( var i = 0; i + n * 2 <= b.length && ! found; i++ )
+        {
+            var k = 0;
+            while( k < n && b[ i + k * 2 ] === tag.charCodeAt( k ) && b[ i + k * 2 + 1 ] === 0 ) k++;
+            found = ( k === n );
+        }
+        if( ! found ) return;
+
+        Ayni.alert( { title: t( "office.lockedTitle" ), body: t( "office.lockedBody" ) } );
+        var e = new Error( "Office file with a password" );
+        e.said = true;
+        throw e;
+    }
+
     window.NayiveUI = {
-        loginRedirect:  loginRedirect,    // to the sign-in page and back here (AyniNet.loginRedirect too)
+        refuseOfficeLocked: refuseOfficeLocked,   // Write / Calc: an Office password file, said and refused
+        loginRedirect:  loginRedirect,   // to the sign-in page and back here (AyniNet.loginRedirect too)
         signOut:        signOut,          // the launcher's and admin's sign-out ({ unlinkPhone, swScope })
         townName:   townName,      // the town at a position, "" when unknown (trips/public.html)
         applySheetButtons: applySheetButtons,

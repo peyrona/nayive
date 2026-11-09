@@ -82,6 +82,9 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
 .breadcrumb .crumb.current { color: var(--text); font-weight: 600; cursor: default; }
 .breadcrumb .crumb.current:hover { background: none; }
 .breadcrumb .crumb-sep { color: var(--text-dim); padding: 0 1px; }
+.breadcrumb .crumb-shared svg { width: 1em; height: 1em; color: var(--accent); }
+.breadcrumb .crumb-shared.mark-public svg { color: #5b8def; }
+:root[data-theme="light"] .breadcrumb .crumb-shared.mark-public svg { color: #1E4A85; }
 /* An advanced search: its words after "Resultados (n)", then the shared
    button that ends it. */
 .breadcrumb .crumb-summary { flex: 1 1 auto; min-width: 0; padding: 0 6px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -379,7 +382,9 @@ dialog.panel .body p { font-size: 0.9rem; color: var(--text-dim); margin: 0 0 14
 body.trash-mode #driveTools,
 body.trash-mode #selActions,
 body.trash-mode .tb-modes,
-body.trash-mode #breadcrumb { display: none; }
+body.trash-mode #breadcrumb,
+body.trash-mode #listing,
+body:not(.trash-mode) #trashListing { display: none; }
 
 #trashTools { gap: 8px; font-weight: 400; color: var(--text); white-space: nowrap; }
 .trash-held { font-size: .9em; }
@@ -406,6 +411,13 @@ body.trash-mode #breadcrumb { display: none; }
     .topbar-actions > .tb-group::before { display: none; }
 
     .sb-rule .picker { width: 128px; }
+
+    /* The tick, in both views, about 30% smaller than Ayni's 22px; its touch pad grows to stay 44px. */
+    .list-rows.is-grid .row > .pick-tick, .list-rows:not(.is-grid) .row > .pick-tick { width: 15px; height: 15px; border-radius: 3px; }
+    .list-rows.is-grid .row > .pick-tick svg, .list-rows:not(.is-grid) .row > .pick-tick svg { width: 9px; height: 9px; }
+    html.touch .list-rows.is-grid .row > .pick-tick::after, html.touch .list-rows:not(.is-grid) .row > .pick-tick::after { inset: -15px; }
+    /* List view shows its ticks too, as icons do: no long tap needed to find them. */
+    html.touch:not(.is-windowed) .list-rows:not(.is-grid) .row > .pick-tick { display: inline-flex; opacity: 1; }
 
     /* B4 — the view switch leaves the header for its ⋮ (menus.js viewMenuItems). */
     .tb-modes { display: none; }

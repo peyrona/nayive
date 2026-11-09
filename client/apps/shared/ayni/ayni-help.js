@@ -243,9 +243,9 @@ const rowSteps = (rows) => (rows || []).flatMap((r) => {
   return [Object.assign(st, r.tour || {})];
 });
 
-/* The menu row standing for a hidden button: a row with data-menu="<the button's id>" */
+/* The menu row standing for a hidden button: a row with data-menu (or, in a filled menu, data-act) = the button's id */
 const menuTwin = (sel) => {
-  for (const b of sel ? $$(sel) : []) { const r = b.id && firstShown(`.panel.menu [data-menu="${CSS.escape(b.id)}"]`); if (r) return r; }
+  for (const b of sel ? $$(sel) : []) { const id = b.id && CSS.escape(b.id), r = id && firstShown(`.panel.menu [data-menu="${id}"], .panel.menu [data-act="${id}"]`); if (r) return r; }
   return null;
 };
 

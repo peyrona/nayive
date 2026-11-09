@@ -159,12 +159,13 @@ body.touch .grip.sw { left: calc(-12 * var(--win-px));  bottom: calc(-12 * var(-
    and size come from the settings (the "⋮" menu; data-edge, --bar-h). */
 #bar          { background: var(--desk-bar); border-color: var(--desk-edge); color: var(--text); font-family: var(--font-sans); }
 #bar button   { font-family: inherit; position: relative; }   /* position: holds the Chat and eMail dots */
-/* Unread Chat (red) and eMail (blue), see CHAT and EMAIL below. On the
+/* Unread Chat (red), eMail (blue) and Planner's day (green), see CHAT and EMAIL below. On the
    menu button: a plain dot, Chat top-right, eMail top-left. On the app's
    own chip: a disc with the count on the app icon, so it never takes
    room from the name or covers the close (x). */
 #bar .icon-badge           { top: 3px; right: 3px; width: 8px; height: 8px; box-shadow: 0 0 0 1.5px var(--bg); }
 #bar .icon-badge.mail-dot  { right: auto; left: 3px; background: var(--busy); }
+#bar .icon-badge.plan-dot  { background: var(--ok); }   /* Planner: today's events, only ever on its own chip */
 #bar .icon-badge.has-count
 {
     top: 0; right: 0; left: auto;

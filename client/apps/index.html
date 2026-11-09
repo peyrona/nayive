@@ -1054,7 +1054,7 @@
             function autoState()
             {
                 if( ! window.Ayni || Ayni.theme.mode() !== 'sun' ) return '';
-                return Ayni.theme.hasPlace() ? 'acct.themeAutoGeo' : 'acct.themeAutoNoGeo';
+                return Ayni.theme.hasPlace() ? '' : 'acct.themeAutoNoGeo';
             }
 
             function askGeo()
@@ -1071,7 +1071,7 @@
                 // mode stays ON, on the sun of the time zone's main city.
                 Ayni.theme.askPlace().then( function ( got )
                 {
-                    say( autoMsg, Ayni.t( got ? 'acct.themeAutoGeo' : 'acct.themeAutoNoGeo' ), got );
+                    say( autoMsg, got ? '' : Ayni.t( 'acct.themeAutoNoGeo' ), false );
                 } );
             }
 
@@ -1086,7 +1086,7 @@
                 autoChk.checked = on;
 
                 var key = autoState();
-                say( autoMsg, key ? Ayni.t( key ) : '', key === 'acct.themeAutoGeo' );
+                say( autoMsg, key ? Ayni.t( key ) : '', false );
 
                 if( on && Ayni.theme.hasPlace() ) Ayni.theme.refreshPlace();
             }

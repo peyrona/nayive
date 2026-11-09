@@ -126,7 +126,21 @@ body       { overflow: hidden; }
 .list-head .sync-indicator  { margin-left: 4px; }
 /* When the list is narrow (a small phone, or dragged thin on a desktop) the
    word "Chat" steps aside (its icon stays). */
-@container side (max-width: 339px) { .list-head .app-title { display: none; } }
+@container side (max-width: 339px)
+{
+    .list-head .app-title { display: none; }
+    /* Its icon then wears the circle Ayni gives a phone's lone icon (ayni-shell.css) */
+    html:not(.is-windowed) .list-head .app-icon.home-link
+    {
+        --pad: calc((var(--hit, 32px) - 20px) / 2);
+        box-sizing: content-box;
+        padding: var(--pad);
+        margin: calc(-1 * var(--pad)) calc(6px - var(--pad)) calc(-1 * var(--pad)) calc(-1 * var(--pad));
+        border-radius: 50%;
+        color: var(--on-accent);
+        background: radial-gradient(circle 16px, var(--accent) 15.5px, transparent 16px);
+    }
+}
 /* In a desktop window (html.is-windowed, desktop/index.html) this header is the
    window's title bar (the desktop puts its three dots at its start), so it spans
    the whole window: taken out of the list's column and laid across the top, both
@@ -524,8 +538,9 @@ html.touch .filters { gap: 8px; }
     border-radius: 23px; background: var(--head); box-shadow: 0 1px 1px var(--shadow);
 }
 /* the faint "T" over the box's left edge; a tap raises the format bar in
-   its place */
-.composer .fmt-open
+   its place. (.btn in the selector: on touch Ayni's html.touch .btn makes a
+   button relative, and the "T" would take room in the row) */
+.composer .btn.fmt-open
 {
     position: absolute; left: 10px; bottom: calc(100% - 4px); z-index: 3;
     width: 24px; height: 24px; border-radius: 50%;
@@ -537,6 +552,7 @@ html.touch .filters { gap: 8px; }
 .composer .fmt-open svg { width: 14px; height: 14px; }
 .composer .fmt-open:hover, .composer .fmt-open:focus-visible { color: var(--text); background-color: var(--head); }
 .composer .emoji-open { left: 40px; }      /* the emoji, beside it (desktop window only) */
+html.touch .composer .emoji-open { left: 54px; }   /* a tablet's desktop: their 44 px hit areas must not overlap */
 .composer:has(.fmt-bar.on) .fmt-open { opacity: 0; pointer-events: none; }
 /* the format bar (B I S list): the "T" raises it from behind the box; it
    goes when the focus leaves; the clip's and the emoji panels open over it */
@@ -583,7 +599,6 @@ html.touch .filters { gap: 8px; }
 /* held down (touch) it opens its menu: no text selection, no phone callout */
 .send          { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
 .send svg      { width: 21px; height: 21px; margin-left: -2px; }
-.send.quiet svg { margin-left: 0; }
 .send:disabled { opacity: 0.5; cursor: default; }
 
 /* the Send button's menu (held down): over the button, inside the composer */

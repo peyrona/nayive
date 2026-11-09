@@ -1,7 +1,7 @@
 <!-- This is an admin/ops tool, not a user-facing app - it will never be
      translated into any language other than English. -->
 <!-- admin.html - Nayive admin panel: create/rename/edit/delete users, the admin
-     account, the web sites folder and the Language app's engines - one tab each. Open with no login only until an
+     account, the web sites folder, the Language app's engines and an SSH terminal - one tab each. Open with no login only until an
      admin account exists; after that it asks you to sign in as that admin.
      Talks to /api/admin.
      NO timezone here: a timezone belongs to a person, so each account picks its
@@ -72,6 +72,9 @@
     <!-- The Language tab: the app's own engine code, saving to the server. -->
     <link rel="stylesheet" href="language/language.css">
     <script src="language/admin.js" type="module"></script>
+    <!-- The SSH tab: a terminal on this server (xterm.js loads when the tab first shows). -->
+    <link rel="stylesheet" href="ssh/ssh-tab.css">
+    <script src="ssh/ssh-tab.js" defer></script>
 
     <style>
         /* Base reset + fonts from ../shared/app.css. Standalone admin panel -
@@ -216,8 +219,12 @@
             <path d="m9 12 2 2 4-4"/>
         </svg>
         <h1 class="app-title">Nayive · Admin</h1>
+        <button type="button" class="btn" id="logoutBtn" data-tip="Sign out" aria-label="Sign out"
+                style="margin-left:auto" hidden>
+            <span class="icon" data-icon="sign-out" style="--icon:18px"></span>
+        </button>
     </div>
-    <!-- Short labels, so the four fit one row on a phone; each section's own
+    <!-- Short labels, so the five fit one row on a phone; each section's own
          heading has the full name. Hidden on first run, when the admin account
          is the only section. -->
     <div id="tabs" role="tablist" aria-label="Sections" hidden></div>
@@ -229,7 +236,7 @@
     <section id="adminSec" hidden>
         <h2>Admin account</h2>
         <p class="banner" id="firstRunBanner">
-            First run: create the admin account. It is saved as soon as both
+            First run: create the admin account. It is saved as soon as all three
             fields are filled; then you'll be asked to sign in with it.
         </p>
         <p class="hint lead"><strong>Forgot this password?</strong> An empty admin password does not
@@ -251,6 +258,13 @@
                            placeholder="leave blank = don't change">
                     <button type="button" class="btn" id="adminPwEye" data-reveal></button>
                 </div>
+            </div>
+        </div>
+        <div class="row2">
+            <div></div>
+            <div class="field">
+                <label for="adminPass2">Type it again</label>
+                <input class="input" id="adminPass2" type="password" autocomplete="new-password">
             </div>
         </div>
     </section>
@@ -323,6 +337,25 @@
 
         <div class="cfg-btns">
             <button class="btn text bordered danger" type="button" id="resetBtn" data-i18n="language.reset"></button>
+        </div>
+    </section>
+
+    <!-- SSH (ssh/ssh-tab.js) --------------------------------------------- -->
+    <section id="sshSec" hidden>
+        <div class="sec-title">
+            <h2>SSH</h2>
+            <button class="info-tip" data-help="A terminal on this server (localhost:22). One session at a time.&#10;&#10;Each connection asks for a passkey (Face ID, a fingerprint, or your phone) and then the SSH password, which is never stored.&#10;&#10;It closes after 15 minutes with no key pressed, after 2 hours in any case, and when the screen locks or you leave this page."></button>
+        </div>
+        <div class="ssh-bar">
+            <div class="ssh-status" id="sshStatus" data-state="off" role="status"><span id="sshStatusText">Not connected</span></div>
+            <button type="button" class="btn text primary" id="sshConnect"></button>
+            <button type="button" class="btn text bordered" id="sshDisconnect" hidden></button>
+            <button type="button" class="btn" id="sshFull" data-tip="Full screen" aria-label="Full screen"></button>
+        </div>
+        <p class="banner ssh-warn" id="sshWarn" role="alert" hidden></p>
+        <div class="ssh-box" id="sshBox">
+            <div id="sshTerm"></div>
+            <div class="ssh-keys" id="sshKeys" hidden></div>
         </div>
     </section>
 </div>
@@ -477,6 +510,7 @@
         IS_ADMIN   = true;
 
         $( 'firstRunBanner' ).classList.toggle( 'hide', CONFIGURED );
+        $( 'logoutBtn' ).hidden = !CONFIGURED;
         ADMIN_ORIG = ( data.admin && data.admin.name ) || '';
         $( 'adminName' ).value = ADMIN_ORIG;
         $( 'adminPass' ).placeholder = CONFIGURED ? "leave blank = don't change"
@@ -494,7 +528,7 @@
 
             var last = null;
             try { last = localStorage.getItem( TAB_KEY ); } catch ( e ) {}
-            var names = { adminSec: 'Account', sitesSec: 'Web sites', usersSec: 'Users', langSec: 'Language' };
+            var names = { adminSec: 'Account', sitesSec: 'Web sites', usersSec: 'Users', langSec: 'Language', sshSec: 'SSH' };
             $( 'tabs' ).hidden = false;
             Ayni.tabs( '#tabs', { value: names[ last ] ? last : 'adminSec',
                 items: Object.keys( names ).map( function ( id ) { return { value: id, label: names[ id ], panel: $( id ) }; } ),
@@ -653,6 +687,21 @@
         if ( e.target.matches( 'input' ) ) autosave();
     } );
 
+    // Sign out: first the field being typed is left (its change saves it)
+    // and that save ends, then only the session ends. NOT the launcher's
+    // sign-out: that one counts and deletes what EVERY account left unsent in
+    // this browser (Write drafts, Chat text...) - the admin cannot send those,
+    // so it would warn about them and, on "yes", delete another person's work.
+    $( 'logoutBtn' ).addEventListener( 'click', async function ()
+    {
+        if ( document.activeElement ) document.activeElement.blur();
+        var wait = function ( ms ) { return new Promise( function ( r ) { setTimeout( r, ms ); } ); };
+        await wait( 350 );                       // past autosave's 300 ms timer
+        for ( var i = 0; saving && i < 100; i++ ) await wait( 100 );
+        try { await fetch( '/api/logout', { method: 'POST', credentials: 'same-origin' } ); } catch ( e ) {}
+        location.href = '/nayive/login.html';
+    } );
+
     // The user rows are rebuilt after a save (usage, placeholders) - but never
     // under the cursor: while focus is in the table it waits until it leaves.
     var refreshWaiting = false;
@@ -686,8 +735,15 @@
         // the first one is typed). Later: only a new name or a typed password.
         var aName = $( 'adminName' ).value.trim();
         var aPass = $( 'adminPass' ).value;
+        var aPass2 = $( 'adminPass2' ).value;
         if ( !CONFIGURED ? ( !aName || !aPass ) : ( aName === ADMIN_ORIG && !aPass ) )
             ;
+        // A new password waits for "Type it again": silent while that is
+        // empty, an error once both are typed and differ.
+        else if ( aPass && !aPass2 )
+            ;
+        else if ( aPass !== aPass2 )
+            errs.push( 'the two passwords do not match' );
         else if ( !aName )
             errs.push( 'admin username is empty' );
         else
@@ -710,6 +766,7 @@
             {
                 ADMIN_ORIG = aName;
                 $( 'adminPass' ).value = '';
+                $( 'adminPass2' ).value = '';
             }
         }
 

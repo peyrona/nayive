@@ -212,6 +212,7 @@ function wireStaticUI()
     listPane.addEventListener( 'drop', onDrop );
 
     wireBrowser();      // picking, the actions, the menu and the drops (menus.js)
+    wireTrashList();    // picking in the bin (trash.js)
     wireZip();          // the .zip list and "Extract here" (zip.js)
     wireSettings();     // the Settings dialog (settings.js)
 }

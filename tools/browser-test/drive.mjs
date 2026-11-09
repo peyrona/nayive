@@ -176,7 +176,7 @@ const driveTick = `( () => { const t = getComputedStyle( document.querySelector(
 await c.evaluate( "setViewMode( 'icons' ); true" );
 ok( await c.until( "document.querySelector('.list-rows.is-grid') !== null" ) && await c.until( driveTick ), "icons: the ticks show without a long-press" );
 await c.evaluate( "setViewMode( 'list' ); true" );
-ok( await c.until( "document.querySelector('.list-rows:not(.is-grid)') !== null" ) && await c.until( `! ( ${ driveTick } )` ), "…not in the list view" );
+ok( await c.until( "document.querySelector('.list-rows:not(.is-grid)') !== null" ) && await c.until( driveTick ), "…and in the list view too" );
 await finger( c, ROW( "files/Docs/Work" ), 700 );
 ok( await c.until( "browse.ids().join() === 'files/Docs/Work'" ) && await c.evaluate( "document.getElementById('listing').classList.contains('picking') && currentFolder === 'files/Docs'" ), "a long-press picks (ticks on), it does not open" );
 fs = await fitState( c );
@@ -236,6 +236,31 @@ await mouse( c, "#trashViewBtn" );
 ok( await c.until( "! trashMode" ), "the arrow goes back to Drive" );
 bs = await binState();
 ok( ! bs.back && ! bs.tools && bs.crumbs, "…the bin icon and the breadcrumb return", bs );
+
+section( "DRIVE · PICKS IN THE BIN" );
+seed( s, { "files/Bin/p1.txt": "1", "files/Bin/p2.txt": "2", "files/Bin/p3.txt": "3" } );
+const binIds = await c.evaluate( "AyniNet.binPaths( [ 'files/Bin/p1.txt', 'files/Bin/p2.txt', 'files/Bin/p3.txt' ] ).then( ids => ids.join() )" );
+ok( binIds && binIds.split( ',' ).length === 3, "three files go to the bin", binIds );
+await mouse( c, "#trashViewBtn" );
+await c.until( "trashMode && document.querySelectorAll('#trashListing .row[data-bin]').length >= 3" );
+const BIN = n => `#trashListing .row[data-bin="${ binIds.split( ',' )[ n ] }"]`;
+const binSel = () => c.evaluate( "binList.ids().length" );
+await mouse( c, BIN( 0 ), { dx: 60 } );
+await mouse( c, BIN( 1 ), { dx: 60, mods: 2 } );
+ok( await binSel() === 2 && await c.evaluate( "! document.getElementById('trashSel').hidden && !! document.querySelector('#trashSel [data-pick-act=purge]') && !! document.querySelector('#trashSel [data-pick-act=restore]')" ),
+    "Ctrl+click picks two bin rows; the header offers Restore and Delete forever" );
+await mouse( c, "#trashSel [data-pick-act=purge]" );
+await c.until( "!! document.querySelector('dialog.panel[open] .btn.danger, dialog[open] .btn.danger')" );
+await c.evaluate( "document.querySelector('dialog[open] .btn.danger').click(); true" );
+ok( await c.until( "document.querySelectorAll('#trashListing .row[data-bin]').length === 1" ), "after the question, only the two picked are gone" );
+ok( await c.evaluate( `!! document.querySelector( '${ BIN( 2 ) }' )` ) && await binSel() === 0, "the third is still in the bin, nothing picked" );
+await mouse( c, BIN( 2 ), { dx: 60 } );
+await mouse( c, "#trashSel [data-pick-act=restore]" );
+ok( await c.until( "document.querySelectorAll('#trashListing .row[data-bin]').length === 0" ), "Restore puts the picked one back" );
+await sleep( 300 );
+ok( exists( s, "files/Bin/p3.txt" ) && ! exists( s, "files/Bin/p1.txt" ) && ! exists( s, "files/Bin/p2.txt" ), "on disk: p3 back, p1 and p2 gone" );
+await mouse( c, "#trashViewBtn" );
+ok( await c.until( "! trashMode" ) && await c.evaluate( "document.getElementById('trashSel').hidden" ), "leaving the bin hides its pick bar" );
 
 const errs = c.logs.filter( l => /EXCEPTION/.test( l ) );
 ok( ! errs.length, "no page exceptions", errs );

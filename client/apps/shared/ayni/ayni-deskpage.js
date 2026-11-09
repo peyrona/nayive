@@ -4,7 +4,7 @@
    (.desktop, #desk, #bar, #tasks, #menu, #menuBtn, #snapGhost, and the rest of the "more" menu ids).
      var D = Ayni.deskPage( hooks )
    hooks: appName; APPS { app: { name, svg } }; NARROW, SHORT { app: px }; appsReady, a promise; appOf( url ); openMenu(), closeMenu(), openMoreHere();
-   placeUnread(), pokeUnread(), placeMail(), askMail(); loadLocker(), loadScript( url ), weatherEngine(). D holds what the page needs back.
+   placeUnread(), pokeUnread(), placeMail(), askMail(), placePlanner() (optional); loadLocker(), loadScript( url ), weatherEngine(). D holds what the page needs back.
    A page in a window says what it holds with window.ayniDocPath, and may hold the close with window.ayniBeforeClose. Rules: chapter 17.4. */
 ( function ()
 {
@@ -170,6 +170,7 @@
         focus( w );
         h.placeUnread();
         h.placeMail();
+        if( h.placePlanner ) h.placePlanner();
         retile();
         upright();
         return w;
@@ -194,10 +195,10 @@
         if( w.url !== want ) w.frame.src = want;
     }
 
-    function setTitle( w, text, tip )
+    function setTitle( w, text, tip, pill )
     {
         w.el.querySelector( '.win-title' ).textContent = text;
-        w.main.querySelector( 'span:not(.icon)' ).textContent = text;
+        w.main.querySelector( 'span:not(.icon)' ).textContent = pill || text;
         w.chip.setAttribute( 'aria-label', text );
         setTip( w.main, tip || text );
     }
@@ -253,6 +254,7 @@
         paint();
         h.placeUnread();
         h.placeMail();
+        if( h.placePlanner ) h.placePlanner();
         if( w.app === 'email' ) h.askMail();
         if( tiled ) { tiled.snaps.delete( w ); if( ! wins.length ) { autoWant = !! tiled.auto; tiled = null; } }   // see UPRIGHT
         paintTile();
@@ -442,7 +444,9 @@
             // Chat's "(3) Chat": the count is already on the button's red disc.
             var tt   = doc.title && doc.title !== 'about:blank' ? doc.title.replace( /^\(\d+\+?\)\s*/, '' ) : '';
             var text = name || tt || w.name;
-            setTitle( w, text, text === w.name ? w.name : w.name + ' - ' + text );
+            // The bar button: the file name only - no folders, no extension, 15 characters at most.
+            var pill = name ? Array.from( name.replace( /^.*[\\/]/, '' ).replace( /(.)\.[^.]+$/, '$1' ) ).slice( 0, 15 ).join( '' ) : '';
+            setTitle( w, text, text === w.name ? w.name : w.name + ' - ' + text, pill );
         }
         update();
         var mo = new cw.MutationObserver( update ), opt = { childList: true, characterData: true, subtree: true };
@@ -1127,6 +1131,14 @@
     var stickyChk = document.getElementById( 'stickyChk' );
     stickyChk.checked = set.sticky !== false;
     stickyChk.addEventListener( 'change', function () { set.sticky = stickyChk.checked; saveSet(); } );
+
+    // BEVEL - this device's choice (set.bevel, default on): <html> carries .bevel (raised controls) or .flat (none, the
+    // splitter too); every window's page copies the class from here (Ayni's base, "A page inside a frame").
+    var bevelChk = document.getElementById( 'bevelChk' );
+    function applyBevel() { var on = set.bevel !== false; document.documentElement.classList.toggle( 'bevel', on ); document.documentElement.classList.toggle( 'flat', ! on ); }
+    bevelChk.checked = set.bevel !== false;
+    applyBevel();
+    bevelChk.addEventListener( 'change', function () { set.bevel = bevelChk.checked; saveSet(); applyBevel(); } );
 
     // SCALE ON OPEN - this device's choice (set.scaleNew); see SCALE.
     var scaleNewChk = document.getElementById( 'scaleNewChk' );

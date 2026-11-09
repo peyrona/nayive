@@ -1,4 +1,4 @@
-/* Ayni library 0.2.0, layout family: tabs, the splitter, the status bar and More fields. Plain JavaScript, no build step, evergreen
+/* Ayni library 0.2.0, layout family: tabs, the splitter, the status bar, More fields and the dock panel. Plain JavaScript, no build step, evergreen
    browsers 2024+. Load it after ayni-base.js:
      <script src="ayni-base.js" defer></script>
      <script src="ayni-layout.js" defer></script>
@@ -385,6 +385,87 @@ const moreFields = (el, opts = {}) => {
   return have.api;
 };
 
+/* ---------- Dock panel: Ayni.dock(el, { key, edge, onClose }) ----------
+   A panel the user moves by its grip (.dock-grip, the top bar): let go near a window edge and it docks there, full
+   height or full width; anywhere else it floats where it was dropped. While it is dragged, the edge it would dock to
+   lights up. A docked panel makes room: :root gets --ayni-dock-left / right / top / bottom (its size, 0px when it
+   is not there), which .app takes as padding. Where it sits is kept under `key` (localStorage). A [data-dock-close]
+   button inside closes it. Returns { open(), close(), toggle(), get isOpen, get edge } - edge null = floating. */
+const SNAP = 40;                                  /* px from a window edge that docks */
+const EDGES = ['left', 'right', 'top', 'bottom'];
+const dock = (el, o = {}) => {
+  if (typeof el === 'string') el = $(el);
+  if (!el) return null;
+  el.classList.add('dock');
+  const grip = $('.dock-grip', el), html = document.documentElement;
+  const st = { edge: o.edge ?? 'right', x: 0, y: 0 };
+  try { const s = JSON.parse(load(o.key) || 'null'); if (s && (s.edge === null || EDGES.includes(s.edge))) Object.assign(st, s); } catch {}
+  if (grip && !grip.dataset.tip) grip.dataset.tip = tx('dock.grip');
+
+  let hint = null;
+  const showHint = (edge) => {
+    if (!edge) { hint?.remove(); hint = null; return; }
+    hint ||= Object.assign(document.createElement('div'), { className: 'dock-hint' });
+    hint.dataset.edge = edge;
+    if (!hint.isConnected) document.body.append(hint);
+  };
+  const edgeAt = (x, y) => x < SNAP ? 'left' : x > innerWidth - SNAP ? 'right' : y < SNAP ? 'top' : y > innerHeight - SNAP ? 'bottom' : null;
+  const room = () => {
+    const r = el.hidden ? null : el.getBoundingClientRect();
+    for (const e of EDGES) html.style.setProperty('--ayni-dock-' + e, r && st.edge === e ? Math.round(e === 'left' || e === 'right' ? r.width : r.height) + 'px' : '0px');
+  };
+  const place = (x, y) => {                       /* a floating panel stays on screen */
+    const w = el.offsetWidth, h = el.offsetHeight;
+    st.x = Math.round(Math.max(0, Math.min(x, innerWidth - w)));
+    st.y = Math.round(Math.max(0, Math.min(y, innerHeight - Math.min(h, 48))));
+    el.style.left = st.x + 'px'; el.style.top = st.y + 'px';
+  };
+  const paint = () => {
+    el.dataset.edge = st.edge || 'float';
+    if (st.edge) { el.style.left = el.style.top = ''; } else place(st.x, st.y);
+    room();
+  };
+  const save = () => store(o.key, o.key ? JSON.stringify(st) : null);
+
+  grip?.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || e.target.closest('button, input, .picker')) return;
+    e.preventDefault();
+    try { grip.setPointerCapture(e.pointerId); } catch {}
+    const r = el.getBoundingClientRect();
+    let dx = e.clientX - r.left, dy = e.clientY - r.top, moved = false;
+    html.classList.add('ayni-dragging');
+    const move = (ev) => {
+      if (!moved && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 4) return;
+      if (!moved) {
+        moved = true; el.classList.add('dragging');
+        if (st.edge) { st.edge = null; el.dataset.edge = 'float'; room(); dx = Math.min(dx, el.offsetWidth - 24); dy = Math.min(dy, 20); }
+      }
+      place(ev.clientX - dx, ev.clientY - dy);
+      showHint(edgeAt(ev.clientX, ev.clientY));
+    };
+    const end = (ev) => {
+      grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', end); grip.removeEventListener('pointercancel', end);
+      html.classList.remove('ayni-dragging'); el.classList.remove('dragging'); showHint(null);
+      if (!moved) return;
+      st.edge = ev.type === 'pointerup' ? edgeAt(ev.clientX, ev.clientY) : null;
+      paint(); save();
+    };
+    grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', end); grip.addEventListener('pointercancel', end);
+  });
+  $$('[data-dock-close]', el).forEach((b) => b.addEventListener('click', () => api.close()));
+  addEventListener('resize', () => { if (!el.hidden) paint(); });
+  new ResizeObserver(() => { if (!el.hidden) room(); }).observe(el);
+
+  const api = {
+    get isOpen() { return !el.hidden; },
+    get edge() { return st.edge; },
+    open() { el.hidden = false; paint(); },
+    close() { if (el.hidden) return; el.hidden = true; room(); o.onClose?.(); },
+    toggle() { if (el.hidden) api.open(); else api.close(); }
+  };
+  return api;
+};
+
 /* A class named .split with no bar of its own is not ours */
 const init = (root) => {
   const among = (sel) => [...(root.matches?.(sel) ? [root] : []), ...$$(sel, root)];
@@ -393,6 +474,6 @@ const init = (root) => {
   among('button.more-toggle[aria-controls]').forEach((b) => { if (!moreOf.has(b)) initMore(b); });
 };
 
-Object.assign(Ayni, { status, tabs, splitter, moreFields });
+Object.assign(Ayni, { status, tabs, splitter, moreFields, dock });
 Ayni.core.family({ init });
 })();

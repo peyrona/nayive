@@ -439,6 +439,7 @@ async function loadFolderMarks()
     } );
 
     folderMarks = marks;
+    renderBreadcrumb();                            // navigate.js: the shared crumb
     document.querySelectorAll( '#listing .row[data-dir]' ).forEach( function( row )
     {
         const ic = row.querySelector( '.row-ic' );

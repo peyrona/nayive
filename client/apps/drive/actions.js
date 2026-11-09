@@ -194,7 +194,7 @@ function openProperties( paths )
         if( node.mtime )                    propRow( dl, T( 'drive.propModified' ), fmtDateTime( node.mtime ) );
         if( node.shared && node.shared.by ) propRow( dl, T( 'drive.propShared'   ), node.shared.by );
         const sharedWith = sharedWithLabel( node.path );
-        if( sharedWith )                    propRow( dl, T( 'drive.propSharedWith' ), sharedWith );
+        propRow( dl, T( 'drive.propSharedWith' ), sharedWith || T( 'drive.propSharedNone' ) );
     }
     else
     {

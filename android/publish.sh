@@ -29,7 +29,8 @@ if [ "${1:-}" != "-f" ] && [ -f "$out/nayive.apk" ] && [ -f "$out/version.json" 
 fi
 code=$(sed -n "s/.*versionCode = \([0-9]*\).*/\1/p" app/build.gradle)
 name=$(sed -n "s/.*versionName = '\([^']*\)'.*/\1/p" app/build.gradle)
-live=$(sed -n 's/.*"code": *\([0-9]*\).*/\1/p' "$out/version.json" 2>/dev/null)
+# No version.json yet (first build, or build/ was cleaned): nothing to compare with - not an error.
+live=$(sed -n 's/.*"code": *\([0-9]*\).*/\1/p' "$out/version.json" 2>/dev/null || true)
 if [ -n "$live" ] && [ "$code" -le "$live" ]; then
     code=$((live + 1))
     major=${name%%.*}; minor=${name#*.}
