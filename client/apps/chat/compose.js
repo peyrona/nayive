@@ -37,8 +37,10 @@
         attachBtn.id = "attachBtn";
         var row1 = h( "div", { class: "row1" }, ta, laterBtn );
         cbox = h( "div", { class: "cbox" }, quoteSlot, row1 );
-        sendBtn = h( "button", { class: "send", attrs: { type: "button", "data-alt": "", "data-tip": T( "chat.sendMsg" ), "aria-label": T( "chat.sendMsg" ) },
-                                 on: { click: function () { send(); } } } );
+        // An Ayni button with a second action (data-alt): a press sends, a
+        // double-click, hold or Shift+Enter opens the send menu.
+        sendBtn = h( "button", { class: "btn primary send", attrs: { type: "button", "data-tip": T( "chat.sendMsg" ), "aria-label": T( "chat.sendMsg" ),
+                                                                    "data-alt": T( "chat.sendSilent" ) + " / " + T( "chat.schedule" ) } } );
         sendBtn.appendChild( C.ic( "send" ) );
         fmtBar = buildFmtBar();
         // The format bar waits behind a faint "T" on the box's left edge; a
@@ -51,6 +53,7 @@
         if( emojiBtn ) emojiBtn.id = "emojiBtn";
         composer = h( "div", { class: "composer", attrs: { id: "composer", "data-toasts-above": "" } }, fmtBtn, emojiBtn, fmtBar, attachBtn, cbox, sendBtn );
         wireSendHold();
+        grow();                                // an empty box: Send starts disabled
 
         ta.addEventListener( "input", function ( e ) { if( ! marking ) smiley( e ); grow(); typing(); C.keepDraft(); } );
         // Once up, the format bar stays while the focus is in the bar at the
@@ -78,7 +81,7 @@
         } );
         document.addEventListener( "click", function ( e )
         {
-            if( panel && ! panel.contains( e.target ) && ! e.target.closest( ".cbox .btn, #emojiBtn, #attachBtn" ) ) closePanel();
+            if( panel && e.target.isConnected && ! panel.contains( e.target ) && ! e.target.closest( ".cbox .btn, #emojiBtn, #attachBtn" ) ) closePanel();
         } );
         return composer;
     };
@@ -196,6 +199,10 @@
 
     function grow()
     {
+        // Every change of the box's words comes through here: Send is
+        // disabled while there is nothing to send (an edit of a picture's
+        // caption may empty it).
+        if( sendBtn ) sendBtn.setAttribute( "aria-disabled", ! ta.value.trim() && ! ( S.editing && S.editing.kind !== "text" ) ? "true" : "false" );
         // Hidden (the chat is not on screen yet) there is nothing to measure:
         // leave it to its one-row CSS size.
         if( ! ta.offsetParent ) { ta.style.height = ""; return; }
@@ -392,26 +399,10 @@
 
     function wireSendHold()
     {
-        var timer = null, held = false;
-        sendBtn.addEventListener( "contextmenu", function ( e ) { e.preventDefault(); openSendMenu(); } );
-        sendBtn.addEventListener( "pointerdown", function ( e )
-        {
-            held = false;
-            if( e.pointerType === "mouse" ) return;
-            timer = setTimeout( function () { timer = null; held = true; openSendMenu(); }, 480 );
-        } );
-        function stop() { clearTimeout( timer ); timer = null; }
-        sendBtn.addEventListener( "pointerup", stop );
-        sendBtn.addEventListener( "pointercancel", stop );
-        sendBtn.addEventListener( "pointerleave", stop );
-        // The tap that ends a hold is not a send (capture: before the send itself).
-        sendBtn.addEventListener( "click", function ( e )
-        {
-            if( ! held ) return;
-            held = false;
-            e.preventDefault();
-            e.stopImmediatePropagation();
-        }, true );
+        Ayni.init( sendBtn );
+        sendBtn.addEventListener( "ayni:press", function ( e ) { if( e.detail.second ) openSendMenu(); else send(); } );
+        // A right-click opens the menu too (the help says so).
+        sendBtn.addEventListener( "contextmenu", function () { openSendMenu(); } );
     }
 
     // A small menu over the button (an Ayni menu, Ayni.menuAt: it shows when
@@ -967,7 +958,12 @@
         var was = panel && panel.dataset.which;
         closePanel();
         if( was === which ) return;
-        panel = which === "emoji" ? emojiPanel( function ( e ) { insert( e ); } ) : attachPanel();
+        showPanel( which === "emoji" ? emojiPanel( function ( e ) { insert( e ); } ) : attachPanel(), which );
+    }
+
+    function showPanel( el, which )
+    {
+        panel = el;
         panel.dataset.which = which;
         composer.appendChild( panel );
     }
@@ -984,25 +980,56 @@
 
     var emojiPanel = Ayni.emojiPanel;
 
-    function attachPanel()
+    // The clip's panel, grouped by what is sent: Photo and Document open a
+    // second panel with its two ways (camera or gallery, record or file,
+    // this device or Nayive). Recording is not built yet: it says so.
+    function tiles( list )
     {
-        // A document from this device, or (the owner, who has their files)
-        // one already in Nayive - two buttons, no chooser.
-        // Audio and video: files of this device, sent as files.
-        return Ayni.attachPanel( [
-            [ "file", "chat.localDoc", 1, function () { C.pickFiles( "file" ); } ],
-            C.canUseNayive() ? [ "nayive", "chat.nayiveDoc", 0, function () { C.pickFromNayive(); } ] : null,
-            [ "image", "chat.gallery", 6, function () { C.pickFiles( "gallery" ); } ],
-            [ "camera", "chat.camera", 3, function () { C.pickFiles( "camera" ); } ],
-            [ "music", "chat.audio", 4, function () { C.pickFiles( "audio" ); } ],
-            [ "video", "chat.video", 7, function () { C.pickFiles( "video" ); } ],
-            [ "pin-map", "chat.location", 5, function () { C.openLocationPicker(); } ],
-            [ "user", "chat.contact", 8, function () { C.openCardSheet(); } ],
-            [ "poll", "chat.poll", 2, function () { C.openPollSheet(); } ]
-        ].filter( Boolean ).map( function ( a )
+        return Ayni.attachPanel( list.filter( Boolean ).map( function ( a )
         {
             return { icon: C.ic( a[ 0 ] ), label: T( a[ 1 ] ), color: a[ 2 ], act: a[ 3 ] };
         } ), closePanel );
+    }
+
+    function subPanel( list ) { showPanel( tiles( list ), "attach" ); }
+    function notYet() { C.toast( "info", "chat.notYet" ); }
+
+    function attachPanel()
+    {
+        return tiles( [
+            [ "image", "chat.photo", 6, function ()
+            {
+                subPanel( [
+                    [ "camera", "chat.camera", 3, function () { C.pickFiles( "camera" ); } ],
+                    [ "image", "chat.gallery", 6, function () { C.pickFiles( "gallery" ); } ]
+                ] );
+            } ],
+            [ "video", "chat.video", 7, function ()
+            {
+                subPanel( [
+                    [ "video", "chat.record", 3, notYet ],
+                    [ "image", "chat.choose", 7, function () { C.pickFiles( "video" ); } ]
+                ] );
+            } ],
+            [ "music", "chat.audio", 4, function ()
+            {
+                subPanel( [
+                    [ "mic", "chat.record", 3, notYet ],
+                    [ "music", "chat.choose", 4, function () { C.pickFiles( "audio" ); } ]
+                ] );
+            } ],
+            [ "file", "chat.document", 1, function ()
+            {
+                if( ! C.canUseNayive() ) { C.pickFiles( "file" ); return; }
+                subPanel( [
+                    [ "file", "chat.localDoc", 1, function () { C.pickFiles( "file" ); } ],
+                    [ "nayive", "chat.nayiveDoc", 0, function () { C.pickFromNayive(); } ]
+                ] );
+            } ],
+            [ "pin-map", "chat.location", 5, function () { C.openLocationPicker(); } ],
+            [ "user", "chat.contact", 8, function () { C.openCardSheet(); } ],
+            [ "poll", "chat.poll", 2, function () { C.openPollSheet(); } ]
+        ] );
     }
 
     // ---------------------------------------------------------------------

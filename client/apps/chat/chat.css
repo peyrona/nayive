@@ -589,17 +589,9 @@ html.touch .composer .emoji-open { left: 54px; }   /* a tablet's desktop: their 
 .cbox .quote      { position: relative; margin: 6px 6px 0; padding-right: 34px; cursor: default; }
 .cbox .quote .x   { position: absolute; top: 2px; right: 2px; width: 28px; height: 28px; margin: 0; }
 .cbox .quote .x svg { width: 16px; height: 16px; }
-.send
-{
-    flex: 0 0 auto; width: 46px; height: 46px; border: none; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    background: var(--accent); color: var(--on-accent); box-shadow: 0 1px 2px var(--shadow);
-    cursor: pointer;
-}
-/* held down (touch) it opens its menu: no text selection, no phone callout */
-.send          { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
-.send svg      { width: 21px; height: 21px; margin-left: -2px; }
-.send:disabled { opacity: 0.5; cursor: default; }
+/* Send: an Ayni .btn.primary, bigger (--btn) for the thumb */
+.btn.send      { --btn: 46px; box-shadow: 0 1px 2px var(--shadow); }
+.btn.send svg  { width: 21px; height: 21px; margin-left: -2px; }
 
 /* the Send button's menu (held down): over the button, inside the composer */
 

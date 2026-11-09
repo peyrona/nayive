@@ -467,3 +467,14 @@ body.calc-painting #gridHost .htCore td { cursor: copy; }
     }
     #printSheet tr { break-inside: avoid; }
 }
+
+/* Scrollbars: Handsontable paints its own (9 px, its colours, scrollbar-color set),
+   which beat the shared look in ayni-base.css. Hand them back to it. The size test
+   box (.htScrollbarTest) gets the same bars, so the grid measures the real width. */
+html:not(.touch) :is(.handsontable .wtHolder, .htScrollbarTest, .ht-dialog, .ht-empty-data-state) {
+    scrollbar-width: auto; scrollbar-color: auto;
+}
+html:not(.touch) :is(.handsontable .wtHolder, .htScrollbarTest)::-webkit-scrollbar { width: var(--sb-size); height: var(--sb-size); }
+html:not(.touch) .handsontable .wtHolder::-webkit-scrollbar-track,
+html:not(.touch) .handsontable .wtHolder::-webkit-scrollbar-corner { background: var(--sb-track); border-radius: 0; }
+html:not(.touch) .handsontable .wtHolder::-webkit-scrollbar-thumb { background-color: var(--sb-thumb); border-radius: 4px; }

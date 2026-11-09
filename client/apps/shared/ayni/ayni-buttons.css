@@ -37,9 +37,11 @@
 .btn[aria-busy="true"] > .icon { display: none; }
 .btn-spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid color-mix(in srgb, currentColor 30%, transparent); border-top-color: currentColor; animation: spin .8s linear infinite; }
 .btn .icon { --icon: 18px; }
-/* Second action (double-click, long tap on touch, Shift+Enter): always marked with a dot, on every device */
+/* Second action (double-click, long tap on touch, Shift+Enter): always marked with a dot, on every device.
+   The dot's centre sits on the round edge at bottom-right (14.6% in from the corner, minus half the 14 px dot), so it is
+   half inside the button at any size */
 :is(.btn, button)[data-alt] { position: relative; touch-action: manipulation; -webkit-touch-callout: none; user-select: none; }
-:is(.btn, button)[data-alt]::after { content: ""; position: absolute; right: -2px; bottom: -2px; width: 10px; height: 10px; border-radius: 50%;
+:is(.btn, button)[data-alt]::after { content: ""; position: absolute; right: calc(14.6% - 7px); bottom: calc(14.6% - 7px); width: 10px; height: 10px; border-radius: 50%;
   background: var(--accent); border: 2px solid var(--panel-bg); }
 /* Popup button (opens a menu or popover): a small down-pointing triangle in the icon's colour, in the same corner, like a combo box. One
    pseudo element only (a border triangle, ringed in the panel colour by drop shadows), so ::before stays free for the

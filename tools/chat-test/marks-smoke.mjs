@@ -87,7 +87,7 @@ await shiftEnter();
 ok( await val() === "- milk\n\n", "then new lines are plain again", await val() );
 
 section( "BUBBLES AND THE LIST" );
-const sendText = async t => { await set( t ); await c.evaluate( "document.querySelector( '#composer .send' ).click(); true" ); };
+const sendText = async t => { await set( t ); await c.evaluate( TA + ".dispatchEvent( new Event( 'input' ) ); document.querySelector( '#composer .send' ).click(); true" ); };
 await sendText( "*hi* and https://x.com/a_b_c" );
 ok( await c.until( `[ ...document.querySelectorAll( '#wall .msg.out b' ) ].some( b => b.textContent === 'hi' )` ), "*hi* is bold in the bubble" );
 ok( await c.evaluate( `[ ...document.querySelectorAll( '#wall .msg.out a' ) ].some( a => a.href === 'https://x.com/a_b_c' )` ), "the link stays whole" );
