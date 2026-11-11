@@ -37,6 +37,7 @@ function rowNode( path )
     return findNode( path ) ||
            ( curListing.nodes || [] ).find( function( n ) { return n.path === path; } ) ||
            ( searchHits || [] ).find( function( n ) { return n.path === path; } ) ||
+           ( dirKids.get( Ayni.dirOf( path ) ) || [] ).find( function( n ) { return n.path === path; } ) ||
            null;
 }
 

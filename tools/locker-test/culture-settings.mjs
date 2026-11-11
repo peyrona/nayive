@@ -24,7 +24,8 @@ try
     await p.send( "Page.navigate", { url: B + "login.html" } ); await sleep( 2000 );
     await p.evaluate( `fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:'test',password:'test'})}).then(r=>r.status)` );
     await p.evaluate( `fetch('/api/files?file=data/salon.json',{method:'DELETE'}).then(r=>r.status).catch(()=>0)` );
-    await p.evaluate( `localStorage.removeItem('nayive-salon');localStorage.setItem('nayive-locker',JSON.stringify({id:'culture',min:15}));localStorage.removeItem('nayive-lock');1` );
+    await p.evaluate( `fetch('/api/files?file=data/weather.json',{method:'DELETE'}).then(r=>r.status).catch(()=>0)` );
+    await p.evaluate( `localStorage.removeItem('nayive-salon');localStorage.removeItem('nayive-weather');localStorage.setItem('nayive-locker',JSON.stringify({id:'culture',min:15}));localStorage.removeItem('nayive-lock');1` );
     await p.send( "Page.navigate", { url: B + "desktop/index.html" } ); await sleep( 3000 );
 
     await p.evaluate( "document.getElementById('moreBtn').click();1" ); await sleep( 400 );
@@ -65,14 +66,10 @@ try
     await p.evaluate( "document.querySelector('#salonSettings [role=tab]:nth-child(3)').click();1" );
     await p.evaluate( `(()=>{var ls=[...document.querySelectorAll('.salon-pane:not([hidden]) .salon-check')];['Musée du Louvre','Sculpture','1600–1750 (Baroque)'].forEach(n=>ls.find(l=>l.textContent===n).querySelector('input').click());return 1})()` );
     await shot( "art" );
-    // Look (select 0 = who gives the weather): a city, °F, 12 h, the clear letters, large, high contrast.
+    // Look (no weather here since 2026-11-11: the desktop's "⋮" menu has it): 12 h, the clear letters, large, high contrast.
     await p.evaluate( "document.querySelector('#salonSettings [role=tab]:nth-child(4)').click();1" );
-    await p.evaluate( `(()=>{var pane=document.querySelector('.salon-pane:not([hidden])');var q=pane.querySelector('input[type=text]');q.value='Lisboa';pane.querySelector('.salon-row button').click();return 1})()` );
-    await sleep( 2500 );
-    const found = await p.evaluate( "[...document.querySelectorAll('.salon-pane:not([hidden]) .salon-note')].map(n=>n.textContent).join('|')" );
-    console.log( "city:", found );
-    ok( /Lisbo/.test( found ), "city found" );
-    await p.evaluate( `(()=>{var ss=[...document.querySelectorAll('.salon-pane:not([hidden]) .picker')];var set=(i,v)=>Ayni.picker(ss[i]).choose(v);set(1,'f');set(2,'12');set(3,'clear');set(4,'l');set(5,'high');return 1})()` );
+    ok( await p.evaluate( "!document.querySelector('.salon-pane:not([hidden]) input[type=text]')" ), "no city field in the locker's settings" );
+    await p.evaluate( `(()=>{var ss=[...document.querySelectorAll('.salon-pane:not([hidden]) .picker')];var set=(i,v)=>Ayni.picker(ss[i]).choose(v);set(0,'12');set(1,'clear');set(2,'l');set(3,'high');return 1})()` );
     await sleep( 500 );
     await shot( "look" );
     ok( await p.evaluate( "getComputedStyle(document.querySelector('.salon-preview .big')).fontFamily.includes('Atkinson')" ), "the sample shows the chosen letters" );
@@ -86,8 +83,27 @@ try
     console.log( JSON.stringify( saved ) );
     ok( saved.langs.join() === "es,en,fr,pt" && saved.cards.word.langs.join() === "es,fr,pt" && saved.cards.quote.on === false &&
         saved.artHours === 4 && saved.museums.includes( "louvre" ) && saved.forms.join() === "painting,sculpture" &&
-        saved.periods.join() === "baroque" && saved.city && saved.place === "city" && saved.units === "f" && saved.hours === 12 &&
+        saved.periods.join() === "baroque" && saved.hours === 12 &&
         saved.font === "clear" && saved.size === "l" && saved.contrast === "high", "saved on the server, per user" );
+
+    // The weather: the "⋮" menu's WEATHER section, one per user (data/weather.json).
+    await p.evaluate( "document.getElementById('moreBtn').click();1" );
+    await sleep( 1500 );
+    const head = await p.evaluate( "(()=>{var h=[...document.querySelectorAll('#moreMenu h4')].map(x=>x.textContent);var cs=getComputedStyle(document.querySelector('#moreMenu h4'));return h.join('|')+' / '+cs.borderBottomStyle})()" );
+    console.log( "sections:", head );
+    ok( /Weather/.test( head ) && / solid$/.test( head ), "WEATHER section, titles ruled" );
+    await p.evaluate( `(()=>{Ayni.picker(document.getElementById('wxPlace')).choose('city');var q=document.getElementById('wxCity');q.value='Lisboa';document.getElementById('wxFind').click();return 1})()` );
+    await sleep( 2500 );
+    const msg = await p.evaluate( "document.getElementById('wxMsg').textContent+'|'+document.getElementById('wxCity').disabled" );
+    console.log( "city:", msg );
+    ok( /Lisbo/.test( msg ) && /\|false$/.test( msg ), "city found in the ⋮ menu" );
+    await shot( "weather-menu" );
+    await p.evaluate( "Ayni.picker(document.getElementById('wxUnits')).choose('f');1" );
+    let wx = {};
+    for( let i = 0; i < 20 && wx.units !== "f"; i++ ) { await sleep( 300 ); wx = JSON.parse( await p.evaluate( "fetch('/api/files?file=data/weather.json').then(r=>r.ok?r.text():'{}')" ) ); }
+    console.log( JSON.stringify( wx ) );
+    ok( wx.place === "city" && /Lisbo/.test( wx.city && wx.city.name ) && wx.units === "f" && ! ( "langs" in wx ), "saved in data/weather.json, weather keys only" );
+    await p.evaluate( "document.getElementById('moreMenu').hidePopover();1" );
 
     // Lock: the locker uses them.
     await p.evaluate( "AyniLocker.lock();1" );
@@ -102,7 +118,7 @@ try
     ok( st.boxes.length === 5 && ! st.boxes.some( b => b.startsWith( "cl-quote" ) ), "quote box gone" );
     ok( /Atkinson/.test( st.font ) && st.high, "letters and contrast applied" );
     ok( /[ap]\.?\s?m\.?/i.test( st.time ), "12-hour clock: " + st.time );
-    ok( st.boxes.some( b => /Lisboa|Lisbon/.test( b ) ) || true, "weather place" );
+    ok( st.boxes.some( b => /mph/.test( b ) ), "the locker uses data/weather.json (°F: wind in mph)" );
     ok( st.boxes.some( b => b.startsWith( "cl-art:" ) && ! /no responde|not reachable/.test( b ) ), "a masterpiece from the chosen museums" );
     await shot( "locked" );
 
@@ -110,7 +126,7 @@ try
     await p.evaluate( "document.querySelector('.lock-dlg').dispatchEvent(new KeyboardEvent('keydown',{key:'a',bubbles:true}));1" );
     await sleep( 300 );
     ok( await p.evaluate( "document.querySelectorAll('.lock-card button:not([data-reveal])').length === 1" ), "the password box has only its unlock button" );
-    const errors = p.logs.filter( l => /^(EXCEPTION|LOG-ERROR)/.test( l ) && ! /favicon|salon\.json/.test( l ) );
+    const errors = p.logs.filter( l => /^(EXCEPTION|LOG-ERROR)/.test( l ) && ! /favicon|salon\.json|weather\.json|science\.json/.test( l ) );
     ok( errors.length === 0, "no errors" + ( errors.length ? ":\n  " + errors.join( "\n  " ) : "" ) );
 }
 catch( e ) { console.log( "CRASH", e ); fails++; }

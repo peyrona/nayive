@@ -551,8 +551,8 @@ html.touch .filters { gap: 8px; }
 }
 .composer .fmt-open svg { width: 14px; height: 14px; }
 .composer .fmt-open:hover, .composer .fmt-open:focus-visible { color: var(--text); background-color: var(--head); }
-.composer .emoji-open { left: 40px; }      /* the emoji, beside it (desktop window only) */
-html.touch .composer .emoji-open { left: 54px; }   /* a tablet's desktop: their 44 px hit areas must not overlap */
+.composer .btn.emoji-open { left: 40px; }      /* the emoji, beside it (desktop window only) */
+html.touch .composer .btn.emoji-open { left: 54px; }   /* a tablet's desktop: their 44 px hit areas must not overlap */
 .composer:has(.fmt-bar.on) .fmt-open { opacity: 0; pointer-events: none; }
 /* the format bar (B I S list): the "T" raises it from behind the box; it
    goes when the focus leaves; the clip's and the emoji panels open over it */
@@ -991,6 +991,23 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
 .call-screen.video.live:not(.small)             { padding-bottom: calc(9px + env(safe-area-inset-bottom)); }
 .call-screen.video.live:not(.small) .call-top  { margin-top: auto; }
 .call-screen.video.live:not(.small) .call-btns { margin-top: 16px; }
+/* Their picture showing, or a group: name top-left, timer top-right, the buttons back
+   at the bottom. My box in a top corner moves down under that row. */
+.call-screen.video.live:not(.small):is(:not(.peer-cam-off), .group) .call-top
+{
+    position: absolute; top: calc(14px + env(safe-area-inset-top)); left: 16px; right: 16px; margin-top: 0;
+    flex-direction: row; align-items: center; gap: 10px; text-align: left;
+}
+.call-screen.video.live:not(.small):is(:not(.peer-cam-off), .group) .call-top b
+{
+    margin-top: 0; font-size: 1.15rem; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.call-screen.video.live:not(.small):is(:not(.peer-cam-off), .group) .call-note  { order: 1; flex: none; }
+.call-screen.video.live:not(.small):is(:not(.peer-cam-off), .group) .call-state { order: 2; flex: none; margin-left: auto; }
+.call-screen.video.live:not(.small):is(:not(.peer-cam-off), .group) .call-btns  { margin-top: auto; }
+.call-screen.video.live:not(.small):is(:not(.peer-cam-off), .group) .call-pip.at-tl,
+.call-screen.video.live:not(.small):is(:not(.peer-cam-off), .group) .call-pip.at-tr { top: calc(54px + env(safe-area-inset-top)); }
 /* My picture: a box in one corner (.at-tl / tr / bl / br), as close to the
    bottom edge as to the top one. */
 .call-screen .call-pip

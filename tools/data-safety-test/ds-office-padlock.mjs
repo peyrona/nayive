@@ -88,7 +88,7 @@ ok( await c.until( `${CM}.getValue() === 'texto en claro\\n'` ), "with its text"
 await c.evaluate( "document.getElementById('lockBtn').click(), true" );
 ok( await c.until( "window.__sheet().indexOf( Ayni.t('lock.pastTitle') ) !== -1" ), "the padlock warns about the copy already written" );
 await c.evaluate( "window.__pressConfirm()" );                       // "Clean copy"
-ok( await c.evaluate( "window.__typePassword( 'una-clave-larga-1' )" ), "a new password" );
+ok( await c.evaluate( "window.__vaultSetup( 'una-clave-larga-1' )" ), "the account's lock password is set (the vault, first time)" );
 ok( await c.until( "document.getElementById('saveAsBackdrop').open" ), "a new name is asked" );
 await c.evaluate( "document.getElementById('saveName').value = 'carta-protegida.txt', document.getElementById('saveAsConfirmBtn').click(), true" );
 

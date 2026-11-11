@@ -3,7 +3,7 @@
      apps (Photos / Music / Movies are folder viewers: opened from here they use the
      folder each remembers in its own data/<app>/config.json, asking once via
      NayiveUI.pickFolder the first time; Write, Calc and Text open from the Office tile's popup,
-     Contacts, Bookmarks and Passwords from the Records one),
+     Contacts and Bookmarks from the Records one),
      centred in the viewport, with a settings row below: a gear button that, when pressed,
      rolls from the centre to the left edge while the other tool buttons unfold into place
      to its right, one after another (right-to-left as the gear rolls out, mirrored on the
@@ -467,7 +467,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
                 <span>Office</span>
             </button>
-            <!-- Records (2026-09-23): Contacts, Bookmarks and Passwords in a popup (#recordsMenu, under the grid). -->
+            <!-- Records (2026-09-23): Contacts and Bookmarks in a popup (#recordsMenu, under the grid). -->
             <button class="btn large" id="recordsBtn" type="button" popovertarget="recordsMenu" aria-haspopup="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="10" y1="7" x2="14" y2="7"></line><line x1="10" y1="17" x2="14" y2="17"></line></svg>
                 <span>Records</span>
@@ -533,10 +533,6 @@
             <a class="btn large" href="bookmarks/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
                 <span>Bookmarks</span>
-            </a>
-            <a class="btn large" href="passwords/index.html">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="M10.7 12.3 21 2"></path><path d="m15.5 7.5 3 3"></path><path d="m18 5 2.5 2.5"></path></svg>
-                <span>Passwords</span>
             </a>
         </div>
 
@@ -606,6 +602,14 @@
             <div class="acct-assign">
                 <span data-i18n="lock.password"></span>
                 <button id="pwChangeBtn" type="button" class="btn text bordered sm" data-i18n="acct.changePwBtn"></button>
+            </div>
+
+            <!-- Locked documents (Write, Calc, Text): one key for all of them,
+                 opened by a lock password, passkeys or the recovery code
+                 (shared/ayni/ayni-vault.js, loaded on the first tap). -->
+            <div class="acct-assign">
+                <span><span data-i18n="ayni.vault.title"></span> <button class="info-tip" type="button" data-i18n-attr="data-help:acct.vaultInfo"></button></span>
+                <button id="vaultBtn" type="button" class="btn text bordered sm" data-i18n="ayni.vault.manage"></button>
             </div>
 
             <div class="acct-assign">
@@ -801,7 +805,7 @@
 
     <script>
         // Office's, Records' and Tools' popups (2026-09-23; Tools 2026-10-28):
-        // Write / Calc / Text, Contacts / Bookmarks / Passwords and Find my
+        // Write / Calc / Text, Contacts / Bookmarks and Find my
         // devices / Split / Language / Calculator, as Ayni tool groups (the
         // tile opens its popup: popovertarget; Ayni places it, above the tile
         // when there is no room below, and closes it on a pick, a press
@@ -1591,6 +1595,36 @@
 
             openBtn.addEventListener( 'click', function (){ open(); } );
             document.getElementById( 'pwChangeBtn' ).addEventListener( 'click', function (){ openPw( false ); } );
+
+            // Locked documents: the vault's scripts come on the first tap (few
+            // people open it, and the launcher stays light).
+            var vaultLoad = null;
+            function needVault()
+            {
+                if( window.AyniVault ) return Promise.resolve();
+                if( ! vaultLoad )
+                    vaultLoad = [ 'ayni-net', 'ayni-crypt', 'ayni-passkey', 'ayni-vault' ].reduce( function ( p, name )
+                    {
+                        return p.then( function ()
+                        {
+                            if( name === 'ayni-net' && window.AyniNet ) return;
+                            return new Promise( function ( resolve, reject )
+                            {
+                                var sc = document.createElement( 'script' );
+                                sc.src = 'shared/ayni/' + name + '.js';
+                                sc.onload = resolve;
+                                sc.onerror = function () { reject( new Error( name ) ); };
+                                document.head.appendChild( sc );
+                            } );
+                        } );
+                    }, Promise.resolve() ).catch( function ( e ) { vaultLoad = null; throw e; } );
+                return vaultLoad;
+            }
+            document.getElementById( 'vaultBtn' ).addEventListener( 'click', function ()
+            {
+                needVault().then( function () { AyniVault.manage(); },
+                                  function () { Ayni.toast( 'err', Ayni.t( 'login.noServer' ) ); } );
+            } );
             cancel.addEventListener( 'click', close );
 
             saveBtn.addEventListener( 'click', async function ()

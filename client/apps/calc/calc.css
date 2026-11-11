@@ -389,7 +389,8 @@ body.calc-painting #gridHost .htCore td { cursor: copy; }
    open cell editor (200), under the menus (400) and the dialogs (500). */
 #fePanel               { z-index: 300; width: 292px; max-width: calc(100vw - 32px); padding: 0; flex-direction: column; overflow: hidden; }
 #fePanel.open          { display: flex; }
-.fe-head               { display: flex; align-items: center; gap: 4px; padding: 3px 12px 3px 3px; cursor: pointer; user-select: none; font-size: 0.88rem; font-weight: 600; color: var(--text); }
+#fePanel.dragging, #fePanel.dragging * { cursor: grabbing !important; }
+.fe-head               { display: flex; align-items: center; gap: 4px; padding: 3px 12px 3px 3px; cursor: grab; touch-action: none; user-select: none; font-size: 0.88rem; font-weight: 600; color: var(--text); }
 .fe-chev svg           { transition: transform var(--tr-fast); }
 #fePanel.is-folded .fe-chev svg { transform: rotate(-90deg); }
 .fe-body               { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow-y: auto; padding: 8px 10px 10px; border-top: 1px solid var(--line); }

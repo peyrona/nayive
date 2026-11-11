@@ -137,6 +137,7 @@ async function reload()
 
         clearSel();
         await loadListing( currentFolder );      // refetch the open folder + render
+        await reloadOpenDirs();                  // and the folders open in place (tree-list)
         if( isSearching() ) runSearch();         // keep an active search live
         setSyncStatus( true );
         setStatus( '' );
@@ -174,7 +175,7 @@ function onFilesNews( msg )
     } );
 
     if( ! seen.length ) return;
-    if( ! msg.folders && ! seen.some( function( p ) { return parent( p ) === currentFolder; } ) ) return;
+    if( ! msg.folders && ! seen.some( function( p ) { return parent( p ) === currentFolder || openDirs.has( parent( p ) ); } ) ) return;
 
     if( msg.folders ) newsTree = true;
     if( document.hidden ) { newsWaiting = true; return; }
@@ -207,6 +208,7 @@ async function applyNews()
 
         curListing = { path: path, nodes: pruneNodes( r.nodes || [] ) };
         render();                  // picks that are gone drop out on their own (the browser)
+        await reloadOpenDirs();
         if( isSearching() ) runSearch();
     }
     catch( _ ) {}     // offline or a hiccup: the next news or a manual reload catches up

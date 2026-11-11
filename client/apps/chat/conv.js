@@ -199,7 +199,7 @@
             h( "span", { class: "who-top" }, h( "b", { text: c.name } ) ),
             sub[ 1 ] ? h( "small", { class: sub[ 0 ], text: sub[ 1 ] } ) : null ) );
         // [phone] [video] | [search] [info] [mute] [pin] [their link] [new link]
-        // [delete] | [⋮] [?]. Each button has a rank (1 = the last to leave):
+        // [delete] | [⋮] [?]. Each button but the calls has a rank (1 = the last to leave):
         // what does not fit goes into the ⋮ (fitBar, built in buildMain); a
         // person's page keeps all but the calls in the ⋮. A group calls up
         // to four people (call.js GROUP CALLS); a server without coturn has
@@ -232,7 +232,7 @@
                 var b = C.btn( it[ 1 ], it[ 2 ], it[ 3 ], it[ 6 ] );
                 b.id = it[ 0 ];
                 b._help = it[ 4 ];
-                if( fits ) b.dataset.rank = it[ 5 ];
+                if( fits && ! call ) b.dataset.rank = it[ 5 ];   // phone + video never leave the bar (his call, 2026-11-11)
                 ( call ? calls : acts ).appendChild( b );
                 return;
             }

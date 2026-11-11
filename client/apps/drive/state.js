@@ -88,8 +88,18 @@ function setViewMode( m )
 {
     viewMode = m === 'list' ? 'list' : 'grid';
     try { localStorage.setItem( VIEW_KEY, viewMode ); } catch( _ ) {}
+    if( viewMode === 'grid' ) closeAllDirs();
     render();
 }
+
+// The list is a tree-list: a folder row opens in place, its children under
+// it (listing.js toggleDir). openDirs = the folders open now; dirKids = their
+// one-level contents (null while loading). Both reset on a new folder.
+let openDirs = new Set();
+let dirKids  = new Map();
+let dirKidsSeq = 0;              // a newer load of the same folder wins
+
+function closeAllDirs() { openDirs = new Set(); dirKids = new Map(); dirKidsSeq++; }
 
 // A search of any kind - the box's own, the advanced one, or the "Biggest
 // files" list - is on screen.

@@ -28,14 +28,15 @@
     "use strict";
 
     // The names Ayni uses for what it keeps: Nayive's, so nothing stored is lost.
-    window.AyniNames = { key: "nayive-", cookie: "nayive_", deskKey: "balata-", api: "/api/", home: "/nayive/", header: "X-Nayive-",
+    window.AyniNames = { key: "nayive-", cookie: "nayive_", deskKey: "balata-", api: "/api/", home: "/nayive/", header: "X-Nayive-", upload: "nayive:upload",
                          mergingApps: [ [ "data/tasks.json", "Planner \u203a Tasks" ], [ "data/calendar.ics", "Planner \u203a Calendar" ], [ "data/contacts.vcf", "Contacts" ],
                                        [ "data/habits/", "Planner \u203a Habits" ], [ "data/split/", "Split" ], [ "data/trips/", "Trips" ],
                                        [ "data/games/", "Games" ], [ "data/bookmarks/", "Bookmarks" ] ] };
 
     // What Ayni writes into files, as Nayive's files have always said it.
-    window.AyniCryptMagic = [ "NAYIVE-LOCK-BIN\n", "NAYIVE-LOCK-B64\n" ];
+    window.AyniCryptMagic = [ "NAYIVE-LOCK-BIN\n", "NAYIVE-LOCK-B64\n", "NAYIVE-LOCK-BI2\n", "NAYIVE-LOCK-B62\n" ];
     window.AyniIcalProdid = "-//Nayive//Personal Calendar//EN";
+    window.AyniVaultConfig = { appName: "Nayive" };      // the name a passkey shows (shared/ayni/ayni-vault.js)
 
     // OLD SETTINGS - Nayive's old localStorage names -> Ayni's. Each is copied
     // only while Ayni's is still empty, then the old one goes, so this does its

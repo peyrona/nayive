@@ -1241,8 +1241,8 @@
     // WEATHER - this device's choice (set.weatherBar, the "⋮" menu): the sky
     // now as an icon on the bar, again every 30 min; a press opens today's
     // forecast beside it, fetched then (never on its own). The place, the units
-    // and who gives it are the screen locker's (Bellas artes' settings, per
-    // user), and so is the engine: shared/lockers/culture.js, loaded only when
+    // and who gives it are ONE per user (data/weather.json, set below in this
+    // menu, read by both lockers too); the engine is Bellas artes': shared/lockers/culture.js, loaded only when
     // this is on. Its cache too ("nv-culture:"): the locker reuses our call.
 
     var wxBtn = document.getElementById( 'wxBtn' ), wxPop = document.getElementById( 'wxPop' ),
@@ -1301,7 +1301,7 @@
         return h.weatherEngine();
     }
 
-    // The locker's settings, the place, the weather. `fresh`: a new call (the
+    // The weather settings (data/weather.json), the place, the weather. `fresh`: a new call (the
     // 30-min turn, a press); else the cache while under 30 min old (a reload).
     // The place keeps its own long cache (no new name lookup each time).
     function wxGet( fresh )
@@ -1311,7 +1311,7 @@
             var E = S.engine;
             wxCached = wxCached || E.store( 'nv-culture:' );
             var get = fresh ? function ( k, ttl, fn ) { return wxCached( k, 0, fn ); } : wxCached;
-            return S.read().then( function ( cfg )
+            return S.weatherRead().then( function ( cfg )
             {
                 return E.placeOf( cfg, wxCached ).then( function ( p )
                 {
@@ -1407,6 +1407,119 @@
     wxApply();
 
     wxPop.addEventListener( 'toggle', function ( e ) { if( e.newState === 'open' ) wxOpen(); else wxPopGen++; } );
+
+    // WEATHER SETTINGS in the "⋮" menu (2026-11-11): where, who gives it,
+    // units - ONE per user (data/weather.json via the engine's weatherUpdate),
+    // for the bar and both lockers. Read again at each menu open; each change
+    // saved at once, version-checked. A read that failed shows nothing to
+    // change (a stand-in saved would replace the real settings, F6).
+    var wxsPlace = document.getElementById( 'wxPlace' ), wxsBy = document.getElementById( 'wxBy' ),
+        wxsUnits = document.getElementById( 'wxUnits' ),
+        wxsCity = document.getElementById( 'wxCity' ), wxsMsg = document.getElementById( 'wxMsg' ),
+        wxsS = null, wxsCfg = null, wxsGen = 0, wxsOff = true;
+    function wxsSay( text ) { wxsMsg.hidden = ! text; wxsMsg.textContent = text || ''; }
+    function wxsLock( off )
+    {
+        [ wxsPlace, wxsBy, wxsUnits ].forEach( function ( x ) { Ayni.picker( x ).disabled = off; } );
+        wxsOff = off;
+        wxsCityOn();
+    }
+    // The city field is always shown; usable only while "A city" is picked.
+    function wxsCityOn()
+    {
+        var off = wxsOff || ! wxsCfg || wxsCfg.place !== 'city';
+        wxsCity.disabled = off;
+        document.getElementById( 'wxFind' ).ariaDisabled = off ? 'true' : null;
+    }
+    function wxsDraw()
+    {
+        var c = wxsCfg, W = wxsS.WEATHER;
+        var pp = Ayni.picker( wxsPlace );
+        pp.options = [ { value: 'geo', text: t( 'salon.placeGeo' ) }, { value: 'city', text: t( 'salon.placeCity' ) } ];
+        pp.set( c.place );
+        var pb = Ayni.picker( wxsBy );
+        pb.options = Object.keys( W ).map( function ( k ) { return { value: k, text: W[ k ].name }; } );
+        pb.set( c.weather );
+        var pu = Ayni.picker( wxsUnits );
+        pu.options = [ { value: 'c', text: t( 'salon.metric' ) }, { value: 'f', text: t( 'salon.imperial' ) } ];   // 'c'/'f' kept: the saved value
+        pu.set( c.units );
+        wxsCityOn();
+        if( document.activeElement !== wxsCity ) wxsCity.value = c.city ? c.city.name : '';
+        placeMore();
+    }
+    function wxsFill()
+    {
+        var g = ++wxsGen;
+        wxEngine().then( function ( S ) { return S.weatherReadStrict().then( function ( c ) { return { S: S, c: c }; } ); } ).then( function ( d )
+        {
+            if( g !== wxsGen ) return;
+            wxsS = d.S; wxsCfg = d.c;
+            wxsLock( false );
+            wxsDraw();
+        }, function () { if( g === wxsGen ) { wxsCfg = null; wxsLock( true ); wxsSay( t( 'salon.readFail' ) ); } } );
+    }
+    // One change: laid over the settings as they are on the server now.
+    function wxsSave( patch )
+    {
+        if( ! wxsS || ! wxsCfg ) return;
+        Object.keys( patch ).forEach( function ( k ) { wxsCfg[ k ] = patch[ k ]; } );
+        wxsDraw();
+        wxsS.weatherUpdate( function ( now )
+        {
+            var out = JSON.parse( JSON.stringify( now ) );
+            Object.keys( patch ).forEach( function ( k ) { out[ k ] = patch[ k ]; } );
+            return out;
+        } ).then( function ( out )
+        {
+            wxsCfg = out;
+            if( set.weatherBar ) wxTick( true );
+        }, function ( e ) { Ayni.toast( e && e.read ? 'err' : 'warn', t( e && e.read ? 'salon.notSaved' : 'salon.saveFail' ) ); } );
+    }
+    // "Where this computer is" asks the browser now, while someone is at the keyboard.
+    function wxsAskHere()
+    {
+        if( ! navigator.geolocation ) { wxsSay( t( 'salon.geoDenied' ) ); return; }
+        wxsSay( '…' );
+        navigator.geolocation.getCurrentPosition( function ( g )
+        {
+            wxsSay( '✓' );
+            if( window.NayiveUI && NayiveUI.townName )
+                NayiveUI.townName( Math.round( g.coords.latitude * 100 ) / 100, Math.round( g.coords.longitude * 100 ) / 100 )
+                    .then( function ( n ) { if( n ) wxsSay( '✓ ' + n ); }, function () {} );
+        }, function () { wxsSay( t( 'salon.geoDenied' ) ); }, { timeout: 20000, maximumAge: 30 * 6e4 } );
+    }
+    function wxsFind()
+    {
+        var name = wxsCity.value.trim();
+        if( ! name || ! wxsCfg || wxsCity.disabled ) return;
+        wxsSay( '…' );
+        var lang = window.Ayni ? String( Ayni.i18n.lang() ).slice( 0, 2 ) : 'en';
+        fetch( 'https://geocoding-api.open-meteo.com/v1/search?count=10&language=' + encodeURIComponent( lang ) + '&name=' + encodeURIComponent( name ) )
+            .then( function ( r ) { return r.json(); } )
+            .then( function ( d )
+            {
+                // The biggest of the namesakes ("Lisboa": Lisbon, not a village in Mozambique).
+                var r = ( d.results || [] ).reduce( function ( a, b ) { return ! a || ( b.population || 0 ) > ( a.population || 0 ) ? b : a; }, null );
+                if( ! r ) { wxsSay( t( 'salon.cityNone' ) ); return; }
+                wxsCity.value = r.name;
+                wxsSay( '✓ ' + [ r.name, r.admin1, r.country ].filter( Boolean ).join( ', ' ) );
+                wxsSave( { place: 'city', city: { name: r.name, lat: Math.round( r.latitude * 100 ) / 100, lon: Math.round( r.longitude * 100 ) / 100, tz: r.timezone } } );
+            }, function () { wxsSay( t( 'salon.cityNone' ) ); } );
+    }
+    wxsPlace.addEventListener( 'ayni:change', function ( e )
+    {
+        var v = e.detail.value;
+        if( ! wxsCfg ) return;
+        wxsSay( '' );
+        if( v === 'geo' ) { wxsSave( { place: 'geo' } ); wxsAskHere(); return; }
+        if( wxsCfg && wxsCfg.city ) wxsSave( { place: 'city' } );
+        else { wxsCfg.place = 'city'; wxsDraw(); wxsCity.focus(); }      // saved once a city is found
+    } );
+    wxsBy.addEventListener( 'ayni:change', function ( e ) { wxsSave( { weather: e.detail.value } ); } );
+    wxsUnits.addEventListener( 'ayni:change', function ( e ) { wxsSave( { units: e.detail.value } ); } );
+    document.getElementById( 'wxFind' ).addEventListener( 'click', wxsFind );
+    wxsCity.addEventListener( 'keydown', function ( e ) { if( e.key === 'Enter' ) { e.preventDefault(); wxsFind(); } } );
+    moreBtn.addEventListener( 'click', function () { wxsSay( '' ); wxsFill(); } );
 
     //------------------------------------------------------------------------//
     // BATTERY - this device's choice (set.battBar, the first row of the "⋮"

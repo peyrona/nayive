@@ -55,8 +55,8 @@ html, body { height: 100%; overflow: hidden; }
     content: ""; position: absolute; left: 50%; top: 50%;
     width: min(38vw, 38vh); aspect-ratio: 1; translate: -50% -50%;
     pointer-events: none;
-    -webkit-mask: url(../icons/logo-lines.svg) center / contain no-repeat;
-            mask: url(../icons/logo-lines.svg) center / contain no-repeat;
+    -webkit-mask: url(../../icons/logo-lines.svg) center / contain no-repeat;
+            mask: url(../../icons/logo-lines.svg) center / contain no-repeat;
 }
 .desk::before { background: var(--engrave-lit); transform: translateY(1px); }
 .desk::after  { background: var(--engrave-groove); }
@@ -224,9 +224,16 @@ body.touch .chip-ctl > .btn svg { width: 18px; height: 18px; }
 .set-row              { display: flex; align-items: center; gap: 8px; min-height: 32px; }
 .set-row > label, .set-row > span:first-child { flex: 1 1 auto; }
 .set-row > .picker    { flex: 0 0 auto; min-width: 150px; }
+.set-note             { margin: -6px 0 0; font-size: .8rem; color: var(--text-dim); line-height: 1.4; }
 .set-row > .slider-row { flex: 0 0 180px; min-width: 0; }
 .set-row > .slider-row > input { flex: 1 1 0; min-width: 0; }
 .set-row:has(> .lock-min) > .picker { flex: 1 1 0; min-width: 96px; }
+/* The weather place: label, list, city field on one row; the list gives
+   way first, the field keeps room to type. */
+#wxPlaceRow > label   { flex: 0 0 auto; }
+#wxPlaceRow > .picker { flex: 0 1 auto; min-width: 96px; }
+#wxPlaceRow > .input-group { flex: 1 1 0; min-width: 96px; }
+#wxPlaceRow > .input-group > .input { min-width: 0; }
 /* The screen locker: its list first, the minutes at the end; the
    clock's text row hides unless the clock is picked. */
 .lock-min             { flex: 0 0 auto; margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); }

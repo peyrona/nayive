@@ -358,6 +358,80 @@ function update( fn )
     }, fn, normalise, LOCAL.put );
 }
 
+//------------------------------------------------------------------------//
+// WEATHER SETTINGS - ONE per user (2026-11-11, his rule): where, who gives
+// it, units. data/weather.json, read by both lockers and the desktop's bar,
+// set only in the desktop's "⋮" menu. Never saved yet: what the lockers had
+// (Science's when it has a city, else Bellas artes'), read only - the file is
+// made on the first change.
+
+var WFILE  = "data/weather.json";
+var WLOCAL = localJson( "nayive-weather" );
+var WKEYS  = [ "place", "city", "weather", "units" ];
+
+function wNormalise( s )
+{
+    var b = normalise( s ), o = {};
+    WKEYS.forEach( function ( k ) { o[ k ] = b[ k ]; } );
+    return o;
+}
+
+// Never saved: from the lockers' files. `ms` each; one that cannot be read is skipped.
+function wSeed( ms )
+{
+    function one( f )
+    {
+        return getFile( f, ms, function ( r ) { return r.ok ? r.json() : null; } ).catch( function () { return null; } );
+    }
+    return Promise.all( [ one( "data/science.json" ), one( FILE ) ] ).then( function ( x )
+    {
+        return wNormalise( x[ 0 ] && x[ 0 ].city ? x[ 0 ] : x[ 1 ] || x[ 0 ] || {} );
+    } );
+}
+
+function wFetch( ms )
+{
+    return getFile( WFILE, ms, function ( r )
+    {
+        if( r.status === 404 ) return null;
+        if( ! r.ok ) throw new Error( "status " + r.status );
+        return r.json();
+    } ).then( function ( s ) { return s ? wNormalise( s ) : wSeed( ms ); } )
+       .then( function ( s ) { WLOCAL.put( s ); return s; } );
+}
+
+// For the bar and the lockers: the server's, else this device's, else the defaults.
+function weatherRead()
+{
+    return wFetch( 4000 ).catch( function () { return wNormalise( WLOCAL.get() ); } );
+}
+
+// For the "⋮" menu (see strictly): never a stand-in saved over the real ones.
+function weatherReadStrict()
+{
+    return strictly( wFetch( 10000 ), function () { return wNormalise( WLOCAL.get() ); } );
+}
+
+// A change from the "⋮" menu, version-checked (updateFile): `fn( now )` returns what to save.
+function weatherUpdate( fn )
+{
+    return updateFile( WFILE, function ()
+    {
+        return fetchTagged( WFILE, 10000 ).then( function ( v )
+        {
+            if( v.s ) return { s: wNormalise( v.s ), tag: v.tag };
+            return wSeed( 10000 ).then( function ( s ) { return { s: s, tag: null }; } );
+        } );
+    }, fn, wNormalise, WLOCAL.put );
+}
+
+// A locker's settings with the weather's laid over them (its own are old copies).
+function withWeather( s )
+{
+    return weatherRead().then( function ( w ) { WKEYS.forEach( function ( k ) { s[ k ] = w[ k ]; } ); return s; },
+                               function () { return s; } );
+}
+
 window.NayiveSalon =
 {
     LANGS: LANGS, CARDS: CARDS, MUSEUMS: MUSEUMS, FORMS: FORMS, PERIODS: PERIODS, DEFAULTS: DEFAULTS,
@@ -373,14 +447,16 @@ window.NayiveSalon =
     readStrict: readStrict,
     update:    update,
     fetchTagged: fetchTagged, updateFile: updateFile,    // for Science's file (science.js)
-    getFile: getFile, localJson: localJson, strictly: strictly
+    getFile: getFile, localJson: localJson, strictly: strictly,
+    weatherRead: weatherRead, weatherReadStrict: weatherReadStrict, weatherUpdate: weatherUpdate,
+    withWeather: withWeather
 };
 
 // The locker: the settings first (4 s at most), then the screen.
 AyniLocker.define( "culture", function ( host )
 {
     var stop = null, gone = false;
-    read().then( function ( s ) { if( ! gone ) stop = start( host, s ); } );
+    read().then( withWeather ).then( function ( s ) { if( ! gone ) stop = start( host, s ); } );
     return function () { gone = true; if( stop ) stop(); };
 } );
 
@@ -776,12 +852,18 @@ function placeOf( cfg, cached )
         ? navigator.permissions.query( { name: "geolocation" } ).then( function ( p )
           {
               if( p.state !== "granted" ) return null;
-              return new Promise( function ( ok ) {
-                  navigator.geolocation.getCurrentPosition(
-                      function ( g ) { ok( { lat: Math.round( g.coords.latitude * 100 ) / 100,      // ~1 km: enough,
-                                             lon: Math.round( g.coords.longitude * 100 ) / 100 } ); }, // and kinder to the cache
-                      function () { ok( null ); },
-                      { maximumAge: 30 * 6e4, timeout: 15000 } );
+              // A fresh position each time; when the browser cannot give one
+              // (slow or failing location service), the last one it gave -
+              // not the time zone's capital, hundreds of km away.
+              return cached( "pos", 0, function ()
+              {
+                  return new Promise( function ( ok, no ) {
+                      navigator.geolocation.getCurrentPosition(
+                          function ( g ) { ok( { lat: Math.round( g.coords.latitude * 100 ) / 100,      // ~1 km: enough,
+                                                 lon: Math.round( g.coords.longitude * 100 ) / 100 } ); }, // and kinder to the cache
+                          no,
+                          { maximumAge: 30 * 6e4, timeout: 8000 } );
+                  } );
               } );
           } ).catch( function () { return null; } )
         : Promise.resolve( null );

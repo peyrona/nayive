@@ -82,7 +82,7 @@ fieldset.group legend { padding: 0 4px; margin: 0; }
 .split .pane { overflow: auto; padding: 10px; min-width: 0; font-size: .85rem; }
 .split .pane:first-child { flex: none; width: var(--split, 35%); }
 .split .pane:last-child { flex: 1; }
-.splitter { --grip-gap: 26px; --grip-len: 132px; flex: none; width: 11px; background-color: var(--card-head);
+.splitter { --grip-gap: 30px; --grip-len: 132px; flex: none; width: 11px; background-color: var(--card-head);
   background-image: linear-gradient(to right, rgb(255 255 255 / .16), transparent 40%, rgb(0 0 0 / .07)); border-inline: var(--panel-border); cursor: col-resize; touch-action: none;
   position: relative; display: grid; place-items: center; z-index: 1; }
 .splitter:hover, .splitter:focus-visible, .splitter.dragging { background-color: var(--accent-soft); outline-offset: -2px; }
@@ -94,7 +94,7 @@ fieldset.group legend { padding: 0 4px; margin: 0; }
   mask: linear-gradient(to right, #000 0 calc(50% - var(--grip-gap)), transparent 0 calc(50% + var(--grip-gap)), #000 0); }
 /* Splitter controls (Frasquito, 2026-10-22): small filled glyphs drawn on the bar, close together (no circle, no background); two small arrows send the bar to either end
    (collapsing that pane) and a small ring in the middle resets both panes. The rest of the bar is dragged. */
-.split-ctl { display: flex; flex-direction: column; align-items: center; gap: 4px; position: relative; z-index: 2; }
+.split-ctl { display: flex; flex-direction: column; align-items: center; gap: 10px; position: relative; z-index: 2; }
 .splitter.rows .split-ctl { flex-direction: row; }
 .split-ctl button { width: 9px; height: 10px; padding: 0; border: 0; background: none; color: var(--text-dim);
   display: grid; place-items: center; cursor: pointer; position: relative; }

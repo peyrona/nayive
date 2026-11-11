@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>vault harness</title>
+<script src="shared/i18n.js"></script>
+<script src="shared/ayni/ayni-i18n.js" data-dict="shared/i18n/" data-langs="es en pt fr de"></script>
+<script src="shared/ayni/ayni-util.js"></script>
+<link rel="stylesheet" href="shared/ayni/ayni-base.css">
+<link rel="stylesheet" href="shared/ayni/ayni-buttons.css">
+<link rel="stylesheet" href="shared/ayni/ayni-toasts.css">
+<link rel="stylesheet" href="shared/ayni/ayni-dialogs.css">
+<link rel="stylesheet" href="shared/ayni/ayni-fields.css">
+<script>
+// The server, in memory: data/vault.json and its .prev copy. The real
+// updateJson's contract: fn( value ) -> new value, or false = nothing to write.
+window.SRV = {};
+window.WRITES = [];
+window.AyniNet = {
+    readJson:  async function ( p ) { return p in SRV ? JSON.parse( SRV[ p ] ) : null; },
+    writeJson: async function ( p, o ) { WRITES.push( p ); SRV[ p ] = JSON.stringify( o ); return {}; },
+    updateJson: async function ( p, fn )
+    {
+        var cur = p in SRV ? JSON.parse( SRV[ p ] ) : null;
+        var out = fn( cur );
+        if( out === false ) return cur;
+        if( out === undefined || out === null ) throw new TypeError( "nothing to write" );
+        WRITES.push( p );
+        SRV[ p ] = JSON.stringify( out );
+        return out;
+    }
+};
+</script>
+<script src="shared/ayni/ayni-icons.js" defer></script>
+<script src="shared/ayni/ayni-base.js" defer></script>
+<script src="shared/ayni/ayni-icons-more.js" defer></script>
+<script src="shared/ayni/ayni-buttons.js" defer></script>
+<script src="shared/ayni/ayni-toasts.js" defer></script>
+<script src="shared/ayni/ayni-dialogs.js" defer></script>
+<script src="shared/ayni/ayni-fields.js" defer></script>
+<script src="shared/ayni/ayni-crypt.js" defer></script>
+<script src="shared/ayni/ayni-passkey.js" defer></script>
+<script src="shared/ayni/ayni-vault.js" defer></script>
+</head>
+<body>
+<script>
+// Helpers the runner drives the real dialogs with.
+window.wait = function ( fn, ms )
+{
+    return new Promise( function ( resolve )
+    {
+        var t0 = Date.now();
+        ( function poll()
+        {
+            var v; try { v = fn(); } catch ( e ) { v = null; }
+            if( v ) return resolve( v );
+            if( Date.now() - t0 > ( ms || 8000 ) ) return resolve( null );
+            setTimeout( poll, 40 );
+        } )();
+    } );
+};
+window.top_ = function () { var all = document.querySelectorAll( "dialog.panel[open]" ); return all[ all.length - 1 ] || null; };
+window.typeNew = async function ( pw )      // Ayni.ask password + verify
+{
+    var one = await wait( function () { var i = document.getElementById( "ayni-ask-pw" ); return i && i.closest( "dialog[open]" ) && i; } );
+    if( ! one ) return false;
+    one.value = pw;
+    var two = document.getElementById( "ayni-ask-repeat" ); if( two ) two.value = pw;
+    one.closest( "dialog" ).querySelector( "footer button:last-child" ).click();
+    return true;
+};
+window.codeShown = async function ()        // the recovery code dialog: read it, press "I have saved it"
+{
+    var pre = await wait( function () { var p = document.querySelector( "dialog[open] pre.ayni-vault-code" ); return p; } );
+    if( ! pre ) return null;
+    var code = pre.textContent;
+    pre.closest( "dialog" ).querySelector( "footer button" ).click();
+    return code;
+};
+window.answer = async function ( yes )      // an Ayni.confirm: ✓ or Cancel
+{
+    var d = await wait( function () { var d = top_(); return d && d.querySelector( "footer .btn" ) && d; } );
+    if( ! d ) return false;
+    var b = yes ? d.querySelector( "footer button:last-child" ) : d.querySelector( "footer [data-close]" );
+    b.click();
+    return true;
+};
+window.unlockWith = async function ( what, value )   // the unlock dialog: "pw" | "code" | "pk" | "cancel"
+{
+    var d = await wait( function () { var d = top_(); return d && d.querySelector( "#ayniVaultLead" ) && d; } );
+    if( ! d ) return "no dialog";
+    if( what === "cancel" ) { d.querySelector( "footer [data-close]" ).click(); return "ok"; }
+    if( what === "pk" ) { d.querySelector( "#ayniVaultPk" ).click(); return "ok"; }
+    if( what === "code" )
+    {
+        var f = d.querySelector( "#ayniVaultForgot" ); if( f ) f.click();
+        var c = await wait( function () { return d.querySelector( "#ayniVaultCode" ); } );
+        c.value = value;
+    }
+    else d.querySelector( "#ayniVaultPw" ).value = value;
+    d.querySelector( "footer button:last-child" ).click();
+    return "ok";
+};
+window.vaultErr = function () { var e = document.getElementById( "ayniVaultErr" ); return e && ! e.hidden ? e.textContent : ""; };
+</script>
+</body></html>

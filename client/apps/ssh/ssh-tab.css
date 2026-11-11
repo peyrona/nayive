@@ -38,3 +38,78 @@
 .ssh-big-icon { color: var(--accent); margin: 4px 0 8px; }
 .ssh-big-icon .icon, .ssh-big-icon svg { --icon: 44px; width: 44px; height: 44px; }
 .ssh-step .btn { margin: 6px auto 0; }
+
+/* The first passkey: the setup code */
+.ssh-setup p { margin: 0 0 10px; }
+.ssh-setup ol { margin: 0 0 12px; padding-left: 1.3em; }
+.ssh-setup ol li { margin-bottom: 4px; }
+.ssh-setup > .btn, #sshCodeBox > .btn { margin: 4px 0 10px; }
+
+/* "Your browser asks for a USB security key?" */
+.ssh-keyhelp
+{
+    margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--line);
+    border-left: 3px solid var(--accent); border-radius: var(--radius-s); font-size: 0.9rem;
+}
+.ssh-keyhelp summary { cursor: pointer; color: var(--accent); font-size: 0.95rem; }
+.ssh-keyhelp[open] summary { margin-bottom: 8px; }
+.ssh-keyhelp h4 { margin: 10px 0 4px; font-size: 1rem; }
+.ssh-keyhelp ul, .ssh-keyhelp ol { margin: 0 0 6px; padding-left: 1.3em; }
+.ssh-keyhelp li { margin-bottom: 5px; line-height: 1.4; }
+.ssh-keyhelp li strong { color: var(--text); }
+.ssh-keyhelp p { margin: 0 0 6px; color: var(--text-dim); }
+.ssh-cmd
+{
+    margin: 0 0 8px; padding: 8px 10px; border-radius: var(--radius-s);
+    background: #16181d; color: #e6e6e6; font: 0.85rem ui-monospace, Menlo, Consolas, monospace;
+    white-space: pre-wrap; word-break: break-all; user-select: all;
+}
+
+/* "Confirm it is you": a passkey and/or the app's 6-digit code */
+.ssh-way { margin: 0 0 14px; }
+.ssh-way .hint { margin: 0 0 8px; }
+.ssh-otp-row { display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+.ssh-step .ssh-otp-row .btn { margin: 0; }
+.ssh-otp
+{
+    width: 8.5em; max-width: 100%; text-align: center; letter-spacing: 0.25em;
+    font: 1.25rem ui-monospace, Menlo, Consolas, monospace;
+}
+.ssh-note { margin: 4px 0 10px; }
+
+/* The setup: which way to add */
+.ssh-sub { margin: 14px 0 8px; }
+.ssh-ways { display: flex; flex-direction: column; gap: 10px; margin: 0 0 12px; }
+.ssh-way-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ssh-way-row[hidden] { display: none; }
+.ssh-way-row .btn { flex: none; }
+.ssh-way-row .hint { flex: 1; min-width: 12em; margin: 0; }
+
+/* Adding the app: QR code, key, first code */
+.ssh-app p { margin: 0 0 10px; }
+.ssh-app-steps { margin: 0 0 12px; padding-left: 1.3em; }
+.ssh-app-steps > li { margin-bottom: 12px; line-height: 1.4; }
+.ssh-app-steps .hint { margin: 6px 0; }
+.ssh-qr { margin: 10px 0; color: var(--text-dim); font-size: 0.9rem; }
+.ssh-qr canvas { display: block; width: 200px; max-width: 100%; height: auto; image-rendering: pixelated; border-radius: var(--radius-s); }
+.ssh-secret-row { display: flex; align-items: center; gap: 6px; }
+.ssh-secret-row .ssh-cmd { flex: 1; min-width: 0; margin: 0; letter-spacing: 0.08em; }
+.ssh-app .ssh-otp-row { justify-content: flex-start; }
+#sshOtpLink { margin: 0 0 10px; }
+
+/* The connect steps: "Step 1 of 2", and step 2's "which login?" box */
+.ssh-stepno { margin: 0 0 6px; color: var(--text-dim); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.ssh-stepno .icon, .ssh-stepno svg { --icon: 14px; width: 14px; height: 14px; vertical-align: -2px; color: var(--accent); }
+.ssh-tip { margin: 0 0 10px; font-size: 0.9rem; }
+.ssh-explain
+{
+    margin: 0 0 14px; padding: 8px 12px; border: 1px solid var(--line);
+    border-left: 3px solid var(--accent); border-radius: var(--radius-s); font-size: 0.9rem;
+}
+.ssh-explain p { margin: 0 0 6px; }
+.ssh-explain ul { margin: 0; padding-left: 1.3em; }
+.ssh-explain li { margin-bottom: 4px; line-height: 1.4; }
+.ssh-explain code { font: 0.85rem ui-monospace, Menlo, Consolas, monospace; word-break: break-all; }
+#sshLoginBox .field .hint { margin: 4px 2px 0; font-size: 0.85rem; }
+#sshUserPick + #sshUser { margin-top: 6px; }
+#sshUser[hidden] { display: none; }

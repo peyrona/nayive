@@ -2490,6 +2490,57 @@ function placeFormulaPanel()
     panel.style.top       = Math.round( top ) + 'px';
     panel.style.right     = Math.round( window.innerWidth - box.right + bar + 8 ) + 'px';
     panel.style.maxHeight = Math.max( 120, Math.round( box.bottom - top - 8 ) ) + 'px';
+    feMoveTo( feDrag.x, feDrag.y );
+}
+
+// Dragged by its title row, as Ayni moves a dialog: the place it was moved
+// to is an offset (a transform) from where placeFormulaPanel puts it, kept
+// until the page reloads, and always inside the window. A press that moves
+// less than 4 px is still a click (it folds the panel).
+const feDrag = { x: 0, y: 0, moved: false };
+
+function feMoveTo( x, y )
+{
+    const panel = fePanel();
+    panel.style.translate = '';
+    const r = panel.getBoundingClientRect(), m = 8;
+    const de = document.documentElement;
+    const keep = ( v, base, size, win ) => Math.min( Math.max( v, m - base ), Math.max( m - base, win - m - size - base ) );
+    feDrag.x = keep( x, r.left, r.width, de.clientWidth );
+    feDrag.y = keep( y, r.top, r.height, de.clientHeight );
+    panel.style.translate = feDrag.x || feDrag.y ? feDrag.x + 'px ' + feDrag.y + 'px' : '';
+}
+
+function wireFormulaDrag( head )
+{
+    head.addEventListener( 'pointerdown', function( e )
+    {
+        if( e.button ) return;
+        const px = e.clientX, py = e.clientY, x0 = feDrag.x, y0 = feDrag.y;
+        let moving = false;
+        feDrag.moved = false;
+        head.setPointerCapture( e.pointerId );
+
+        function move( ev )
+        {
+            const dx = ev.clientX - px, dy = ev.clientY - py;
+            if( ! moving && Math.abs( dx ) < 4 && Math.abs( dy ) < 4 ) return;
+            moving = true;
+            fePanel().classList.add( 'dragging' );
+            feMoveTo( x0 + dx, y0 + dy );
+        }
+        function up()
+        {
+            head.removeEventListener( 'pointermove', move );
+            head.removeEventListener( 'pointerup', up );
+            head.removeEventListener( 'pointercancel', up );
+            fePanel().classList.remove( 'dragging' );
+            feDrag.moved = moving;
+        }
+        head.addEventListener( 'pointermove', move );
+        head.addEventListener( 'pointerup', up );
+        head.addEventListener( 'pointercancel', up );
+    } );
 }
 
 // Type `text` at the cell editor's caret, over whatever is selected in
@@ -2743,11 +2794,13 @@ function wireFormulaPanel()
     for( const type of [ 'mousedown', 'mouseup', 'click', 'pointerdown', 'pointerup', 'touchstart', 'touchend' ] )
         panel.addEventListener( type, function( e ) { e.stopPropagation(); } );
     panel.addEventListener( 'mousedown', function( e ) { e.preventDefault(); } );
+    wireFormulaDrag( document.getElementById( 'feHead' ) );
 
     panel.addEventListener( 'click', function( e )
     {
         if( e.target.closest( '#feHead' ) )
         {
+            if( feDrag.moved ) { feDrag.moved = false; return; }   // the end of a drag
             setFolded( ! panel.classList.contains( 'is-folded' ), true );
             placeFormulaPanel();
             return;

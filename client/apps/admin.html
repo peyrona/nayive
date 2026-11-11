@@ -74,6 +74,7 @@
     <script src="language/admin.js" type="module"></script>
     <!-- The SSH tab: a terminal on this server (xterm.js loads when the tab first shows). -->
     <link rel="stylesheet" href="ssh/ssh-tab.css">
+    <script src="shared/ayni/ayni-passkey.js" defer></script>
     <script src="ssh/ssh-tab.js" defer></script>
 
     <style>
@@ -344,12 +345,13 @@
     <section id="sshSec" hidden>
         <div class="sec-title">
             <h2>SSH</h2>
-            <button class="info-tip" data-help="A terminal on this server (localhost:22). One session at a time.&#10;&#10;Each connection asks for a passkey (Face ID, a fingerprint, or your phone) and then the SSH password, which is never stored.&#10;&#10;It closes after 15 minutes with no key pressed, after 2 hours in any case, and when the screen locks or you leave this page."></button>
+            <button class="info-tip" data-help="A terminal on Nayive&#39;s server. One session at a time.&#10;&#10;Each connection first asks you to confirm it is you: with a passkey (Face ID, a fingerprint, or your phone) or with the 6-digit code of an authenticator app (Google Authenticator, Microsoft Authenticator, Aegis, 2FAS…). Then it asks your login on the server itself: a Linux account of the computer Nayive runs on (the name and password you use for ssh there; the password is the one sudo asks for). It is NOT your Nayive login. The password is never stored. A wrong password needs a new confirm; with the app, wait for its next code.&#10;&#10;The first passkey or app needs a one-time setup code: Passkeys &amp; app › Make setup code, then read the file it names in a real SSH login. Later ones need one you have. Keep two, so a lost phone does not lock you out.&#10;&#10;Wrong tries (passkey, code, setup code, SSH password) lock it: 5 in 15 minutes, or 10 in 24 hours.&#10;&#10;Lost everything? In a real SSH login, delete BOTH config/ssh-passkeys.json AND config/ssh-totp.json; then start again with a setup code.&#10;&#10;The server&#39;s SSH must take passwords from this machine. If it takes keys only, add at the END of /etc/ssh/sshd_config:&#10;Match Address 127.0.0.1,::1&#10;    PasswordAuthentication yes&#10;then: sudo systemctl reload ssh&#10;&#10;It closes after 15 minutes with no key pressed, after 2 hours in any case, and when the screen locks, you sign out or you leave this page."></button>
         </div>
         <div class="ssh-bar">
             <div class="ssh-status" id="sshStatus" data-state="off" role="status"><span id="sshStatusText">Not connected</span></div>
             <button type="button" class="btn text primary" id="sshConnect"></button>
             <button type="button" class="btn text bordered" id="sshDisconnect" hidden></button>
+            <button type="button" class="btn text bordered" id="sshPasskeys"></button>
             <button type="button" class="btn" id="sshFull" data-tip="Full screen" aria-label="Full screen"></button>
         </div>
         <p class="banner ssh-warn" id="sshWarn" role="alert" hidden></p>

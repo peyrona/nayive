@@ -154,7 +154,18 @@
             <!-- BATTERY ON THE BAR - set.battBar (2026-10-04): the #batt on the bar (see
                  BATTERY). Always the first row; greyed with no battery or no browser API. -->
             <label class="switch end" id="battRow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line><line x1="6" y1="11" x2="6" y2="13"></line><line x1="10" y1="11" x2="10" y2="13"></line></svg><span data-i18n="desktop.battBar"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.battBarInfo"></span><input role="switch" type="checkbox" id="battBarChk" disabled></label>
-            <!-- WEATHER ON THE BAR - set.weatherBar (2026-10-02): the #wxBtn on the bar (see WEATHER). -->
+            <!-- WEATHER (2026-11-11) - on the bar: set.weatherBar, this device (the #wxBtn, see WEATHER).
+                 Where, who gives it, units: ONE per user (data/weather.json), for the bar AND both lockers;
+                 filled and saved at once by ayni-deskpage.js (wxSet*). -->
+            <h4 data-i18n="desktop.weatherLabel"></h4>
+            <!-- The place: the list, then the city (always there, usable only with "A city" picked). -->
+            <div class="set-row" id="wxPlaceRow"><label for="wxPlace" data-i18n="salon.place"></label>
+                <div class="picker" id="wxPlace"></div><span class="input-group"><input class="input" id="wxCity" type="text" spellcheck="false" data-i18n-attr="placeholder:salon.city, aria-label:salon.city"><button class="btn" type="button" id="wxFind" data-i18n-attr="data-tip:salon.cityFind, aria-label:salon.cityFind"><span class="icon" data-icon="search"></span></button></span></div>
+            <p class="set-note" id="wxMsg" role="status" hidden></p>
+            <div class="set-row"><label for="wxBy" data-i18n="salon.weatherBy"></label>
+                <div class="picker" id="wxBy"></div></div>
+            <div class="set-row"><label for="wxUnits" data-i18n="salon.units"></label>
+                <div class="picker" id="wxUnits"></div></div>
             <label class="switch end"><span class="icon" data-icon="cloud"></span><span data-i18n="desktop.weatherBar"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.weatherBarInfo"></span><input role="switch" type="checkbox" id="weatherBarChk"></label>
             <!-- WINDOWS - how the windows behave on the desk. -->
             <h4 data-i18n="desktop.windowsLabel"></h4>
@@ -193,11 +204,9 @@
             <div class="set-row">
                 <div class="picker" id="lockSel" data-i18n-attr="aria-label:acct.locker"></div>
                 <span class="lock-min"><span class="input-group spin" id="lockMinSpin"><input class="input" id="lockMin" type="number" min="0" max="999" step="1" inputmode="numeric"
-                       data-i18n-attr="title:acct.lockerMin, aria-label:acct.lockerMin"></span> <span data-i18n="acct.lockerUnit"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:acct.lockerOff"></span></span></div>
+                       data-i18n-attr="title:acct.lockerMin, aria-label:acct.lockerMin"></span> <span data-i18n="acct.lockerUnit"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:acct.lockerOff"></span><button class="btn" id="salonBtn" type="button" hidden data-i18n-attr="data-tip:salon.settings, aria-label:salon.settings"><span class="icon" data-icon="settings"></span></button></span></div>
             <div class="set-row" id="lockTextWrap" hidden><label for="lockText" data-i18n="acct.lockerText"></label>
                 <input class="input" id="lockText" type="text" maxlength="60" spellcheck="false"></div>
-            <!-- Bellas artes' or Science's own settings (shared/lockers/culture-settings.js): per USER. -->
-            <button class="btn text" id="salonBtn" type="button" hidden><span class="icon" data-icon="settings"></span><span data-i18n="salon.settings"></span></button>
             <button class="btn text" id="lockNowBtn" type="button"><span class="icon" data-icon="lock"></span><span data-i18n="desktop.lockNow"></span></button>
         </div>
 
@@ -320,10 +329,12 @@
         lockMin.value  = s.min;
         lockText.value = s.text;
         document.getElementById( 'lockTextWrap' ).hidden = s.id !== 'clock';
-        var sb = document.getElementById( 'salonBtn' ), sbl = sb.querySelector( '[data-i18n]' );
+        // Bellas artes' / Science's own settings (per USER): the cog after the minutes' (i).
+        var sb = document.getElementById( 'salonBtn' ), sbk = s.id === 'science' ? 'sci.settings' : 'salon.settings';
         sb.hidden = s.id !== 'culture' && s.id !== 'science';
-        sbl.setAttribute( 'data-i18n', s.id === 'science' ? 'sci.settings' : 'salon.settings' );
-        sbl.textContent = t( sbl.getAttribute( 'data-i18n' ) );
+        sb.setAttribute( 'data-i18n-attr', 'data-tip:' + sbk + ', aria-label:' + sbk );
+        setTip( sb, t( sbk ) );
+        sb.setAttribute( 'aria-label', t( sbk ) );
         placeMore();
     }
     // The minutes are ONE value for every locker: choosing a locker never

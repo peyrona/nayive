@@ -43,6 +43,7 @@ type Server struct {
 	downloads *Downloads // Drive's downloads under way (api_download.go)
 	mail      *MailHub   // the eMail app's accounts and unread counts (mail.go)
 	clientLog *ClientLog // errors the browsers send (api_clientlog.go)
+	ssh       *SSHHub    // the Admin panel's SSH tab (ssh_passkey.go, ssh_term.go)
 
 	httpd  *http.Server
 	scheme string // "http" or "https", decided at construction
@@ -93,6 +94,7 @@ func NewServer(cfg *Config, log Logger) (*Server, error) {
 		downloads: NewDownloads(),
 		mail:      NewMailHub(cfg, users, push, log),
 		clientLog: NewClientLog(cfg.Here),
+		ssh:       NewSSHHub(cfg.ConfigDir),
 		scheme:    "http",
 	}
 	s.chat.Hook(s.devices)
@@ -131,6 +133,11 @@ func NewServer(cfg *Config, log Logger) (*Server, error) {
 	// instead of sitting out its 10-second grace (chat.go).
 	s.httpd.RegisterOnShutdown(s.chat.Close)
 	s.httpd.RegisterOnShutdown(s.devices.Close) // the phones' waits, held minutes
+	s.httpd.RegisterOnShutdown(s.ssh.CloseAll)  // the SSH tab's session
+	s.ssh.alive = func(token string) bool {
+		sess, ok := s.sessions.Get(token)
+		return ok && sess.Role == "admin"
+	}
 
 	if err := s.configureTLS(); err != nil {
 		// Missing file, unreadable key (letsencrypt directories are root-only),
@@ -249,6 +256,7 @@ func (s *Server) routes() http.Handler {
 	// NOT wrapped in a session guard: while no admin account exists this route
 	// is deliberately open, so the very first admin can be created.
 	mux.HandleFunc("/api/admin", s.apiAdmin)
+	mux.HandleFunc("/api/ssh/{what}", s.apiSSH) // the Admin panel's SSH tab (api_ssh.go)
 
 	// --- sharing -----------------------------------------------------------
 	mux.HandleFunc("/api/shares", s.apiShares)

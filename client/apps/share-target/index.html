@@ -2,12 +2,17 @@
 <!-- index.html - Web Share Target landing page.
 
      The launcher manifest declares this folder as a share_target. When the user
-     picks photos in the phone's gallery and taps Share -> "Nayive", the OS
-     POSTs them here. A page can't read that POST, so apps/sw.js intercepts it,
-     stashes the images in the "nayive-share-inbox" Cache, and 303-redirects here
+     picks photos, videos or any file and taps Share -> "Nayive", the OS POSTs
+     them here. A page can't read that POST, so apps/sw.js intercepts it,
+     stashes the files in the "nayive-share-inbox" Cache, and 303-redirects here
      with ?n=<count>. This page reads them back out of that cache, lets the user
-     confirm the destination album, uploads each file with PUT /api/files, then
-     opens Photos on that folder.
+     confirm the destination, uploads each file as a NEW file (create-only PUT),
+     then opens it:
+       - photos and videos only (inbox kind "media") -> a Photos album;
+       - anything else, or a mix (kind "files")      -> a Drive folder.
+     A shared link (no files) arrives as ?link=&title=&text=: two buttons send
+     it to Bookmarks or to Chat. Nothing is written here for a link.
+     ?err=1: the service worker could not keep what was shared (storage full).
 
      Online only (it uploads). iOS Safari does not support Web Share Target at
      all - there the launcher shows the "Add to Home Screen" recipe instead and
@@ -107,6 +112,21 @@
             font-size: 0.85rem; color: var(--text-dim);
         }
 
+        .st-strip .tile
+        {
+            width: 74px; height: 74px; border-radius: var(--radius-m); background: var(--card2);
+            border: 1px solid var(--line); display: flex; flex-direction: column; align-items: center;
+            justify-content: center; gap: 4px; color: var(--text-dim); overflow: hidden;
+        }
+        .st-strip .tile .icon { width: 24px; height: 24px; }
+        .st-strip .tile span.nm
+        {
+            font-size: 0.7rem; max-width: 66px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+
+        .st-link { word-break: break-all; font-size: 0.9rem; margin: 0 0 4px; }
+        .st-link-title { font-weight: 600; margin: 0 0 6px; overflow-wrap: anywhere; }
+
         .st-dest { display: flex; align-items: center; gap: 10px; }
         .st-dest .lbl { font-size: 0.8rem; color: var(--text-dim); flex: 0 0 auto; }
         .st-dest .val { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -128,12 +148,23 @@
 <body>
     <div class="app">
         <div class="st-head">
-            <span class="icon" data-icon="images"></span>
+            <span class="icon" data-icon="images" id="headIcon"></span>
             <h1 data-i18n="ui.shareToNayive"></h1>
         </div>
 
         <div class="st-card" id="empty" hidden>
-            <p class="st-msg" id="emptyMsg"><span data-i18n="st.noPhoto"></span><br><a href="../index.html" data-i18n="st.goToNayive"></a></p>
+            <p class="st-msg" id="emptyMsg"><span id="emptyText" data-i18n="st.noPhoto"></span><br><a href="../index.html" data-i18n="st.goToNayive"></a></p>
+        </div>
+
+        <div class="st-card" id="linkCard" hidden>
+            <p class="st-count" data-i18n="st.linkWhere"></p>
+            <p class="st-link-title" id="linkTitle" hidden></p>
+            <p class="st-link" id="linkUrl"></p>
+        </div>
+
+        <div class="st-actions" id="linkActions" hidden>
+            <button type="button" class="btn text bordered" id="toBookmarks"><span class="icon" data-icon="bookmark"></span><span data-i18n="st.toBookmarks"></span></button>
+            <button type="button" class="btn text bordered" id="toChat"><span class="icon" data-icon="chat"></span><span data-i18n="st.toChat"></span></button>
         </div>
 
         <div class="st-card" id="review" hidden>
@@ -143,7 +174,7 @@
 
         <div class="st-card" id="destCard" hidden>
             <div class="st-dest">
-                <span class="lbl" data-i18n="st.album"></span>
+                <span class="lbl" id="destLbl" data-i18n="st.album"></span>
                 <span class="val" id="destVal">…</span>
                 <button type="button" class="btn text bordered" id="changeDest" data-i18n="ui.change"></button>
             </div>
@@ -166,8 +197,17 @@ const PARAMS = new URLSearchParams( location.search );
 
 let ITEMS = [];          // [{ name, blob }]
 let DEST  = null;        // folder path, e.g. "files/fotos/viajes"
+let KIND  = "media";     // "media": photos/videos -> a Photos album | "files": anything -> a Drive folder
 
-/* Pull the shared images back out of the Cache the service worker filled. */
+const IMAGE_RE = /\.(jpe?g|png|gif|webp|bmp|avif|heic|heif)$/i;
+const VIDEO_RE = /\.(mp4|m4v|mov|webm|3gp|mkv|avi)$/i;
+const isImage  = it => /^image\//.test( ( it.blob && it.blob.type ) || "" ) || IMAGE_RE.test( it.name || "" );
+const isVideo  = it => /^video\//.test( ( it.blob && it.blob.type ) || "" ) || VIDEO_RE.test( it.name || "" );
+
+// The texts say "photos" while every item is a photo, "files" otherwise.
+const T = ( photoKey, fileKey ) => ITEMS.every( isImage ) ? photoKey : fileKey;
+
+/* Pull the shared files back out of the Cache the service worker filled. */
 async function readInbox()
 {
     if( ! ( "caches" in window ) ) return [];
@@ -183,6 +223,8 @@ async function readInbox()
         if( m ) manifest = await m.json();
     }
     catch ( _ ) {}
+
+    KIND = manifest.kind === "files" ? "files" : "media";      // no kind: a share from before files came in
 
     const n = manifest.count || parseInt( PARAMS.get( "n" ) || "0", 10 ) || 0;
     const out = [];
@@ -242,7 +284,7 @@ async function clearInbox()
 
 function renderStrip()
 {
-    $( "#count" ).textContent = Ayni.tf( ITEMS.length === 1 ? "st.onePhoto" : "st.nPhotos",
+    $( "#count" ).textContent = Ayni.tf( ITEMS.length === 1 ? T( "st.onePhoto", "st.oneFile" ) : T( "st.nPhotos", "st.nFiles" ),
                                             { n: ITEMS.length } );
 
     const strip = $( "#strip" );
@@ -250,6 +292,21 @@ function renderStrip()
     const SHOW = 6;
     ITEMS.slice( 0, SHOW ).forEach( it =>
     {
+        if( ! isImage( it ) )           // a video or any other file: its icon and name
+        {
+            const tile = document.createElement( "div" );
+            tile.className = "tile";
+            tile.title = it.name;
+            const ic = document.createElement( "span" );
+            ic.className = "icon";
+            ic.dataset.icon = isVideo( it ) ? "video" : "file";
+            const nm = document.createElement( "span" );
+            nm.className = "nm";
+            nm.textContent = it.name;
+            tile.append( ic, nm );
+            strip.appendChild( tile );
+            return;
+        }
         const img = document.createElement( "img" );
         img.src = URL.createObjectURL( it.blob );
         img.alt = it.name;
@@ -273,11 +330,11 @@ function setDest( folder )
     DEST = folder;
     $( "#destVal" ).textContent = folder
         ? ( folder.replace( /^files\//, "" ).replace( /^data\//, "" ) || Ayni.t( 'ui.filesRoot' ) )
-        : Ayni.t( 'st.pickAlbum' );
+        : Ayni.t( KIND === "files" ? 'st.pickFolder' : 'st.pickAlbum' );
     $( "#goBtn" ).ariaDisabled = ! folder || ! ITEMS.length;
 }
 
-// A photo goes up as a NEW file only (create-only PUT): a name another device
+// A file goes up as a NEW file only (create-only PUT): a name another device
 // took after the listing answers 412 (409 in an album shared with us), and
 // the next free one is used - "IMG_1 (2).jpg" - never written over. (A 412
 // that is this very photo's first try, landed before a dropped connection
@@ -360,7 +417,7 @@ async function upload()
     // again (or Cancel): never cleared as if it had been uploaded.
     if( failed.length )
     {
-        if( done ) Ayni.toast( "ok", Ayni.tf( done === 1 ? "st.oneUploaded" : "st.nUploaded", { n: done } ) );
+        if( done ) Ayni.toast( "ok", Ayni.tf( done === 1 ? T( "st.oneUploaded", "st.oneFileUploaded" ) : T( "st.nUploaded", "st.nFilesUploaded" ), { n: done } ) );
 
         ITEMS = failed.map( f => f.it );
         await markKept();
@@ -373,17 +430,38 @@ async function upload()
         setDest( DEST );
 
         Ayni.alert( {
-            title: Ayni.tf( 'st.notUploaded', { n: failed.length } ),
+            title: Ayni.tf( T( 'st.notUploaded', 'st.filesNotUploaded' ), { n: failed.length } ),
             body:  ( quota ? Ayni.t( 'ui.quotaExceeded' ) + "\n\n" : "" ) +
-                   ( unread ? Ayni.t( 'st.albumUnread' ) + "\n\n" : "" ) +
+                   ( unread ? Ayni.t( KIND === "files" ? 'st.folderUnread' : 'st.albumUnread' ) + "\n\n" : "" ) +
                    failed.map( f => f.it.name + ( f.why ? " (" + f.why + ")" : "" ) ).join( "\n" ) +
                    "\n\n" + Ayni.t( 'st.keptToRetry' )
         } );
         return;
     }
 
+    const allPhotos = ITEMS.every( isImage );
     await clearInbox();
-    Ayni.toast( "ok", Ayni.tf( done === 1 ? "st.oneUploaded" : "st.nUploaded", { n: done } ) );
+    Ayni.toast( "ok", Ayni.tf( done === 1 ? ( allPhotos ? "st.oneUploaded" : "st.oneFileUploaded" )
+                                          : ( allPhotos ? "st.nUploaded"   : "st.nFilesUploaded" ), { n: done } ) );
+
+    // Files: remember the folder for the next share (Drive's own config keeps
+    // every other key, see drive/settings.js), then open it in Drive.
+    if( KIND === "files" )
+    {
+        try
+        {
+            await AyniNet.updateJson( "data/drive/config.json", cfg =>
+            {
+                const next = ( cfg && typeof cfg === "object" && ! Array.isArray( cfg ) ) ? cfg : {};
+                next.shareFolder = DEST;
+                return next;
+            } );
+        }
+        catch ( _ ) {}
+
+        location.replace( "../drive/?open=" + encodeURIComponent( DEST ) );
+        return;
+    }
 
     // Remember this album as the Photos folder, then open it there. Only
     // `folder` changes: the file's other keys are kept, and an unreadable one
@@ -405,9 +483,10 @@ async function upload()
 
 $( "#changeDest" ).addEventListener( "click", async () =>
 {
+    const files = KIND === "files";
     const f = await NayiveUI.pickFolder( {
-        title: Ayni.t( 'st.whichAlbum' ),
-        note:  Ayni.t( 'st.whichAlbumNote' ),
+        title: Ayni.t( files ? 'st.whichFolder'     : 'st.whichAlbum' ),
+        note:  Ayni.t( files ? 'st.whichFolderNote' : 'st.whichAlbumNote' ),
         allowRoot: true,
         rootLabel: Ayni.t( 'ui.filesRoot' )
     } );
@@ -421,14 +500,52 @@ $( "#cancelBtn" ).addEventListener( "click", async () =>
     location.replace( "../index.html" );
 } );
 
+// A shared link: Bookmarks or Chat, the user picks. Only a page is opened.
+function showLink()
+{
+    const link  = PARAMS.get( "link" );
+    const title = PARAMS.get( "title" ) || "";
+    const text  = PARAMS.get( "text" ) || link;
+
+    $( "#headIcon" ).dataset.icon = "link";
+    $( "#linkUrl" ).textContent = link;
+    if( title && title !== link ) { $( "#linkTitle" ).textContent = title; $( "#linkTitle" ).hidden = false; }
+    $( "#linkCard"    ).hidden = false;
+    $( "#linkActions" ).hidden = false;
+
+    $( "#toBookmarks" ).addEventListener( "click", () =>
+        location.replace( "../bookmarks/?" + new URLSearchParams( { add: link, title: title } ).toString() ) );
+    $( "#toChat" ).addEventListener( "click", () =>
+        location.replace( "../chat/?text=" + encodeURIComponent( text ) ) );
+}
+
 async function boot()
 {
+    if( /^https?:\/\//i.test( PARAMS.get( "link" ) || "" ) ) { showLink(); return; }
+
     ITEMS = await readInbox();
+
+    // The service worker could not keep what was shared (storage full). With
+    // files kept from an earlier share still here, a toast; else the card says it.
+    if( PARAMS.get( "err" ) && ITEMS.length ) Ayni.toast( 'warn', Ayni.t( 'st.tooBig' ) );
 
     if( ! ITEMS.length )
     {
+        if( PARAMS.get( "err" ) )
+        {
+            $( "#emptyText" ).dataset.i18n = "st.tooBig";
+            $( "#emptyText" ).textContent  = Ayni.t( "st.tooBig" );
+        }
         $( "#empty" ).hidden = false;
         return;
+    }
+
+    const files = KIND === "files";
+    if( files )
+    {
+        $( "#headIcon" ).dataset.icon = "file";
+        $( "#destLbl" ).dataset.i18n = "st.folder";
+        $( "#destLbl" ).textContent = Ayni.t( "st.folder" );
     }
 
     renderStrip();
@@ -436,12 +553,14 @@ async function boot()
     $( "#destCard" ).hidden = false;
     $( "#actions"  ).hidden = false;
 
-    // Default destination: the folder Photos already remembers.
+    // Default destination: the folder Photos already remembers (photos and
+    // videos), or the one the last shared files went to (anything else).
     let folder = null;
     try
     {
-        const cfg = await AyniNet.readJson( "data/photos/config.json" );
-        if( cfg && cfg.folder ) folder = cfg.folder;
+        const cfg = await AyniNet.readJson( files ? "data/drive/config.json" : "data/photos/config.json" );
+        const f   = cfg && ( files ? cfg.shareFolder : cfg.folder );
+        if( typeof f === "string" && f ) folder = f;
     }
     catch ( err )
     {
@@ -450,7 +569,7 @@ async function boot()
     setDest( folder );
 
     if( ! folder )
-        Ayni.toast( 'info', Ayni.t( 'st.pickAlbumToast' ) );
+        Ayni.toast( 'info', Ayni.t( files ? 'st.pickFolderToast' : 'st.pickAlbumToast' ) );
 }
 
 // shared/ayni/ayni-net.js + shared/ui.js load deferred; they run before

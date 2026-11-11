@@ -69,10 +69,6 @@ var glyphs = []glyph{
 		"<line x1='8' y1='6' x2='16' y2='6'></line>" +
 		"<line x1='16' y1='14' x2='16' y2='18'></line>" +
 		"<path d='M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01'></path>"},
-	{name: "passwords", svg: "<circle cx='7.5' cy='15.5' r='4.5'/>" +
-		"<path d='M10.7 12.3 21 2'/>" +
-		"<path d='m15.5 7.5 3 3'/>" +
-		"<path d='m18 5 2.5 2.5'/>"},
 	{name: "contact", svg: "<rect x='3' y='4' width='18' height='17' rx='2'/>" +
 		"<circle cx='9' cy='11' r='2.2'/>" +
 		"<path d='M5.5 17.5c0-2.2 1.7-3.3 3.5-3.3s3.5 1.1 3.5 3.3'/>" +

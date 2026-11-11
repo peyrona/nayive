@@ -81,12 +81,6 @@ const APPS = {
     language: {
         path: "/nayive/language/", ready: "!! window.nayiveLanguage && document.querySelectorAll( '#to [role=option]' ).length === 5"
     },
-    // Passwords: the tour of a vault that is not open yet (set-up): the gate.
-    passwords: {
-        path: "/nayive/passwords/", ready: has( "#gate:not([hidden]) #setupBox:not([hidden])" ),
-        dismiss: "passwords",
-        expect: { 2: s => /gate|setup/.test( s.lit ) || "the gate's card" }
-    },
     trips: {
         path: "/nayive/trips/", ready: has( ".trip-card" ), empty: true, emptyReady: has( "#tripHeader .trip-header-actions" ),
         seed: { "data/trips/osaka/trip.json": JSON.stringify( { id: 9100, destination: "Osaka", dirName: "osaka", startDate: "2026-11-01", endDate: "2026-11-10",

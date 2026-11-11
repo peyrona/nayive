@@ -152,6 +152,7 @@ const sameDay = (a, b) => a && b && iso(a) === iso(b);
 const fmtLong = new Intl.DateTimeFormat(LOCALE, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const fmtMonShort = new Intl.DateTimeFormat(LOCALE, { month: 'short' });
 const fmtMonLong = new Intl.DateTimeFormat(LOCALE, { month: 'long', year: 'numeric' });
+const fmtMonName = new Intl.DateTimeFormat(LOCALE, { month: 'long' });
 /* Two-letter day names, Monday first: "Mo", "Lu"... */
 const dayHeads = () => Array.from({ length: 7 }, (_, i) => {
   const n = window.Ayni?.i18n?.weekday(i + 1, 'short') || ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'][i];
@@ -172,7 +173,8 @@ const isoWeek = (d) => {
 /* Ayni.calendar(root, onPick) draws a calendar in root and returns { set(date), focus() }.
    Optional limits come from data-min / data-max (YYYY-MM-DD) on the calendar root; data-weeks starts each row with its
    ISO week number. Without onPick it is view only: days take no press and no focus, the rest still moves it.
-   The title switches days -> months -> years; picking a month or a year returns to the days. */
+   The head reads "November ▾ 2026 ▾ ... Today < >": the month opens a 12-month grid, the year a 12-year grid, and a
+   second press (or picking one, or Esc) returns to the days. */
 const makeCalendar = (root, onPick) => {
   const viewOnly = typeof onPick !== 'function', weeks = () => 'weeks' in root.dataset;
   const min = parseIso(root.dataset.min || ''), max = parseIso(root.dataset.max || '');
@@ -218,22 +220,20 @@ const makeCalendar = (root, onPick) => {
         return `<button type="button" data-yr="${yy}" class="${yy === today.getFullYear() ? 'today' : ''}" tabindex="${yy === y ? 0 : -1}" aria-selected="${yy === sel.getFullYear()}"${off(yearOk(yy))}>${yy}</button>`;
       }).join('')}</div>`;
     }
-    const titleEl = view === 'years' ? `<span class="cal-title" aria-live="polite">${title}</span>`
-      : `<button type="button" class="cal-title" data-view aria-live="polite" data-tip="${tx(view === 'days' ? 'cal.chooseMonth' : 'cal.chooseYear')}">${title}${icon('chev-down')}</button>`;
+    const pickBtn = (v, text, key) => `<button type="button" class="cal-title" data-view="${v}" aria-expanded="${view === v}" data-tip="${tx(key)}">${text}${icon('chev-down')}</button>`;
+    const navBtn = (n) => `<button type="button" class="btn sm" data-nav="${n}" aria-label="${tx(`cal.${n < 0 ? 'prev' : 'next'}.${unit}`)}" data-tip="${tx(`cal.${n < 0 ? 'prev' : 'next'}.${unit}`)}"${off(n < 0 ? prevOk : nextOk)}>${icon('chev-right', n < 0 ? 'flip' : '')}</button>`;
     root.innerHTML = `<div class="cal-head">
-      <button type="button" class="btn icon-btn" data-nav="-1" aria-label="${tx('cal.prev.' + unit)}" data-tip="${tx('cal.prev.' + unit)}"${off(prevOk)}>${icon('chev-right', 'flip')}</button>
-      ${titleEl}
-      <button type="button" class="btn icon-btn" data-nav="1" aria-label="${tx('cal.next.' + unit)}" data-tip="${tx('cal.next.' + unit)}"${off(nextOk)}>${icon('chev-right')}</button></div>
-      <div class="cal-body">${body}</div>
-      <div class="cal-foot"><button type="button" class="btn" data-today aria-label="${tx('cal.today')}" data-tip="${dayOk(today) ? txf('cal.todayIs', { date: fmtLong.format(today) }) : tx('cal.todayOff')}"${off(dayOk(today))}>${icon('today')}</button></div>`;
-    if (focus === 'title') $('.cal-title', root).focus?.({ preventScroll: true });
+      <div class="cal-picks" aria-live="polite">${pickBtn('months', fmtMonName.format(cur), 'cal.chooseMonth')}${pickBtn('years', String(y), 'cal.chooseYear')}</div>
+      <div class="cal-nav"><button type="button" class="btn sm" data-today aria-label="${tx('cal.today')}" data-tip="${dayOk(today) ? txf('cal.todayIs', { date: fmtLong.format(today) }) : tx('cal.todayOff')}"${off(dayOk(today))}>${icon('today')}</button>${navBtn(-1)}${navBtn(1)}</div></div>
+      <div class="cal-body">${body}</div>`;
+    if (focus === 'months' || focus === 'years' || focus === 'title') $(focus === 'title' ? '.cal-title' : `.cal-title[data-view="${focus}"]`, root).focus?.({ preventScroll: true });
     else if (focus) ($('.cal-body [tabindex="0"]', root) || $('.cal-title', root)).focus?.({ preventScroll: true });
   };
   const pick = (d) => { sel = cur = d; view = 'days'; render(true); onPick(sel); };
   root.addEventListener('click', (e) => {
     const t = e.target.closest('button'); if (!t || t.getAttribute('aria-disabled') === 'true') return;
     if (t.dataset.nav) { moveMonth(+t.dataset.nav * (view === 'days' ? 1 : view === 'months' ? 12 : 144)); render(false); }
-    else if ('view' in t.dataset) { view = view === 'days' ? 'months' : 'years'; render('title'); }
+    else if (t.dataset.view) { const v = t.dataset.view; view = view === v ? 'days' : v; render(v); }
     else if (t.dataset.mo) { moveMonth(+t.dataset.mo - cur.getMonth()); cur = clamp(cur); view = 'days'; render(true); }
     else if (t.dataset.yr) { moveMonth((+t.dataset.yr - cur.getFullYear()) * 12); cur = clamp(cur); view = 'days'; render(true); }
     else if (t.dataset.d) pick(parseIso(t.dataset.d));

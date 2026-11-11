@@ -110,6 +110,29 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
 .list-rows:not(.is-grid) .row > .pick-tick     { width: 18px; height: 18px; border-radius: 4px; }
 .list-rows:not(.is-grid) .row > .pick-tick svg { width: 11px; height: 11px; }
 .row .row-ic { flex: 0 0 auto; color: var(--text-dim); }
+/* Tree-list (listing.js appendTreeRows): each level one step in; a folder's
+   ▸ turns to ▾ when open. A phone stops stepping in after 4 levels. */
+.list-rows.is-tree .row,
+.list-rows.is-tree .tree-hint { padding-left: calc( 14px + var(--depth, 0) * 16px ); }
+.list-rows.is-tree .tree-hint { padding-top: 8px; padding-bottom: 8px; text-align: left; margin-left: 58px; font-size: 0.85rem; }
+.row-twist
+{
+    flex: 0 0 auto; width: 20px; height: 20px; margin-right: -6px; padding: 0; border: 0; border-radius: 4px;
+    background: none; color: var(--text-dim); display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+}
+span.row-twist { cursor: inherit; }
+button.row-twist:hover { color: var(--text); background: color-mix(in srgb, var(--text) 10%, transparent); }
+.row-twist svg { width: 14px; height: 14px; transition: transform .15s; }
+.row-twist[aria-expanded="true"] svg { transform: rotate(90deg); }
+@media (hover: none) and (pointer: coarse)
+{
+    .row-twist { width: 36px; height: 36px; margin: -8px -8px -8px -10px; }
+}
+@media (max-width: 640px)
+{
+    .list-rows.is-tree .row,
+    .list-rows.is-tree .tree-hint { padding-left: calc( 14px + min( var(--depth, 0), 4 ) * 12px ); }
+}
 /* File-type icon colours. The dark set is pastel for the dark ground; the
    light set is deepened so it stays legible on the grey light background. */
 .row .row-ic.ic-doc   { color: #5b8def; }   /* Write document (.docx, .md)  */

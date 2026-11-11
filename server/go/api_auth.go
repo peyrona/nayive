@@ -134,14 +134,19 @@ func (s *Server) apiLogin(w http.ResponseWriter, r *http.Request) {
 // last one here was such a session and ended without a sign-out
 // (login.html, LEFTOVERS). A header, not a parameter: another site's form
 // cannot set it, so it can never wipe a browser from outside.
+//
+// NEVER THE ADMIN'S. The admin's sign-out asks nothing (admin.html): the
+// browser may hold another account's unsent saves (ana's own PC), and a wipe
+// would delete them with nobody asked. The admin keeps no saves of its own
+// there, so there is nothing of the admin's to wipe.
 func (s *Server) apiLogout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		redirect(w, http.StatusSeeOther, URLPrefix+"/")
 		return
 	}
-	_, live := s.sessions.Get(tokenFrom(r))
+	sess, live := s.sessions.Get(tokenFrom(r))
 	_, remembered := s.sessions.Remembered(tokenFrom(r))
-	if (live && !remembered) || (!live && r.Header.Get("X-Nayive-Forget") == "1") {
+	if (live && !remembered && sess.Role != "admin") || (!live && r.Header.Get("X-Nayive-Forget") == "1") {
 		w.Header().Set("Clear-Site-Data", `"cache", "storage"`)
 	}
 	s.sessions.Drop(tokenFrom(r))

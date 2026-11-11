@@ -108,6 +108,7 @@ function refreshCanAdd( path )
 function navigateTo( path )
 {
     currentFolder = path;
+    closeAllDirs();
     clearSel();
     clearSearch();
     loadListing( path );                // renders now, and again when the folder arrives

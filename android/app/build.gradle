@@ -30,8 +30,8 @@ android {
         applicationId = 'org.nayive.app'
         minSdk = 26
         targetSdk = 36
-        versionCode = 10
-        versionName = '1.0'
+        versionCode = 11
+        versionName = '1.1'
 
         buildConfigField 'String', 'ORIGIN', "\"${origin}\""
         manifestPlaceholders = [
@@ -42,10 +42,10 @@ android {
         // <origin>/.well-known/assetlinks.json.
         resValue 'string', 'asset_statements',
             "[{\"relation\":[\"delegate_permission/common.handle_all_urls\"],\"target\":{\"namespace\":\"web\",\"site\":\"${origin}\"}}]"
-        // "Share -> Nayive" for photos: the PWA's own share_target
+        // "Share -> Nayive" for photos, videos and any file: the PWA's own share_target
         // (client/apps/manifest.json), which the TWA forwards to.
         resValue 'string', 'share_target',
-            "{\"action\":\"${origin}/nayive/share-target/\",\"method\":\"POST\",\"enctype\":\"multipart/form-data\",\"params\":{\"title\":\"title\",\"text\":\"text\",\"url\":\"url\",\"files\":[{\"name\":\"photos\",\"accept\":[\"image/*\"]}]}}"
+            "{\"action\":\"${origin}/nayive/share-target/\",\"method\":\"POST\",\"enctype\":\"multipart/form-data\",\"params\":{\"title\":\"title\",\"text\":\"text\",\"url\":\"url\",\"files\":[{\"name\":\"photos\",\"accept\":[\"image/*\",\"video/*\",\"*/*\"]}]}}"
     }
 
     signingConfigs {

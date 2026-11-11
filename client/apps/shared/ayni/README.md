@@ -331,6 +331,7 @@ The page follows the system setting until the user picks light or dark (`ayni-th
 | `ayni-photo.js`, `ayni-image-editor.js`, `ayni-image.css` | Optional: `AyniPhoto`, `AyniImageEditor`; the editor needs Fabric, `window.AyniFabricUrl` says where |
 | `ayni-map.js`, `.css` | Optional: `AyniBaseMap`; needs Leaflet |
 | `ayni-crypt.js`, `ayni-fx.js`, `formats/` | Optional: `AyniCrypt`, `AyniFx`, `formats/ical.js` (needs luxon, rrule), `formats/vcard.js` |
+| `ayni-vault.js`, `ayni-passkey.js` | Optional: `AyniVault`, one key for every locked document (a lock password, passkeys, a recovery code; `data/vault.json` holds it only wrapped); `AyniPasskey`, make and confirm passkeys, and their list dialog |
 | `sample/` | A small app made of Ayni alone, and the smallest server its data side needs: `node sample/server.mjs`, `node sample/test.mjs` |
 | `tools/` | For your project: `cdp.mjs` (a headless browser driver), `rules.mjs`, `check-i18n`, `build-gzip`, `build-precache` |
 | `ayni-base.css` | The base: both colour schemes, corners, spacing, type, motion, the icon box, the Panel and the text field look (`.input`, `.input-group`, autofill colours) |

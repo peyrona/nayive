@@ -110,7 +110,7 @@ try
     await p.evaluate( `localStorage.removeItem('nayive-lock');1` );
     await go( "desktop/index.html" );
     await sleep( 1000 );
-    const btn = await p.evaluate( `(()=>{var b=document.getElementById('salonBtn');return b.hidden+'|'+b.textContent})()` );
+    const btn = await p.evaluate( `(()=>{var b=document.getElementById('salonBtn');return b.hidden+'|'+b.getAttribute('aria-label')})()` );
     console.log( "menu button", btn );
     ok( /^false\|/.test( btn ) && /Ciencia|Science/.test( btn ), "⋮ menu offers Science's settings" );
     await p.evaluate( `document.getElementById('salonBtn').click();1` );
@@ -141,7 +141,7 @@ try
     ok( saved.news && ! saved.news.includes( "sinc" ) && saved.news.includes( "tcEs" ), "saved per user in data/science.json" );
     await p.evaluate( `fetch('/api/files?file=data/science.json',{method:'DELETE'}).then(r=>r.status)` );
 
-    const errors = p.logs.filter( l => /^(EXCEPTION|LOG-ERROR)/.test( l ) && ! /404 .*science\.json/.test( l ) );   // never saved: expected
+    const errors = p.logs.filter( l => /^(EXCEPTION|LOG-ERROR)/.test( l ) && ! /404 .*(science|weather)\.json/.test( l ) );   // never saved: expected
     ok( errors.length === 0, "no errors in the console" + ( errors.length ? ":\n  " + JSON.stringify( errors ).slice( 0, 2000 ) : "" ) );
 }
 finally

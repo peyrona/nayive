@@ -7,6 +7,8 @@
  * parsed):
  *     <script src="../the app" defer></script>
  *     <script src="../shared/ayni/ayni-crypt.js" defer></script>
+ *     <script src="../shared/ayni/ayni-passkey.js" defer></script>
+ *     <script src="../shared/ayni/ayni-vault.js" defer></script>
  *     <script src="../ayni-doc.js" defer></script>
  *
  * Each editor used to carry its own copy of the same plumbing: the path
@@ -1565,11 +1567,14 @@
     //                                          aside: its draft was kept - "apartado", not "descartado"
     //   session.offerUndo( msg, back )         an Undo toast the next key or edit makes final (Write: the dictionary)
     //
-    // THE PADLOCK (#lockBtn, optional): a password on the open document. The
-    // key is derived once and kept in this tab only (shared/ayni/ayni-crypt.js), so a
-    // reload asks for it again and a forgotten one cannot be recovered by
-    // anybody - us included. Everything read back (a file, an import, the
-    // device draft, the .bak) is sniffed for the seal and asks by itself.
+    // THE PADLOCK (#lockBtn, optional): the open document is written
+    // encrypted under the account's vault (shared/ayni/ayni-vault.js): one lock
+    // password, passkeys and a recovery code open every locked document. The
+    // keys live in this tab only, so a reload asks again (or takes the key
+    // from another open tab). Older documents with a password of their own
+    // still open with it, and move to the vault when the account has one.
+    // Everything read back (a file, an import, the device draft, the .bak) is
+    // sniffed for the seal and asks by itself.
     //
     // It builds the four sheets the three apps share (see THE SHEETS) and wires
     // whatever the page has of: #newBtn, #openBtn, #importBtn + #importInput,
@@ -1834,6 +1839,7 @@
         async function unsealAsk( body, name )
         {
             if( ! AyniCrypt.available() ) { toast( "warn", "lock.noCrypto" ); return null; }
+            if( AyniCrypt.isV2( body ) ) return unsealVault( body, name );
 
             for( ;; )
             {
@@ -1854,6 +1860,44 @@
                     toast( "warn", "lock.wrong" );
                 }
             }
+        }
+
+        // A document sealed under the account's vault (ayni-vault.js): the
+        // vault opens it - a passkey or the lock password, asked once per tab.
+        async function unsealVault( body, name )
+        {
+            var v;
+            try { v = await AyniVault.unlock( { name: name } ); }
+            catch ( e ) { toast( "warn", e && e.code === "noVault" ? "lock.noVault" : e && e.code === "damaged" ? "ayni.vault.damaged" : "lock.vaultUnread" ); return null; }
+            if( ! v ) return null;                                  // cancelled
+
+            try
+            {
+                var lock = await AyniCrypt.docLockFrom( v, body );
+                return { lock: lock, body: await AyniCrypt.unseal( lock, body ) };
+            }
+            catch ( e )
+            {
+                toast( "warn", e && e.code === "otherVault" ? "lock.otherVault" : "lock.damaged" );
+                return null;
+            }
+        }
+
+        // A document with a password of its own (v1) moves to the vault: when
+        // the account has one, its next save is sealed under it. No vault, or
+        // the unlock cancelled: it keeps its own password, as before.
+        async function toVault( lock, name )
+        {
+            if( ! lock || lock.v === 2 || ! window.AyniVault ) return lock;
+            try
+            {
+                var v = AyniVault.current() || ( await AyniVault.exists() && await AyniVault.unlock( { name: name } ) );
+                if( ! v ) return lock;
+                var moved = await AyniCrypt.newDocLock( v );
+                moved.v1 = lock;               // its .bak from before still opens (ayni-crypt.js)
+                return moved;
+            }
+            catch ( e ) { return lock; }
         }
 
         // ---- what is on screen ----------------------------------------------
@@ -1903,6 +1947,7 @@
                 got = await unsealAsk( body, baseName( p ) );
                 if( ! got ) return false;                // no password, no document
                 body = got.body;
+                got.lock = await toVault( got.lock, baseName( p ) );
             }
 
             // Keys typed while the file came down (seconds, on a phone) went
@@ -1943,6 +1988,7 @@
                 got = await unsealAsk( bytes, name );
                 if( ! got ) return false;
                 bytes = got.body;
+                got.lock = await toVault( got.lock, name );
             }
 
             try { await o.load( bytes, name, "import" ); }
@@ -2007,7 +2053,7 @@
                     if( AyniCrypt.looksLocked( d.body ) )
                     {
                         var got = await takeLockedDraft( d );
-                        if( got ) { d = { name: d.name, body: got.body, at: d.at }; lock = got.lock; }
+                        if( got ) { d = { name: d.name, body: got.body, at: d.at }; lock = await toVault( got.lock, d.name || t( "ayni.untitled" ) ); }
                         else      { d = null; }        // thrown away: fall through to a blank one
                     }
 
@@ -2803,13 +2849,14 @@
             var how = ( path || saver.drafted() ) ? await warnAlreadyWritten() : "lock";
             if( ! how ) return;
 
-            var pw = await Ayni.ask( { password: true, title:   t( "lock.setTitle" ),
-                                                   lead:    t( "lock.setBody" ),
-                                                   okTip: t( "lock.protect" ),
-                                                   verify:  true } );
-            if( pw === null ) return;
+            // The account's vault (ayni-vault.js): set up the first time, else
+            // unlocked - one secret for every locked document.
+            var v;
+            try { v = await AyniVault.ensure(); }
+            catch ( e ) { toast( "warn", e && e.code === "damaged" ? "ayni.vault.damaged" : "lock.vaultUnread" ); return; }
+            if( ! v ) return;
 
-            try { saver.lockDoc( await AyniCrypt.newLock( pw ) ); }
+            try { saver.lockDoc( await AyniCrypt.newDocLock( v ) ); }
             catch ( e ) { toast( "err", "lock.failed" ); return; }
 
             showLock();

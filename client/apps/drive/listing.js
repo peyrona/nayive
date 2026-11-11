@@ -204,13 +204,7 @@ function renderListing()
         return;
     }
 
-    const kids = curListing.nodes.slice().sort( function( a, b )
-    {
-        const da = dirLike( a ), db = dirLike( b );
-        if( da !== db ) return da ? -1 : 1;                 // folders first
-        return bySortPref( a, b ) ||
-               displayName( a ).localeCompare( displayName( b ), Ayni.i18n.lang(), { sensitivity: 'base', numeric: true } );
-    });
+    const kids = sortKids( curListing.nodes );
 
     const shared = showsSharedEntry();
     if( ! kids.length && ! shared )
@@ -222,12 +216,160 @@ function renderListing()
     const grid = viewMode === 'grid';
     const host = listRowsHost( grid );
     if( shared ) host.appendChild( sharedEntry() );
-    kids.forEach( function( child )
+    if( grid )
     {
-        const row = buildListRow( child );
-        if( grid ) addThumb( row, child );      // a picture shows itself (thumbs.js)
-        host.appendChild( row );
+        kids.forEach( function( child )
+        {
+            const row = buildListRow( child );
+            addThumb( row, child );             // a picture shows itself (thumbs.js)
+            host.appendChild( row );
+        });
+        return;
+    }
+    host.classList.add( 'is-tree' );
+    appendTreeRows( host, kids, 0 );
+}
+
+// Folders first, then the sort picked in Settings, then the name.
+function sortKids( nodes )
+{
+    return nodes.slice().sort( function( a, b )
+    {
+        const da = dirLike( a ), db = dirLike( b );
+        if( da !== db ) return da ? -1 : 1;                 // folders first
+        return bySortPref( a, b ) ||
+               displayName( a ).localeCompare( displayName( b ), Ayni.i18n.lang(), { sensitivity: 'base', numeric: true } );
     });
+}
+
+//------------------------------------------------------------------------//
+// TREE-LIST: in the list view a folder row opens in place (its ▸), its
+// contents under it, one step in. Every row is an ordinary listing row, so
+// picking, the menu, dragging and the drops onto a folder (menus.js) work
+// on the nested ones too. A shortcut to a folder is not opened in place:
+// it leads somewhere else (its row opens it as before).
+
+function appendTreeRows( host, nodes, depth )
+{
+    nodes.forEach( function( child )
+    {
+        host.appendChild( buildListRow( child, false, depth ) );
+        if( ! isDir( child ) || ! openDirs.has( child.path ) ) return;
+
+        const sub = dirKids.get( child.path );
+        if( ! sub )
+        {
+            const wait = document.createElement( 'div' );
+            wait.className   = 'empty-hint tree-hint';
+            wait.style.setProperty( '--depth', depth + 1 );
+            wait.textContent = T( 'ui.loading' );
+            host.appendChild( wait );
+            return;
+        }
+        if( ! sub.length )
+        {
+            const none = document.createElement( 'div' );
+            none.className   = 'empty-hint tree-hint';
+            none.style.setProperty( '--depth', depth + 1 );
+            none.textContent = T( 'drive.treeEmpty' );
+            host.appendChild( none );
+            return;
+        }
+        appendTreeRows( host, sortKids( sub ), depth + 1 );
+    });
+}
+
+// Open or close a folder row in place. `open` omitted = flip it.
+async function toggleDir( path, open )
+{
+    if( open === undefined ) open = ! openDirs.has( path );
+    if( ! open )
+    {
+        openDirs.delete( path );
+        // Its open subfolders close with it.
+        Array.from( openDirs ).forEach( function( p ) { if( p.indexOf( path + '/' ) === 0 ) openDirs.delete( p ); } );
+        render();
+        browse.focus( path );
+        return;
+    }
+    if( openDirs.has( path ) ) return;
+    openDirs.add( path );
+    dirKids.delete( path );
+    render();
+    browse.focus( path );
+    await loadDirKids( path );
+}
+
+// Fetch one open folder's contents into dirKids and draw them.
+async function loadDirKids( path )
+{
+    const seq = dirKidsSeq;
+    try
+    {
+        const r = await AyniNet.listDir( path, true );      // shortcuts too, as navigate.js
+        if( seq !== dirKidsSeq || ! openDirs.has( path ) ) return;
+        dirKids.set( path, pruneNodes( r.nodes || [] ) );
+    }
+    catch( err )
+    {
+        if( seq !== dirKidsSeq ) return;
+        openDirs.delete( path );
+        if( err && err.status === 401 ) { AyniNet.loginRedirect(); return; }
+        Ayni.toast( 'err', T( 'drive.openFolderFailed' ) );
+    }
+    const had = document.activeElement && document.activeElement.closest && document.activeElement.closest( '#listing .row[data-path]' );
+    render();
+    if( had ) browse.focus( had.dataset.path );
+}
+
+// After a reload: fetch again every folder still open; the gone ones close.
+async function reloadOpenDirs()
+{
+    dirKidsSeq++;                        // a load still on its way is old news
+    Array.from( openDirs ).forEach( function( p )
+    {
+        if( findNode( p ) ) return;
+        openDirs.delete( p );
+        dirKids.delete( p );
+    } );
+    if( ! openDirs.size || viewMode !== 'list' ) return;
+    await Promise.all( Array.from( openDirs ).map( loadDirKids ) );   // the old rows stay until the new arrive
+}
+
+// ← / → on a row of the tree-list: → opens a folder (or steps into it),
+// ← closes it (or steps up to the folder that holds the row).
+function treeKey( e )
+{
+    if( e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' ) return;
+    if( e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.defaultPrevented ) return;
+    if( viewMode !== 'list' || isSearching() || trashMode ) return;
+    const row = e.target.closest && e.target.closest( '#listing .row[data-path]' );
+    if( ! row ) return;
+
+    const path = row.dataset.path;
+    const node = rowNode( path );
+    const isOpen = openDirs.has( path );
+    e.preventDefault();
+
+    if( e.key === 'ArrowRight' )
+    {
+        if( ! node || ! isDir( node ) ) return;
+        if( ! isOpen ) { toggleDir( path, true ); return; }
+        const next = row.nextElementSibling;
+        if( next && next.dataset.path && Ayni.dirOf( next.dataset.path ) === path )
+        {
+            browse.set( [ next.dataset.path ] );
+            browse.focus( next.dataset.path );
+        }
+        return;
+    }
+    if( isOpen ) { toggleDir( path, false ); return; }
+    const up = Ayni.dirOf( path );
+    if( up !== currentFolder && document.querySelector( '#listing .row[data-path="' + CSS.escape( up ) + '"]' ) )
+    {
+        browse.set( [ up ] );
+        browse.focus( up );
+    }
 }
 
 // Icons shown in the listing. The document / spreadsheet / code glyphs are the
@@ -478,7 +620,7 @@ function paintFolderMarks( row, ic )
     } );
 }
 
-function buildListRow( node, showPath )
+function buildListRow( node, showPath, depth )
 {
     const dir = isDir( node );
     const name = displayName( node );
@@ -559,6 +701,34 @@ function buildListRow( node, showPath )
 
         meta.textContent = bits.join( ' · ' );
         if( node.mtime ) meta.title = fmtDateTime( node.mtime );
+    }
+
+    // In the tree-list (depth given): a ▸ before a real folder, an empty
+    // gap of the same width before anything else, so the names line up.
+    if( depth !== undefined )
+    {
+        row.style.setProperty( '--depth', depth );
+        if( dir )
+        {
+            const open = openDirs.has( node.path );
+            const tw   = document.createElement( 'button' );
+            tw.type      = 'button';
+            tw.className = 'row-twist';
+            tw.tabIndex  = -1;                       // the keys are ← / → on the row
+            tw.setAttribute( 'aria-expanded', open );
+            tw.setAttribute( 'aria-label', T( open ? 'drive.treeClose' : 'drive.treeOpen' ) );
+            tw.innerHTML = Ayni.icon( 'chev-right' );
+            tw.addEventListener( 'click', function( e ) { e.stopPropagation(); toggleDir( node.path ); } );
+            row.setAttribute( 'aria-expanded', open );
+            row.appendChild( tw );
+        }
+        else
+        {
+            const gap = document.createElement( 'span' );
+            gap.className = 'row-twist';
+            gap.setAttribute( 'aria-hidden', 'true' );
+            row.appendChild( gap );
+        }
     }
 
     row.appendChild( ic );

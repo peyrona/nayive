@@ -60,11 +60,13 @@ section( "BIN 1,300 PICKED FILES, THEN ONE UNDO" );
 {
     await c.until( READY, 20000 );
     ok( await pickAll() === N, "all 1,300 picked" );
+    // The bin writes its index once per item: 1,300 take ~30 s on an idle
+    // PC, over a minute on a busy one - hence the long waits.
     await c.evaluate( "openDeleteConfirm(); true" );
-    ok( await until( () => jpgsOnDisk() === 0, 60000 ), "all 1,300 go to the bin", jpgsOnDisk() );
+    ok( await until( () => jpgsOnDisk() === 0, 180000 ), "all 1,300 go to the bin", jpgsOnDisk() );
     ok( await c.until( "document.querySelector( '#ayni-toasts .toast.undo .act' ) && ! deleteBusy", 30000 ), "...with one Undo" );
     await c.evaluate( "document.querySelector( '#ayni-toasts .toast.undo .act' ).click(); true" );
-    ok( await until( () => jpgsOnDisk() === N, 60000 ), "the Undo brings all 1,300 back", jpgsOnDisk() );
+    ok( await until( () => jpgsOnDisk() === N, 180000 ), "the Undo brings all 1,300 back", jpgsOnDisk() );
 }
 
 //------------------------------------------------------------------------//

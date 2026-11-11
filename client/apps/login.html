@@ -1,3 +1,4 @@
+<!-- SEALED - a user-data write path (docs/sealed-crud.md): announce a change, keep it minimal, then `node tools/data-safety-test/run.mjs` must be ALL GREEN. -->
 <!-- login.html - sign-in screen for Nayive. Posts to /api/login, which sets the session cookie. -->
 <!doctype html>
 <html lang="es">
@@ -10,6 +11,8 @@
     <script src="shared/i18n.js"></script>
     <script src="shared/ayni/ayni-i18n.js" data-dict="shared/i18n/" data-langs="es en pt fr de"></script>
     <script src="shared/ayni/ayni-util.js"></script>
+    <!-- Only its localCount(): LEFTOVERS below never wipes unsent work. -->
+    <script src="shared/ayni/ayni-store.js"></script>
     <title>Nayive</title>
     <link rel="icon" type="image/png" href="icons/icon-192.png">
 
@@ -163,6 +166,11 @@
             // browser closed, the 12 h ran out) left its files here; with no
             // session left, the server is asked to wipe this browser now. The
             // sign-in waits for it, so it never wipes the new session's work.
+            // NEVER UNSENT WORK: saves, drafts or Chat text still only here
+            // (AyniStore.localCount - every account's) keep the browser as it
+            // is; they stay tagged for their owner's next sign-in, which sends
+            // them (the sign-out asks about them; this page cannot). No
+            // AyniStore, or the count fails = keep too.
             var shared = false, known = false;
             try
             {
@@ -183,7 +191,11 @@
                 fetch( '/api/whoami', { credentials: 'same-origin' } ).then( function ( r )
                 {
                     if( r.status !== 401 ) return;
-                    return fetch( '/api/logout', { method: 'POST', credentials: 'same-origin', headers: { 'X-Nayive-Forget': '1' } } );
+                    return window.AyniStore.localCount().then( function ( n )
+                    {
+                        if( n !== 0 ) return;
+                        return fetch( '/api/logout', { method: 'POST', credentials: 'same-origin', headers: { 'X-Nayive-Forget': '1' } } );
+                    } );
                 } ).catch( function () {} );
 
             // i18n.js hides the page until the dictionary is in, and a hidden
@@ -261,12 +273,16 @@
                         // device's push: the launcher's next load registers it
                         // again, even when this sign-in goes straight to Chat.
                         try { localStorage.removeItem( 'nayive-push-note' ); } catch ( e ) {}
-                        try
-                        {
-                            if( remember ) localStorage.removeItem( 'nayive-shared' );
-                            else           localStorage.setItem( 'nayive-shared', '1' );
-                        }
-                        catch ( e ) {}
+                        // Never for the admin: its session is never wiped
+                        // (api_auth.go apiLogout), so it leaves the mark as it
+                        // was - another account's unsent saves may be here.
+                        if( info.role !== 'admin' )
+                            try
+                            {
+                                if( remember ) localStorage.removeItem( 'nayive-shared' );
+                                else           localStorage.setItem( 'nayive-shared', '1' );
+                            }
+                            catch ( e ) {}
                         // No password yet: the launcher (never the big-screen
                         // desktop, whose apps the server now refuses) asks for one.
                         try

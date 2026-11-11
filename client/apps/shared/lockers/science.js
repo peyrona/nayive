@@ -247,7 +247,7 @@ function need()
 AyniLocker.define( "science", function ( host )
 {
     var stop = null, gone = false;
-    need().then( read ).then( function ( s ) { if( ! gone ) stop = start( host, s ); }, function () {} );
+    need().then( read ).then( function ( s ) { return S().withWeather( s ); } ).then( function ( s ) { if( ! gone ) stop = start( host, s ); }, function () {} );
     return function () { gone = true; if( stop ) stop(); };
 } );
 

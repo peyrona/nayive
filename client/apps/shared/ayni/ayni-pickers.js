@@ -228,7 +228,10 @@ const initPicker = (root, opts = {}) => {
     const hit = ta.find(ch, shown(), isOpen() ? activeOpt() : all.find((o) => o.ayniItem.value === cur.value));
     if (hit && !isRO(field)) isOpen() ? setActive(hit) : choose(hit.ayniItem.value);
   };
-  root.addEventListener('click', (e) => { if (pop.contains(e.target)) return; if (!isOpen()) open(); else if (!typing) close(); });
+  /* A click in the popup is not a click on the field. Asked of the click's path, not of pop.contains(e.target): a page
+     that sets new items on ayni:change redraws the list during the pick, the clicked row leaves the popup, and
+     contains() would then say "outside" and open the list again */
+  root.addEventListener('click', (e) => { if (e.composedPath().includes(pop)) return; if (!isOpen()) open(); else if (!typing) close(); });
   if (bar) {
     /* The pointer: a drop-down list never takes the focus from the document; a typing field does, to be typed in */
     root.addEventListener('pointerdown', (e) => { if (!pop.contains(e.target) && !root.contains(document.activeElement)) back = document.activeElement; });

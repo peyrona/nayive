@@ -70,6 +70,7 @@ var publicStatic = map[string]bool{
 	// a time-zone table - nothing private.
 	"shared/ayni/ayni-i18n.js":       true,
 	"shared/ayni/ayni-util.js":       true,
+	"shared/ayni/ayni-store.js":      true, // login.html counts unsent work before LEFTOVERS wipes (D2)
 	"shared/ayni/ayni-boot.js":       true,
 	"shared/ayni/ayni-deskpage.js":   true,
 	"shared/ayni/ayni-deskpage.css":  true,
@@ -145,7 +146,7 @@ var publicStatic = map[string]bool{
 	// scripts, look and photo shrinking come from here. No messages live in
 	// them - those come from /api/c/<token>, token-checked. chat/*.js,
 	// chat/*.css and chat/icons/ are public too (isPublicStatic).
-	"shared/photo.js":              true,
+	"shared/ayni/ayni-photo.js":    true,
 	"shared/ayni/formats/vcard.js": true, // a shared contact's "Save" (.vcf) on a Chat link
 	// The Android app's first step (devices.go): it only moves the phone's token
 	// from the URL's #fragment into this browser, then goes to the launcher.

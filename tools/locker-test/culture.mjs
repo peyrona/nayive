@@ -66,7 +66,7 @@ try
     console.log( "links in", links );
     for( const c of [ "cl-art", "cl-word", "cl-quote", "cl-weather" ] ) ok( links.includes( c ), "a link in " + c );
     await shot( "screen" );
-    const errors = p.logs.filter( l => /^(EXCEPTION|LOG-ERROR)/.test( l ) );
+    const errors = p.logs.filter( l => /^(EXCEPTION|LOG-ERROR)/.test( l ) && ! /404 .*(weather|science)\.json/.test( l ) );   // never saved: expected
     ok( errors.length === 0, "no errors in the console" + ( errors.length ? ":\n  " + errors.join( "\n  " ) : "" ) );
 }
 finally

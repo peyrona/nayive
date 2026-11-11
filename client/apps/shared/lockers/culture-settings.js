@@ -14,7 +14,8 @@
  *               long each one stays (3, 7, 10 or 15 min)
  *   Content     each box on / off; a new masterpiece every N hours; pronunciation
  *   Art         museums, art forms, periods
- *   Place & look  where the weather is for; who gives it; units; 12 / 24 h; letters; size; contrast
+ *   Look        12 / 24 h; letters; size; contrast (the weather's place, provider
+ *               and units: the desktop's "⋮" menu, data/weather.json)
  * Science has News (its sources) in place of Art, and its own Content.
  *
  * Saved PER USER (data/salon.json or data/science.json, every device the
@@ -356,90 +357,15 @@ function open( kind )
     }
 
     //------------------------------------------------------------------------//
-    // PLACE & LOOK
+    // LOOK
 
     function drawLook()
     {
         var p = panes.look;
         p.innerHTML = "";
 
-        // Where the weather is for.
-        el( "div", "salon-h", t( "salon.place" ), p );
-        var geoRow = el( "label", "choice salon-check", null, p );
-        var geo = el( "input", null, null, geoRow );
-        geo.type = "radio"; geo.name = "salonPlace"; geo.checked = cfg.place === "geo";
-        el( "span", null, t( "salon.placeGeo" ), geoRow );
-        var geoMsg = el( "p", "salon-note", "", p );
-        geoMsg.hidden = true;
-        var cityRow = el( "label", "choice salon-check", null, p );
-        var city = el( "input", null, null, cityRow );
-        city.type = "radio"; city.name = "salonPlace"; city.checked = cfg.place === "city";
-        el( "span", null, t( "salon.placeCity" ), cityRow );
-
-        var find = el( "div", "salon-row", null, p );
-        var q = el( "input", "input grow", null, find );
-        q.type = "text";
-        q.placeholder = t( "salon.city" );
-        q.setAttribute( "aria-label", t( "salon.city" ) );
-        q.value = cfg.city ? cfg.city.name : "";
-        var found = el( "p", "salon-note", "", p );
-        iconBtn( find, "search", t( "salon.cityFind" ), lookUp );
-        q.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); lookUp(); } } );
-
-        function lookUp()
-        {
-            var name = q.value.trim();
-            if( ! name ) return;
-            found.textContent = "…";
-            fetch( "https://geocoding-api.open-meteo.com/v1/search?count=1&language=" + encodeURIComponent( cfg.langs[ 0 ] ) +
-                   "&name=" + encodeURIComponent( name ) )
-                .then( function ( r ) { return r.json(); } )
-                .then( function ( d )
-                {
-                    var r = d.results && d.results[ 0 ];
-                    if( ! r ) { found.textContent = t( "salon.cityNone" ); return; }
-                    cfg.city = { name: r.name, lat: Math.round( r.latitude * 100 ) / 100, lon: Math.round( r.longitude * 100 ) / 100,
-                                 tz: r.timezone };
-                    cfg.place = "city";
-                    city.checked = true;
-                    q.value = r.name;
-                    found.textContent = "✓ " + [ r.name, r.admin1, r.country ].filter( Boolean ).join( ", " );
-                }, function () { found.textContent = t( "salon.cityNone" ); } );
-        }
-
-        // Choosing "here" asks the browser now, while someone is at the
-        // keyboard to answer - never later, on the lock screen.
-        geo.addEventListener( "change", function ()
-        {
-            if( ! geo.checked ) return;
-            cfg.place = "geo";
-            if( ! navigator.geolocation ) { geoMsg.hidden = false; geoMsg.textContent = t( "salon.geoDenied" ); return; }
-            geoMsg.hidden = false;
-            geoMsg.textContent = "…";
-            navigator.geolocation.getCurrentPosition( function ( g )
-            {
-                var lat = Math.round( g.coords.latitude * 100 ) / 100, lon = Math.round( g.coords.longitude * 100 ) / 100;
-                geoMsg.textContent = "✓";
-                NayiveUI.townName( lat, lon ).then( function ( n ) { if( n ) geoMsg.textContent = "✓ " + n; } );
-            }, function () { geoMsg.textContent = t( "salon.geoDenied" ); }, { timeout: 20000, maximumAge: 30 * 6e4 } );
-        } );
-        city.addEventListener( "change", function () { if( city.checked ) { cfg.place = "city"; q.focus(); } } );
-        if( cfg.place === "geo" && navigator.permissions )
-            navigator.permissions.query( { name: "geolocation" } ).then( function ( s )
-            {
-                if( s.state === "denied" ) { geoMsg.hidden = false; geoMsg.textContent = t( "salon.geoDenied" ); }
-            }, function () {} );
-
-        // Who gives it.
-        var who = el( "div", "salon-two", null, p );
-        who.style.marginTop = "14px";
-        choose( who, t( "salon.weatherBy" ), cfg.weather,
-                Object.keys( S.WEATHER ).map( function ( k ) { return [ k, S.WEATHER[ k ].name ]; } ),
-                function ( v ) { cfg.weather = v; } );
-
+        // The weather's place, provider and units: the desktop's "⋮" menu (one per user, data/weather.json).
         var two = el( "div", "salon-two", null, p );
-        two.style.marginTop = "14px";
-        choose( two, t( "salon.units" ), cfg.units, [ [ "c", "°C" ], [ "f", "°F" ] ], function ( v ) { cfg.units = v; } );
         choose( two, t( "salon.clock" ), cfg.hours, [ [ 24, t( "salon.h24" ) ], [ 12, t( "salon.h12" ) ] ],
                 function ( v ) { cfg.hours = Number( v ); } );
 

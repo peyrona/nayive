@@ -30,7 +30,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-3beabd534b01";
+var CACHE_VERSION = "nayive-2a678e6a803b";
 /* @end */
 
 /* @generated:precache */
@@ -166,22 +166,6 @@ var PRECACHE_SHELL = [
     "manifest.json",
     "movies/index.html",
     "music/index.html",
-    "passwords/argon2-worker.js",
-    "passwords/boot.js",
-    "passwords/gen.js",
-    "passwords/head.js",
-    "passwords/icons/icon-192.png",
-    "passwords/icons/icon-512.png",
-    "passwords/index.html",
-    "passwords/input.js",
-    "passwords/io.js",
-    "passwords/lock.js",
-    "passwords/manifest.json",
-    "passwords/model.js",
-    "passwords/passwords.css",
-    "passwords/render.js",
-    "passwords/sheets.js",
-    "passwords/vault.js",
     "photos/index.html",
     "planner/icons/icon-192.png",
     "planner/icons/icon-512.png",
@@ -229,6 +213,7 @@ var PRECACHE_SHELL = [
     "shared/ayni/ayni-menus.js",
     "shared/ayni/ayni-menutable.js",
     "shared/ayni/ayni-net.js",
+    "shared/ayni/ayni-passkey.js",
     "shared/ayni/ayni-photo.js",
     "shared/ayni/ayni-pickers.css",
     "shared/ayni/ayni-pickers.js",
@@ -251,6 +236,7 @@ var PRECACHE_SHELL = [
     "shared/ayni/ayni-toasts.js",
     "shared/ayni/ayni-upload.js",
     "shared/ayni/ayni-util.js",
+    "shared/ayni/ayni-vault.js",
     "shared/ayni/formats/ical.js",
     "shared/ayni/formats/lib/ical_v2.2.1.esm.min.js",
     "shared/ayni/formats/vcard.js",
@@ -336,13 +322,6 @@ var PRECACHE_REST = [
     "calendar/lib/fullcalendar-locale-fr_v6.1.21.min.js",
     "calendar/lib/fullcalendar-locale-pt_v6.1.21.min.js",
     "calendar/lib/fullcalendar-timegrid_v6.1.21.min.js",
-    "passwords/lib/argon2id_v1.0.1/LICENSE",
-    "passwords/lib/argon2id_v1.0.1/argon2id.js",
-    "passwords/lib/argon2id_v1.0.1/blake2b.js",
-    "passwords/lib/argon2id_v1.0.1/no-simd.wasm",
-    "passwords/lib/argon2id_v1.0.1/setup.js",
-    "passwords/lib/argon2id_v1.0.1/simd.wasm",
-    "passwords/lib/eff-large-words.txt",
     "shared/lib/fabric_v7.4.0.min.js",
     "shared/lib/luxon_v3.7.2.min.js",
     "shared/lib/rrule_v2.8.1.min.js",
@@ -385,8 +364,8 @@ importScripts( "chat/push-notice.js" );
 // SW). Kept across SW updates - never precached, never version-scoped.
 var TRIP_DOCS = "nayive-trips-docs";
 
-// Web Share Target hand-off: a POST of shared images (from the phone's gallery
-// "Share" sheet) can't reach a page directly, so this SW catches it, stashes
+// Web Share Target hand-off: a POST of shared files (photos, videos, any file
+// from the phone's "Share" sheet) can't reach a page directly, so this SW catches it, stashes
 // the files here, and redirects to apps/share-target/ which reads them back and
 // uploads them. Kept across SW updates like TRIP_DOCS.
 var SHARE_INBOX = "nayive-share-inbox";
@@ -578,7 +557,7 @@ self.addEventListener( "fetch", function ( event )
     var req = event.request;
 
     // Web Share Target: a POST of shared files to apps/share-target/. Stash the
-    // images, then redirect (303 -> GET) to the page that uploads them.
+    // files, then redirect (303 -> GET) to the page that uploads them.
     if( req.method === "POST" &&
         new URL( req.url ).pathname === SCOPE_PATH + "share-target/" )
     {
@@ -620,23 +599,45 @@ self.addEventListener( "fetch", function ( event )
         event.respondWith( assetStrategy( req ) );
 } );
 
-// Web Share Target POST -> stash images in SHARE_INBOX, redirect to the page
-// (or, for a shared link/text, to Chat).
+// Web Share Target POST -> stash the shared files in SHARE_INBOX, redirect to
+// the page that uploads them. A link (no files) goes to the same page, which
+// asks Bookmarks or Chat; plain text goes straight to Chat.
+//
+// The inbox manifest says what the files are: kind "media" (every one a photo
+// or a video: they go to a Photos album) or "files" (anything else, or a mix:
+// they go to a Drive folder).
 async function handleShare( req )
 {
-    var base = new URL( "share-target/", self.registration.scope ).toString();
+    var base  = new URL( "share-target/", self.registration.scope ).toString();
+    var start = 0;
+    var wrote = [];          // inbox keys this share put, removed again if it fails
+
+    function isMedia( f )
+    {
+        return /^(image|video)\//.test( f.type || "" ) ||
+               /\.(jpe?g|png|gif|webp|bmp|avif|heic|heif|mp4|m4v|mov|webm|3gp|mkv|avi)$/i.test( f.name || "" );
+    }
+
+    function fallbackName( f, j )
+    {
+        var t = f.type || "";
+        if( /^image\//.test( t ) ) return "foto-" + ( j + 1 ) + ".jpg";
+        if( /^video\//.test( t ) ) return "video-" + ( j + 1 ) + "." + ( t === "video/quicktime" ? "mov" : ( t.split( "/" )[ 1 ] || "mp4" ).replace( /[^a-z0-9]/gi, "" ) );
+        var ext = ( t.split( "/" )[ 1 ] || "" ).replace( /[^a-z0-9]/gi, "" ).slice( 0, 5 );
+        return "file-" + ( j + 1 ) + ( ext ? "." + ext : "" );
+    }
 
     try
     {
         var form  = await req.formData();
         var files = form.getAll( "photos" ).filter( function ( f )
         {
-            return f && typeof f === "object" && f.size > 0 &&
-                   ( /^image\//.test( f.type ) || /\.(jpe?g|png|gif|webp|bmp|avif|heic|heif)$/i.test( f.name || "" ) );
+            return f && typeof f === "object" && f.size > 0;
         } );
 
-        // No photos, only a link or text (YouTube's "Share"): Chat opens with
-        // it in the box, to pick who gets it.
+        // No files, only a link or text (YouTube's "Share", a web page). A
+        // link: the page asks where it goes (Bookmarks or Chat). Text alone:
+        // Chat opens with it in the box, to pick who gets it.
         if( ! files.length )
         {
             var text  = String( form.get( "text" )  || "" ).trim();
@@ -644,18 +645,28 @@ async function handleShare( req )
             var title = String( form.get( "title" ) || "" ).trim();
             if( link && text.indexOf( link ) < 0 ) text = text ? text + "\n" + link : link;
             if( ! text ) text = title;
+            if( ! link )
+            {
+                var m = /https?:\/\/[^\s<>"]+/i.exec( text );
+                if( m ) link = m[ 0 ];
+            }
+            if( link && /^https?:\/\//i.test( link ) )
+            {
+                var q = new URLSearchParams( { link: link, title: title, text: text } );
+                return Response.redirect( base + "?" + q.toString(), 303 );
+            }
             if( text )
                 return Response.redirect( new URL( "chat/?text=" + encodeURIComponent( text ),
                                                    self.registration.scope ).toString(), 303 );
         }
 
+        var kind  = files.every( isMedia ) ? "media" : "files";
         var cache = await caches.open( SHARE_INBOX );
 
-        // Photos kept after a failed upload (share-target marks them `kept`)
+        // Files kept after a failed upload (share-target marks them `kept`)
         // stay, and the new ones go AFTER them. Anything else left from an
         // earlier share - a page closed without Upload or Cancel - is cleared.
         var names = [];
-        var start = 0;
         try
         {
             var prev = await cache.match( base + "inbox/manifest.json" );
@@ -664,6 +675,7 @@ async function handleShare( req )
             {
                 start = prev.count || 0;
                 names = ( prev.names || [] ).slice( 0, start );
+                if( prev.kind === "files" ) kind = "files";       // a mix goes to one Drive folder
             }
         }
         catch ( e ) { start = 0; names = []; }
@@ -678,21 +690,23 @@ async function handleShare( req )
 
         for( var j = 0; j < files.length; j++ )
         {
-            var f = files[ j ];
-            var i = start + j;
-            names.push( f.name || ( "foto-" + ( j + 1 ) + ".jpg" ) );
+            var f    = files[ j ];
+            var i    = start + j;
+            var name = f.name || fallbackName( f, j );
+            names.push( name );
+            wrote.push( base + "inbox/" + i );
             await cache.put(
                 new Request( base + "inbox/" + i ),
                 new Response( f, { headers: {
                     "Content-Type":  f.type || "application/octet-stream",
-                    "X-File-Name":   encodeURIComponent( f.name || ( "foto-" + ( j + 1 ) + ".jpg" ) )
+                    "X-File-Name":   encodeURIComponent( name )
                 } } )
             );
         }
 
         await cache.put(
             new Request( base + "inbox/manifest.json" ),
-            new Response( JSON.stringify( { count: start + files.length, names: names, at: Date.now() } ),
+            new Response( JSON.stringify( { count: start + files.length, names: names, kind: kind, at: Date.now() } ),
                           { headers: { "Content-Type": "application/json" } } )
         );
 
@@ -700,7 +714,16 @@ async function handleShare( req )
     }
     catch ( e )
     {
-        return Response.redirect( base + "?n=0", 303 );
+        // Could not keep them (the browser's storage is full: a big video,
+        // say). What this share put is taken out again - files kept from an
+        // earlier one are not touched - and the page says so.
+        try
+        {
+            var c = await caches.open( SHARE_INBOX );
+            await Promise.all( wrote.map( function ( k ) { return c.delete( k ); } ) );
+        }
+        catch ( e2 ) {}
+        return Response.redirect( base + "?n=" + start + "&err=1", 303 );
     }
 }
 

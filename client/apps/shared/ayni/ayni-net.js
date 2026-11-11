@@ -198,9 +198,10 @@
     // (X-Ayni-User, WHOSE PAGE above).
     //
     // XMLHttpRequest rather than fetch(), because only XHR reports UPLOAD
-    // progress. Every attempt is announced as "the server:upload" events on the
-    // document - { id, loaded, total } while it runs, { id, done: true } when it
-    // ends, however it ends - and the app draws the progress bar from them.
+    // progress. Every attempt is announced as upload events on the document
+    // (named by AyniNames.upload, "ayni:upload" by default) - { id, loaded,
+    // total } while it runs, { id, done: true } when it ends, however it
+    // ends - and the app draws the progress bar from them.
     // Nothing here depends on ui.js: with no listener the events go nowhere.
     //
     // The two contracts fetch() had are kept exactly: a non-2xx goes through
@@ -211,7 +212,7 @@
 
     function announceUpload( detail )
     {
-        try { document.dispatchEvent( new CustomEvent( "the server:upload", { detail: detail } ) ); }
+        try { document.dispatchEvent( new CustomEvent( NAMES.upload || "ayni:upload", { detail: detail } ) ); }
         catch ( e ) {}
     }
 

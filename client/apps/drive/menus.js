@@ -16,7 +16,18 @@ let actTargets = null;
 
 function actionTargets()
 {
-    return actTargets ? actTargets.slice() : Array.from( selectedPaths );
+    return topPicks( actTargets ? actTargets.slice() : Array.from( selectedPaths ) );
+}
+
+// The tree-list can show a folder and things inside it at once: when both
+// are picked, the folder carries them - so nothing moves, copies or goes to
+// the bin twice.
+function topPicks( paths )
+{
+    return paths.filter( function( p )
+    {
+        return ! paths.some( function( q ) { return q !== p && p.indexOf( q + '/' ) === 0; } );
+    } );
 }
 
 // The browser's picks are Drive's selectedPaths; everything that clears or
@@ -162,6 +173,8 @@ function wireBrowser()
     // The header keeps to one row: what does not fit goes into its ⋮.
     Ayni.fitBar( document.querySelector( '.topbar' ), { btn: '#moreBtn', more: viewMenuItems } );
 
+    document.getElementById( 'listing' ).addEventListener( 'keydown', treeKey );   // ← / → of the tree-list (listing.js)
+
     browse = Ayni.list( document.getElementById( 'listing' ), {
         main:     true,
         row:      '.row[data-path]',
@@ -188,7 +201,7 @@ function wireBrowser()
         sel:    '.row[data-dir]',
         target: function( el ) { return el.dataset.path; },
         can:    function( ids, dest ) { return canDropInto( dest, ids ) ? 'inside' : false; },
-        drop:   function( ids, dest ) { doMove( ids, dest ); }
+        drop:   function( ids, dest ) { doMove( topPicks( ids ), dest ); }
     } );
 
     // So do the folders above the open one, in the breadcrumb: the way to
@@ -198,7 +211,7 @@ function wireBrowser()
         sel:    '.crumb[data-path]:not(.current)',
         target: function( el ) { return el.dataset.path; },
         can:    function( ids, dest ) { return canDropInto( dest, ids ) ? 'inside' : false; },
-        drop:   function( ids, dest ) { doMove( ids, dest ); }
+        drop:   function( ids, dest ) { doMove( topPicks( ids ), dest ); }
     } );
 }
 
@@ -207,7 +220,7 @@ function wireBrowser()
 
 function setClipboard( mode, paths )
 {
-    paths = paths || actionTargets();
+    paths = topPicks( paths || actionTargets() );
     if( ! paths.length ) return;
     clipboard = { mode: mode, paths: paths.slice() };
     flashStatus( TF( mode === 'move' ? 'drive.nCut' : 'drive.nCopiedClip', { n: clipboard.paths.length } ) );

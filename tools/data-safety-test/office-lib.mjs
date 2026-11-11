@@ -197,5 +197,37 @@ export const PW = `( function ( w ) {
         }
         return false;
     };
+    // The vault (shared/ayni/ayni-vault.js). Set up: the lock password twice,
+    // the recovery code (returned), then "Later" to the passkey offer, if one comes.
+    w.__waitFor = async function ( f, n ) {
+        for( var i = 0; i < ( n || 160 ); i++ ) { var v = null; try { v = f(); } catch ( e ) {} if( v ) return v; await new Promise( function ( r ) { setTimeout( r, 50 ); } ); }
+        return null;
+    };
+    w.__vaultSetup = async function ( pw ) {
+        if( ! await w.__typePassword( pw ) ) return null;
+        var pre = await w.__waitFor( function () { return w.document.querySelector( 'dialog.panel[open] pre.ayni-vault-code' ); }, 400 );
+        if( ! pre ) return null;
+        var code = pre.textContent;
+        pre.closest( 'dialog' ).querySelector( 'footer button' ).click();
+        var offer = await w.__waitFor( function () {
+            var d = w.document.querySelector( 'dialog.panel[open]' );
+            return d && d.textContent.indexOf( w.Ayni.t( 'ayni.vault.pkOfferTitle' ) ) !== -1 && d;
+        }, 40 );
+        if( offer ) offer.querySelector( 'footer [data-close]' ).click();
+        return code;
+    };
+    // Unlock: the lock password, or ( "code", the recovery code ).
+    w.__vaultUnlock = async function ( value, how ) {
+        var d = await w.__waitFor( function () { var d = w.document.querySelector( 'dialog.panel[open]' ); return d && d.querySelector( '#ayniVaultLead' ) && d; } );
+        if( ! d ) return false;
+        if( how === 'code' ) {
+            var f = d.querySelector( '#ayniVaultForgot' ); if( f ) f.click();
+            var c = await w.__waitFor( function () { return d.querySelector( '#ayniVaultCode' ); } );
+            c.value = value;
+        }
+        else d.querySelector( '#ayniVaultPw' ).value = value;
+        d.querySelector( 'footer button:last-child' ).click();
+        return true;
+    };
     return true;
 } )`;

@@ -346,9 +346,10 @@ try
         await ev( "( function () { var m = document.getElementById( 'lockMin' ); m.value = '7'; m.dispatchEvent( new Event( 'input', { bubbles: true } ) ); var t = document.getElementById( 'lockText' ); t.value = 'Hi'; t.dispatchEvent( new Event( 'input', { bubbles: true } ) ); return true; } )()" );
         check( "...its minutes and text at once", await ev( "( function () { var s = JSON.parse( localStorage.getItem( 'nayive-locker' ) ); return s.min === 7 && s.text === 'Hi'; } )()" ), await ev( "localStorage.getItem( 'nayive-locker' )" ) );
         await pick( "lockSel", "culture" );
-        check( "Bellas artes: its settings button, with its icon and its words", await ev( "( function () { var b = document.getElementById( 'salonBtn' ); return ! b.hidden && !! b.querySelector( '.icon svg' ) && b.querySelector( '[data-i18n]' ).textContent.trim().length > 3; } )()" ), await ev( "document.getElementById( 'salonBtn' ).innerHTML.slice( 0, 120 )" ) );
+        check( "Bellas artes: its settings cog after the minutes' (i), with its name as tip", await ev( "( function () { var b = document.getElementById( 'salonBtn' ); return ! b.hidden && !! b.querySelector( '.icon svg' ) && b.parentNode.classList.contains( 'lock-min' ) && ( b.getAttribute( 'aria-label' ) || '' ).trim().length > 3; } )()" ), await ev( "document.getElementById( 'salonBtn' ).innerHTML.slice( 0, 120 )" ) );
         await ev( "( window.__locked = 0, AyniLocker.lock = function () { window.__locked = 1; }, true )" );
         await pick( "lockSel", "clock" );
+        await ev( "( document.getElementById( 'lockNowBtn' ).scrollIntoView( { block: 'nearest' } ), true )" );   // the menu grew (WEATHER section): it may scroll
         await press( "#lockNowBtn" );
         check( "Lock now closes the popup and locks", await ev( "window.__locked" ) === 1 && ! await open( "moreMenu" ) );
     }

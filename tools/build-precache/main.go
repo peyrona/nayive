@@ -39,7 +39,7 @@ import (
 // shared/ayni/ayni-store.js"; games is here for the other reason - it asks the server for
 // nothing at all, so its shell IS the whole app.
 var offlineApps = []string{"tasks", "calendar", "contact", "planner", "trips", "write", "split", "habits",
-	"games", "bookmarks", "passwords", "calculator", "desktop", // desktop: the launcher sends a big screen there, so it must open offline too
+	"games", "bookmarks", "calculator", "desktop", // desktop: the launcher sends a big screen there, so it must open offline too
 	"share-target"} // photos shared with no connection: the page opens and keeps them to try again
 
 // Files under apps/<app>/ to precache, by glob. lib/ is recursive. *.js and
@@ -53,7 +53,7 @@ var shared = []string{"shared/ayni/ayni-i18n.js", "shared/ayni/ayni-util.js", "s
 	"shared/theme.css", "shared/app.css", "shared/ayni/ayni-store.js",
 	"shared/ayni/ayni-net.js", "shared/i18n.js", "shared/ui.js", "shared/ayni/ayni-menutable.js",
 	"shared/ayni/formats/ical.js", "shared/media.js", "shared/ayni/ayni-playon.js", "shared/ayni/formats/vcard.js",
-	"shared/ayni/ayni-photo.js", "shared/ayni/ayni-image-editor.js", "shared/ayni/ayni-doc.js", "shared/ayni/ayni-crypt.js", "shared/ayni/ayni-map.js",
+	"shared/ayni/ayni-photo.js", "shared/ayni/ayni-image-editor.js", "shared/ayni/ayni-doc.js", "shared/ayni/ayni-crypt.js", "shared/ayni/ayni-passkey.js", "shared/ayni/ayni-vault.js", "shared/ayni/ayni-map.js",
 	"shared/locker.js", "shared/lockers/clock.js", "shared/lockers/matrix.js", "shared/lockers/life.js", "shared/lockers/culture.js", "shared/lockers/culture-settings.js", "shared/lockers/science.js",
 	"shared/lib/luxon_v3.7.2.min.js", "shared/lib/rrule_v2.8.1.min.js",
 	"shared/lib/fabric_v7.4.0.min.js",
