@@ -48,11 +48,31 @@ type Event struct {
 	UID        string
 	Summary    string
 	StartEpoch *int64
+	Location   string // what the launcher's search reads (search_all.go)
+	Desc       string
+	Day        string // an all-day event: its first day, "2006-01-02" (StartEpoch nil)
 
 	start   time.Time      // StartEpoch on the wall clock of its own zone
 	rule    *recurRule     // nil: rings once, at StartEpoch
 	exdates map[int64]bool // occurrences taken out (EXDATE, or moved by an override)
 	recurID *int64         // an override: the occurrence of its series it replaces
+	// an all-day series (a birthday): its rule from Day's midnight. Kept apart
+	// from `rule`, which only timed events have: reminders and the launcher's
+	// count never ring an all-day event. Only the search reads it (dayEvent).
+	dayRule *recurRule
+}
+
+// dayEvent is an all-day series as a timed one starting at its first day's
+// midnight in `loc`, so StartsBetween walks it; ok false when it is no series.
+func (e Event) dayEvent(loc *time.Location) (Event, bool) {
+	if e.dayRule == nil || e.Day == "" {
+		return Event{}, false
+	}
+	d, err := time.ParseInLocation("2006-01-02", e.Day, loc)
+	if err != nil {
+		return Event{}, false
+	}
+	return Event{UID: e.UID, StartEpoch: ptrInt64(d.Unix()), start: d, rule: e.dayRule}, true
 }
 
 // dtRE captures the six date components. It is deliberately not anchored at the
@@ -145,6 +165,7 @@ func ParseEvents(text string, loc *time.Location) []Event {
 
 	var (
 		inEvent bool
+		inAlarm bool
 		uid     string
 		summary string
 		start   *int64
@@ -155,7 +176,7 @@ func ParseEvents(text string, loc *time.Location) []Event {
 	for _, line := range unfold(text) {
 		switch {
 		case line == "BEGIN:VEVENT":
-			inEvent, uid, summary, start = true, "", "", nil
+			inEvent, inAlarm, uid, summary, start = true, false, "", "", nil
 			ev, rrules = Event{}, nil
 
 		case line == "END:VEVENT":
@@ -163,6 +184,12 @@ func ParseEvents(text string, loc *time.Location) []Event {
 				ev.UID, ev.Summary, ev.StartEpoch = uid, summary, start
 				if start != nil && len(rrules) == 1 { // a second RRULE: a rule we do not read
 					ev.rule = parseRRule(rrules[0], ev.start.Location())
+				} else if ev.Day != "" && len(rrules) == 1 {
+					zone := loc
+					if zone == nil {
+						zone = time.Local
+					}
+					ev.dayRule = parseRRule(rrules[0], zone)
 				}
 				events = append(events, ev)
 			}
@@ -170,6 +197,13 @@ func ParseEvents(text string, loc *time.Location) []Event {
 
 		case !inEvent:
 			continue // outside an event - ignore calendar-level lines
+
+		case line == "BEGIN:VALARM":
+			inAlarm = true
+		case line == "END:VALARM":
+			inAlarm = false
+		case inAlarm:
+			continue // a reminder's own lines (its DESCRIPTION...) are not the event's
 
 		case strings.HasPrefix(line, "UID:"):
 			uid = strings.TrimSpace(line[4:])
@@ -186,6 +220,20 @@ func ParseEvents(text string, loc *time.Location) []Event {
 			start = nil
 			if t, ok := dtstartTime(params, value, loc); ok {
 				start, ev.start = ptrInt64(t.Unix()), t
+			} else if v := strings.TrimSpace(value); len(v) == 8 {
+				if d, err := time.Parse("20060102", v); err == nil {
+					ev.Day = d.Format("2006-01-02")
+				}
+			}
+
+		case strings.HasPrefix(line, "LOCATION:") || strings.HasPrefix(line, "LOCATION;"):
+			if _, v, ok := strings.Cut(line, ":"); ok {
+				ev.Location = unescapeText(v)
+			}
+
+		case strings.HasPrefix(line, "DESCRIPTION:") || strings.HasPrefix(line, "DESCRIPTION;"):
+			if _, v, ok := strings.Cut(line, ":"); ok {
+				ev.Desc = unescapeText(v)
 			}
 
 		case strings.HasPrefix(line, "RRULE:"):

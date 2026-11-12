@@ -582,6 +582,39 @@ func verifyAssertion(pub crypto.PublicKey, alg int, authData, clientData, sig []
 	return false
 }
 
+// errStoredKeyDamaged: our own file, not the person's answer, is wrong.
+var errStoredKeyDamaged = errors.New("the stored passkey is damaged")
+
+// checkAssertion checks one passkey answer against the stored key k: our
+// challenge, our page, touched and verified, the signature, the counter.
+// Answers the new counter. Shared by the Confirmer and the passkey login.
+func checkAssertion(k passkeyRec, origin string, challenge, cd, ad, sig []byte) (uint32, error) {
+	if err := checkClientData(cd, "webauthn.get", challenge, origin); err != nil {
+		return 0, errors.New("Passkey refused: " + err.Error() + ".")
+	}
+	if !originMatches(origin, k.RPID) {
+		return 0, errors.New("Passkey refused: wrong site.")
+	}
+	_, count, err := checkAuthData(ad, k.RPID)
+	if err != nil {
+		return 0, errors.New("Passkey refused: " + err.Error() + ".")
+	}
+	spki, err := b64uDec(k.Key)
+	if err != nil {
+		return 0, errStoredKeyDamaged
+	}
+	pub, err := parsePasskeyKey(spki, k.Alg)
+	if err != nil || !verifyAssertion(pub, k.Alg, ad, cd, sig) {
+		return 0, errors.New("Passkey refused: bad signature.")
+	}
+	// A counter that goes back means a copied key. Synced passkeys always
+	// say 0, and that is fine.
+	if (count != 0 || k.Count != 0) && count <= k.Count {
+		return 0, errors.New("Passkey refused: its counter went back (a copied key?).")
+	}
+	return count, nil
+}
+
 // -- confirm: navigator.credentials.get's answer --------------------------------
 
 type passkeyAssertion struct {
@@ -627,28 +660,12 @@ func (h *Confirmer) Confirm(token, origin string, a passkeyAssertion) (string, e
 		return fail("This passkey is not registered here.")
 	}
 	k := &keys[idx]
-	if err := checkClientData(cd, "webauthn.get", challenge, origin); err != nil {
-		return fail("Passkey refused: " + err.Error() + ".")
-	}
-	if !originMatches(origin, k.RPID) {
-		return fail("Passkey refused: wrong site.")
-	}
-	_, count, err := checkAuthData(ad, k.RPID)
+	count, err := checkAssertion(*k, origin, challenge, cd, ad, sig)
 	if err != nil {
-		return fail("Passkey refused: " + err.Error() + ".")
-	}
-	spki, err := b64uDec(k.Key)
-	if err != nil {
-		return "", errors.New("the stored passkey is damaged")
-	}
-	pub, err := parsePasskeyKey(spki, k.Alg)
-	if err != nil || !verifyAssertion(pub, k.Alg, ad, cd, sig) {
-		return fail("Passkey refused: bad signature.")
-	}
-	// A counter that goes back means a copied key. Synced passkeys always
-	// say 0, and that is fine.
-	if (count != 0 || k.Count != 0) && count <= k.Count {
-		return fail("Passkey refused: its counter went back (a copied key?).")
+		if errors.Is(err, errStoredKeyDamaged) {
+			return "", err
+		}
+		return fail(err.Error())
 	}
 	k.Count = count
 	k.Used = h.now().UTC().Format(time.RFC3339)
@@ -704,15 +721,40 @@ func (h *Confirmer) Register(token, origin string, r passkeyRegistration) (strin
 	if !ok {
 		return "", errors.New("Too slow - try again.")
 	}
+	rec, err := checkRegistration(origin, challenge, r)
+	if err != nil {
+		return "", err
+	}
+	idS := rec.ID
+	for _, k := range keys {
+		if k.ID == idS {
+			return "", errors.New("This passkey is registered already.")
+		}
+	}
+	rec.Added = h.now().UTC().Format(time.RFC3339)
+	rec.Used = rec.Added
+	keys = append(keys, rec)
+	if err := h.saveKeys(keys); err != nil {
+		return "", err
+	}
+	h.dropSetup()
+	return h.newTicket(token), nil
+}
+
+// checkRegistration checks a new passkey's answer (our challenge, our page,
+// touched and verified, the ids match, a key we can use) and answers the
+// record to store, made for this host. Shared by the Confirmer and the
+// passkey login.
+func checkRegistration(origin string, challenge []byte, r passkeyRegistration) (passkeyRec, error) {
 	id, err0 := b64uDec(r.ID)
 	cd, err1 := b64uDec(r.ClientData)
 	ad, err2 := b64uDec(r.AuthData)
 	spki, err3 := b64uDec(r.Key)
 	if err0 != nil || err1 != nil || err2 != nil || err3 != nil || len(id) == 0 || len(id) > 1023 {
-		return "", errors.New("Bad passkey answer.")
+		return passkeyRec{}, errors.New("Bad passkey answer.")
 	}
 	if err := checkClientData(cd, "webauthn.create", challenge, origin); err != nil {
-		return "", errors.New("Passkey refused: " + err.Error() + ".")
+		return passkeyRec{}, errors.New("Passkey refused: " + err.Error() + ".")
 	}
 	host := strings.TrimPrefix(strings.TrimPrefix(origin, "https://"), "http://")
 	if hh, _, err := net.SplitHostPort(host); err == nil {
@@ -720,24 +762,18 @@ func (h *Confirmer) Register(token, origin string, r passkeyRegistration) (strin
 	}
 	flags, count, err := checkAuthData(ad, host)
 	if err != nil {
-		return "", errors.New("Passkey refused: " + err.Error() + ".")
+		return passkeyRec{}, errors.New("Passkey refused: " + err.Error() + ".")
 	}
 	// The credential id inside the authenticator data must be the one sent.
 	if flags&adAT == 0 || len(ad) < 55 {
-		return "", errors.New("Passkey refused: no credential in the answer.")
+		return passkeyRec{}, errors.New("Passkey refused: no credential in the answer.")
 	}
 	n := int(binary.BigEndian.Uint16(ad[53:55]))
 	if len(ad) < 55+n || !bytes.Equal(ad[55:55+n], id) {
-		return "", errors.New("Passkey refused: the ids do not match.")
+		return passkeyRec{}, errors.New("Passkey refused: the ids do not match.")
 	}
 	if _, err := parsePasskeyKey(spki, r.Alg); err != nil {
-		return "", errors.New("Passkey refused: " + err.Error() + ".")
-	}
-	idS := b64u(id)
-	for _, k := range keys {
-		if k.ID == idS {
-			return "", errors.New("This passkey is registered already.")
-		}
+		return passkeyRec{}, errors.New("Passkey refused: " + err.Error() + ".")
 	}
 	name := strings.TrimSpace(r.Name)
 	if name == "" {
@@ -752,16 +788,10 @@ func (h *Confirmer) Register(token, origin string, r passkeyRegistration) (strin
 			tr = append(tr, t)
 		}
 	}
-	now := h.now().UTC().Format(time.RFC3339)
-	keys = append(keys, passkeyRec{
-		ID: idS, Key: b64u(spki), Alg: r.Alg, RPID: host,
-		Name: name, Transports: tr, Count: count, Added: now, Used: now,
-	})
-	if err := h.saveKeys(keys); err != nil {
-		return "", err
-	}
-	h.dropSetup()
-	return h.newTicket(token), nil
+	return passkeyRec{
+		ID: b64u(id), Key: b64u(spki), Alg: r.Alg, RPID: host,
+		Name: name, Transports: tr, Count: count,
+	}, nil
 }
 
 // RemoveKey drops one passkey, or the app (id "app"); it needs a ticket.

@@ -72,11 +72,14 @@
     <link rel="stylesheet" href="shared/ayni/ayni-status.css">
     <link rel="stylesheet" href="shared/ayni/ayni-shell.css">
     <link rel="stylesheet" href="shared/app.css">
+    <link rel="stylesheet" href="shared/launcher-search.css">
+    <link rel="stylesheet" href="shared/sos.css">
+    <link rel="stylesheet" href="shared/notes.css">
     <link rel="stylesheet" href="shared/ayni/ayni-doc.css">
     <link rel="stylesheet" href="shared/ayni/ayni-media.css">
     <link rel="stylesheet" href="shared/ayni/ayni-image.css">
     <link rel="stylesheet" href="shared/ayni/ayni-map.css">
-    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); var z = localStorage.getItem( 'ayni-text-size' ); if( z ) document.documentElement.style.fontSize = z + '%'; }catch( e ){}</script>
     <script src="shared/ayni/ayni-icons.js" defer></script>
     <script src="shared/ayni/ayni-base.js" defer></script>
     <script src="shared/ayni/ayni-icons-more.js" defer></script>
@@ -99,6 +102,11 @@
     <script src="shared/ayni/ayni-schemes.js" defer></script>
     <script src="shared/ui.js" defer></script>
     <script src="shared/ayni/ayni-store.js" defer></script>
+    <script src="shared/file-kinds.js" defer></script>
+    <script src="shared/launcher-search.js" defer></script>
+    <script src="shared/notes.js" defer></script>
+    <script src="shared/launcher-bar.js" defer></script>
+    <script src="shared/sos.js" defer></script>
     <script>
     Ayni.i18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
@@ -108,10 +116,14 @@
             lead:  Ayni.t( 'launcher.introLead' ),
             autoShow: true,
             rows: [
+                { sel: '#lsBox',             name: Ayni.t( 'search.title' ), text: Ayni.t( 'launcher.introSearch' ) },
                 { sel: '#plannerBtn',        name: 'Planner', text: Ayni.t( 'launcher.introPlanner' ) },
                 { sel: '#chatBtn',           name: 'Chat', text: Ayni.t( 'launcher.introChat' ) },
                 { sel: '#mailBtn',           name: 'eMail', text: Ayni.t( 'launcher.introMail' ) },
                 { sel: '#findBtn',           name: Ayni.t( 'find.title' ), text: Ayni.t( 'launcher.introFind' ), tour: { open: '#moreBtn' } },
+                // Notes: under the apps (not in the desktop's menu, see #notesHost); built
+                // after this card, so the row names the button only for the tour.
+                window.top === window ? { icon: 'sticky', name: Ayni.t( 'notes.title' ), text: Ayni.t( 'launcher.introNotes' ), tour: { sel: '#notesNewBtn' } } : null,
                 // The plug of every app, explained once here: it only shows when saving
                 // has trouble, so the app helps can't point at it. Drawn unplugged.
                 { svg: Ayni.icon( 'plug-off' ),
@@ -122,7 +134,7 @@
                 { sel: '#accountBtn',        text: Ayni.t( 'launcher.introAccount' ), tour: { open: '#gearBtn' } },
                 { sel: '#installBtn',        text: Ayni.t( 'launcher.introInstall' ), tour: { open: '#gearBtn' } },
                 { sel: '#logoutBtn',         text: Ayni.t( 'launcher.introLogout' ), tour: { open: '#gearBtn' } }
-            ],
+            ].filter( Boolean ),
             tip: Ayni.t( 'launcher.introTip' ),
             // The guided tour ("Ver el tour" in the card): the app tiles, then the
             // card's buttons. The plug row stays out: it only shows on trouble.
@@ -341,6 +353,29 @@
 
         .tool-extra svg { width: 20px; height: 20px; }
 
+        /* ONE TOP ROW (html.ls-top: a phone, or the desktop's menu): the magnifier, the
+           new note (the desktop's notes pair), then the gear. The gear does not roll
+           here: pressed, its four extras take the row's place beside it. */
+        html.ls-top #lsBox { gap: 6px; margin-bottom: -12px; height: 42px; }   /* the small row sits closer to the tiles */
+        html.ls-top #lsField.is-open { height: 42px; box-sizing: border-box; }  /* same height open or folded: no jump */
+        html:root.ls-top .apps-panel { padding-top: 14px; }      /* ...and closer to the card's top edge */
+        html.ls-top #lsBox > .btn, html.ls-top #quickBar > .btn { width: 42px; height: 42px; }
+        html.ls-top #quickBar { display: contents; }   /* its buttons, the magnifier and the gear are ordered by shared/launcher-bar.js */
+        #quickBar[hidden], #quickPark { display: none !important; }
+        #quickBar .qb-app svg { width: 20px; height: 20px; }
+        html.ls-top #notesNewBtn .icon { --icon: 20px; }
+        html.ls-top #lsBox #tools
+        {
+            flex: none; width: auto; min-height: 0; padding-left: 0; gap: 6px;
+            flex-wrap: nowrap; overflow: visible; container-type: normal; transition: none;
+        }
+        html.ls-top #tools #gearBtn { position: static; transform: none; order: 1; }
+        html.ls-top #tools .tool-extra { margin-left: 0; transition: none; }
+        html.ls-top #tools:not(.open) .tool-extra { display: none; }
+        html.ls-top #lsBox:has(#tools.open) > :not(#tools):not(.ls-quick) { display: none; }
+        /* the open search takes the whole row: the other buttons step aside until it folds */
+        html.ls-top #lsBox:has(#lsField.is-open) > :not(#lsField):not(.ls-quick) { display: none; }
+
         /* Chat's and eMail's unread counts: a disc on the tile's icon, top-right.
            Chat red, eMail blue - the desktop bar's mail dot colour (2026-10-09).
            Planner green: today's events still to come (2026-10-28). */
@@ -377,6 +412,14 @@
         .find-note { font-size: 0.8rem; color: var(--text-dim); margin: 10px 0 0; }
         /* Mi cuenta: under each phone, its photo upload switch and folder. */
         .dev-media { padding: 0 6px 0 12px; margin-bottom: 8px; }
+        /* Top bar dialog: the row itself, as it will look; tap an icon to pick it, or drag it. */
+        .bar-edit { display: flex; justify-content: flex-end; gap: 6px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; }
+        .bar-edit .btn { width: 42px; height: 42px; touch-action: pan-y; user-select: none; }
+        .bar-edit svg { width: 20px; height: 20px; pointer-events: none; }
+        .bar-edit .btn.is-picked { outline: 2px solid var(--accent); outline-offset: 1px; }
+        .bar-edit .btn.is-dragged { position: relative; z-index: 1; opacity: .8; }
+        .bar-acts { display: inline-flex; gap: 4px; }
+        .bar-acts[hidden] { display: none; }
         .dev-media .acct-check-row { margin: 6px 0; }
         .dev-media .folder-pick[hidden] { display: none; }
 
@@ -395,7 +438,7 @@
         }
 
         /* An on / off row: text · (i) · the shared .switch at the end. */
-        .acct-check-row { display: flex; align-items: center; gap: 6px; margin: 10px 0; }
+        .acct-check-row { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
         .acct-check-row[hidden] { display: none; }
         .acct-check { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 0.88rem; cursor: pointer; }
         .acct-check-row .acct-check { margin: 0; }
@@ -416,7 +459,7 @@
         .acct-msg { font-size: 0.8rem; color: var(--danger); margin: 10px 0 0; }
         .acct-msg[hidden] { display: none; }
 
-        .acct-assign { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; font-size: 0.88rem; }
+        .acct-assign { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 4px 0; font-size: 0.88rem; }
         .acct-assign.acct-assign-inline { justify-content: flex-start; }   /* spinner sits right after the label, not pushed to the edge */
         .acct-assign .picker { min-width: 120px; max-width: 190px; }   /* Ayni's list picker */
         /* Colour schemes: the dark and light pickers share one row, half each. */
@@ -436,6 +479,39 @@
     <div class="launcher">
 
       <div class="apps-panel">
+
+        <!-- Search across the apps (shared/launcher-search.js, 2026-11-12): the
+             field lists apps, contacts, files and events as you type; its funnel
+             opens #lsDialog (mail and chats too, and the choices). On a phone it
+             folds behind a magnifier, like every search field. -->
+        <div class="ls-box" id="lsBox">
+            <div class="input-group search-field" id="lsField">
+                <input class="input" type="search" id="lsInput" autocomplete="off" spellcheck="false"
+                       role="combobox" aria-controls="lsQuick" aria-expanded="false"
+                       data-i18n-attr="placeholder:search.ph, aria-label:search.ph, data-tip:search.tip">
+            </div>
+            <!-- The top row's own buttons, picked in My account › Top bar (shared/launcher-bar.js);
+                 quickPark holds the pages' action buttons while they are not in it. -->
+            <div class="quick-bar" id="quickBar" hidden></div>
+            <div id="quickPark" hidden></div>
+            <div class="lb ls-quick" id="lsQuick" role="listbox" hidden data-i18n-attr="aria-label:search.title"></div>
+        </div>
+        <script>
+            // A phone, or the desktop's menu (this page framed by desktop/): the field
+            // folds to its magnifier and the row also takes the new-note button (the
+            // desktop puts its notes pair there) and the gear, whose extras unfold in
+            // this row too (html.ls-top, 2026-11-12).
+            ( function ()
+            {
+                var inDesk = false;
+                try { inDesk = window.parent !== window && /\/desktop\//.test( window.parent.location.pathname ); } catch( e ) {}
+                if( inDesk || ( window.top === window && matchMedia( '(max-width: 640px)' ).matches ) )
+                {
+                    document.getElementById( 'lsField' ).classList.add( 'fold' );
+                    document.documentElement.classList.add( 'ls-top' );
+                }
+            } )();
+        </script>
 
         <div class="grid">
             <!-- 4 rows of 3 (2026-11-12): Planner+Chat+eMail / Office+Drive+Trips /
@@ -584,7 +660,78 @@
 
       </div>
 
+      <!-- NOTES (2026-11-12, shared/notes.js): the cards under the apps. Not in the
+           desktop's menu (a framed launcher): there the notes sit on the wallpaper. -->
+      <div id="notesHost"></div>
+      <script>
+          document.addEventListener( 'DOMContentLoaded', function ()
+          {
+              if( window.top !== window || ! window.NayiveNotes ) return;
+              Ayni.i18n.ready.then( function ()
+              {
+                  NayiveNotes.wall( document.getElementById( 'notesHost' ) );
+                  // the top row (html.ls-top): its "new note" goes where My account › Top bar puts it
+                  if( window.NayiveBar ) NayiveBar.render();
+              } );
+          } );
+      </script>
+
     </div>
+
+    <!-- Search's full dialog (shared/launcher-search.js): the words, the
+         choices, and the results grouped by kind, live as they change. -->
+    <dialog class="panel big" id="lsDialog" data-i18n-attr="aria-label:search.title">
+        <header>
+            <h2 data-i18n="search.title"></h2>
+            <button class="btn" id="lsReset" type="button" hidden data-i18n-attr="data-tip:search.reset, aria-label:search.reset">
+                <span class="icon" data-icon="eraser"></span>
+            </button>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close, aria-label:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body ls-dlg">
+            <div class="ls-opts">
+                <div class="field">
+                    <div class="input-group search-field">
+                        <input class="input" type="search" id="lsWords" autocomplete="off" spellcheck="false"
+                               data-i18n-attr="placeholder:search.ph, aria-label:search.ph, data-tip:search.tip">
+                    </div>
+                    <p class="ls-hint" data-i18n="search.hint"></p>
+                </div>
+                <div class="field">
+                    <label data-i18n="search.in"></label>
+                    <div id="lsKinds" class="ls-pills"></div>
+                </div>
+                <div class="field">
+                    <label for="lsFrom"><span data-i18n="search.from"></span> <span class="ls-hint" data-i18n="search.fromHint"></span></label>
+                    <div class="input-group"><input class="input" id="lsFrom" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:search.fromPh"></div>
+                </div>
+                <div class="field">
+                    <label data-i18n="search.when"></label>
+                    <div id="lsWhen" class="ls-pills"></div>
+                    <div id="lsRange" class="field-row" hidden>
+                        <div class="field">
+                            <label for="lsSince" data-i18n="drive.sbFrom"></label>
+                            <div class="input-group"><input class="input" id="lsSince"></div>
+                        </div>
+                        <div class="field">
+                            <label for="lsUntil" data-i18n="drive.sbTo"></label>
+                            <div class="input-group"><input class="input" id="lsUntil"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="field" id="lsTypesRow">
+                    <label><span data-i18n="drive.sbKinds"></span> <span class="ls-hint" data-i18n="search.typesHint"></span></label>
+                    <div id="lsTypes" class="ls-pills"></div>
+                </div>
+                <div class="field" id="lsMailRow">
+                    <label data-i18n="search.kind.mail"></label>
+                    <div id="lsTrays" class="ls-pills"></div>
+                    <label class="switch end ls-attach"><span data-i18n="search.attach"></span><input type="checkbox" role="switch" id="lsAttach"></label>
+                </div>
+            </div>
+            <div class="lb ls-results" id="lsResults" role="listbox" data-i18n-attr="aria-label:search.title"></div>
+        </div>
+    </dialog>
 
     <!-- "Mi cuenta" dialog - opened by the account button in the settings row. -->
     <dialog class="panel" id="pwBackdrop" data-i18n-attr="aria-label:ui.account">
@@ -593,15 +740,34 @@
             <button class="btn" id="schemesBtn" type="button" data-i18n-attr="data-tip:ayni.scm.title, aria-label:ayni.scm.title">
                 <span class="icon" data-icon="palette" style="--icon:18px"></span>
             </button>
+            <button class="btn" id="barBtn" type="button" data-i18n-attr="data-tip:acct.barTitle, aria-label:acct.barTitle">
+                <span class="icon" data-icon="bar-toolbar" style="--icon:18px"></span>
+            </button>
             <button class="btn" id="acctClose" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
         </header>
         <div class="body">
             <!-- Close-only, the GNOME way (docs/audit/dialogs.md): every row saves
                  itself on change, so the dialog has just its ×. The password,
                  the one thing that needs a ✓, has its own small dialog below. -->
+            <!-- Notifications first: the most important row. -->
+            <div class="acct-check-row" id="pushChkWrap">
+                <label class="acct-check" for="pushChk"><span data-i18n="acct.notifsOff"></span></label>
+                <button class="info-tip" data-i18n-attr="data-help:acct.notifsInfo"></button>
+                <label class="switch"><input role="switch" type="checkbox" id="pushChk"></label>
+            </div>
+            <!-- "Remind me N min before" lives in Planner › Settings (2026-09-27):
+                 only events use it. -->
+            <p class="acct-msg" id="pushMsg" hidden></p>
             <div class="acct-assign">
                 <span data-i18n="lock.password"></span>
                 <button id="pwChangeBtn" type="button" class="btn text bordered sm" data-i18n="acct.changePwBtn"></button>
+            </div>
+
+            <!-- Sign in with a passkey (server/go/login_passkey.go): the list,
+                 add, remove - each change asks the password. -->
+            <div class="acct-assign">
+                <span><span data-i18n="acct.pkTitle"></span> <button class="info-tip" type="button" data-i18n-attr="data-help:acct.pkInfo"></button></span>
+                <button id="loginPkBtn" type="button" class="btn text bordered sm" data-i18n="ayni.vault.manage"></button>
             </div>
 
             <!-- Locked documents (Write, Calc, Text): one key for all of them,
@@ -650,6 +816,22 @@
             </div>
             <p class="acct-msg" id="autoThemeMsg" hidden></p>
 
+            <!-- Text size - DEVICE state too (Ayni.textSize, localStorage): every page
+                 and every desktop window follows it at once. -->
+            <div class="acct-assign">
+                <span><label for="textSizeSel" data-i18n="acct.textSize"></label> <button class="info-tip" type="button" data-i18n-attr="data-help:acct.textSizeInfo"></button></span>
+                <div class="picker" id="textSizeSel">
+                    <input type="hidden" value="100">
+                    <div class="panel popup picker-pop" popover="manual"><ul role="listbox">
+                        <li role="option" data-value="90"  data-i18n="acct.textSmall"></li>
+                        <li role="option" data-value="100" data-i18n="acct.textNormal"></li>
+                        <li role="option" data-value="115" data-i18n="acct.textLarge"></li>
+                        <li role="option" data-value="130" data-i18n="acct.textHuge"></li>
+                        <li role="option" data-value="150" data-i18n="acct.textEnormous"></li>
+                    </ul></div>
+                </div>
+            </div>
+
             <!-- Open the desktop: Auto / Always / Never - DEVICE state too (see the
                  <head>). The ONLY place for it (one action, one knob): a big screen,
                  or inside the desktop (it follows the change, see its OPEN THE DESKTOP). -->
@@ -665,20 +847,38 @@
                 </div>
             </div>
 
-            <div class="acct-check-row" id="pushChkWrap">
-                <label class="acct-check" for="pushChk"><span data-i18n="acct.notifsOff"></span></label>
-                <button class="info-tip" data-i18n-attr="data-help:acct.notifsInfo"></button>
-                <label class="switch"><input role="switch" type="checkbox" id="pushChk"></label>
-            </div>
-            <!-- "Remind me N min before" lives in Planner › Settings (2026-09-27):
-                 only events use it. -->
-            <p class="acct-msg" id="pushMsg" hidden></p>
 
             <!-- Phones with the Android app (server/go/devices.go); only when there is one. -->
             <div id="devWrap" hidden>
                 <p class="acct-h" data-i18n="dev.title"></p>
                 <div class="acct-list" id="devList"></div>
             </div>
+        </div>
+    </dialog>
+
+    <!-- Top bar: the buttons between the magnifier and the gear, ONE per user
+         (shared/launcher-bar.js, data/launcher/bar.json); each press saves.
+         Its own close-only dialog, opened from My account's header (#barBtn). -->
+    <dialog class="panel" id="barBackdrop" data-i18n-attr="aria-label:acct.barTitle">
+        <header>
+            <h2 data-i18n="acct.barTitle"></h2>
+            <button class="info-tip" type="button" data-i18n-attr="data-help:acct.barInfo"></button>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body">
+            <!-- The row itself, as it will look: tap an icon to pick it (then
+                 ← → ×), or drag it along. -->
+            <div class="bar-edit" id="barList" role="group" data-i18n-attr="aria-label:acct.barTitle"></div>
+            <div class="acct-assign">
+                <span class="bar-acts" id="barActs" hidden>
+                    <button type="button" class="btn" data-bar-act="up" data-i18n-attr="data-tip:acct.barUp, aria-label:acct.barUp"><span class="icon" data-icon="prev"></span></button>
+                    <button type="button" class="btn" data-bar-act="down" data-i18n-attr="data-tip:acct.barDown, aria-label:acct.barDown"><span class="icon" data-icon="next"></span></button>
+                    <button type="button" class="btn" data-bar-act="del" data-i18n-attr="data-tip:acct.barRemove, aria-label:acct.barRemove"><span class="icon" data-icon="trash"></span></button>
+                </span>
+                <span></span>
+                <button id="barAdd" type="button" class="btn text bordered sm" data-i18n="acct.barAdd"></button>
+            </div>
+            <p class="acct-msg" id="barMsg" hidden></p>
         </div>
     </dialog>
 
@@ -824,7 +1024,11 @@
             // The launcher going away closes them too: its page hidden (another
             // app, another tab) or, on the desktop, its menu shut - every way
             // the desktop shuts it (desktop/index.html, closeMenu) calls this.
-            function closeAll() { cards.forEach( function ( c ) { if( c.matches( ':popover-open' ) ) c.hidePopover(); } ); }
+            function closeAll()
+            {
+                cards.forEach( function ( c ) { if( c.matches( ':popover-open' ) ) c.hidePopover(); } );
+                if( window.NayiveSearch ) NayiveSearch.close();       // the search's list (shared/launcher-search.js)
+            }
             document.addEventListener( 'visibilitychange', function () { if( document.hidden ) closeAll(); } );
             window.NayiveLauncher = { closePopups: closeAll };
         } );
@@ -836,6 +1040,9 @@
             var tools = document.getElementById( 'tools' );
             var gear  = document.getElementById( 'gearBtn' );
             if( ! tools || ! gear ) return;
+            // The one top row (html.ls-top): the gear and its extras go after the magnifier.
+            var top = document.documentElement.classList.contains( 'ls-top' );
+            if( top ) document.getElementById( 'lsBox' ).appendChild( tools );
 
             // Roll the gear between its two resting spots (row-centre <-> left edge). It turns
             // like a wheel: one full turn, counter-clockwise on the way out to the left,
@@ -848,7 +1055,7 @@
             var rollSeq = 0;
             function rollGear( open )
             {
-                if( ! gear.animate ) return;
+                if( top || ! gear.animate ) return;
                 var cx  = ( tools.clientWidth - gear.offsetWidth ) / 2;   // centre offset from the left edge
                 var deg = open ? -360 : 360;                             // out = counter-clockwise, back = clockwise
                 var mine = ++rollSeq;
@@ -883,10 +1090,16 @@
             }, true );
 
             document.getElementById( 'schemesBtn' ).addEventListener( 'click', function () { Ayni.schemeDialog(); } );
+            // Top bar: its own dialog, drawn over My account (the top bar's buttons).
+            document.getElementById( 'barBtn' ).addEventListener( 'click', function ()
+            {
+                if( window.NayiveBar ) NayiveBar.openEditor();
+                document.getElementById( 'barBackdrop' ).showModal();
+            } );
 
             document.addEventListener( 'keydown', function ( e )
             {
-                if( e.key === 'Escape' && tools.classList.contains( 'open' ) && ! ( document.getElementById( 'scmBackdrop' ) || {} ).open ) setOpen( false );
+                if( e.key === 'Escape' && tools.classList.contains( 'open' ) && ! ( document.getElementById( 'scmBackdrop' ) || {} ).open && ! document.getElementById( 'barBackdrop' ).open ) setOpen( false );
             } );
         } )();
     </script>
@@ -1389,6 +1602,12 @@
                 if( window.top === window && ayniWantDesk( cur.mode ) ) location.replace( 'desktop/' );
             } );
 
+            // Text size (Ayni.textSize): saved at once, on this device; every open
+            // page and desktop window follows through the 'storage' event.
+            var textSel = document.getElementById( 'textSizeSel' );
+            textSel.addEventListener( 'ayni:change', function () { Ayni.textSize.set( Ayni.picker( textSel ).value ); } );
+            document.addEventListener( 'ayni:textsize', function ( e ) { Ayni.picker( textSel ).set( String( e.detail.size ) ); } );
+
             // My account. Close-only: every row saves itself, its × just closes.
             // A brand-new user with no password gets Change password alone.
             function open( opts )
@@ -1397,6 +1616,7 @@
 
                 loadTz();
                 loadAuto();
+                Ayni.picker( textSel ).set( String( Ayni.textSize.get() ) );
                 loadDeskMode();
                 loadPush();
                 if( window.NayiveDevices ) NayiveDevices.loadAccount();   // the phones with the app
@@ -1624,6 +1844,30 @@
             {
                 needVault().then( function () { AyniVault.manage(); },
                                   function () { Ayni.toast( 'err', Ayni.t( 'login.noServer' ) ); } );
+            } );
+
+            // Sign-in passkeys (shared/login-passkeys.js): its scripts come on
+            // the first tap, as the vault's do.
+            var pkLoad = null;
+            document.getElementById( 'loginPkBtn' ).addEventListener( 'click', function ()
+            {
+                if( ! pkLoad )
+                    pkLoad = [ 'ayni/ayni-passkey', 'login-passkeys' ].reduce( function ( p, name )
+                    {
+                        return p.then( function ()
+                        {
+                            if( name === 'ayni/ayni-passkey' && window.AyniPasskey ) return;
+                            return new Promise( function ( resolve, reject )
+                            {
+                                var sc = document.createElement( 'script' );
+                                sc.src = 'shared/' + name + '.js';
+                                sc.onload = resolve; sc.onerror = reject;
+                                document.head.appendChild( sc );
+                            } );
+                        } );
+                    }, Promise.resolve() ).catch( function ( e ) { pkLoad = null; throw e; } );
+                pkLoad.then( function () { NayiveLoginPasskeys.manage(); },
+                             function () { Ayni.toast( 'err', Ayni.t( 'login.noServer' ) ); } );
             } );
             cancel.addEventListener( 'click', close );
 

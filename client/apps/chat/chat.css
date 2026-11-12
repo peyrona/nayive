@@ -812,19 +812,19 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
 /* Recortar: the box over the photo (.crop-box, shared app.css); outside it is dimmed. Corners are 44 px to a finger. */
 .cropper .editor-canvas { padding: 24px; touch-action: none; }
 
-.picker         { position: fixed; inset: 0; z-index: 160; display: flex; flex-direction: column; background: var(--head); }
-.picker .map-box { position: relative; flex: 1 1 auto; min-height: 0; }
-.picker .map-host { position: absolute; inset: 0; }
-.picker .foot   { flex: 0 0 auto; padding: 6px 0 calc(12px + env(safe-area-inset-bottom)); }
-.picker .row[disabled] { opacity: 0.5; cursor: default; }
-.picker .me-btn
+.place-picker         { position: fixed; inset: 0; z-index: 160; display: flex; flex-direction: column; background: var(--head); }
+.place-picker .map-box { position: relative; flex: 1 1 auto; min-height: 0; }
+.place-picker .map-host { position: absolute; inset: 0; }
+.place-picker .foot   { flex: 0 0 auto; padding: 6px 0 calc(12px + env(safe-area-inset-bottom)); }
+.place-picker .row[disabled] { opacity: 0.5; cursor: default; }
+.place-picker .me-btn
 {
     position: absolute; right: 14px; bottom: 14px; z-index: 900;
     width: 44px; height: 44px; border-radius: 50%; border: none;
     display: flex; align-items: center; justify-content: center;
     background: var(--head); color: var(--link); box-shadow: var(--elev-card); cursor: pointer;
 }
-.picker .me-btn svg { width: 20px; height: 20px; }
+.place-picker .me-btn svg { width: 20px; height: 20px; }
 
 /* photo preview before sending */
 .prev-tools     { display: flex; justify-content: center; gap: 16px; margin: -4px 0 12px; }
@@ -1173,3 +1173,13 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 .call-bar > svg  { width: 18px; height: 18px; color: var(--ok); flex: none; }
 .call-bar > span { flex: 1 1 auto; min-width: 0; }
+
+/* "Translate and send": the original under the translation, smaller */
+.orig                   { margin-top: 4px; padding-top: 4px; border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+                          font-size: 0.82em; opacity: 0.75; white-space: pre-wrap; }
+dialog.tr-sheet         { max-width: min(380px, calc(100vw - 32px)); }
+.tr-sheet .tr-langs     { display: flex; gap: 8px; }
+.tr-sheet .tr-langs > * { flex: 1; min-width: 0; }
+.tr-sheet .tr-out       { margin-top: 12px; min-height: 3em; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tr-sheet .tr-status    { margin: 8px 0 0; font-size: 0.85em; color: var(--text-dim); }
+.tr-sheet .tr-status.err { color: var(--danger); }

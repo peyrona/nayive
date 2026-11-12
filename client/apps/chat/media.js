@@ -1072,7 +1072,7 @@
         var host = h( "div", { class: "map-host" } );
         var meBtn = h( "button", { class: "me-btn", attrs: { type: "button", "data-tip": T( "chat.myPlace" ), "aria-label": T( "chat.myPlace" ) } } );
         meBtn.appendChild( C.ic( "nav" ) );
-        var layer = h( "div", { class: "picker" },
+        var layer = h( "div", { class: "place-picker" },
             h( "div", { class: "bar" }, C.btn( "back", "chat.back", function () { C.back(); } ),
                 h( "div", { class: "who" }, h( "b", { text: T( "chat.sendLocation" ) } ) ) ),
             h( "div", { class: "map-box" }, host, meBtn ),

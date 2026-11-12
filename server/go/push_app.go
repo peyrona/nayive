@@ -50,6 +50,7 @@ type deviceNote struct {
 	Tag   string `json:"tag,omitempty"` // the same tag replaces, as in sw.js
 	URL   string `json:"url,omitempty"` // a path on this server
 	Quiet bool   `json:"quiet,omitempty"`
+	Sos   bool   `json:"sos,omitempty"` // an SOS alert or "Are you OK?": the app rings it (sos.go)
 	exp   int64  // unix ms: dropped after, like a push's TTL
 }
 
@@ -176,6 +177,7 @@ func (d *Devices) queueNote(id string, raw []byte, ttl int) bool {
 		Tag   string `json:"tag"`
 		URL   string `json:"url"`
 		Quiet bool   `json:"quiet"`
+		Sos   bool   `json:"sos"`
 	}
 	if json.Unmarshal(raw, &p) != nil {
 		return false
@@ -201,7 +203,7 @@ func (d *Devices) queueNote(id string, raw []byte, ttl int) bool {
 	now := time.Now().UnixMilli()
 	d.noteSeq = max(d.noteSeq+1, now)
 	note := deviceNote{ID: d.noteSeq, Title: p.Title, Body: p.Body, Tag: p.Tag, URL: p.URL,
-		Quiet: p.Quiet, exp: now + int64(ttl)*1000}
+		Quiet: p.Quiet, Sos: p.Sos, exp: now + int64(ttl)*1000}
 
 	kept := []deviceNote{}
 	for _, n := range d.notes[id] {

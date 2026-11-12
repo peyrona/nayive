@@ -106,6 +106,7 @@ var publicStatic = map[string]bool{
 	"shared/ayni/ayni-toasts.js":     true,
 	"shared/ayni/ayni-dialogs.css":   true,
 	"shared/ayni/ayni-dialogs.js":    true,
+	"shared/ayni/ayni-passkey.js":    true, // login.html: sign in with a passkey (login_passkey.go)
 	"shared/ayni/ayni-menus.css":     true,
 	"shared/ayni/ayni-menus.js":      true,
 	"shared/ayni/ayni-search.css":    true,

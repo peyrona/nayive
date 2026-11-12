@@ -43,7 +43,7 @@
     <link rel="stylesheet" href="shared/ayni/ayni-media.css">
     <link rel="stylesheet" href="shared/ayni/ayni-image.css">
     <link rel="stylesheet" href="shared/ayni/ayni-map.css">
-    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); var z = localStorage.getItem( 'ayni-text-size' ); if( z ) document.documentElement.style.fontSize = z + '%'; }catch( e ){}</script>
     <script src="shared/ayni/ayni-icons.js" defer></script>
     <script src="shared/ayni/ayni-base.js" defer></script>
     <script src="shared/ayni/ayni-icons-more.js" defer></script>
@@ -75,6 +75,7 @@
     <!-- The SSH tab: a terminal on this server (xterm.js loads when the tab first shows). -->
     <link rel="stylesheet" href="ssh/ssh-tab.css">
     <script src="shared/ayni/ayni-passkey.js" defer></script>
+    <script src="shared/login-passkeys.js" defer></script>
     <script src="ssh/ssh-tab.js" defer></script>
 
     <style>
@@ -83,7 +84,7 @@
         html, body { min-height: 100%; }
         body
         {
-            font-size: 15px; line-height: 1.5;
+            font-size: .9375rem; line-height: 1.5;
             padding: 24px 16px 60px;
         }
         .wrap { max-width: 720px; margin: 0 auto; }
@@ -267,6 +268,12 @@
                 <label for="adminPass2">Type it again</label>
                 <input class="input" id="adminPass2" type="password" autocomplete="new-password">
             </div>
+        </div>
+        <!-- Sign in with a passkey (shared/login-passkeys.js, server/go/login_passkey.go). -->
+        <div class="field">
+            <label>Sign-in passkeys
+                <button class="info-tip" type="button" data-help="Sign in with Face ID, a fingerprint, a PIN or your phone instead of typing the password. The password still works. Adding or removing one asks the password.&#10;&#10;These are NOT the SSH tab&#39;s passkeys: that one keeps its own."></button></label>
+            <div><button type="button" class="btn text bordered sm" id="adminPkBtn" onclick="NayiveLoginPasskeys.manage()">Manage</button></div>
         </div>
     </section>
 

@@ -140,9 +140,12 @@
         setInterval( function () { if( ! document.hidden ) E.refresh( false ); }, 3 * 60 * 1000 );
 
         var last = E.recall();
-        // a notification's link: that account's Inbox (sw.js opens email/?a=<id>)
-        var want = new URLSearchParams( location.search ).get( "a" );
-        if( want ) { last = { acct: want, tray: "inbox" }; try { history.replaceState( null, "", location.pathname ); } catch( e ) {} }
+        // a notification's link: that account's Inbox (sw.js opens email/?a=<id>).
+        // The launcher's search adds the tray (t), its words (q) and the
+        // message found (m = its ref, mid = its Message-ID, s = its subject).
+        var ask = new URLSearchParams( location.search ), want = ask.get( "a" );
+        var deep = want ? { q: ask.get( "q" ) || "", m: ask.get( "m" ), mid: ask.get( "mid" ) || "", s: ask.get( "s" ) || "" } : null;
+        if( want ) { last = { acct: want, tray: ask.get( "t" ) || "inbox" }; try { history.replaceState( null, "", location.pathname ); } catch( e ) {} }
         E.plug( "loading" );
         try { await Promise.all( [ E.loadAccounts(), E.loadLabels(), E.loadSettings() ] ); }
         catch( err )
@@ -158,7 +161,20 @@
         applyLast( last );
         E.showAccounts();
         E.restoreLocal();               // compose.js: a mail not saved last time
+        if( deep && S.acct === want ) openAsked( deep );
     };
+
+    // The launcher's search result: its words in the box, the message open.
+    function openAsked( d )
+    {
+        if( d.q )
+        {
+            E.$( "searchInput" ).value = d.q;
+            E.searchFold.open( true );
+            E.search( d.q );
+        }
+        if( d.m ) E.openMessage( { ref: d.m, mid: d.mid, subject: d.s, acct: S.acct } );
+    }
 
     // The account signed in here (its copies on this device are its own,
     // compose.js): from the boot's probe, or asked now when that had none.

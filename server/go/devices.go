@@ -83,6 +83,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1146,6 +1147,9 @@ func (s *Server) deviceWait(w http.ResponseWriter, r *http.Request, dev *deviceR
 	s.devices.ear.opened(dev.ID, queryValue(r, "ear") == "1")
 	s.devices.setLocale(dev.ID, queryValue(r, "tz"), queryValue(r, "lang"))
 	s.devices.setApp(dev.ID, r.Header.Get("X-Nayive-App"))
+	if u, err := strconv.ParseInt(queryValue(r, "unlock"), 10, 64); err == nil && u > 0 {
+		s.sos.Alive(dev.Owner, u) // the phone was unlocked then (sos.go)
+	}
 	defer s.devices.ear.closed(dev.ID)
 	seen := queryValue(r, "v")
 	deadline := time.Now().Add(deviceHold)
@@ -1237,6 +1241,7 @@ func (s *Server) deviceAck(w http.ResponseWriter, r *http.Request, dev *deviceRo
 		Find  string `json:"find"`
 		Act   string `json:"act"`
 		Notes int64  `json:"notes"`
+		Sos   string `json:"sos"`
 	}
 	if !readJSONBody(w, r, &body) {
 		return
@@ -1251,6 +1256,8 @@ func (s *Server) deviceAck(w http.ResponseWriter, r *http.Request, dev *deviceRo
 		s.devices.StopFind(dev.Owner, body.Find, "stopped")
 	case body.Notes > 0:
 		s.devices.ackNotes(dev.ID, body.Notes)
+	case body.Sos == "ok":
+		s.sos.Alive(dev.Owner, 0) // "I'm OK" (or Stop) on the phone's "Are you OK?" (sos.go)
 	default:
 		sendError(w, r, http.StatusBadRequest, "no sé qué hacer con eso")
 		return

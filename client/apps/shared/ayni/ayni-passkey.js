@@ -19,10 +19,13 @@
  *   AyniPasskey.create( o ) -> Promise<{ cred, id, transports, prf, prfSecret }>
  *       o: challenge (bytes), rpId?, rpName, userId (bytes), userName, displayName,
  *          exclude [ b64u ids ], prf: true (ask for the PRF extension; prf = true/false/null: unknown),
- *          prfSalt (bytes): also ask for the secret now (prfSecret; null when the authenticator gives it only on use)
+ *          prfSalt (bytes): also ask for the secret now (prfSecret; null when the authenticator gives it only on use),
+ *          resident: true (a "discoverable" passkey: the device lists it, no name typed - sign-in)
  *   AyniPasskey.get( o ) -> Promise<{ cred, id, prf }>
  *       o: challenge (bytes), rpId?, allow [ { id: b64u, transports? } ],
- *          prfSalts { <b64u id>: bytes } (prf = the 32-byte secret of the key used, or null)
+ *          prfSalts { <b64u id>: bytes } (prf = the 32-byte secret of the key used, or null),
+ *          mediation: "conditional" (offered in the name field's autofill list), signal (AbortSignal)
+ *          -> also userHandle (b64u, or "")
  *   AyniPasskey.error( e )                    the browser's error -> one short, translated Error
  *   AyniPasskey.listDialog( o )               the "Passkeys" dialog (see there)
  */
@@ -90,7 +93,8 @@
             user: { id: o.userId, name: o.userName, displayName: o.displayName },
             pubKeyCredParams: [ { type: "public-key", alg: -7 }, { type: "public-key", alg: -8 }, { type: "public-key", alg: -257 } ],
             excludeCredentials: ( o.exclude || [] ).map( function ( id ) { return { type: "public-key", id: bytes( id ) }; } ),
-            authenticatorSelection: { residentKey: "preferred", userVerification: "required" },
+            authenticatorSelection: o.resident ? { residentKey: "required", requireResidentKey: true, userVerification: "required" }
+                                               : { residentKey: "preferred", userVerification: "required" },
             attestation: "none",
             timeout: 120000
         };
@@ -132,11 +136,15 @@
             pk.extensions = { prf: { evalByCredential: by } };
         }
 
-        return navigator.credentials.get( { publicKey: pk } ).catch( function ( e ) { throw error( e ); } ).then( function ( cred )
+        var req = { publicKey: pk };
+        if( o.mediation ) req.mediation = o.mediation;
+        if( o.signal )    req.signal    = o.signal;
+        return navigator.credentials.get( req ).catch( function ( e ) { throw error( e ); } ).then( function ( cred )
         {
             var ext = cred.getClientExtensionResults ? cred.getClientExtensionResults() : {};
             var out = ext && ext.prf && ext.prf.results && ext.prf.results.first;
-            return { cred: cred, id: cred.id, prf: out ? new Uint8Array( out ) : null };
+            var uh  = cred.response && cred.response.userHandle;
+            return { cred: cred, id: cred.id, prf: out ? new Uint8Array( out ) : null, userHandle: uh ? b64u( uh ) : "" };
         } );
     }
 

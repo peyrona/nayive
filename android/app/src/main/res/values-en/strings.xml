@@ -38,6 +38,7 @@
     <string name="find_title">Nayive is looking for you</string>
     <string name="find_text">Someone pressed “Find my phone”.</string>
     <string name="find_stop">Stop</string>
+    <string name="sos_ok">I\'m OK</string>
     <plurals name="pending_chat">
         <item quantity="one">You have 1 unread message</item>
         <item quantity="other">You have %d unread messages</item>

@@ -38,6 +38,7 @@
     <string name="find_title">Nayive te cherche</string>
     <string name="find_text">Quelqu’un a appuyé sur « Localiser mon téléphone ».</string>
     <string name="find_stop">Arrêter</string>
+    <string name="sos_ok">Tout va bien</string>
     <plurals name="pending_chat">
         <item quantity="one">Tu as 1 message non lu</item>
         <item quantity="other">Tu as %d messages non lus</item>

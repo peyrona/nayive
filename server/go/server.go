@@ -38,12 +38,14 @@ type Server struct {
 	convert   *Converter
 	office    *Office
 	static    *StaticFiles
-	chat      *ChatHub   // the Chat app's messenger (chat.go)
-	devices   *Devices   // the Android app's phones (devices.go)
-	downloads *Downloads // Drive's downloads under way (api_download.go)
-	mail      *MailHub   // the eMail app's accounts and unread counts (mail.go)
-	clientLog *ClientLog // errors the browsers send (api_clientlog.go)
-	ssh       *SSHHub    // the Admin panel's SSH tab (ssh_passkey.go, ssh_term.go)
+	chat      *ChatHub       // the Chat app's messenger (chat.go)
+	devices   *Devices       // the Android app's phones (devices.go)
+	downloads *Downloads     // Drive's downloads under way (api_download.go)
+	mail      *MailHub       // the eMail app's accounts and unread counts (mail.go)
+	clientLog *ClientLog     // errors the browsers send (api_clientlog.go)
+	ssh       *SSHHub        // the Admin panel's SSH tab (ssh_passkey.go, ssh_term.go)
+	loginPK   *LoginPasskeys // sign in with a passkey (login_passkey.go)
+	sos       *Sos           // SOS button and "no sign of life" alerts (sos.go)
 
 	httpd  *http.Server
 	scheme string // "http" or "https", decided at construction
@@ -95,6 +97,8 @@ func NewServer(cfg *Config, log Logger) (*Server, error) {
 		mail:      NewMailHub(cfg, users, push, log),
 		clientLog: NewClientLog(cfg.Here),
 		ssh:       NewSSHHub(cfg.ConfigDir),
+		loginPK:   NewLoginPasskeys(),
+		sos:       NewSos(cfg.ConfigDir, log),
 		scheme:    "http",
 	}
 	s.chat.Hook(s.devices)
@@ -244,6 +248,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("/api/whoami", s.apiWhoami)
 	mux.HandleFunc("/api/password", s.apiPassword)
 	mux.HandleFunc("/api/unlock", s.apiUnlock)          // the screen locker
+	mux.HandleFunc("/api/passkey/{what}", s.apiPasskey) // sign in with a passkey (login_passkey.go)
 	mux.HandleFunc("/api/culture/{what}", s.apiCulture) // the Salon locker's sources (api_culture.go)
 
 	// --- per-account settings ----------------------------------------------
@@ -274,6 +279,8 @@ func (s *Server) routes() http.Handler {
 	// --- the Android app's phones (devices.go) ------------------------------
 	mux.HandleFunc("/api/device", s.apiDevice)
 	mux.HandleFunc("/api/device/{rest...}", s.apiDevice)
+	mux.HandleFunc("/api/sos", s.apiSos) // SOS (sos.go)
+	mux.HandleFunc("/api/sos/{rest...}", s.apiSos)
 	mux.HandleFunc("/.well-known/assetlinks.json", s.assetLinks) // lets the app show Nayive full screen
 
 	// --- Chat: the owner signed in, a person by link (see api_chat.go) ----
@@ -283,6 +290,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("/api/chat/via/{owner}/{rest...}", s.apiChatVia)
 	mux.HandleFunc("/api/mail/{rest...}", s.apiMail)      // the eMail app (api_mail.go)
 	mux.HandleFunc("/api/calendar/{what}", s.apiCalendar) // the launcher's Planner count (api_calendar.go)
+	mux.HandleFunc("/api/search", s.apiSearchAll)         // the launcher's search: contacts, events, chats (search_all.go)
 	mux.HandleFunc("/api/c/{token}", s.apiChatGuest)
 	mux.HandleFunc("/api/c/{token}/{rest...}", s.apiChatGuest)
 	mux.HandleFunc("/c/{token}", s.chatGuestRedirect)

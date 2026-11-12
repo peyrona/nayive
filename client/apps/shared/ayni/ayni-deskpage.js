@@ -205,6 +205,7 @@
 
     function focus( w )
     {
+        if( deskHid ) { deskHid = null; paintDesk(); }     // a window coming forward ends "Show the desk"
         var back = w.el.hidden;     // brought back from the bar: it was minimised
         if( back ) w.el.hidden = false;
         w.el.style.zIndex = ++zTop;
@@ -227,6 +228,42 @@
         saveWins();
         retile();
     }
+
+    // SHOW THE DESK (2026-11-12) - every window out of the way at once, and a
+    // second press brings the same ones back, in the same order (the one in
+    // front last). Optional #deskBtn is its toggle (aria-pressed while on);
+    // showDesk( true / false / nothing = flip ) is the same from a page. A
+    // window brought forward any other way ends it (see focus). Windows that
+    // were minimised already stay minimised; a reload finds them all minimised.
+    var deskHid = null;     // the windows it hid, bottom first; null = off
+    var deskBtn = document.getElementById( 'deskBtn' );
+
+    function paintDesk() { if( deskBtn ) deskBtn.setAttribute( 'aria-pressed', deskHid ? 'true' : 'false' ); }
+
+    function showDesk( on )
+    {
+        if( on == null ) on = ! deskHid;
+        if( on && ! deskHid )
+        {
+            var up = wins.filter( function ( w ) { return ! w.el.hidden; } )
+                         .sort( function ( a, b ) { return +a.el.style.zIndex - +b.el.style.zIndex; } );
+            if( ! up.length ) return;     // nothing in the way
+            deskHid = up;
+            up.forEach( function ( w ) { w.el.hidden = true; } );
+            front = topmost();
+            paint();
+            saveWins();
+            retile();
+        }
+        else if( ! on && deskHid )
+        {
+            var back = deskHid;
+            deskHid = null;
+            back.forEach( function ( w ) { if( wins.indexOf( w ) >= 0 && w.el.hidden ) focus( w ); } );
+        }
+        paintDesk();
+    }
+    if( deskBtn ) deskBtn.addEventListener( 'click', function () { showDesk(); } );
 
     // An app with work not yet saved (Image; Write, Calc and Text keep theirs
     // first, shared/office.js) asks first: its window.ayniBeforeClose answers
@@ -1232,6 +1269,11 @@
         tick();
         placeMore();
     }
+    // SHOW THE CLOCK - off (set.clockOff) hides both clocks; its rows stay, greyed.
+    var clockChk = document.getElementById( 'setClock' ), clockRows = document.getElementById( 'clockRows' );
+    function clockShown() { clockChk.checked = ! set.clockOff; clockRows.inert = !! set.clockOff; }
+    clockShown();
+    clockChk.addEventListener( 'change', function () { set.clockOff = ! clockChk.checked; clockShown(); saveSet(); tick(); placeMore(); } );
     tz2On.addEventListener( 'change', saveTz2 );
     tz2Sel.addEventListener( 'ayni:change', saveTz2 );
     loadTz2();
@@ -1722,6 +1764,7 @@
     {
         clearTimeout( clockTimer );
         var now = new Date();
+        clock.hidden = !! set.clockOff;
         var head = [];
         if( set.dow !== 'none' ) head.push( dayName( now, set.dow ) );
         if( set.date )           head.push( isoDate( now ) );
@@ -1742,7 +1785,7 @@
     function zoneCity( z ) { return z.split( '/' ).pop().replace( /_/g, ' ' ); }
     function tick2( now )
     {
-        var z = set.tz2On && set.tz2;
+        var z = ! set.clockOff && set.tz2On && set.tz2;
         clock2.hidden = ! z;
         if( ! z ) return;
         var p = {};
@@ -2127,6 +2170,6 @@
     // narrow = null: looked at afresh, so a desk tiled upright and reloaded wide goes back to Free
     h.appsReady.then( function () { restoreWins(); narrow = null; upright(); } );
 
-        return { ICON_SCALE: ICON_SCALE, ICON_TILE: ICON_TILE, ICON_WIN: ICON_WIN, ROOT: ROOT, bar: bar, battEl: battEl, clock: clock, closeMore: closeMore, desk: desk, desktop: desktop, focus: focus, ghost: ghost, hookAlt: hookAlt, menu: menu, menuBtn: menuBtn, moreBtn: moreBtn, moreMenu: moreMenu, narrow: narrow, openApp: openApp, placeMore: placeMore, set: set, setTip: setTip, t: t, tasks: tasks, tile: tile, wins: wins, wxSvg: wxSvg };
+        return { showDesk: showDesk, ICON_SCALE: ICON_SCALE, ICON_TILE: ICON_TILE, ICON_WIN: ICON_WIN, ROOT: ROOT, bar: bar, battEl: battEl, clock: clock, closeMore: closeMore, desk: desk, desktop: desktop, focus: focus, ghost: ghost, hookAlt: hookAlt, menu: menu, menuBtn: menuBtn, moreBtn: moreBtn, moreMenu: moreMenu, narrow: narrow, openApp: openApp, placeMore: placeMore, set: set, setTip: setTip, t: t, tasks: tasks, tile: tile, wins: wins, wxSvg: wxSvg };
     };
 } )();

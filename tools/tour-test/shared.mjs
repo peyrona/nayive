@@ -38,9 +38,15 @@ ok( await picked( c ) === 0, "leaving «picked» lets the row go" );
 await key( c, "Escape" ); await tourGone( c );
 
 section( "SHARED STEPS · NARROW (buttons in the ⋮)" );
-await c.send( "Emulation.setDeviceMetricsOverride", { width: 330, height: 700, deviceScaleFactor: 1, mobile: false } );
-await c.until( "document.getElementById( 'dedupBtn' ).classList.contains( 'fit-out' ) || !! document.querySelector( '#dedupBtn' ).closest( '.fit-out' )", 3000 );
-ok( await c.evaluate( "!! document.querySelector( '#dedupBtn' ).closest( '.fit-out' )" ), "at 330 px the dedup button is in the ⋮" );
+// Narrower and narrower until fitBar moves the dedup button into the ⋮: the
+// width it takes depends on the header's other parts, not on this test.
+let narrow = 0;
+for( let w = 340; w >= 200 && ! narrow; w -= 10 )
+{
+    await c.send( "Emulation.setDeviceMetricsOverride", { width: w, height: 700, deviceScaleFactor: 1, mobile: false } );
+    if( await c.until( "!! document.querySelector( '#dedupBtn' ).closest( '.fit-out' )", 600 ) ) narrow = w;
+}
+ok( narrow > 0, "narrow enough, the dedup button goes into the ⋮", narrow );
 await runSteps( c, STEPS );
 const seen = await walk( c, "narrow", {
     5: s => s.inMenu && /dedupBtn/.test( s.lit ) && s.note.includes( "⋮" ) || "the ⋮ opens by itself and its row is lit" } );

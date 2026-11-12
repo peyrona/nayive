@@ -105,6 +105,9 @@ public class LinkService extends Service {
     private ConnectivityManager.NetworkCallback netCallback;
 
     private String version = "";
+    /** The last unlock (unix s), told in every wait: a sign of life for SOS (server/go/sos.go). */
+    static volatile long lastUnlock;
+    private android.content.BroadcastReceiver unlockReceiver;
     private int holdSeconds = 180;
     private Notes.Link shown;
     private boolean trackWanted;
@@ -133,6 +136,17 @@ public class LinkService extends Service {
             netCallback = null;
         }
 
+        unlockReceiver = new android.content.BroadcastReceiver() {
+            @Override
+            public void onReceive(Context c, Intent i) { lastUnlock = System.currentTimeMillis() / 1000; }
+        };
+        try {
+            ContextCompat.registerReceiver(this, unlockReceiver,
+                    new android.content.IntentFilter(Intent.ACTION_USER_PRESENT), ContextCompat.RECEIVER_NOT_EXPORTED);
+        } catch (RuntimeException e) {
+            unlockReceiver = null;
+        }
+
         alive = true;
         loop = new Thread(this::pollLoop, "nayive-link");
         loop.start();
@@ -155,6 +169,12 @@ public class LinkService extends Service {
         if (netCallback != null) {
             try {
                 getSystemService(ConnectivityManager.class).unregisterNetworkCallback(netCallback);
+            } catch (RuntimeException ignored) {
+            }
+        }
+        if (unlockReceiver != null) {
+            try {
+                unregisterReceiver(unlockReceiver);
             } catch (RuntimeException ignored) {
             }
         }
@@ -245,7 +265,8 @@ public class LinkService extends Service {
             try {
                 r = Api.get(this, "/api/device/wait?v=" + Uri.encode(version) + (ear != null ? "&ear=1" : "")
                                 + "&tz=" + Uri.encode(java.util.TimeZone.getDefault().getID())
-                                + "&lang=" + Uri.encode(java.util.Locale.getDefault().getLanguage()),
+                                + "&lang=" + Uri.encode(java.util.Locale.getDefault().getLanguage())
+                                + (lastUnlock > 0 ? "&unlock=" + lastUnlock : ""),
                         (holdSeconds + 30) * 1000);
             } catch (IOException e) {
                 failures++;
@@ -371,7 +392,7 @@ public class LinkService extends Service {
             newest = Math.max(newest, id);
             if (id <= last) continue;
             Notes.note(this, id, n.optString("title", "Nayive"), n.optString("body", ""),
-                    n.optString("tag", ""), n.optString("url", ""), n.optBoolean("quiet", false));
+                    n.optString("tag", ""), n.optString("url", ""), n.optBoolean("quiet", false), n.optBoolean("sos", false));
         }
         if (newest > last) Prefs.setLastNote(this, newest);
         if (newest > 0) {

@@ -398,28 +398,7 @@ func (h *MailHub) Contacts(user string) []MailContact {
 		return out
 	}
 	defer f.Close()
-	// the logical lines: a folded line (a space or tab first) goes on with
-	// the one before; so does the line after a QUOTED-PRINTABLE value that
-	// ends in "=" (vCard 2.1's soft break, Android's exports)
-	var lines []string
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 64<<10), 4<<20)
-	qpOpen := false
-	for sc.Scan() {
-		l := strings.TrimRight(sc.Text(), "\r")
-		switch {
-		case qpOpen && len(lines) > 0:
-			last := lines[len(lines)-1]
-			lines[len(lines)-1] = last[:len(last)-1] + strings.TrimLeft(l, " \t")
-		case (strings.HasPrefix(l, " ") || strings.HasPrefix(l, "\t")) && len(lines) > 0:
-			lines[len(lines)-1] += l[1:]
-		default:
-			lines = append(lines, l)
-		}
-		last := lines[len(lines)-1]
-		key, _, _ := strings.Cut(last, ":")
-		qpOpen = strings.Contains(strings.ToUpper(key), "QUOTED-PRINTABLE") && strings.HasSuffix(last, "=")
-	}
+	lines := vcardLines(f)
 	seen := map[string]bool{}
 	name := ""
 	var emails []string
@@ -458,6 +437,33 @@ func (h *MailHub) Contacts(user string) []MailContact {
 	}
 	sort.SliceStable(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
 	return out
+}
+
+// vcardLines are a vCard file's logical lines: a folded line (a space or tab
+// first) goes on with the one before; so does the line after a
+// QUOTED-PRINTABLE value that ends in "=" (vCard 2.1's soft break, Android's
+// exports). Mail's address book and the launcher's search (search_all.go).
+func vcardLines(f io.Reader) []string {
+	var lines []string
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64<<10), 4<<20)
+	qpOpen := false
+	for sc.Scan() {
+		l := strings.TrimRight(sc.Text(), "\r")
+		switch {
+		case qpOpen && len(lines) > 0:
+			last := lines[len(lines)-1]
+			lines[len(lines)-1] = last[:len(last)-1] + strings.TrimLeft(l, " \t")
+		case (strings.HasPrefix(l, " ") || strings.HasPrefix(l, "\t")) && len(lines) > 0:
+			lines[len(lines)-1] += l[1:]
+		default:
+			lines = append(lines, l)
+		}
+		last := lines[len(lines)-1]
+		key, _, _ := strings.Cut(last, ":")
+		qpOpen = strings.Contains(strings.ToUpper(key), "QUOTED-PRINTABLE") && strings.HasSuffix(last, "=")
+	}
+	return lines
 }
 
 // vcardDecode undoes a vCard 2.1 value's ENCODING=QUOTED-PRINTABLE (or the

@@ -38,6 +38,7 @@
     <string name="find_title">O Nayive está à tua procura</string>
     <string name="find_text">Alguém carregou em «Encontrar o meu telemóvel».</string>
     <string name="find_stop">Parar</string>
+    <string name="sos_ok">Estou bem</string>
     <plurals name="pending_chat">
         <item quantity="one">Tens 1 mensagem por ler</item>
         <item quantity="other">Tens %d mensagens por ler</item>

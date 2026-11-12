@@ -30,6 +30,12 @@ function pushNotice( d, def )
         o.requireInteraction = true;
         o.vibrate = [ 500, 250, 500, 250, 500 ];
     }
+    // An SOS alert or "Are you OK?" (server/go/sos.go): stays until tapped.
+    if( d.sos )
+    {
+        o.requireInteraction = true;
+        o.vibrate = [ 800, 300, 800, 300, 800, 300, 800 ];
+    }
     if( d.quiet ) o.silent = true;
     return o;
 }

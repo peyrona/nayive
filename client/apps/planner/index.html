@@ -47,7 +47,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-media.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-image.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-map.css">
-    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); var z = localStorage.getItem( 'ayni-text-size' ); if( z ) document.documentElement.style.fontSize = z + '%'; }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-icons-more.js" defer></script>
@@ -215,9 +215,14 @@
         // an expired session would render the login page inside each frame.
         function showFrames()
         {
+            // ?date=YYYY-MM-DD (the launcher's search, an event found) goes on
+            // to the calendar, which opens that day.
+            var day = new URLSearchParams( location.search ).get( 'date' );
             document.querySelectorAll( 'iframe[data-src]' ).forEach( function ( f )
             {
-                f.src = f.getAttribute( 'data-src' );
+                var src = f.getAttribute( 'data-src' );
+                if( day && /^\d{4}-\d{2}-\d{2}$/.test( day ) && f.id === 'calendarPane' ) src += '?date=' + day;
+                f.src = src;
             } );
         }
 
@@ -456,6 +461,7 @@
 
             var last = null;
             try { last = localStorage.getItem( TABKEY ); } catch( e ) {}
+            if( new URLSearchParams( location.search ).get( 'date' ) ) last = 'calendarPane';   // a day was asked (showFrames)
             showPane( PANES[ last ] ? last : 'calendarPane' );
         })();
     </script>

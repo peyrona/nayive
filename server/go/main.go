@@ -189,6 +189,7 @@ func main() {
 		server.push, server.trackers, log)
 	reminders.devices = server.devices // a phone with the app needs no "turn location on" alert
 	loops.Go(ctx, reminders.Run)
+	loops.Go(ctx, server.RunSos) // SOS: phone silent / not used (sos.go)
 
 	// Chat's auto-delete: messages older than each owner's "delete after N days".
 	loops.Go(ctx, server.chat.RunExpiry)

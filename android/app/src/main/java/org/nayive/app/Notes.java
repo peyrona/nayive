@@ -183,8 +183,12 @@ final class Notes {
      * reminder, new mail...). The tag is the Android tag too, so the same tag
      * replaces, as in the browser. Tapped: Nayive on that page.
      */
-    static void note(Context c, long id, String title, String body, String tag, String url, boolean quiet) {
+    static void note(Context c, long id, String title, String body, String tag, String url, boolean quiet, boolean sos) {
         if (tag.isEmpty()) tag = "n" + id;
+        if (sos) {
+            sosNote(c, id, title, body, tag, url);
+            return;
+        }
         Intent open = new Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.ORIGIN + (url.isEmpty() ? "/nayive/" : url)))
                 .setClass(c, Launcher.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         boolean chat = tag.startsWith("chat-") || tag.startsWith("call-");
@@ -199,6 +203,36 @@ final class Notes {
                 .setContentIntent(PendingIntent.getActivity(c, (int) (id ^ (id >>> 32)), open, IMMUTABLE))
                 .build();
         c.getSystemService(NotificationManager.class).notify(tag, NOTE, n);
+    }
+
+    /**
+     * An SOS alert from a contact, or "Are you OK?" (server/go/sos.go): an
+     * alarm that rings (Ringer.startSos) until Stop, the tap, or Ringer's cap.
+     */
+    static final String ASK = "sos-ask";   // server/go/sos.go's "Are you OK?"
+
+    private static void sosNote(Context c, long id, String title, String body, String tag, String url) {
+        // A tap only - never a full-screen intent: that opens Nayive by itself on a
+        // locked phone, which would stop the alarm and answer "Are you OK?" alone.
+        Intent open = new Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.ORIGIN + (url.isEmpty() ? "/nayive/" : url)))
+                .setClass(c, Launcher.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra(Launcher.EXTRA_SOS, tag);
+        PendingIntent stop = PendingIntent.getBroadcast(c, (int) (id ^ (id >>> 32)) + 1,
+                ActionReceiver.intent(c, ActionReceiver.STOP_SOS, tag), IMMUTABLE);
+        PendingIntent tap = PendingIntent.getActivity(c, (int) (id ^ (id >>> 32)), open, IMMUTABLE);
+        Notification n = new NotificationCompat.Builder(c, NayiveApp.CH_FIND)
+                .setSmallIcon(R.drawable.ic_stat)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setAutoCancel(true)
+                .setContentIntent(tap)
+                .addAction(0, c.getString(ASK.equals(tag) ? R.string.sos_ok : R.string.find_stop), stop)
+                .build();
+        c.getSystemService(NotificationManager.class).notify(tag, NOTE, n);
+        Ringer.startSos(c, tag);
     }
 
     /** Nothing unread any more: the chat notes go too (read on another device). */

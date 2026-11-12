@@ -30,7 +30,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-2a678e6a803b";
+var CACHE_VERSION = "nayive-4ace5ccfa3fb";
 /* @end */
 
 /* @generated:precache */
@@ -246,17 +246,26 @@ var PRECACHE_SHELL = [
     "shared/ayni/i18n/fr.json",
     "shared/ayni/i18n/pt.json",
     "shared/ayni/tz-geo.json",
+    "shared/file-kinds.js",
     "shared/i18n.js",
     "shared/i18n/de.json",
     "shared/i18n/en.json",
     "shared/i18n/es.json",
     "shared/i18n/fr.json",
     "shared/i18n/pt.json",
+    "shared/launcher-bar.js",
+    "shared/launcher-search.css",
+    "shared/launcher-search.js",
     "shared/locker.js",
     "shared/lockers/culture-settings.js",
     "shared/lockers/culture.js",
     "shared/lockers/science.js",
+    "shared/login-passkeys.js",
     "shared/media.js",
+    "shared/notes.css",
+    "shared/notes.js",
+    "shared/sos.css",
+    "shared/sos.js",
     "shared/theme.css",
     "shared/ui.js",
     "split/icons/icon-192.png",

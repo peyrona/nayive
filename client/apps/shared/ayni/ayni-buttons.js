@@ -33,15 +33,18 @@ const initAlt = (b) => {
   b.setAttribute('aria-description', `Shift+Enter: ${alt}`);
   b.style.setProperty('--hold-ms', HOLD_MS + 'ms');
   const run = (second) => fire(b, 'ayni:press', { second, label: second ? alt : base });
-  let timer, held = false;
-  const cancel = () => { clearTimeout(timer); b.classList.remove('holding'); };
+  let timer, held = false, t0 = 0;
+  const hold = () => { if (held || !t0) return; clearTimeout(timer); held = true; t0 = 0; b.classList.remove('holding'); navigator.vibrate?.(15); run(true); };
+  /* A finger that stays down past HOLD_MS always gets the second action, even when the browser ends the touch first
+     (its own long press: pointercancel, or contextmenu) or lifts it before the timer ran */
+  const end = (e) => { if (!held && t0 && (e.type === 'contextmenu' || performance.now() - t0 >= HOLD_MS)) hold(); else { clearTimeout(timer); t0 = 0; b.classList.remove('holding'); } };
   b.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && !isTouch()) return;
-    held = false; b.classList.add('holding');
-    timer = setTimeout(() => { held = true; b.classList.remove('holding'); navigator.vibrate?.(15); run(true); }, HOLD_MS);
+    held = false; t0 = performance.now(); b.classList.add('holding');
+    clearTimeout(timer); timer = setTimeout(hold, HOLD_MS);
   });
-  ['pointerup', 'pointerleave', 'pointercancel'].forEach((t) => b.addEventListener(t, cancel));
-  b.addEventListener('contextmenu', (e) => e.preventDefault());
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach((t) => b.addEventListener(t, end));
+  b.addEventListener('contextmenu', (e) => { e.preventDefault(); end(e); });
   /* With a mouse, a single click waits DBL_MS to see whether a second click follows; a double-click runs only the
      second action. Taps (touch) and Enter/Space (detail 0) act at once. */
   let clickTimer;

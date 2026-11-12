@@ -9,6 +9,7 @@ public class ActionReceiver extends BroadcastReceiver {
 
     static final String DECLINE = "org.nayive.app.DECLINE";
     static final String STOP_FIND = "org.nayive.app.STOP_FIND";
+    static final String STOP_SOS = "org.nayive.app.STOP_SOS";
 
     static Intent intent(Context c, String action, String id) {
         return new Intent(action).setClass(c, ActionReceiver.class).putExtra("id", id);
@@ -21,6 +22,8 @@ public class ActionReceiver extends BroadcastReceiver {
             Actions.decline(c, id);
         } else if (STOP_FIND.equals(i.getAction())) {
             Actions.stopFind(c, id);
+        } else if (STOP_SOS.equals(i.getAction())) {
+            Actions.stopSos(c, id);
         }
     }
 }

@@ -46,6 +46,7 @@
     <string name="find_title">Nayive te está buscando</string>
     <string name="find_text">Alguien ha pulsado «Buscar mi móvil».</string>
     <string name="find_stop">Parar</string>
+    <string name="sos_ok">Estoy bien</string>
 
     <plurals name="pending_chat">
         <item quantity="one">Tienes 1 mensaje sin leer</item>

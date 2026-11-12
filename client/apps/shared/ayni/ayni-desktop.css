@@ -28,6 +28,14 @@ html.touch .desktop { --taskbar: max(56px, var(--bar-h, 48px)); }
 .taskbar > .chips { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 0; overflow: auto; padding: 2px;
   border: 0; background: none; border-radius: 0; flex-wrap: nowrap; scrollbar-width: thin; }
 .taskbar > .widgets { flex: none; display: flex; align-items: center; gap: 4px; }
+/* A .btn-pair on the bar is as tall as a window's chip (its 1 px frame included); at a side it stands upright, as wide
+   as a chip (see .btn-pair.vertical in ayni-buttons.css). */
+.taskbar .btn-pair > .btn { width: 34px; height: calc(var(--taskbar) - 16px); }
+.taskbar .btn-pair .icon { --icon: 16px; }
+.desktop:is([data-edge="left"], [data-edge="right"]) .taskbar .btn-pair > .btn { width: calc(var(--taskbar) - 16px); height: 30px; }
+.desktop:is([data-edge="left"], [data-edge="right"]) .taskbar .btn-pair { flex-direction: column; }
+.desktop:is([data-edge="left"], [data-edge="right"]) .taskbar .btn-pair > .btn { border-radius: 999px 999px 0 0; }
+.desktop:is([data-edge="left"], [data-edge="right"]) .taskbar .btn-pair > .btn + .btn { border-radius: 0 0 999px 999px; border-left: 0; border-top: 1px solid var(--line); }
 .desktop:is([data-edge="left"], [data-edge="right"]) .taskbar > :is(.chips, .widgets) { flex-direction: column; width: 100%; }
 /* A scrollbar has no room in a bar that narrow: it would push the chips off it. The wheel or a finger moves the column */
 .desktop:is([data-edge="left"], [data-edge="right"]) .taskbar > .chips { scrollbar-width: none; }

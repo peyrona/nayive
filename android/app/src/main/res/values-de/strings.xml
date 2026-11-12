@@ -38,6 +38,7 @@
     <string name="find_title">Nayive sucht dich</string>
     <string name="find_text">Jemand hat „Mein Handy suchen“ gedrückt.</string>
     <string name="find_stop">Stopp</string>
+    <string name="sos_ok">Alles gut</string>
     <plurals name="pending_chat">
         <item quantity="one">Du hast 1 ungelesene Nachricht</item>
         <item quantity="other">Du hast %d ungelesene Nachrichten</item>

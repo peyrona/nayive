@@ -39,7 +39,7 @@
     <link rel="stylesheet" href="shared/ayni/ayni-media.css">
     <link rel="stylesheet" href="shared/ayni/ayni-image.css">
     <link rel="stylesheet" href="shared/ayni/ayni-map.css">
-    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); var z = localStorage.getItem( 'ayni-text-size' ); if( z ) document.documentElement.style.fontSize = z + '%'; }catch( e ){}</script>
     <script src="shared/ayni/ayni-icons.js" defer></script>
     <script src="shared/ayni/ayni-base.js" defer></script>
     <script src="shared/ayni/ayni-icons-more.js" defer></script>
@@ -52,6 +52,7 @@
     <script src="shared/ayni/ayni-buttons.js" defer></script>
     <script src="shared/ayni/ayni-toasts.js" defer></script>
     <script src="shared/ayni/ayni-dialogs.js" defer></script>
+    <script src="shared/ayni/ayni-passkey.js" defer></script>
     <script src="shared/ayni/ayni-menus.js" defer></script>
     <script src="shared/ayni/ayni-search.js" defer></script>
     <script src="shared/ayni/ayni-lists.js" defer></script>
@@ -67,7 +68,7 @@
         html, body { height: 100%; }
         body
         {
-            font-size: 15px; line-height: 1.5;
+            font-size: .9375rem; line-height: 1.5;
             display: flex; align-items: center; justify-content: center; padding: 20px;
         }
         .card
@@ -115,6 +116,13 @@
         {
             color: var(--danger); font-size: 0.88rem; margin: 0; line-height: 1.3;
         }
+        /* Sign in with a passkey: Ayni's text button, under the form (undoes the
+           round arrow's look above). Shown only where the browser has passkeys. */
+        .card .pk-btn
+        {
+            width: 100%; height: auto; margin: 16px 0 0; border-radius: var(--radius);
+            color: var(--text); background: transparent; gap: 8px;
+        }
     </style>
 </head>
 <body>
@@ -127,7 +135,7 @@
         <p class="warn-box" id="notMine" role="alert" data-i18n="login.notMine" hidden></p>
 
         <label for="user" data-i18n="login.user"></label>
-        <input class="input" id="user" name="user" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+        <input class="input" id="user" name="user" type="text" autocomplete="username webauthn" autocapitalize="none" autocorrect="off" spellcheck="false" required>
 
         <label for="password" data-i18n="login.password"></label>
         <div class="input-group">
@@ -146,6 +154,10 @@
                 <span class="icon" data-icon="play-solid"></span>
             </button>
         </div>
+
+        <button type="button" class="btn text bordered pk-btn" id="pkBtn" hidden>
+            <span class="icon" data-icon="key"></span><span class="label" data-i18n="login.passkey"></span>
+        </button>
     </form>
 
     <script>
@@ -239,6 +251,39 @@
                 return path && q ? path + '?' + q : '/nayive/';
             }
 
+            // Signed in (by password or passkey): the marks this browser keeps,
+            // then on to the right page.
+            function goIn( info, remember )
+            {
+                // The launcher checks this device's notifications once
+                // after each sign-in (see "after each login" there).
+                if( info.role !== 'admin' )
+                    try { sessionStorage.setItem( 'nayive-just-in', '1' ); } catch ( e ) {}
+                // A password change elsewhere may have dropped this
+                // device's push: the launcher's next load registers it
+                // again, even when this sign-in goes straight to Chat.
+                try { localStorage.removeItem( 'nayive-push-note' ); } catch ( e ) {}
+                // Never for the admin: its session is never wiped
+                // (api_auth.go apiLogout), so it leaves the mark as it
+                // was - another account's unsent saves may be here.
+                if( info.role !== 'admin' )
+                    try
+                    {
+                        if( remember ) localStorage.removeItem( 'nayive-shared' );
+                        else           localStorage.setItem( 'nayive-shared', '1' );
+                    }
+                    catch ( e ) {}
+                // No password yet: the launcher (never the big-screen
+                // desktop, whose apps the server now refuses) asks for one.
+                try
+                {
+                    if( info.must_set_password ) sessionStorage.setItem( 'nayive-must-set', '1' );
+                    else                         sessionStorage.removeItem( 'nayive-must-set' );
+                }
+                catch ( e ) {}
+                location.href = returnTo( info );
+            }
+
             form.addEventListener( 'submit', async function ( ev )
             {
                 ev.preventDefault();
@@ -264,34 +309,7 @@
 
                     if( res.ok )
                     {
-                        var info = await res.json().catch( function () { return {}; } );
-                        // The launcher checks this device's notifications once
-                        // after each sign-in (see "after each login" there).
-                        if( info.role !== 'admin' )
-                            try { sessionStorage.setItem( 'nayive-just-in', '1' ); } catch ( e ) {}
-                        // A password change elsewhere may have dropped this
-                        // device's push: the launcher's next load registers it
-                        // again, even when this sign-in goes straight to Chat.
-                        try { localStorage.removeItem( 'nayive-push-note' ); } catch ( e ) {}
-                        // Never for the admin: its session is never wiped
-                        // (api_auth.go apiLogout), so it leaves the mark as it
-                        // was - another account's unsent saves may be here.
-                        if( info.role !== 'admin' )
-                            try
-                            {
-                                if( remember ) localStorage.removeItem( 'nayive-shared' );
-                                else           localStorage.setItem( 'nayive-shared', '1' );
-                            }
-                            catch ( e ) {}
-                        // No password yet: the launcher (never the big-screen
-                        // desktop, whose apps the server now refuses) asks for one.
-                        try
-                        {
-                            if( info.must_set_password ) sessionStorage.setItem( 'nayive-must-set', '1' );
-                            else                         sessionStorage.removeItem( 'nayive-must-set' );
-                        }
-                        catch ( e ) {}
-                        location.href = returnTo( info );
+                        goIn( await res.json().catch( function () { return {}; } ), remember );
                         return;
                     }
 
@@ -306,6 +324,60 @@
                 submit.disabled = false;
                 document.getElementById( 'password' ).value = '';
                 document.getElementById( 'password' ).focus();
+            } );
+
+            // SIGN IN WITH A PASSKEY (server/go/login_passkey.go). No name typed:
+            // the device lists its own Nayive passkeys, the server learns who
+            // from the one picked. The password stays the way in without one.
+            // Where the browser can, the name field's autofill list offers them
+            // too ("conditional"); the button stops that wait first.
+            var pkBtn = document.getElementById( 'pkBtn' ), pkWait = null;
+
+            async function passkey( conditional )
+            {
+                if( pkWait ) pkWait.abort();
+                var wait = pkWait = new AbortController();
+                try
+                {
+                    await leftovers;
+                    var post = function ( what, body )
+                    {
+                        return fetch( '/api/passkey/' + what, { method: 'POST', credentials: 'same-origin',
+                            headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( body ) } );
+                    };
+                    var res = await post( 'login-begin', {} );
+                    if( ! res.ok ) throw new Error( Ayni.t( 'login.failed' ) );
+                    var b = await res.json();
+                    var got = await AyniPasskey.get( { challenge: AyniPasskey.bytes( b.challenge ), rpId: b.rp_id,
+                        mediation: conditional ? 'conditional' : undefined, signal: wait.signal } );
+                    if( ! conditional ) pkBtn.disabled = true;
+                    errBox.textContent = '';
+                    var r = got.cred.response, remember = document.getElementById( 'remember' ).checked;
+                    res = await post( 'login', { nonce: b.nonce, id: got.id, user_handle: got.userHandle, remember: remember,
+                        client_data: AyniPasskey.b64u( r.clientDataJSON ), auth_data: AyniPasskey.b64u( r.authenticatorData ),
+                        signature: AyniPasskey.b64u( r.signature ) } );
+                    if( res.ok ) { goIn( await res.json().catch( function () { return {}; } ), remember ); return; }
+                    throw new Error( Ayni.t( res.status === 401 ? 'login.passkeyRefused' : 'login.failed' ) );
+                }
+                catch ( e )
+                {
+                    if( wait.signal.aborted ) return;              // the button took over
+                    if( ! conditional ) errBox.textContent = ( e && e.message ) || Ayni.t( 'login.noServer' );
+                }
+                finally { pkBtn.disabled = false; }
+            }
+
+            window.addEventListener( 'DOMContentLoaded', function ()
+            {
+                if( ! window.AyniPasskey || ! AyniPasskey.supported() ) return;
+                pkBtn.hidden = false;
+                pkBtn.addEventListener( 'click', function () { passkey( false ); } );
+                try
+                {
+                    if( PublicKeyCredential.isConditionalMediationAvailable )
+                        PublicKeyCredential.isConditionalMediationAvailable().then( function ( ok ) { if( ok ) passkey( true ); }, function () {} );
+                }
+                catch ( e ) {}
             } );
         } )();
     </script>

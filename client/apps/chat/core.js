@@ -495,7 +495,16 @@
     };
 
     // A text without its marks (marks.js), for one-line places.
-    C.stripMarks = function ( text ) { return text ? window.Ayni.marks.strip( text ) : ""; };
+    // A translated text's original follows this (an invisible separator after
+    // a line break; compose.js translateSend): one-line places show the
+    // translation only.
+    C.ORIG = "\n⁣";
+    C.stripMarks = function ( text )
+    {
+        if( ! text ) return "";
+        var cut = text.indexOf( C.ORIG );
+        return window.Ayni.marks.strip( cut < 0 ? text : text.slice( 0, cut ) );
+    };
 
     C.convOf = function ( id )
     {

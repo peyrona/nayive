@@ -87,22 +87,7 @@ func (s *Server) apiLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	unlock()
 
-	if role == "user" { // make sure data/ and files/ exist
-		s.ensureHome(user)
-	}
-
-	ttl := s.cfg.SessionTTL
-	if creds.Remember {
-		ttl = s.cfg.RememberTTL
-	}
-	token := s.sessions.Create(user, role, ttl, creds.Remember)
-	// r.TLS is nil on a plain HTTP connection - that is the "is this secure?"
-	// test, and it decides whether the cookie gets "; Secure".
-	w.Header().Set("Set-Cookie", sessionCookieHeader(token, ttl, creds.Remember, r.TLS != nil))
-	w.Header().Add("Set-Cookie", whoCookieHeader(role, user, ttl, creds.Remember, r.TLS != nil))
-	s.setWasCookie(w, r, role, user, ttl, creds.Remember)
-
-	s.log.Info("login ok", "user", user, "role", role, "remember", creds.Remember)
+	s.signIn(w, r, user, role, creds.Remember, "password")
 
 	if isForm { // where login.html's script goes (its returnTo)
 		if role == "admin" {
@@ -117,6 +102,28 @@ func (s *Server) apiLogin(w http.ResponseWriter, r *http.Request) {
 		body["must_set_password"] = true
 	}
 	sendJSON(w, r, http.StatusOK, body)
+}
+
+// signIn starts the session of a person just proved to be `user` (by a
+// password, or a passkey: login_passkey.go): the home folders, the session,
+// its three cookies and the log line. The caller writes the answer.
+func (s *Server) signIn(w http.ResponseWriter, r *http.Request, user, role string, remember bool, how string) {
+	if role == "user" { // make sure data/ and files/ exist
+		s.ensureHome(user)
+	}
+
+	ttl := s.cfg.SessionTTL
+	if remember {
+		ttl = s.cfg.RememberTTL
+	}
+	token := s.sessions.Create(user, role, ttl, remember)
+	// r.TLS is nil on a plain HTTP connection - that is the "is this secure?"
+	// test, and it decides whether the cookie gets "; Secure".
+	w.Header().Set("Set-Cookie", sessionCookieHeader(token, ttl, remember, r.TLS != nil))
+	w.Header().Add("Set-Cookie", whoCookieHeader(role, user, ttl, remember, r.TLS != nil))
+	s.setWasCookie(w, r, role, user, ttl, remember)
+
+	s.log.Info("login ok", "user", user, "role", role, "remember", remember, "with", how)
 }
 
 // apiLogout drops the session, clears the cookie and sends the browser to the

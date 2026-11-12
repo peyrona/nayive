@@ -646,7 +646,17 @@
     // lists), its links made clickable, and a search hit marked. Text nodes
     // only, never HTML. No line break is kept just before or after a list:
     // the list is a block already.
+    // A text sent translated (the Send menu's "Translate and send") carries
+    // its original after C.ORIG: drawn under the translation, smaller.
     C.textNodes = function ( el, text )
+    {
+        var cut = text.indexOf( C.ORIG );
+        if( cut < 0 ) return marked( el, text );
+        marked( el, text.slice( 0, cut ) );
+        el.appendChild( marked( h( "div", { class: "orig" } ), text.slice( cut + C.ORIG.length ) ) );
+    };
+
+    function marked( el, text )
     {
         var m = S.searching && Ayni.matcher( S.searching.q ), q = m ? m.terms.map( Ayni.fold ) : [];
         window.Ayni.marks.parse( text ).forEach( function ( bl )
@@ -664,7 +674,8 @@
                 runs( el, ln, ln.runs, q );
             } );
         } );
-    };
+        return el;
+    }
 
     function runs( el, ln, list, q )
     {

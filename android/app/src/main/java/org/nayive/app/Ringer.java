@@ -29,7 +29,9 @@ final class Ringer {
 
     private Ringer() {}
 
-    static final int NONE = 0, CALL = 1, FIND = 2;
+    static final int NONE = 0, CALL = 1, FIND = 2, SOS = 3;
+    static final long SOS_RING_MS = 2 * 60_000L;   // an SOS alarm stops by itself after this
+    private static final android.os.Handler later = new android.os.Handler(android.os.Looper.getMainLooper());
 
     private static MediaPlayer player;
     private static Vibrator vibrator;
@@ -73,6 +75,15 @@ final class Ringer {
         }
         play(c, RingtoneManager.TYPE_ALARM, AudioAttributes.USAGE_ALARM);
         vibrate(c, new long[]{0, 600, 400}, true);
+    }
+
+    /** An SOS alert or "Are you OK?": the alarm, like a find, for SOS_RING_MS at most. */
+    static void startSos(Context c, String tag) {
+        if (kind == CALL) return;   // never over a call
+        startFind(c, tag);
+        kind = SOS;
+        later.removeCallbacksAndMessages(null);
+        later.postDelayed(() -> { if (kind == SOS && id.equals(tag)) stop(c); }, SOS_RING_MS);
     }
 
     static void stop(Context c) {

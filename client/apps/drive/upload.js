@@ -181,9 +181,8 @@ function settleReplace( choice )
 // pushes a notification when it is done; meanwhile the row shows "En
 // cola" / "Convirtiendo… 42 %".
 
-// Keep the same list as convertExts in server/go/convert.go.
-const CONVERT_EXT = [ 'avi', 'divx', 'wmv', 'asf', 'flv', 'f4v', 'mpg', 'mpeg', 'vob',
-                      'ts', 'm2ts', 'mts', '3gp', 'rm', 'rmvb', 'ogm', 'mkv', 'mov' ];
+// The list is shared/file-kinds.js's (the same as convertExts in server/go/convert.go).
+const CONVERT_EXT = NayiveKinds.CONVERT_EXT;
 
 function isConvertible( path )
 {

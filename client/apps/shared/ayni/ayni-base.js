@@ -277,10 +277,25 @@ const theme = {
   get schemes() { return readJson(SCHEMES_KEY); },
   set schemes(d) { writeKey(SCHEMES_KEY, d == null ? null : JSON.stringify(d)); applyTheme(); },
 };
+/* ---------- Text size ----------
+   One size for every page of the site, on this device: 'ayni-text-size' holds a percent of the browser's own size
+   (no value = 100). It sets the font-size of <html>, so every rem grows with it; px stays as it is (a document's own
+   paper, a grid's cells). The one-line <head> script of the page sets it too, before the first paint. A change
+   reaches the other tabs and the desktop's windows through the 'storage' event, and fires ayni:textsize { size }. */
+const TEXT_KEY = 'ayni-text-size', TEXT_SIZES = [90, 100, 115, 130, 150];
+const textSize = () => { const n = Number(readKey(TEXT_KEY)); return TEXT_SIZES.includes(n) ? n : 100; };
+const applyTextSize = () => { const n = textSize(); document.documentElement.style.fontSize = n === 100 ? '' : n + '%'; };
+const setTextSize = (n) => {
+  n = Number(n);
+  writeKey(TEXT_KEY, TEXT_SIZES.includes(n) && n !== 100 ? String(n) : null);
+  applyTextSize(); fire(document, 'ayni:textsize', { size: textSize() });
+};
+
 const initTheme = () => {
-  applyTheme(); sunTick();
+  applyTheme(); sunTick(); applyTextSize();
   darkMq.addEventListener('change', applyTheme);
   addEventListener('storage', (e) => {
+    if (e.key === TEXT_KEY) { applyTextSize(); fire(document, 'ayni:textsize', { size: textSize() }); }
     if (e.key === THEME_KEY || e.key === SCHEMES_KEY) applyTheme();
     if (e.key === SUN_KEY || e.key === PLACE_KEY) { applyTheme(); sunTick(); }
   });
@@ -302,7 +317,7 @@ const supported = () => {
 
 /* ---------- Touch ---------- */
 /* Browsers can't read the system double-click time, so a fixed 250 ms window is used */
-const HOLD_MS = 500, DBL_MS = 250, coarse = matchMedia('(pointer: coarse)');
+const HOLD_MS = 400, DBL_MS = 250, coarse = matchMedia('(pointer: coarse)');
 let touchPreview = false;
 const isTouch = () => coarse.matches || touchPreview;
 /* html.touch marks a touch device; every touch rule follows it. ayni:touch on document tells the families it changed */
@@ -440,7 +455,8 @@ if (embedded && !windowed) try {
 const owner = () => { try { if (embedded && window.top.location.pathname) return window.top; } catch { /* foreign */ } return window; };
 
 Object.assign(window.Ayni ??= {}, {
-  version: '0.2.0', init, $, $$, icon, setIcon, isDark, setTheme, theme, supported, frame: { embedded, windowed, owner }, isTouch, setTouchPreview, setTip, fold, matcher,
+  version: '0.2.0', init, $, $$, icon, setIcon, isDark, setTheme, theme, supported,
+  textSize: { get: textSize, set: setTextSize, sizes: TEXT_SIZES }, frame: { embedded, windowed, owner }, isTouch, setTouchPreview, setTip, fold, matcher,
   icons: { use: useIcons, add: addIcons, names: ICONS, get set() { return iconSet; } },
   /* For Ayni's own family files */
   core: { fire, wired, once, each, tx, txf, LOCALE, iconName, drawIcons, family, isRO, layer, isTouch, HOLD_MS, DBL_MS, retip, fold },

@@ -419,6 +419,7 @@ func (s *Server) adminRenameUser(w http.ResponseWriter, r *http.Request, body *a
 		s.trackers.RenameUser(oldName, newName) // their location URL keeps working
 		s.chat.RenameUser(oldName, newName)     // read again under the new name; others' contacts follow
 		s.devices.RenameUser(oldName, newName)  // their phones keep working
+		s.sos.RenameUser(oldName, newName)      // their SOS settings, and as others' contact
 		s.convert.RenameUser(oldName, newName)  // their queued videos still convert
 		s.log.Info("user renamed", "from", oldName, "to", newName)
 		sendJSON(w, r, http.StatusOK,
@@ -468,6 +469,7 @@ func (s *Server) adminDeleteUser(w http.ResponseWriter, r *http.Request, body *a
 	s.trackers.DropUser(name) // their location URL
 	s.chat.DeleteUser(name)   // their chat links; others' chats with them end
 	s.devices.DropUser(name)  // their phones' tokens die
+	s.sos.DropUser(name)      // their SOS settings, and as others' contact
 	if removed != nil {
 		s.log.Error("cannot delete a user's home", "name", name, "err", removed)
 		sendError(w, r, http.StatusInternalServerError, "no se pudo borrar todo el usuario")

@@ -1,0 +1,44 @@
+/* SOS (shared/sos.js): the red button, the red screen, the settings dialog. */
+
+/* first in the launcher's top row, at its left end */
+#lsBox > .sos-btn
+{
+    order: -1; margin-right: auto; flex: none;
+    min-width: 56px; min-height: 44px; padding: 0 12px;
+    background: #d32f2f; color: #fff; border-color: #b71c1c;
+    font-weight: 800; letter-spacing: 1px; font-size: 1rem;
+}
+#lsBox > .sos-btn:hover, #lsBox > .sos-btn:focus-visible { background: #b71c1c; color: #fff; }
+#lsBox > .sos-btn[hidden] { display: none; }
+html.ls-top #lsBox > .sos-btn { width: auto; }
+
+/* My account's header: the way into the settings */
+#pwBackdrop > header .sos-set { color: #d32f2f; font-weight: 800; font-size: 0.8rem; padding: 0 8px; }
+
+/* the full-screen red panel: countdown, result, a contact's alert */
+.sos-screen
+{
+    position: fixed; inset: 0; z-index: 100000;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    padding: 24px 16px; box-sizing: border-box; overflow-y: auto;
+    background: #b71c1c; color: #fff; text-align: center;
+}
+.sos-screen.test { background: #6d4c41; }
+.sos-screen h2 { margin: 0; font-size: 1.8rem; }
+.sos-count { font-size: 6rem; font-weight: 800; line-height: 1; }
+.sos-msg { margin: 0; font-size: 1.1rem; max-width: 30em; }
+.sos-to { font-size: 1.1rem; margin: 4px 0; }
+.sos-acts { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin-top: 10px; }
+.sos-acts .btn
+{
+    min-width: 140px; min-height: 64px; padding: 0 22px;
+    font-size: 1.3rem; font-weight: 700; border-radius: 14px; text-decoration: none;
+}
+.sos-acts .sos-cancel { background: #fff; color: #b71c1c; border-color: #fff; }
+.sos-acts .sos-now { background: transparent; color: #fff; border: 2px solid #fff; }
+
+/* settings */
+.sos-contact { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
+.sos-hours { width: 5em; }
+.sos-quiet { display: inline-flex; align-items: center; gap: 6px; }
+.sos-quiet .input { width: 8.5em; }

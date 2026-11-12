@@ -82,7 +82,8 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-image.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-map.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-deskpage.css">
-    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); }catch( e ){}</script>
+    <link rel="stylesheet" href="../shared/notes.css">
+    <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); var z = localStorage.getItem( 'ayni-text-size' ); if( z ) document.documentElement.style.fontSize = z + '%'; }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
     <script src="../shared/ayni/ayni-base.js" defer></script>
     <script src="../shared/ayni/ayni-icons-more.js" defer></script>
@@ -106,6 +107,7 @@
     <script src="../shared/ayni/ayni-locker.js"></script>
     <script src="../shared/ui.js" defer></script>
     <script src="../shared/ayni/ayni-store.js" defer></script>
+    <script src="../shared/notes.js" defer></script>
     <script>
         if( 'serviceWorker' in navigator )
             window.addEventListener( 'load', function () { navigator.serviceWorker.register( '../sw.js' ).catch( function () {} ); } );
@@ -119,12 +121,18 @@
 </head>
 <body>
     <div class="desktop" id="desktop" data-edge="bottom" data-mode="app">
-        <main class="area desk" id="desk"><div class="desk-empty"></div><div class="snap-ghost" id="snapGhost" hidden></div></main>
+        <main class="area desk" id="desk"><div class="desk-empty"></div><!-- NOTES (shared/notes.js): sticky notes on the wallpaper, under the windows. --><div class="notes-layer" id="notesLayer"></div><div class="snap-ghost" id="snapGhost" hidden></div></main>
 
         <nav class="taskbar" id="bar" data-i18n-attr="aria-label:ayni.desk.taskbar">
             <button class="btn" id="menuBtn" data-i18n-attr="data-tip:ui.toApps" data-tip="Apps"><img src="../icons/icon-192.png" alt=""></button>
             <div class="chips" id="tasks" role="group" data-i18n-attr="aria-label:desktop.switchWin"></div>
             <div class="widgets">
+            <!-- NOTES (2026-11-12) - two plain icon buttons, like the row's others: show the desk (every
+                 window out of the way, a second press brings them back; ayni-deskpage.js SHOW THE DESK), a new note. -->
+            <div class="notes-pair" id="notesPair" role="group" data-i18n-attr="aria-label:notes.title">
+                <button class="btn" id="deskBtn" type="button" aria-pressed="false" data-i18n-attr="data-tip:desktop.showDesk, aria-label:desktop.showDesk"><span class="icon" data-icon="show-desk"></span></button>
+                <button class="btn" id="noteNewBtn" type="button" data-i18n-attr="data-tip:notes.new, aria-label:notes.new"><span class="icon" data-icon="plus"></span></button>
+            </div>
             <!-- COUNTDOWNS - one chip each (see THE COUNTDOWNS), cloned from cdTpl. -->
             <span id="cds"></span>
             <template id="cdTpl"><div class="widget cd-chip" role="group"><button class="cd-main" type="button"><b></b><span class="cd-text"></span></button><button class="btn cd-pp" type="button" data-cd="pp"></button><button class="btn cd-stop" type="button" data-cd="stop"></button><button class="btn cd-x" type="button" data-cd="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button></div></template>
@@ -181,6 +189,9 @@
             <label class="switch end"><span class="icon" data-icon="window-scale"></span><span data-i18n="desktop.scaleNew"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.scaleNewInfo"></span><input role="switch" type="checkbox" id="scaleNewChk"></label>
             <!-- THE CLOCK - what it shows beside the time (see THE CLOCK). -->
             <h4 data-i18n="desktop.tabClock"></h4>
+            <!-- SHOW THE CLOCK - set.clockOff (2026-11-12): off hides both clocks and greys the rows below. -->
+            <label class="switch end"><span data-i18n="desktop.showClock"></span><input role="switch" type="checkbox" id="setClock"></label>
+            <div id="clockRows">
             <div class="set-row"><label for="setDow" data-i18n="desktop.weekday"></label>
                 <div class="picker" id="setDow"><input type="hidden" value="none"><div class="panel popup picker-pop" popover="manual"><ul role="listbox"><li role="option" data-value="none" data-i18n="desktop.weekdayNone"></li><li role="option" data-value="short" data-i18n="desktop.weekdayShort"></li><li role="option" data-value="long" data-i18n="desktop.weekdayLong"></li></ul></div></div></div>
             <label class="switch end"><span data-i18n="desktop.showDate"></span><input role="switch" type="checkbox" id="setDate"></label>
@@ -189,6 +200,7 @@
             <label class="switch end"><span data-i18n="desktop.clock2"></span><input role="switch" type="checkbox" id="setTz2On"></label>
             <div class="set-row" id="tz2Wrap" hidden><label for="setTz2" data-i18n="desktop.clock2Zone"></label>
                 <div class="picker" id="setTz2" data-picker="filter"></div></div>
+            </div>
             <!-- THE BAR - its side of the screen and its height (its width when at a side). -->
             <h4 data-i18n="desktop.tabDesktop"></h4>
             <div class="set-row"><label for="setBar" data-i18n="desktop.barPos"></label>
@@ -383,6 +395,15 @@
 
     var menuFrame = null, menuAuto = false;
 
+    // The notes buttons (show the desk, a new note) live in the menu's top row
+    // (2026-11-12). They move into each loaded launcher, whose top bar puts them
+    // where My account › Top bar says (shared/launcher-bar.js), so their own
+    // handlers (here and in ayni-deskpage.js) and their pressed look go with them.
+    // A press shuts the menu: the desk, or the new note, is what comes next.
+    var notesPair = document.getElementById( 'notesPair' );
+    var notesBtns = [ 'deskBtn', 'noteNewBtn' ].map( function ( id ) { return document.getElementById( id ); } ).filter( Boolean );
+    notesBtns.forEach( function ( b ) { b.addEventListener( 'click', function () { closeMenu(); } ); } );
+
     function ensureMenuFrame()
     {
         if( menuFrame ) return;
@@ -425,6 +446,16 @@
                          // full screen for a dialog: the desk shows behind it, not the launcher's tiles
                          'html.desk-full,html.desk-full body{background:transparent}html.desk-full .launcher{visibility:hidden}';
         doc.head.appendChild( st );
+        var lsBox = doc.getElementById( 'lsBox' ), lsTools = doc.getElementById( 'tools' );
+        // (after this page's words and icons are in: the pair leaves this document)
+        if( notesPair && lsBox ) ( window.Ayni ? Ayni.i18n.ready : Promise.resolve() ).then( function ()
+        {
+            // its two buttons: the launcher's top bar places them (shared/launcher-bar.js)
+            notesBtns.forEach( function ( b ) { notesPair.appendChild( b ); } );   // back from a launcher loaded before
+            lsBox.insertBefore( notesPair, lsTools && lsTools.parentNode === lsBox ? lsTools : null );
+            notesPair.hidden = true;
+            if( cw.NayiveBar ) cw.NayiveBar.render();
+        } );
         // The menu is exactly the launcher's panel, once that has laid out (not while hidden).
         var panel = doc.querySelector( '.apps-panel' );
         if( panel ) new cw.ResizeObserver( function ()
@@ -437,12 +468,20 @@
 
         doc.addEventListener( 'click', function ( e )
         {
-            var a = e.target.closest && e.target.closest( 'a.btn.large[href]' );   // the grid's, or a popup's
+            // the grid's tiles, a popup's, or a search result (shared/launcher-search.js)
+            var a = e.target.closest && e.target.closest( 'a.btn.large[href], a.ls-row[href], a.qb-app[href]' );
             if( ! a ) return;
             e.preventDefault();
             e.stopPropagation();
+            var url = new URL( a.getAttribute( 'href' ), cw.location.href ).href, found = a.classList.contains( 'ls-row' );
             closeMenu();
-            appsReady.then( function () { openApp( new URL( a.getAttribute( 'href' ), cw.location.href ).href ); } );
+            // A result picked in the search dialog: the dialog closes first (its
+            // own listener, on the window), and the full-screen menu only after.
+            if( found ) setTimeout( closeMenu, 0 );
+            // A result goes where it points: a document in a window of its own
+            // (as Drive opens one), anything else in that app's window, there.
+            var how = ! found ? undefined : /\/(write|calc|text|image)\//.test( url ) ? { fresh: true } : { nav: true };
+            appsReady.then( function () { openApp( url, how ); } );
         }, true );
         doc.addEventListener( 'keydown', function ( e ) { if( e.key === 'Escape' ) closeMenu(); } );
         hookAlt( cw );
@@ -678,6 +717,20 @@
 
     var syncDot = document.getElementById( 'syncIndicator' );
 
+    //------------------------------------------------------------------------//
+    // NOTES - sticky notes on the wallpaper (shared/notes.js). "+" shows the
+    // desk first, then puts a new note on it. Their saving counts in the plug below.
+    document.addEventListener( 'DOMContentLoaded', function () { if( window.Ayni && window.NayiveNotes ) Ayni.i18n.ready.then( function ()
+    {
+        NayiveNotes.desk( document.getElementById( 'notesLayer' ) );
+    } ); } );
+    document.getElementById( 'noteNewBtn' ).addEventListener( 'click', function ()
+    {
+        if( ! window.NayiveNotes ) return;
+        D.showDesk( true );
+        NayiveNotes.add();
+    } );
+
     function winDot( w )
     {
         try { return w.frame.contentDocument && w.frame.contentDocument.querySelector( '.sync-indicator' ); }
@@ -697,6 +750,7 @@
             var el = winDot( w ), r = syncRank( el );
             if( r > worstRank ) { worstRank = r; worst = el; }
         } );
+        if( window.NayiveNotes && NayiveNotes.dot.dataset.syncState && syncRank( NayiveNotes.dot ) > worstRank ) worst = NayiveNotes.dot;
         syncDot.hidden = ! worst;
         if( ! worst ) return;
         [ 'synced', 'busy', 'offline' ].forEach( function ( cls ) { syncDot.classList.toggle( cls, worst.classList.contains( cls ) ); } );
@@ -709,6 +763,7 @@
     // refreshes its panes.
     syncDot.addEventListener( 'click', function ()
     {
+        if( window.NayiveNotes ) NayiveNotes.refresh();
         wins.forEach( function ( w )
         {
             try
@@ -737,6 +792,9 @@
             lead:  t( 'desktop.helpLead' ),
             rows: [
                 { sel: '#menuBtn',       icon: 'grid', text: t( 'desktop.helpMenu' ) },
+                // the notes pair sits in the menu's top row (another document): no sel, the rows always show
+                { icon: 'show-desk', name: t( 'desktop.showDesk' ), text: t( 'desktop.helpShowDesk' ) },
+                { icon: 'plus', name: t( 'notes.new' ), text: t( 'desktop.helpNewNote' ) },
                 // tour: ("Ver el tour" in the card) a window, its bar button, the
                 // ⋮'s Tile switch, the bar's weather and battery - or, with no
                 // window open / the item off, the desk or the bar as a ghost.

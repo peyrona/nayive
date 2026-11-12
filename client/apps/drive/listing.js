@@ -407,49 +407,14 @@ const SVG_PHOTOS = Ayni.icon( 'photos', '', 18 );
 const SVG_TRIPS  = Ayni.icon( 'trips', '', 18 );
 const SVG_SPLIT  = Ayni.icon( 'euro', '', 18 );
 
-// Extensions each tool can open/import (mirrors the accept="" of their import
-// inputs — see apps/write, apps/calc). Kept disjoint so a double-click routes
-// to exactly one tool.
-const WRITE_IMPORT = [ 'docx' ];
-const CALC_IMPORT  = [ 'xlsx', 'csv' ];
-// Compressed files: all get the zipper icon. Only the last part of the name
-// counts, so "x.tar.gz" is 'gz'.
-const ARCHIVE_EXT  = [ 'zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'tbz2', 'xz', 'txz', 'zst', 'lz', 'lzma', 'z', 'cab', 'arj', 'lzh' ];
-// LibreOffice documents. Write and Calc cannot read them, so the server
-// makes a .docx / .xlsx twin beside the original (openOffice below; keep
-// officeTwin in server/go/office.go the same lists). The other LibreOffice
-// kinds have no app here: they upload as they are (no twin) and a
-// double-click only says Nayive cannot open them: Impress, Draw, Math, Base.
-const OFFICE_WRITE  = [ 'odt', 'ott', 'fodt', 'sxw', 'stw' ];
-const OFFICE_CALC   = [ 'ods', 'ots', 'fods', 'sxc', 'stc' ];
-const OFFICE_REFUSE = [ 'odp', 'otp', 'fodp', 'sxi', 'sti',      // Impress
-                        'odg', 'otg', 'fodg', 'sxd', 'std',      // Draw
-                        'odf', 'sxm', 'odb' ];                   // Math, Base
-// Plain-text / code / markup files → the Text editor (see apps/text), which is
-// also the catch-all: it opens anything not owned by another tool and not a
-// known-binary type, so this list only steers the file-row ICON.
-const TEXT_IMPORT  =
-[
-    'txt', 'log', 'une', 'model', 'md', 'markdown', 'mkd',
-    'html', 'htm', 'xhtml', 'css', 'js', 'mjs', 'cjs', 'jsx', 'ts',
-    'json', 'map', 'webmanifest', 'xml', 'xsl', 'xsd', 'svg', 'rss',
-    'yaml', 'yml', 'toml', 'ini', 'conf', 'cfg', 'properties', 'env',
-    'sh', 'bash', 'zsh', 'ksh', 'ps1', 'bat', 'sql',
-    'py', 'pyw', 'r', 'c', 'h', 'cpp', 'cc', 'cxx', 'hpp', 'hh', 'java', 'cs', 'tex'
-];
-// Raster images → an image opener. '.svg' is deliberately absent: it is
-// text (the server sends it as image/svg+xml), so it stays in TEXT_IMPORT
-// and opens in the Text editor.
-//   IMAGE_EDIT  the formats the photo editor can load AND re-encode
-//               (canvas.toDataURL) → they open in Image (apps/image).
-//   IMAGE_VIEW  every other raster type → the plain lightbox (view only), and
-//               it also stays the superset used for the file-row icon.
+// The extension lists (which tool opens what, the row icons, the search's
+// "Type") live in shared/file-kinds.js, shared with the launcher's search.
+const { WRITE_IMPORT, CALC_IMPORT, ARCHIVE_EXT, OFFICE_WRITE, OFFICE_CALC, OFFICE_REFUSE,
+        TEXT_IMPORT, IMAGE_VIEW, VIDEO_VIEW, AUDIO_VIEW } = NayiveKinds;
+// IMAGE_EDIT: the formats the photo editor can load AND re-encode
+// (canvas.toDataURL) → they open in Image (apps/image); any other raster
+// type (IMAGE_VIEW) gets the plain lightbox (view only).
 const IMAGE_EDIT = AyniPhoto.EDIT_EXT;     // shared/ayni/ayni-photo.js: Image takes the same list
-const IMAGE_VIEW = [ 'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif' ];
-// Audio / video → Drive's own player (browser-native <audio>/<video> controls,
-// view only, no editing). What actually plays depends on the browser's codecs.
-const VIDEO_VIEW = [ 'mp4', 'm4v', 'webm', 'ogv', 'mov', 'mkv' ];
-const AUDIO_VIEW = [ 'mp3', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'wav', 'flac', 'weba' ];
 
 const extOf = Ayni.extOf, pad2 = Ayni.dates.pad;   // shared/ui.js (loads before this file)
 

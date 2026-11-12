@@ -20,6 +20,7 @@ import com.google.androidbrowserhelper.trusted.LauncherActivity;
 public class Launcher extends LauncherActivity {
 
     static final String EXTRA_ANSWER = "org.nayive.app.ANSWER";
+    static final String EXTRA_SOS = "org.nayive.app.SOS";   // the tag of the SOS note that was tapped
 
     /** "Contestar": open the chat on that call. */
     static Intent answer(Context c, String callId, String url) {
@@ -33,6 +34,8 @@ public class Launcher extends LauncherActivity {
     protected void onCreate(Bundle b) {
         String callId = getIntent().getStringExtra(EXTRA_ANSWER);
         if (callId != null) Actions.answered(this, callId);
+        String sosTag = getIntent().getStringExtra(EXTRA_SOS);
+        if (sosTag != null) Actions.stopSos(this, sosTag);   // a tap on an SOS note
         LinkService.start(this);
         LinkService.kick();
         super.onCreate(b);

@@ -174,7 +174,7 @@ try
         var probe = document.createElement( 'i' ); document.body.appendChild( probe ); var tok = function ( v ) { probe.style.color = cs.getPropertyValue( v ).trim(); return getComputedStyle( probe ).color; };
         var out = { scale: [ c( 'scale' ), tok( '--win-scale' ) ], min: [ c( 'min' ), tok( '--warn' ) ], max: [ c( 'max' ), tok( '--ok' ) ], close: [ c( 'close' ), tok( '--danger' ) ] }; probe.remove(); return JSON.stringify( out ); } )()` ) );
     check( "colours: blue Scale / Resize, then the old dots' warn / ok / danger", Object.values( colours ).every( ( [ a, z ] ) => a === z ) && /rgb\(\s*(24, 115, 204|30, 144, 255)/.test( colours.scale[ 0 ] ), colours );
-    const fi = await ev( "AyniDesk.windows().findIndex( function ( x ) { return x.name === document.querySelector( '#tasks .chip[aria-current=true] .chip-main span' ).textContent; } )" );
+    const fi = await ev( "AyniDesk.windows().findIndex( function ( x ) { return x.name === document.querySelector( '#tasks .chip[aria-current=true] .chip-main span:not(.icon)' ).textContent; } )" );
     const sc0 = JSON.parse( await ev( `JSON.stringify( [ AyniDesk.windows()[ ${fi} ].scale, ${frontBtn( "scale" )}.dataset.tip, ${frontBtn( "scale" )}.innerHTML.length, ${frontBtn( "scale" )}.getAttribute( 'aria-pressed' ) ] )` ) );
     await press( frontBtn( "scale" ) );
     const sc1 = JSON.parse( await ev( `JSON.stringify( [ AyniDesk.windows()[ ${fi} ].scale, ${frontBtn( "scale" )}.dataset.tip, ${frontBtn( "scale" )}.innerHTML.length, ${frontBtn( "scale" )}.getAttribute( 'aria-pressed' ) ] )` ) );
@@ -235,7 +235,7 @@ try
 
     // ----- 3. Maximise is always 1:1; restored, it shrinks again
     const f0 = w[ 1 ].factor;
-    check( "B is in front", await ev( "document.querySelector( '#tasks .chip[aria-current=true] .chip-main span' ).textContent" ) === "Box B" );
+    check( "B is in front", await ev( "document.querySelector( '#tasks .chip[aria-current=true] .chip-main span:not(.icon)' ).textContent" ) === "Box B" );
     await press( frontBtn( "max" ) );
     w = await wins();
     r = await rectOf( winEl( 1 ) );
@@ -380,7 +380,7 @@ try
     const boxAt  = "[].filter.call( document.querySelectorAll( '#desk > .win' ), function ( w ) { return /n=F/.test( w.querySelector( 'iframe' ).src ); } )[ 0 ]";
     await waitFor( `( function () { try { return /^Box Inner/.test( ${nestAt}.querySelector( 'iframe' ).contentDocument.getElementById( 'inner' ).contentDocument.title ); } catch( e ) { return false; } } )()`, 10000, "inner frame loaded" );
     await settle();
-    const frontName = () => ev( "document.querySelector( '#tasks .chip[aria-current=true] .chip-main span' ).textContent" );
+    const frontName = () => ev( "document.querySelector( '#tasks .chip[aria-current=true] .chip-main span:not(.icon)' ).textContent" );
     const fRect = await rectOf( boxAt ), nRect = await rectOf( nestAt );
     await click( fRect.left + fRect.width / 2, fRect.top + fRect.height - 30 );
     const f1 = await frontName();

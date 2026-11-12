@@ -221,6 +221,10 @@ body.touch .chip-ctl > .btn svg { width: 18px; height: 18px; }
 #moreMenu .switch[disabled] > :is(svg, .icon),
 #moreMenu .switch[disabled] > [data-i18n] { opacity: 0.42; }
 #moreMenu > .btn.text { justify-content: flex-start; width: 100%; }
+/* The clock's rows: greyed and dead while "Show the clock" is off. */
+#clockRows           { display: flex; flex-direction: column; gap: 8px; }
+#clockRows[inert]    { opacity: 0.42; }
+#clock[hidden]       { display: none; }
 .set-row              { display: flex; align-items: center; gap: 8px; min-height: 32px; }
 .set-row > label, .set-row > span:first-child { flex: 1 1 auto; }
 .set-row > .picker    { flex: 0 0 auto; min-width: 150px; }

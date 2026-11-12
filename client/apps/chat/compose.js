@@ -11,6 +11,7 @@
 
     var C = window.NayiveChat;
     var S = C.S, h = C.h, T = C.T;
+    var HERE = document.currentScript ? document.currentScript.src : location.href;   // the Language app's modules sit beside chat/
 
     var ta, cbox, quoteSlot, sendBtn, laterBtn, composer, fmtBar, fmtBtn, panel = null;
     var laterSheet = null;     // the open list of scheduled texts: { render, close }
@@ -341,9 +342,10 @@
     };
 
     // opts.silent: "Send without sound" (the Send button held down).
+    // opts.text: send this instead of the box's text ("Translate and send").
     async function send( opts )
     {
-        var text = smileyTail( ta.value.trim() );
+        var text = opts && opts.text ? opts.text : smileyTail( ta.value.trim() );
         if( ! S.open ) return;
         // The server's limit (chat.go chatMaxText, in runes): over it, a send
         // is refused and its retry fails for ever. The text stays in the box.
@@ -411,10 +413,13 @@
     {
         if( sendBtn.getAttribute( "aria-expanded" ) === "true" || ! S.open || S.editing || ! ta.value.trim() ) return;
         closePanel();
-        Ayni.menuAt( [
+        var items = [
             { id: "silent",   label: T( "chat.sendSilent" ), icon: C.icon( "bell-off" ), run: function () { send( { silent: true } ); } },
             { id: "schedule", label: T( "chat.schedule" ),   icon: C.icon( "clock" ),    run: schedule }
-        ], { anchor: sendBtn } );
+        ];
+        // The translator needs a signed-in account (/api/translate/config).
+        if( S.mode === "owner" ) items.push( { id: "translate", label: T( "chat.translateSend" ), icon: Ayni.icon( "translate" ), run: translateSend } );
+        Ayni.menuAt( items, { anchor: sendBtn } );
         if( navigator.vibrate ) try { navigator.vibrate( 15 ); } catch( _ ) {}
     }
 
@@ -487,6 +492,166 @@
     }
 
     function whenLabel( ms ) { return C.dayLabel( ms ) + " " + C.time( ms ); }
+
+    // ---------------------------------------------------------------------
+    // "Translate and send": the Language app's translator turns the text
+    // into the picked language; the message is the translation with the
+    // original after C.ORIG (drawn small under it, conv.js textNodes). The
+    // same engines, Local mode and download questions as the Language app.
+    // ---------------------------------------------------------------------
+
+    var trLoad = null;     // Promise of { tr, M (translator.js), L (languages.js) }
+    var TR_KEY = "chat.translate";   // { from, to: { conv: lang } }: this device's picks
+
+    function loadTranslator()
+    {
+        if( trLoad ) return trLoad;
+        trLoad = ( async function ()
+        {
+            var files = [ "translator.js", "languages.js", "engine-chrome.js", "engine-bergamot.js",
+                          "engine-mymemory.js", "engine-libretranslate.js", "engine-lingva.js" ];
+            var mods = await Promise.all( files.map( function ( f ) { return import( new URL( "../language/" + f, HERE ).href ); } ) );
+            var shared = await fetch( "/api/translate/config", { credentials: "same-origin", signal: AbortSignal.timeout( 5000 ) } )
+                .then( function ( r ) { return r.ok ? r.json() : null; } ).catch( function () { return null; } );
+            var tr = new mods[ 0 ].Translator( { adapters: mods.slice( 2 ).map( function ( m ) { return m.default; } ), shared: shared } );
+            await tr.init();
+            return { tr: tr, M: mods[ 0 ], L: mods[ 1 ] };
+        } )();
+        trLoad.catch( function () { trLoad = null; } );   // a failed load is tried again next time
+        return trLoad;
+    }
+
+    function trPicks()
+    {
+        try { var p = JSON.parse( localStorage.getItem( TR_KEY ) || "{}" ); if( p && typeof p === "object" ) return p; } catch( _ ) {}
+        return {};
+    }
+
+    function trKeep( p ) { try { localStorage.setItem( TR_KEY, JSON.stringify( p ) ); } catch( _ ) {} }
+
+    async function translateSend()
+    {
+        var original = smileyTail( ta.value.trim() ), conv = S.open;
+        if( ! original || ! conv ) return;
+        var fromEl = h( "div", { class: "picker", attrs: { "aria-label": T( "language.from" ) } } );
+        var toEl   = h( "div", { class: "picker", attrs: { "aria-label": T( "language.to" ) } } );
+        var out    = h( "div", { class: "tr-out", attrs: { "aria-live": "polite" } } );
+        var status = h( "p", { class: "tr-status", text: T( "language.working" ) } );
+        var ok = Ayni.dialogButton( "primary", T( "chat.send" ) );
+        ok.disabled = true;
+        var busy = null, result = null, lib = null;
+        var sh = C.sheet( T( "chat.translateSend" ), h( "div", {},
+            h( "div", { class: "tr-langs" }, fromEl, toEl ), out, status ), ok,
+            function () { if( busy ) busy.abort(); busy = null; }, "tr-sheet" );
+
+        try { lib = await loadTranslator(); }
+        catch( e ) { status.textContent = T( "chat.translateNoLoad" ); status.classList.add( "err" ); return; }
+
+        var ui = Ayni.i18n.lang(), L = lib.L, picks = trPicks();
+        var name = function ( c ) { return L.languageName( c, ui ); };
+        var langs = L.LANGS.map( function ( c ) { return { value: c, text: name( c ) }; } );
+        var from = Ayni.picker( fromEl, { options: [ { value: "auto", text: T( "language.detect" ) } ].concat( langs ),
+                                          value: picks.from || ( L.LANGS.indexOf( ui ) >= 0 ? ui : "auto" ) } );
+        var to = Ayni.picker( toEl, { options: langs,
+                                      value: ( picks.to && picks.to[ conv ] ) || L.LANGS.filter( function ( c ) { return c !== ui; } )[ 0 ] } );
+        fromEl.addEventListener( "ayni:change", function () { var p = trPicks(); p.from = from.value; trKeep( p ); run( false ); } );
+        toEl.addEventListener( "ayni:change", function ()
+        {
+            var p = trPicks(); p.to = p.to || {}; p.to[ conv ] = to.value; trKeep( p ); run( false );
+        } );
+
+        ok.addEventListener( "click", function ()
+        {
+            if( ! result ) return;
+            var text = result + C.ORIG + original;
+            sh.close();
+            C.nightGate( conv, function ( silent ) { if( S.open === conv ) send( { silent: silent, text: text } ); } );
+        } );
+
+        function say( key, vars, err )
+        {
+            status.textContent = vars ? C.TF( key, vars ) : T( key );
+            status.classList.toggle( "err", !! err );
+        }
+
+        async function run( allowRemote )
+        {
+            if( busy ) busy.abort();
+            var ctl = busy = new AbortController();
+            result = null; ok.disabled = true; out.textContent = "";
+            if( from.value === to.value ) { say( "language.sameLangs", null, true ); return; }
+            say( "language.working" );
+            try
+            {
+                var r = await lib.tr.translate( { text: original, source: from.value, target: to.value, allowRemote: !! allowRemote },
+                                                { signal: ctl.signal, confirmDownload: confirmDownload,
+                                                  beforeRemote: allowRemote ? undefined : remoteNotice } );
+                if( busy !== ctl ) return;
+                result = r.text.trim();
+                out.textContent = result;
+                status.textContent = ""; status.classList.remove( "err" );
+                ok.disabled = ! result;
+            }
+            catch( err )
+            {
+                if( busy !== ctl ) return;
+                await trouble( err, allowRemote );
+            }
+            finally { if( busy === ctl ) busy = null; }
+        }
+
+        // The Language app's own answers (page.js showError, confirmDownload,
+        // remoteNotice): the text never leaves the device unasked.
+        async function trouble( err, allowRemote )
+        {
+            var c = err && err.category, d = ( err && err.details ) || {};
+            if( c === "aborted" ) return;
+            if( err instanceof lib.M.LocalModeError )
+            {
+                say( "language.noLocal", { from: name( err.source ), to: name( err.target ) }, true );
+                if( ! err.remoteEngineIds.length || allowRemote ) return;
+                var names = err.remoteEngineIds.map( engineName ).join( ", " );
+                if( await Ayni.confirm( { title: T( "language.noLocalTitle" ), confirm: T( "language.useOnline" ),
+                                          body: C.TF( "language.noLocalAsk", { from: name( err.source ), to: name( err.target ), engines: names } ) } ) ) run( true );
+                return;
+            }
+            if( err instanceof lib.M.AllEnginesFailedError )
+            {
+                var tried = err.attempts.filter( function ( a ) { return ! a.declined; } );
+                say( tried.length ? "language.allFailed" : err.attempts.length ? "language.declined" : "language.noEngine", null, true );
+                return;
+            }
+            if( d.reason === "no-detector" ) return say( "language.noDetector", null, true );
+            if( d.reason === "low-confidence" ) return say( "language.unclear", null, true );
+            if( d.detected ) return say( "language.detectedSame", { lang: name( d.detected ) }, true );
+            say( "language.err." + ( c || "internal" ), null, true );
+        }
+
+        function engineName( id )
+        {
+            var e = lib.tr.getEngines().filter( function ( x ) { return x.id === id; } )[ 0 ];
+            return e ? e.name : id;
+        }
+
+        function confirmDownload( d )
+        {
+            return Ayni.confirm( { title: T( "language.dlTitle" ), confirm: T( "language.dlYes" ),
+                                   body: C.TF( d.bytes ? "language.dlBody" : "language.dlBodyNoSize",
+                                               { from: name( d.source ), to: name( d.target ), engine: d.engineName, size: d.bytes ? Ayni.fmtBytes( d.bytes ) : "" } ) } );
+        }
+
+        async function remoteNotice()
+        {
+            var p = lib.tr.getPreferences();
+            var remote = lib.tr.getEngines().filter( function ( e ) { return e.enabled && e.location === "remote" && p.remoteNoticeShown.indexOf( e.id ) < 0; } );
+            if( ! remote.length ) return;
+            lib.tr.setPreferences( { remoteNoticeShown: p.remoteNoticeShown.concat( remote.map( function ( e ) { return e.id; } ) ) } );
+            await Ayni.alert( { title: T( "language.remoteTitle" ),
+                                body: C.TF( "language.remoteBody", { engines: remote.map( function ( e ) { return e.name; } ).join( ", " ) } ) } );
+        }
+
+        run( false );
+    }
 
     // "Schedule message": the day and time, then the server keeps it and
     // sends it then - this page may be closed by that time.

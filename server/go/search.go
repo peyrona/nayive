@@ -100,18 +100,11 @@ type nameRule struct {
 func parseSearchSpec(q Query) (SearchSpec, error) {
 	sp := SearchSpec{any: q.Get("any") == "1", dirs: q.Get("folders") == "1", exts: map[string]bool{}}
 
-	for _, v := range q["name"] {
-		// Cut at the FIRST ":" - the text itself may hold one.
-		op, text, ok := strings.Cut(v, ":")
-		switch op {
-		case "has", "not", "starts", "ends", "is":
-		default:
-			return sp, errors.New("bad name rule")
-		}
-		if text = strings.TrimSpace(text); ok && fold(text) != "" {
-			sp.rules = append(sp.rules, nameRule{op, foldForms(text)})
-		}
+	rules, err := parseNameRules(q["name"])
+	if err != nil {
+		return sp, err
 	}
+	sp.rules = rules
 
 	for _, e := range q["ext"] {
 		if e = strings.ToLower(strings.TrimPrefix(strings.TrimSpace(e), ".")); e != "" {
@@ -137,6 +130,25 @@ func parseSearchSpec(q Query) (SearchSpec, error) {
 		return sp, errors.New("empty search")
 	}
 	return sp, nil
+}
+
+// parseNameRules reads repeated name=<op>:<text> values (Drive's search and
+// the launcher's, search_all.go). A rule with an empty text is dropped.
+func parseNameRules(vals []string) ([]nameRule, error) {
+	var rules []nameRule
+	for _, v := range vals {
+		// Cut at the FIRST ":" - the text itself may hold one.
+		op, text, ok := strings.Cut(v, ":")
+		switch op {
+		case "has", "not", "starts", "ends", "is":
+		default:
+			return nil, errors.New("bad name rule")
+		}
+		if text = strings.TrimSpace(text); ok && fold(text) != "" {
+			rules = append(rules, nameRule{op, foldForms(text)})
+		}
+	}
+	return rules, nil
 }
 
 // keep is the SearchBy predicate.

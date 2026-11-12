@@ -12,23 +12,9 @@
 const SB_OPS      = [ 'has', 'not', 'starts', 'ends', 'is' ];
 const SB_WHEN     = [ 'any', 'today', 'd7', 'd30', 'year', 'range' ];
 
-// What each "Tipo" pill finds, built on the lists listing.js keeps for the
-// row icons and the openers. A function, not a table: CONVERT_EXT lives in
-// upload.js, which loads after this file.
-function sbKindList()
-{
-    return [
-        { id: 'dir'   },
-        { id: 'doc',   exts: WRITE_IMPORT.concat( OFFICE_WRITE, [ 'doc', 'rtf' ] ) },
-        { id: 'sheet', exts: CALC_IMPORT.concat( OFFICE_CALC, [ 'xls' ] ) },
-        { id: 'pdf',   exts: [ 'pdf' ] },
-        { id: 'img',   exts: IMAGE_VIEW.concat( [ 'heic', 'heif' ] ) },
-        { id: 'video', exts: VIDEO_VIEW.concat( CONVERT_EXT ) },
-        { id: 'audio', exts: AUDIO_VIEW },
-        { id: 'code',  exts: TEXT_IMPORT },
-        { id: 'zip',   exts: ARCHIVE_EXT }
-    ];
-}
+// What each "Tipo" pill finds: shared/file-kinds.js (the launcher's search
+// offers the same).
+function sbKindList() { return NayiveKinds.kinds(); }
 
 let sbDraft   = null;       // the dialog's working copy; advSearch keeps the one applied
 let sbSeq     = 0;          // guards the live count against a late answer
