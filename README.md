@@ -1,78 +1,76 @@
+<div align="center">
+
 # Nayive
 
-Personal web apps you host yourself: Drive, Planner (calendar, tasks and habits),
-eMail, Chat (with calls), Office (Write, Calc, Text), Records (Contacts, Bookmarks,
-Passwords), Photos, Music, Movies, Trips, Split and Games.
+**Your own cloud, on your own server.**
 
-<p align="center"><img src=".github/launcher.png" alt="The Nayive launcher" width="340"></p>
+Drive, Office, eMail, Chat, Photos, Calendar and more: personal web apps you host yourself.<br>
+One small Go program, no database, your data in plain files.
 
-- One static Go binary (`server/go/`) serves the apps and a small JSON file API.
-- Multi-user. Each user's data is plain files (`.ics`, `.vcf`, `.json`) in their own folder.
-- No database, no framework, no build step for the apps.
-- Installable as a PWA, with native notifications (Web Push).
-- A desktop mode on big screens: windows, a task bar, tiling.
-- An Android app (`android/`) for location sharing and photo upload.
+[**Download**](https://github.com/peyrona/nayive/releases/latest) · [Install](#install) · [Built on Ayni](https://github.com/peyrona/ayni)
 
-## Browsers
+<img src=".github/launcher.png" alt="The Nayive launcher" width="340">
 
-Chrome or Edge 111+, Safari 16.4+ (macOS, iPhone, iPad) and Firefox 113+:
-anything from spring 2023 on. An older browser gets a warning on the launcher.
-On iPhone and iPad every browser runs Safari's engine, so the Safari version is the one that counts.
+</div>
+
+## The apps
+
+| | |
+|---|---|
+| **Files** | Drive, Photos, Music, Movies, an image editor |
+| **Office** | Write (.docx), Calc (.xlsx), Text (Markdown), Calculator |
+| **Talk** | eMail, Chat with voice and video calls |
+| **Plan** | Calendar, Tasks, Habits, Trips, Split (shared expenses) |
+| **Keep** | Contacts, Bookmarks, locked documents |
+| **More** | Games, Language tools, an admin panel |
+
+## Why Nayive
+
+- **Yours.** Your files stay on your server, as plain `.docx`, `.ics`, `.vcf` and `.json` you can read without Nayive.
+- **Simple.** One static binary and a folder. No database, no containers, nothing to keep in sync.
+- **Everywhere.** Installs as an app on phones, tablets and computers, with notifications. Big screens get a real desktop with windows and a taskbar.
+- **For the family.** Many users, each with their own space, sharing by link.
+- **Android app** for photo backup and location sharing on trips.
+
+Works in any browser from 2024 on: Chrome or Edge 119+, Firefox 128+, Safari 18+ (iPhone and iPad too).
 
 ## Install
 
+On a Linux server (Go is not needed):
+
 ```sh
-./pack.sh                 # builds nayive.zip (needs Go 1.27+ and zip)
-unzip nayive.zip -d nayive
+unzip nayive.zip -d nayive        # from the latest release
 cd nayive
-./install.sh              # writes store/config/server.json and a systemd unit
+./install.sh                      # sets up the server and a systemd service
 ```
 
 Then open `http://localhost:4343/nayive/admin.html` and create the admin account.
 
-## Run from source
+<details>
+<summary>Run from source, build the zip, deploy</summary>
+
+Needs Go 1.27+.
 
 ```sh
 mkdir -p store/config store/homes
 cp store/config/server.example.json store/config/server.json
-cd server/go
-go run . -config ../../store/config/server.json   # http://localhost:4343/nayive/
+cd server/go && go run . -config ../../store/config/server.json   # http://localhost:4343/nayive/
 ```
 
-## Write's editor bundle
-
-Write is built on [docx-editor.dev](https://github.com/eigenpal/docx-editor)
-(`@docx-editor.dev/core`, Apache-2.0, with metric-compatible OFL fonts). The bundle
-**is** in this repository, so a clone needs nothing extra. To rebuild it, or move to
-a newer release (needs `node` + `npm`; nothing is installed globally):
-
-```sh
-tools/build-docx-editor.sh            # rebuild the pinned version
-tools/build-docx-editor.sh 2.21.0     # bump
-tools/build-docx-editor.sh --restore  # put the previous build back
-```
-
-The version, every bundled package and a sha256 per file live in
-`client/apps/write/lib/docx-editor/docx-editor.lock.json`;
-`tools/check-docx-editor` holds the folder to it on every deploy. See
-`client/apps/write/lib/docx-editor/BUILD.md`.
-
-## Deploy to your own server
-
-```sh
-cp deploy.local.sh.example deploy.local.sh   # your VPS user, host and SSH port
-./deploy.sh
-```
-
-## Layout
+- `./pack.sh` builds `nayive.zip` (`GOARCH=arm64` for a Raspberry Pi or an ARM server).
+- `./deploy.sh` copies it to your own VPS; put your user, host and SSH port in `deploy.local.sh` (copy `deploy.local.sh.example`).
+- Write runs on [docx-editor.dev](https://github.com/eigenpal/docx-editor); its bundle is in the repo. To rebuild it see `client/apps/write/lib/docx-editor/BUILD.md`.
 
 | Folder | What it holds |
 |---|---|
 | `server/go/` | the server (Go) |
-| `client/` | `apps/`: what the browser loads |
-| `store/` | the run-root: settings and every user's data (git-ignored) |
-| `tools/` | build and check helpers (Go) |
+| `client/apps/` | what the browser loads |
+| `store/` | settings and every user's data (git-ignored) |
+| `android/` | the Android app |
+| `tools/` | build and check helpers |
 
-## License
+</details>
+
+## Licence
 
 [Apache 2.0](LICENSE)
