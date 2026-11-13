@@ -1361,9 +1361,13 @@ Ayni.core.lists = { makeTypeAhead };
    all may be promises; failed(err) says what went wrong (a toast by default). root: the id new folders go in with nothing
    lit; rootName shows it as a row. note: a line on top; noFolders: what to say with none. onOpen(ctl) gets { task(promise),
    rekey(from, to), isOpen() } for what comes later (an Undo: task(p) shows the tree busy, then reads it again; rekey keeps
-   what was open under a folder that moved) */
+   what was open under a folder that moved). current: the folder lit at start, the folders above it open. A node with
+   lazy: true has sub-folders not read yet: opening it calls expand(id) (may be a promise), then load() again. Without
+   create, rename or remove that corner button is not there */
 const pickFolder = (o = {}) => new Promise((resolve) => {
-  let done = false, nodes = null, failed = false, open = {}, selected = null;
+  let done = false, nodes = null, failed = false, open = {}, selected = o.current ?? null, first = true;
+  /* The row a lazy folder shows while its sub-folders are read: never lit, never chosen */
+  const STUB = '\u0000', isStub = (id) => String(id).endsWith(STUB), dead = {};
   let nameMode = null, nameTarget = null, nameVal = '', namePicked = false, busy = false;
   const d = Ayni.dialog({ title: o.title || tx('fp.pickFolder') }), sheet = d.body;
   const fail = o.failed || ((err) => Ayni.toast('warn', String(err?.message || err)));
@@ -1401,6 +1405,15 @@ const pickFolder = (o = {}) => new Promise((resolve) => {
     task(Promise.resolve().then(() => o.rename(target, nm)));
   };
   const remove = () => { const gone = selected; task(Promise.resolve().then(() => o.remove(gone)).then(() => null)); };
+  /* A lazy folder that opens reads its sub-folders; one that cannot be read shows none */
+  const lazy = (list) => (list || []).map((n) => (n.lazy && !n.children?.length
+    ? (dead[n.id] ? { ...n, children: [] } : { ...n, children: [{ id: n.id + STUB, name: tx('fp.loading') }] })
+    : n.children?.length ? { ...n, children: lazy(n.children) } : n));
+  const expand = (id) => {
+    const n = find(nodes, id); if (!n?.lazy || n.children?.length || !o.expand) return;
+    Promise.resolve().then(() => o.expand(id)).then(load, (err) => { dead[id] = true; fail(err); }).then(() => { if (!done) render(); });
+  };
+  const trail = (list, id, up = []) => { for (const n of list || []) { if (n.id === id) return up; const hit = trail(n.children, id, up.concat(n.id)); if (hit) return hit; } return null; };
   const msg = (text) => { const p = document.createElement('p'); p.className = 'fp-msg'; p.textContent = text; return p; };
   const act = (role, ic, tip, off, fn) => { const b = Ayni.dialogButton(role, tip, ic); b.ariaDisabled = !!off; b.addEventListener('click', fn); return b; };
   function render() {
@@ -1409,21 +1422,26 @@ const pickFolder = (o = {}) => new Promise((resolve) => {
     sheet.innerHTML = ''; d.footer.innerHTML = '';
     if (o.note) { const p = document.createElement('p'); p.className = 'text'; p.textContent = o.note; sheet.append(p); }
     const box = document.createElement('div'); box.className = 'fp-tree'; sheet.append(box);
+    let reveal = null;
     if (failed) box.append(msg(tx('fp.loadError')));
     else if (nodes === null) box.append(msg(tx('fp.loading')));
     else {
-      const roots = o.rootName ? [{ id: o.root, name: o.rootName, children: nodes }] : nodes;
+      const roots = lazy(o.rootName ? [{ id: o.root, name: o.rootName, children: nodes }] : nodes);
       if (o.rootName) open[o.root] = open[o.root] !== false;
+      if (first && selected != null) (trail(roots, selected) || []).forEach((id) => (open[id] = true));
       if (!roots.length) box.append(msg(o.noFolders || tx('fp.noFolders')));
       else {
         const host = document.createElement('ul'); box.append(host);
-        const tr = tree(host, { nav: true, pick: true, items: () => roots, isOpen: (id) => !!open[id], setOpen: (id, v) => { open[id] = v; },
-          current: () => selected, disabled: () => busy, go: (id) => { selected = id; render(); },
-          confirm: (id) => { if (!busy && !nameMode) finish(id); } });
-        if (hadFocus) tr.focus(selected);
+        const tr = tree(host, { nav: true, pick: true, items: () => roots, isOpen: (id) => !!open[id], setOpen: (id, v) => { open[id] = v; if (v) expand(id); },
+          current: () => selected, disabled: (id) => busy || isStub(id), go: (id) => { if (!isStub(id)) { selected = id; render(); } },
+          confirm: (id) => { if (!busy && !nameMode && !isStub(id)) finish(id); } });
+        if (hadFocus) tr.focus(selected); else if (first && selected != null) reveal = tr;
+        first = false;
       }
     }
     box.scrollTop = scroll;
+    /* First show with a folder lit: scroll it into view, the names start at the left edge */
+    if (reveal) { reveal.focus(selected); box.scrollLeft = 0; }
     let input = null;
     if (nameMode) {
       const fld = document.createElement('div'), lab = document.createElement('label'); fld.className = 'field';
@@ -1433,12 +1451,13 @@ const pickFolder = (o = {}) => new Promise((resolve) => {
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commitName(); } });
       fld.append(input); sheet.append(fld);
     }
-    if (!nameMode) {
+    if (!nameMode && (o.remove || o.rename || o.create)) {
       /* In the corner: delete or rename the lit folder, create one inside it (with nothing lit, in the root) */
       const ready = !busy && nodes !== null && !failed, onOne = ready && !!selected && selected !== o.root;
       const left = document.createElement('div'); left.className = 'extra';
-      left.append(act('danger', null, tx('fp.delete'), !onOne, remove), act('', 'edit', tx('fp.rename'), !onOne, () => startName('rename')),
-        act('', 'folder-plus', tx('fp.newFolder'), !ready, () => startName('create')));
+      if (o.remove) left.append(act('danger', null, tx('fp.delete'), !onOne, remove));
+      if (o.rename) left.append(act('', 'edit', tx('fp.rename'), !onOne, () => startName('rename')));
+      if (o.create) left.append(act('', 'folder-plus', tx('fp.newFolder'), !ready, () => startName('create')));
       d.footer.append(left);
     }
     const cancel = Ayni.dialogButton('close', tx('cancel'));

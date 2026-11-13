@@ -450,7 +450,7 @@ func (s *Server) chatSummary(w http.ResponseWriter, r *http.Request, a chatActor
 		"online":  o.onlineFor(a.pid),
 		"typing":  o.typingFor(a.pid),
 		"avatars": o.avatarsFor(a.pid),
-		"zones":   o.zonesFor(a.pid),
+		"zones":   h.zonesFor(o, a.pid),
 		"callsOn": h.callsOn(),
 		"calls":   o.cs().callsFor(a.pid, ""),
 		// Everybody sees the owner's auto-delete: a person is told, by a small
@@ -602,7 +602,7 @@ func (s *Server) chatWait(w http.ResponseWriter, r *http.Request, who func() (ch
 		"online": a.o.onlineFor(a.pid),
 		"typing": a.o.typingFor(a.pid),
 		"calls":  a.o.cs().callsFor(a.pid, dev),
-		"zones":  a.o.zonesFor(a.pid),
+		"zones":  h.zonesFor(a.o, a.pid),
 		"watch":  a.o.watchFor(a.pid),
 		"now":    nowMs(),
 	}

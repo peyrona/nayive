@@ -58,6 +58,10 @@ type Server struct {
 	// workers meant 250 parallel guesses. It used to be ONE lock for the whole
 	// process, and then a stream of wrong guesses queued every real sign-in.
 	authLocks keyedMutex
+
+	// siteGuard remembers good logins and wrong guesses on password-protected
+	// static web sites (sites_auth.go).
+	siteGuard siteGuard
 }
 
 const authFailDelay = 400 * time.Millisecond

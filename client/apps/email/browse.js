@@ -489,5 +489,6 @@
         } );
         wireReader();
         E.$( "treeBtn" ).addEventListener( "click", function () { treeView.openSheet(); } );
+        E.$( "whereName" ).addEventListener( "click", function () { treeView.openSheet(); } );   // the tray name opens the trays too
     };
 } )();

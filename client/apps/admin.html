@@ -104,8 +104,6 @@
         }
         h2 { font-size: 1rem; margin: 0 0 14px; letter-spacing: 0.02em; }
         /* a card heading with an action button next to it (Users "+") */
-        .sec-title { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
-        .sec-title h2 { margin: 0; }
 
         .banner
         {
@@ -176,6 +174,33 @@
         .msg.err  { color: var(--danger); }
         .msg:empty { min-height: 0; margin: 0; }
         .hint.lead { margin: 0 2px 14px; }   /* a description ABOVE the fields */
+
+        /* Web sites: one row per site, and the people of one site in its dialog */
+        #sitesListBox { margin-top: 18px; }
+        .site-row
+        {
+            display: flex; align-items: center; gap: 10px;
+            padding: 6px 2px; border-bottom: 1px solid var(--line);
+        }
+        .site-row:last-child { border-bottom: none; }
+        .site-row .site-name
+        {
+            flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .site-row .site-name { font-weight: 600; }
+        .site-row .site-state { color: var(--text-dim); font-size: 0.86rem; white-space: nowrap; }
+        .site-row .site-state.err { color: var(--danger); }
+        .site-row > .icon { color: var(--text-dim); }
+        .site-row.locked > .icon { color: var(--accent); }
+        .people-empty { color: var(--text-dim); margin: 4px 2px 10px; }
+        /* one site's dialog: name | password | button, one person per row */
+        .people-state { color: var(--text-dim); margin: 0 2px 12px; }
+        .people-state.err { color: var(--danger); }
+        .people-grid
+        {
+            display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+            gap: 8px; align-items: center; min-width: min(420px, 100%);
+        }
 
         a.link { color: var(--link, var(--accent) ); }
         .hide { display: none !important; }
@@ -295,6 +320,12 @@
                 <button type="button" class="btn" id="sitesPick" data-tip="Choose the folder" aria-label="Choose the folder"></button>
             </div>
         </div>
+        <!-- Who may open each site: its .password file (server/go/sites_admin.go). -->
+        <div class="field" id="sitesListBox" hidden>
+            <label>Sites
+                <button class="info-tip" type="button" data-help="A site with people asks every visitor for a name and password, in the browser's own box. With nobody, anyone can open it.&#10;&#10;On a locked site, web fonts, data that a page's scripts load (fetch, $.ajax) and module scripts do not get through."></button></label>
+            <div id="sitesList"></div>
+        </div>
     </section>
 
     <!-- USERS ------------------------------------------------------------- -->
@@ -350,10 +381,26 @@
 
     <!-- SSH (ssh/ssh-tab.js) --------------------------------------------- -->
     <section id="sshSec" hidden>
-        <div class="sec-title">
-            <h2>SSH</h2>
-            <button class="info-tip" data-help="A terminal on Nayive&#39;s server. One session at a time.&#10;&#10;Each connection first asks you to confirm it is you: with a passkey (Face ID, a fingerprint, or your phone) or with the 6-digit code of an authenticator app (Google Authenticator, Microsoft Authenticator, Aegis, 2FAS…). Then it asks your login on the server itself: a Linux account of the computer Nayive runs on (the name and password you use for ssh there; the password is the one sudo asks for). It is NOT your Nayive login. The password is never stored. A wrong password needs a new confirm; with the app, wait for its next code.&#10;&#10;The first passkey or app needs a one-time setup code: Passkeys &amp; app › Make setup code, then read the file it names in a real SSH login. Later ones need one you have. Keep two, so a lost phone does not lock you out.&#10;&#10;Wrong tries (passkey, code, setup code, SSH password) lock it: 5 in 15 minutes, or 10 in 24 hours.&#10;&#10;Lost everything? In a real SSH login, delete BOTH config/ssh-passkeys.json AND config/ssh-totp.json; then start again with a setup code.&#10;&#10;The server&#39;s SSH must take passwords from this machine. If it takes keys only, add at the END of /etc/ssh/sshd_config:&#10;Match Address 127.0.0.1,::1&#10;    PasswordAuthentication yes&#10;then: sudo systemctl reload ssh&#10;&#10;It closes after 15 minutes with no key pressed, after 2 hours in any case, and when the screen locks, you sign out or you leave this page."></button>
-        </div>
+        <h2>SSH</h2>
+        <p class="hint lead">A terminal on Nayive's server. One session at a time.
+           Each connection first asks you to confirm it is you: with a passkey (Face ID, a fingerprint,
+           or your phone) or with the 6-digit code of an authenticator app (Google Authenticator,
+           Microsoft Authenticator, Aegis, 2FAS…). Then it asks your login on the server itself: a Linux
+           account of the computer Nayive runs on (the name and password you use for ssh there; the
+           password is the one sudo asks for). It is <strong>not</strong> your Nayive login. The password
+           is never stored. A wrong password needs a new confirm; with the app, wait for its next code.</p>
+        <p class="hint lead">The first passkey or app needs a one-time setup code: <strong>Passkeys &amp; app ›
+           Make setup code</strong>, then read the file it names in a real SSH login. Later ones need one
+           you have. Keep two, so a lost phone does not lock you out.
+           Wrong tries (passkey, code, setup code, SSH password) lock it: 5 in 15 minutes, or 10 in 24 hours.
+           Lost everything? In a real SSH login, delete BOTH <code>config/ssh-passkeys.json</code> AND
+           <code>config/ssh-totp.json</code>; then start again with a setup code.</p>
+        <p class="hint lead">The server's SSH must take passwords from this machine. If it takes keys only,
+           add at the END of <code>/etc/ssh/sshd_config</code>:
+           <code>Match Address 127.0.0.1,::1</code> / <code>PasswordAuthentication yes</code>,
+           then: <code>sudo systemctl reload ssh</code>.
+           It closes after 15 minutes with no key pressed, after 2 hours in any case, and when the
+           screen locks, you sign out or you leave this page.</p>
         <div class="ssh-bar">
             <div class="ssh-status" id="sshStatus" data-state="off" role="status"><span id="sshStatusText">Not connected</span></div>
             <button type="button" class="btn text primary" id="sshConnect"></button>
@@ -532,6 +579,7 @@
             SITES_ORIG = data.sites_dir || '';
             $( 'sitesDir' ).value = SITES_ORIG;
             $( 'sitesUrl' ).textContent = location.origin + '/cv/';
+            loadSites();
 
             renderUsers( data.users || [] );
 
@@ -550,9 +598,11 @@
     // at DOMContentLoaded it is there).
 
     // -- web sites folder picker -------------------------------------
-    // The folder button inside the field: browse the SERVER's folders (one at
-    // a time, the crumb goes back up) and put the chosen one in the field.
-    // Saved at once, as leaving the typed field would be.
+    // The folder button inside the field: the same folder dialog as the rest
+    // of Nayive (Ayni.pickFolder), over the SERVER's folders. A folder's
+    // sub-folders are read when it opens; no delete / rename / create here.
+    // The chosen one goes in the field and is saved at once, as leaving the
+    // typed field would be.
     document.addEventListener( 'DOMContentLoaded', function ()
     {
         var btn = $( 'sitesPick' );
@@ -562,109 +612,284 @@
 
     function pickSitesDir()
     {
-        var d     = Ayni.dialog( { title: 'Web sites folder' } );
-        var sheet = d.body;
-        var cur   = null;      // { path, home, dirs } once listed
-        var err   = '';
-        var seq   = 0;
+        var seen = {};      // folder path -> its sub-folders [{ name, more }], once read
+        var home = '';
+
+        // Read one folder; resolves with its full path
+        function list( path )
+        {
+            return api( { action: 'list-dirs', path: path } ).then( async function ( r )
+            {
+                if ( ! r.ok ) throw new Error( await errText( r ) );
+                var j = await r.json(), more = j.more || [];
+                home = j.home;
+                seen[ j.path ] = j.dirs.map( function ( name ) { return { name: name, more: more.indexOf( name ) >= 0 }; } );
+                return j.path;
+            } );
+        }
+
+        function join( dir, name ) { return ( dir === '/' ? '' : dir ) + '/' + name; }
+
+        // The tree as read so far; a folder not read yet but with sub-folders is lazy
+        function nodes( dir )
+        {
+            return ( seen[ dir ] || [] ).map( function ( f )
+            {
+                var id = join( dir, f.name );
+                return seen[ id ] ? { id: id, name: f.name, children: nodes( id ) } : { id: id, name: f.name, lazy: f.more };
+            } );
+        }
 
         // "/home/me/web" -> "~/web", as the field's placeholder writes it
-        function tilde( p, home )
+        function tilde( p )
         {
             if ( home && p === home ) return '~';
             if ( home && p.indexOf( home + '/' ) === 0 ) return '~' + p.slice( home.length );
             return p;
         }
 
-        function open( path )
+        // Open on the folder in the field (home when it is gone): it and every folder above it are read first
+        // (one above it that cannot be read just shows no sub-folders)
+        list( $( 'sitesDir' ).value.trim() || '~' ).catch( function () { return list( '~' ); } ).then( function ( at )
         {
-            var my = ++seq;
-            err = ''; render();
-            api( { action: 'list-dirs', path: path } ).then( async function ( r )
-            {
-                if ( my !== seq ) return;
-                if ( r.ok ) cur = await r.json();
-                else if ( ! cur && path !== '~' ) return open( '~' );   // typed folder gone: start at home
-                else        err = await errText( r );
-                render();
-            }, function () { if ( my === seq ) { err = 'Could not reach the server'; render(); } } );
+            var parts = at.split( '/' ).filter( Boolean ), up = [ '/' ];
+            for ( var i = 1; i < parts.length; i++ ) up.push( '/' + parts.slice( 0, i ).join( '/' ) );
+            return Promise.all( up.map( function ( p ) { return list( p ).catch( function () {} ); } ) ).then( function () { return at; } );
+        } ).then( function ( at )
+        {
+            return Ayni.pickFolder( {
+                title:     'Web sites folder',
+                root:      '/',
+                rootName:  '/',
+                current:   at,
+                noFolders: 'No folders here',
+                load:      function () { return nodes( '/' ); },
+                expand:    list
+            } );
+        }, function ( e )
+        {
+            Ayni.toast( 'warn', ( e && e.message ) || 'Could not reach the server' );
+            return null;
+        } ).then( function ( picked )
+        {
+            if ( ! picked ) return;
+            $( 'sitesDir' ).value = tilde( picked );
+            autosave();
+        } );
+    }
+
+    // -- web sites: who may open each one ---------------------------
+    // One row per site folder: open / locked, and a button for its people.
+    // The people dialog only has (x): every add, new password and removal is
+    // saved at once (server/go/sites_admin.go). Only taking off the LAST
+    // person asks first, as that makes the site public.
+    var SITES = [];
+
+    async function loadSites()
+    {
+        var box = $( 'sitesListBox' );
+        if ( ! SITES_ORIG ) { box.hidden = true; SITES = []; return; }
+        var r;
+        try { r = await api( { action: 'list-sites' } ); } catch ( e ) { r = null; }
+        if ( ! r || ! r.ok ) { box.hidden = true; SITES = []; return; }
+        SITES = ( await r.json() ).sites || [];
+        box.hidden = false;
+        renderSites();
+    }
+
+    function siteState( s )
+    {
+        if ( s.broken ) return 'Locked for everyone: .password has no usable line';
+        if ( ! s.locked ) return 'Public';
+        return s.people.length === 1 ? '1 person' : s.people.length + ' people';
+    }
+
+    function renderSites()
+    {
+        var list = $( 'sitesList' );
+        list.innerHTML = '';
+        if ( ! SITES.length )
+        {
+            list.innerHTML = '<p class="people-empty">No sites in this folder yet.</p>';
+            return;
         }
-
-        function msg( text )
+        SITES.forEach( function ( s )
         {
-            var p = document.createElement( 'p' );
-            p.className = 'fp-msg'; p.textContent = text;
-            return p;
-        }
+            var row = document.createElement( 'div' );
+            row.className = 'site-row' + ( s.locked ? ' locked' : '' );
+            row.innerHTML = Ayni.icon( s.locked ? 'lock' : 'globe' );
 
-        function render()
+            var a = document.createElement( 'a' );
+            a.className = 'site-name link';
+            a.href = '/' + encodeURIComponent( s.name ) + '/';
+            a.target = '_blank';
+            a.rel = 'noopener';
+            a.textContent = s.name;
+
+            var st = document.createElement( 'span' );
+            st.className = 'site-state' + ( s.broken ? ' err' : '' );
+            st.textContent = siteState( s );
+
+            var b = Ayni.dialogButton( '', 'Who may open it', 'users' );
+            b.classList.add( 'sm' );
+            b.addEventListener( 'click', function () { openSitePeople( s.name ); } );
+
+            row.append( a, st, b );
+            list.appendChild( row );
+        } );
+    }
+
+    function siteByName( name )
+    {
+        return SITES.filter( function ( s ) { return s.name === name; } )[ 0 ];
+    }
+
+    // The same rule as the server's (sitePersonNameOK): said here, before the
+    // password is asked for nothing.
+    function personNameProblem( n )
+    {
+        if ( n.length > 64 ) return 'The name is too long (64 characters at most).';
+        if ( /[:\r\n]/.test( n ) || n.charAt( 0 ) === '#' ) return 'A name cannot hold ":" or start with "#".';
+        return '';
+    }
+
+    // One dialog per site, all in place: each person is a row (name, new
+    // password, trash) and the last row adds one. A field is saved when it is
+    // left (or Enter); a name change keeps the password (rename-site-person).
+    function openSitePeople( name )
+    {
+        var dl = Ayni.dialog( { title: '/' + name + '/' } );
+        dl.place( [ Ayni.dialogButton( 'close', 'Close' ) ] );
+
+        var state = document.createElement( 'p' );
+        state.className = 'people-state';
+        var people = document.createElement( 'div' );
+        people.className = 'people-grid';
+        dl.body.append( state, people );
+
+        var busy = false;
+        async function run( body, okText )
         {
-            sheet.innerHTML    = '';
-            d.footer.innerHTML = '';
-
-            // "/ › home › me": every step but the last goes back there
-            var crumbs = document.createElement( 'div' );
-            crumbs.className = 'fp-crumbs';
-            if ( cur )
+            if ( busy ) return false;
+            busy = true;
+            try
             {
-                var parts = cur.path.split( '/' );
-                parts[ 0 ] = '/';
-                parts.forEach( function ( part, i )
-                {
-                    if ( ! part ) return;
-                    if ( i > 1 ) crumbs.appendChild( document.createTextNode( '›' ) );
-                    var el;
-                    if ( i === parts.length - 1 ) { el = document.createElement( 'b' ); el.textContent = part; }
-                    else
-                    {
-                        el = document.createElement( 'button' );
-                        el.type = 'button'; el.textContent = part;
-                        el.addEventListener( 'click', function () { open( '/' + parts.slice( 1, i + 1 ).join( '/' ) ); } );
-                    }
-                    crumbs.appendChild( el );
-                } );
+                var r = await api( body );
+                if ( ! r.ok ) { Ayni.toast( 'warn', await errText( r ) ); return false; }
+                if ( okText ) Ayni.toast( 'ok', okText );
+                await loadSites();
+                return true;
             }
-            sheet.appendChild( crumbs );
-
-            var box = document.createElement( 'div' );
-            box.className = 'fp-tree';
-            box.setAttribute( 'role', 'listbox' );
-            sheet.appendChild( box );
-
-            if ( err )                  box.appendChild( msg( err ) );
-            else if ( ! cur )           box.appendChild( msg( 'Loading…' ) );
-            else if ( ! cur.dirs.length ) box.appendChild( msg( 'No folders here' ) );
-            else cur.dirs.forEach( function ( name )
-            {
-                var row = document.createElement( 'div' );
-                row.className = 'fp-row';
-                row.setAttribute( 'role', 'option' );
-                row.innerHTML = '<span class="fp-caret">▸</span><span class="fp-ic">' + Ayni.icon( 'folder' ) +
-                                '</span><span class="fp-name"></span>';
-                row.querySelector( '.fp-name' ).textContent = name;
-                row.addEventListener( 'click', function () { open( ( cur.path === '/' ? '' : cur.path ) + '/' + name ); } );
-                box.appendChild( row );
-            } );
-
-            var arow = d.footer;
-            var cancel = Ayni.dialogButton( 'close', 'Cancel' );
-            cancel.addEventListener( 'click', function () { d.close(); } );
-            arow.appendChild( cancel );
-            var ok = Ayni.dialogButton( 'primary', 'Use this folder' );
-            ok.ariaDisabled = ! cur || !! err;
-            ok.addEventListener( 'click', function ()
-            {
-                if ( ! cur ) return;
-                $( 'sitesDir' ).value = tilde( cur.path, cur.home );
-                d.close();
-                autosave();
-            } );
-            arow.appendChild( ok );
-            NayiveUI.applySheetButtons( d.dialog );
+            catch ( e ) { Ayni.toast( 'warn', 'Could not reach the server' ); return false; }
+            finally { busy = false; }
         }
 
-        d.show();
-        open( $( 'sitesDir' ).value.trim() || '~' );
+        function field( value, holder, label )
+        {
+            var i = document.createElement( 'input' );
+            i.className = 'input';
+            i.type = 'text';
+            i.value = value;
+            i.placeholder = holder;
+            i.setAttribute( 'aria-label', label );
+            i.autocomplete = 'off'; i.autocapitalize = 'none'; i.spellcheck = false;
+            i.setAttribute( 'autocorrect', 'off' );
+            i.addEventListener( 'keydown', function ( e ) { if ( e.key === 'Enter' ) { e.preventDefault(); i.blur(); } } );
+            return i;
+        }
+
+        function showState()
+        {
+            var s = siteByName( name ) || { people: [], broken: false };
+            state.classList.toggle( 'err', !! s.broken );
+            state.textContent = s.broken ? 'Locked for everyone: .password has no usable line. Add a person to fix it.'
+                              : ! s.people.length ? 'Public: anyone can open it. Add a person to lock it.'
+                              : 'Only these people can open it.';
+        }
+
+        function personRow( who )
+        {
+            var n = field( who, 'Name', 'Name' );
+            var p = field( '', 'New password', 'New password for ' + who );
+
+            n.addEventListener( 'change', async function ()
+            {
+                var v = n.value.trim();
+                if ( ! v || v === who ) { n.value = who; return; }
+                var why = personNameProblem( v );
+                if ( why ) { Ayni.toast( 'warn', why ); n.value = who; return; }
+                if ( await run( { action: 'rename-site-person', site: name, name: who, new_name: v } ) )
+                {
+                    who = v;
+                    p.setAttribute( 'aria-label', 'New password for ' + who );
+                }
+                else n.value = who;
+            } );
+
+            p.addEventListener( 'change', async function ()
+            {
+                if ( ! p.value ) return;
+                if ( await run( { action: 'set-site-person', site: name, name: who, password: p.value }, 'Password changed.' ) )
+                    p.value = '';
+            } );
+
+            var del = Ayni.dialogButton( 'danger', 'Remove' );
+            del.addEventListener( 'click', async function ()
+            {
+                var last = ( siteByName( name ) || { people: [] } ).people.length === 1;
+                if ( last && ! await Ayni.confirm( {
+                        title: 'Make /' + name + '/ public?',
+                        body: who + ' is the last person. Without anybody, anyone can open the site.',
+                        confirm: 'Remove', danger: true } ) ) return;
+                if ( await run( { action: 'remove-site-person', site: name, name: who } ) ) draw();
+            } );
+
+            people.append( n, p, del );
+        }
+
+        function addRow()
+        {
+            var n = field( '', 'New person', 'New person name' );
+            var p = field( '', 'Password', 'Password for the new person' );
+            var add = Ayni.dialogButton( 'primary', 'Add', 'user-plus' );
+
+            async function tryAdd( fromButton )
+            {
+                var who = n.value.trim(), pw = p.value;
+                if ( ! who || ! pw )
+                {
+                    if ( fromButton ) ( who ? p : n ).focus();
+                    return;
+                }
+                var why = personNameProblem( who );
+                if ( why ) { Ayni.toast( 'warn', why ); n.focus(); return; }
+                var had = ( siteByName( name ) || { people: [] } ).people.indexOf( who ) >= 0;
+                if ( await run( { action: 'set-site-person', site: name, name: who, password: pw },
+                                had ? 'Password changed.' : '' ) )
+                {
+                    draw();
+                    people.querySelector( '.people-new' ).focus();
+                }
+            }
+            n.classList.add( 'people-new' );
+            n.addEventListener( 'change', function () { tryAdd( false ); } );
+            p.addEventListener( 'change', function () { tryAdd( false ); } );
+            add.addEventListener( 'click', function () { tryAdd( true ); } );
+            people.append( n, p, add );
+        }
+
+        function draw()
+        {
+            var s = siteByName( name ) || { people: [] };
+            people.innerHTML = '';
+            showState();
+            s.people.forEach( personRow );
+            addRow();
+        }
+
+        draw();
+        dl.show();
+        if ( ! ( siteByName( name ) || { people: [] } ).people.length ) people.querySelector( '.people-new' ).focus();
     }
 
     // -- autosave -----------------------------------------------------
@@ -791,7 +1016,7 @@
                 flash( $( 'saveMsg' ), 'Saving…', '' );
                 var rS = await api( { action: 'set-sites', sites_dir: sd } );
                 if ( !rS.ok ) errs.push( 'web sites: ' + await errText( rS ) );
-                else          SITES_ORIG = sd;
+                else        { SITES_ORIG = sd; loadSites(); }
             }
 
             // 3. changed user rows --------------------------------

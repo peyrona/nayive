@@ -8,14 +8,24 @@
 // N4 another device's save meanwhile: both kept (412 -> merge by id).
 // N5 delete + Undo: back as it was, in the list as it is now.
 // N6 the desktop: a sticky note saves; its place never reaches the file.
-import { server, browser, ok, section, done, onDisk, disk, type, click, sleep } from "./lib.mjs";
+import { server, browser, ok, section, done, onDisk, disk, type, sleep } from "./lib.mjs";
 
 const F = "data/notes/notes.json";
 const s = await server();
 const phone = await s.client();
 const json = () => { try { return JSON.parse( onDisk( s, F ) ); } catch { return null; } };
 const has  = pred => disk( () => { const l = json(); return l && pred( l ); }, 30000 );
-const ready = "document.querySelector( '.notes-wall .notes-empty' ) && ( ! document.querySelector( '.notes-wall .notes-empty' ).hidden || document.querySelector( '.note.card' ) )";
+// "+" (pressed in the page: on a phone it may sit in the top row) until a note opens - it is refused until the first read is back.
+async function plusOpens( c, ms = 20000 )
+{
+    const end = Date.now() + ms;
+    while( Date.now() < end )
+    {
+        if( await c.evaluate( "( b => { if( b ) b.click(); } )( document.getElementById( 'notesNewBtn' ) ); !! ( document.querySelector( 'dialog.notes-full' ) || {} ).open" ) ) return true;
+        await sleep( 300 );
+    }
+    return false;
+}
 const closeFull = c => c.evaluate( "document.querySelector( 'dialog.notes-full [data-close]' ).click(); true" );
 const openCard  = ( c, t ) => c.evaluate( `[ ...document.querySelectorAll( '.note.card' ) ].find( x => x.textContent.includes( ${JSON.stringify( t )} ) ).click(); true` );
 
@@ -23,13 +33,12 @@ const openCard  = ( c, t ) => c.evaluate( `[ ...document.querySelectorAll( '.not
 section( "N1 · THE FIRST NOTE, A BLANK ONE" );
 const c = await browser( s, { width: 390, height: 844 } );
 await c.open( "/nayive/" );
-ok( await c.until( ready ), "the notes section is ready" );
-await click( c, "#notesNewBtn" );
+ok( await plusOpens( c ), "the notes are read: + opens a note" );
 await c.until( "document.activeElement && document.activeElement.classList.contains( 'note-text' )" );
 await closeFull( c );
 await sleep( 1500 );
 ok( onDisk( s, F ) === null, "a note left blank: no file" );
-await click( c, "#notesNewBtn" );
+await plusOpens( c );
 await c.until( "document.activeElement && document.activeElement.classList.contains( 'note-text' )" );
 await type( c, "first" );
 ok( await has( l => l.length === 1 && l[ 0 ].text === "first" ), "the first note makes the file" );
@@ -74,7 +83,7 @@ section( "N2 · A DAMAGED FILE" );
     const c2 = await browser( s, { width: 390, height: 844 } );
     await c2.open( "/nayive/" );
     await c2.until( "[ ...document.querySelectorAll( '#ayni-toasts .toast' ) ].some( t => /damaged/.test( t.textContent ) )" );
-    await click( c2, "#notesNewBtn" );
+    await c2.evaluate( "document.getElementById( 'notesNewBtn' ).click(); true" );
     await sleep( 2000 );
     ok( onDisk( s, F ) === "{ broken", "never written over" );
     await phone.put( F, good );
@@ -107,8 +116,8 @@ section( "N3 · NO SERVER, NOTHING CACHED" );
     await c3.open( "/nayive/" );
     ok( await disk( () => failed > 0, 15000 ), "the read failed", failed );
     await sleep( 1000 );
-    ok( await c3.evaluate( "document.querySelector( '.notes-wall .notes-empty' ).hidden && ! document.querySelector( '.note.card' )" ), "it does not say \"no notes\"" );
-    await click( c3, "#notesNewBtn" );
+    ok( await c3.evaluate( "! document.querySelector( '.note.card' )" ), "it shows no notes" );
+    await c3.evaluate( "document.getElementById( 'notesNewBtn' ).click(); true" );
     await sleep( 2000 );
     ok( onDisk( s, F ) === before && await c3.evaluate( "! ( document.querySelector( 'dialog.notes-full' ) || {} ).open" ), "+ is refused, the file is untouched" );
     ws.close();

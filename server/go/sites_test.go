@@ -5,6 +5,7 @@ package main
 // =============================================================================
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
@@ -199,5 +200,39 @@ func TestAdminSetSites(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("GET /cv/ after clearing = %d, want 404", resp.StatusCode)
+	}
+}
+
+// TestAdminListDirsMore - the folder picker's listing: hidden folders left
+// out, and "more" names only the folders that hold a sub-folder.
+func TestAdminListDirsMore(t *testing.T) {
+	_, ts, client := newTestServer(t)
+	signIn(t, client, ts.URL, "jefe", "secreto")
+
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, "full", "inner"), 0o755)
+	os.MkdirAll(filepath.Join(root, "files-only"), 0o755)
+	os.WriteFile(filepath.Join(root, "files-only", "a.txt"), []byte("a"), 0o644)
+	os.MkdirAll(filepath.Join(root, "hidden-inside", ".git"), 0o755)
+	os.MkdirAll(filepath.Join(root, ".secret", "x"), 0o755)
+	os.WriteFile(filepath.Join(root, "file.txt"), []byte("f"), 0o644)
+
+	code, body := callJSON(t, client, "POST", ts.URL+"/api/admin", `{"action":"list-dirs","path":"`+root+`"}`)
+	if code != http.StatusOK {
+		t.Fatalf("list-dirs = %d %s", code, body)
+	}
+	var got struct {
+		Path string   `json:"path"`
+		Dirs []string `json:"dirs"`
+		More []string `json:"more"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got.Dirs, ",") != "files-only,full,hidden-inside" {
+		t.Errorf("dirs = %v", got.Dirs)
+	}
+	if strings.Join(got.More, ",") != "full" {
+		t.Errorf("more = %v, want [full]", got.More)
 	}
 }

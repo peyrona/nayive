@@ -47,6 +47,11 @@ type adminRequest struct {
 	// list-dirs (read-only: the web sites folder picker)
 	Path string `json:"path"`
 
+	// set-site-person, remove-site-person, rename-site-person (sites_admin.go):
+	// the site folder; the person goes in Name, the password in Password, a
+	// new name in NewName
+	Site string `json:"site"`
+
 	// raw keeps the object as it arrived, so "was this key present at all?" can
 	// still be asked - encoding/json cannot tell an absent key from a null one
 	// for a non-pointer field, and cannot tell either from a pointer that was
@@ -126,6 +131,22 @@ func (s *Server) apiAdmin(w http.ResponseWriter, r *http.Request) {
 		if s.needAdmin(w, r, isAdmin) {
 			s.adminListDirs(w, r, &body)
 		}
+	case "list-sites":
+		if s.needAdmin(w, r, isAdmin) {
+			s.adminListSites(w, r)
+		}
+	case "set-site-person":
+		if s.needAdmin(w, r, isAdmin) {
+			s.adminSetSitePerson(w, r, &body)
+		}
+	case "remove-site-person":
+		if s.needAdmin(w, r, isAdmin) {
+			s.adminRemoveSitePerson(w, r, &body)
+		}
+	case "rename-site-person":
+		if s.needAdmin(w, r, isAdmin) {
+			s.adminRenameSitePerson(w, r, &body)
+		}
 	case "create-user", "update-user":
 		if s.needAdmin(w, r, isAdmin) {
 			s.adminSaveUser(w, r, &body)
@@ -185,6 +206,7 @@ func (s *Server) adminSetup(w http.ResponseWriter, r *http.Request, body *adminR
 		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar la configuración")
 		return
 	}
+	s.dropLoginKeys("admin", name) // a first admin never inherits an old one's passkeys
 
 	token := s.sessions.Create(name, "admin", s.cfg.SessionTTL, false)
 	w.Header().Set("Set-Cookie", sessionCookieHeader(token, s.cfg.SessionTTL, false, r.TLS != nil))
@@ -220,6 +242,7 @@ func (s *Server) adminSetCredentials(w http.ResponseWriter, r *http.Request, bod
 	}
 	// Hashed HERE, before the closure: a blank one keeps the stored value,
 	// which is hashed already (or plaintext until the next sign-in).
+	newPassword := derefString(body.Password) != ""
 	pw := hashPassword(derefString(body.Password))
 
 	failed := false
@@ -249,6 +272,10 @@ func (s *Server) adminSetCredentials(w http.ResponseWriter, r *http.Request, bod
 	// password change there would check the old name and say "wrong password".
 	// End them all, then re-issue THIS one under the new name, as long-lived as
 	// before, so the admin stays signed in here (the same as apiPassword).
+	if newPassword {
+		// A passkey added by whoever knew the old password goes with it.
+		s.dropLoginKeys("admin", name)
+	}
 	if oldName != "" && oldName != name {
 		ttl, remember := s.sessions.Remembered(tokenFrom(r))
 		if !remember {
@@ -347,8 +374,10 @@ func (s *Server) adminSaveUser(w http.ResponseWriter, r *http.Request, body *adm
 		}
 		if opts.ClearPassword || opts.Password != "" {
 			// A password set or cleared here signs them out everywhere, as
-			// their own change does: a kept session must not pick the next one.
+			// their own change does: a kept session must not pick the next one,
+			// nor a passkey added under the old password.
 			s.sessions.DropUser(name)
+			s.dropLoginKeys("user", name)
 		}
 		s.log.Info("user saved", "status", status, "name", name)
 		sendJSON(w, r, http.StatusOK,

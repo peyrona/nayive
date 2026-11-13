@@ -75,7 +75,7 @@ try
         const r = await c.send( "Page.captureScreenshot", { format: "png" } );
         fs.writeFileSync( path.join( SHOTS, name + ".png" ), Buffer.from( r.result.data, "base64" ) );
     };
-    const errors = () => c.logs.filter( l => /EXCEPTION|LOG-ERROR/.test( l ) && ! /favicon|status of 40[134]/.test( l ) );
+    const errors = () => c.logs.filter( l => /EXCEPTION|LOG-ERROR/.test( l ) && ! /favicon|status of 40[134]|navigator\.vibrate/.test( l ) );
     const click = ( sel ) => ev( `( e => { e.click(); true } )( document.querySelector( ${JSON.stringify( sel )} ) )` );
 
     await size( 1280 );
@@ -93,14 +93,15 @@ try
     ok( await until( "!! document.getElementById('sosSetBtn')" ), "\"SOS\" in My account's header" );
     await click( "#sosSetBtn" );
     ok( await until( "document.getElementById('sosBackdrop') && document.getElementById('sosBackdrop').open" ), "the settings dialog opens" );
-    ok( await ev( "[ ...document.querySelectorAll('#sosBackdrop .sos-contact span') ].map( s => s.textContent ).join() === 'ana'" ), "the other user is offered" );
+    ok( await ev( "[ ...document.querySelectorAll('#sosContacts [role=option]') ].map( s => s.textContent ).join() === 'ana'" ), "the other user is offered" );
+    ok( await ev( "[ ...document.querySelectorAll('#sosBackdrop .sos-quiet .time-field input') ].map( i => i.value ).join() === '23:00,08:00'" ), "quiet hours in 24 hours" );
     await shot( "settings" );
-    await click( "#sosBackdrop .sos-contact input" );
+    await ev( "document.querySelector('#sosContacts [role=option]').dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true } ) ); true" );
     ok( await until( "!! document.getElementById('sosBtn') && ! document.getElementById('sosBtn').hidden" ), "a contact ticked: the SOS button appears" );
     const pos = await ev( `JSON.stringify( [ document.getElementById('sosBtn').getBoundingClientRect().left, document.getElementById('lsField').getBoundingClientRect().left,
         getComputedStyle( document.getElementById('sosBtn') ).backgroundColor ] )` );
     const [ sl, fl, bg ] = JSON.parse( pos );
-    ok( sl < fl && bg === "rgb(211, 47, 47)", "red, left of the search field", pos );
+    ok( sl < fl && bg === "rgb(150, 35, 6)", "red, left of the search field", pos );
     await ev( "document.getElementById('sosBackdrop').close(); true" );
 
     console.log( "THE RED SCREEN" );
@@ -119,6 +120,31 @@ try
     const as = alerts();
     ok( as.length === 1 && as[ 0 ].kind === "sos" && as[ 0 ].to[ 0 ].user === "ana", "one SOS alert on the server", as );
     await click( ".sos-screen .sos-cancel" );
+
+    console.log( "DANGER WATCH (held down)" );
+    const myRow = () => { try { return JSON.parse( fs.readFileSync( `${RUN}/config/sos.json`, "utf8" ) ).users.find( u => u.owner === "test" ) || {}; } catch { return {}; } };
+    const hold = () => ev( `( b => { b.dispatchEvent( new PointerEvent( 'pointerdown', { bubbles: true, button: 0 } ) ); setTimeout( () => b.dispatchEvent( new PointerEvent( 'pointerup', { bubbles: true } ) ), 900 ); true } )( document.getElementById('sosBtn') )` );
+    await hold();
+    ok( await until( "!! document.querySelector('.sos-screen.watch .sos-count')" ), "held down: the watch screen" );
+    ok( await until( "/^1:2\\d$/.test( document.querySelector('.sos-screen.watch .sos-count').textContent )" ), "...counting from 1:30", await ev( "document.querySelector('.sos-screen.watch .sos-count').textContent" ) );
+    await sleep( 500 );
+    ok( myRow().watch > Date.now() / 1000 + 60, "...and the SERVER counts", myRow() );
+    await shot( "watch" );
+    await open( "index.html", 1280 );
+    ok( await until( "!! document.querySelector('.sos-screen.watch .sos-count')" ), "the page opened again: the watch screen is back" );
+    await click( ".sos-screen.watch .sos-cancel" );
+    ok( await until( "! document.querySelector('.sos-screen')" ), "I'm safe: the screen goes" );
+    await sleep( 300 );
+    ok( ! myRow().watch && alerts().filter( a => a.kind === "watch" ).length === 0, "...the server stopped it, nothing sent", myRow() );
+    await hold();
+    await until( "!! document.querySelector('.sos-screen.watch .sos-now')" );
+    await click( ".sos-screen.watch .sos-now" );
+    ok( await until( "!! document.querySelector('.sos-screen .sos-to')" ), "Send now: says who was told" );
+    ok( alerts().filter( a => a.kind === "watch" ).length === 1, "one watch alert on the server", alerts() );
+    await click( ".sos-screen .sos-cancel" );   // "I'm safe", first after the send
+    ok( await until( "! document.querySelector('.sos-screen')" ), "I'm safe after it went out: the screen goes" );
+    await sleep( 300 );
+    ok( alerts().filter( a => a.kind === "safe" ).length === 1, "...and the contacts are told \"safe\"", alerts() );
 
     console.log( "LINKS" );
     await open( "index.html?sos=" + ( as[ 0 ] || {} ).id, 1280 );

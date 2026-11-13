@@ -467,7 +467,7 @@ func (s *Server) filesMkdir(w http.ResponseWriter, r *http.Request, role, user s
 	target, ok := s.users.Resolve(role, user, rel)
 	// "add" lends you the folder to drop files in, not to reshape; data/chat
 	// and data/mail belong to their servers (isServerData).
-	if !ok || !target.Writable || IsSharedPath(rel) || s.isServerData(target.Abs) {
+	if !ok || !target.Writable || IsSharedPath(rel) || s.isServerData(target.Abs) || s.isAccountFile(target.Abs) {
 		sendError(w, r, http.StatusForbidden, "forbidden")
 		return
 	}
@@ -918,14 +918,16 @@ func (s *Server) isStructuralDir(role, user, target string) bool {
 }
 
 // isAccountFile is homes/<someone>/data/config.json - the file that IS an
-// account. `t` must already be resolved.
+// account - or data/passkeys.json, its sign-in passkeys (login_passkey.go):
+// a session alone must never add a way in. `t` must already be resolved.
 func (s *Server) isAccountFile(t string) bool {
 	homes, err := resolveExisting(s.cfg.HomesDir)
 	if err != nil {
 		return false
 	}
 	data := filepath.Dir(t)
-	return filepath.Base(t) == "config.json" && filepath.Base(data) == "data" &&
+	base := filepath.Base(t)
+	return (base == "config.json" || base == "passkeys.json") && filepath.Base(data) == "data" &&
 		filepath.Dir(filepath.Dir(data)) == homes
 }
 

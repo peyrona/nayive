@@ -43,6 +43,7 @@ import (
 
 const (
 	loginNonceMax   = 1000 // login challenges waiting at once; more = refused
+	loginNonceAddr  = 20   // ... from one address (an IPv6 /64): one client must not fill the table
 	loginPasskeyMax = 20   // passkeys per account
 )
 
@@ -62,12 +63,14 @@ type loginAdd struct {
 type LoginPasskeys struct {
 	mu     sync.Mutex                // the challenges, and every read-change-write of a file
 	nonces map[string]confirmPending // a login's challenge, by its nonce
+	addrs  map[string]string         // the address that asked for each nonce
 	adds   map[string]loginAdd       // an add's challenge, by session token
 	now    func() time.Time
 }
 
 func NewLoginPasskeys() *LoginPasskeys {
-	return &LoginPasskeys{nonces: map[string]confirmPending{}, adds: map[string]loginAdd{}, now: time.Now}
+	return &LoginPasskeys{nonces: map[string]confirmPending{}, addrs: map[string]string{},
+		adds: map[string]loginAdd{}, now: time.Now}
 }
 
 // -- the files -----------------------------------------------------------------
@@ -77,6 +80,22 @@ func (s *Server) loginKeysPath(role, user string) string {
 		return filepath.Join(s.cfg.ConfigDir, "admin-passkeys.json")
 	}
 	return filepath.Join(s.users.homeDir(user), "data", "passkeys.json")
+}
+
+// dropLoginKeys removes an account's sign-in passkeys. Called when its
+// password is set, changed or cleared: whoever learnt the old password may
+// have added a passkey, and a new password must lock them out as it locks
+// out their sessions. The person adds their own passkeys again.
+func (s *Server) dropLoginKeys(role, user string) {
+	lp := s.loginPK
+	lp.mu.Lock()
+	defer lp.mu.Unlock()
+	path := s.loginKeysPath(role, user)
+	if err := os.Remove(path); err == nil {
+		s.log.Info("passkeys removed: new password", "user", user, "role", role)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		s.log.Warn("passkeys: could not remove", "user", user, "role", role, "err", err)
+	}
 }
 
 // readLoginKeys: a missing file is no passkeys.
@@ -199,6 +218,11 @@ func (s *Server) apiPasskey(w http.ResponseWriter, r *http.Request) {
 
 	switch what {
 	case "login-begin":
+		host, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			host = r.RemoteAddr
+		}
+		addr := addrKey(host)
 		lp.mu.Lock()
 		now := lp.now()
 		for n, c := range lp.nonces {
@@ -206,13 +230,22 @@ func (s *Server) apiPasskey(w http.ResponseWriter, r *http.Request) {
 				delete(lp.nonces, n)
 			}
 		}
-		if len(lp.nonces) >= loginNonceMax {
+		mine := 0
+		for n, a := range lp.addrs {
+			if _, ok := lp.nonces[n]; !ok {
+				delete(lp.addrs, n) // used or expired
+			} else if a == addr {
+				mine++
+			}
+		}
+		if len(lp.nonces) >= loginNonceMax || mine >= loginNonceAddr {
 			lp.mu.Unlock()
 			sendError(w, r, http.StatusTooManyRequests, "busy - try again in a minute")
 			return
 		}
 		nonce, ch := b64u(randomBytes(24)), randomBytes(32)
 		lp.nonces[nonce] = confirmPending{value: ch, kind: "get", expires: now.Add(confirmChallengeTTL)}
+		lp.addrs[nonce] = addr
 		lp.mu.Unlock()
 		sendJSON(w, r, http.StatusOK, map[string]string{"nonce": nonce, "challenge": b64u(ch), "rp_id": hostOnly(r)})
 

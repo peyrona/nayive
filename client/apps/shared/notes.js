@@ -617,12 +617,10 @@
         h2.textContent = T( 'notes.title' );
         head.append( plus, h2 );
         var cards = el( 'div', 'notes-cards' );
-        var empty = el( 'p', 'notes-empty' );
-        empty.textContent = T( 'notes.empty' );
         var more = el( 'button', 'btn text sm notes-more' );
         more.type = 'button';
         more.addEventListener( 'click', function () { expanded = true; render(); } );
-        sec.append( head, cards, empty, more );
+        sec.append( head, cards, more );
         host.append( sec );
 
         var V = {
@@ -662,7 +660,8 @@
             var shown = expanded ? list : list.slice( 0, PAGE );
             cards.textContent = '';
             shown.forEach( function ( n ) { cards.append( card( n ) ); } );
-            empty.hidden = !! list.length || ! readOnce;
+            // no notes and no "new note" button here (a phone: it lives in the top row): nothing to show
+            sec.hidden = ! list.length && ! head.contains( plus );
             more.hidden = shown.length >= list.length;
             more.textContent = TF( 'notes.more', { n: list.length - shown.length } );
             // The open note deleted (its own button, or another device): the full view

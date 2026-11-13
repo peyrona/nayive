@@ -40,15 +40,16 @@ ok( onDisk( s, F ) === null, "nothing written by just looking" );
 
 //------------------------------------------------------------------------//
 section( "B2 · ADD, MOVE, REMOVE" );
-await addApp( c, "Drive" );
-ok( await has( f => same( f.items, [ "drive/index.html", "search", "desk", "note", "gear" ] ) ), "+ Add makes the file (new one first)", onDisk( s, F ) );
-ok( await c.until( "document.querySelector( '#quickBar a.qb-app[href=\"drive/index.html\"]' )" ), "the row shows it" );
+// Write sits in a group: a first-level tile (Drive...) is always in sight and never offered by Add
+await addApp( c, "Write" );
+ok( await has( f => same( f.items, [ "write/index.html", "search", "desk", "note", "gear" ] ) ), "+ Add makes the file (new one first)", onDisk( s, F ) );
+ok( await c.until( "document.querySelector( '#quickBar a.qb-app[href=\"write/index.html\"]' )" ), "the row shows it" );
 ok( await c.until( "document.querySelectorAll( '#barList [data-id]' ).length === 5" ), "the editor shows the row's five icons" );
-ok( await press( c, "down", "Drive" ), "→ pressed" );
-ok( await has( f => same( f.items, [ "search", "drive/index.html", "desk", "note", "gear" ] ) ), "→ moves it", onDisk( s, F ) );
+ok( await press( c, "down", "Write" ), "→ pressed" );
+ok( await has( f => same( f.items, [ "search", "write/index.html", "desk", "note", "gear" ] ) ), "→ moves it", onDisk( s, F ) );
 ok( ! await press( c, "del", "Search" ) && ! await press( c, "del", "Settings" ), "Search and Settings cannot be removed" );
 ok( await press( c, "up", "Settings" ), "← on Settings pressed" );
-ok( await has( f => same( f.items, [ "search", "drive/index.html", "desk", "gear", "note" ] ) ), "Settings moves like the rest", onDisk( s, F ) );
+ok( await has( f => same( f.items, [ "search", "write/index.html", "desk", "gear", "note" ] ) ), "Settings moves like the rest", onDisk( s, F ) );
 
 //------------------------------------------------------------------------//
 section( "B3 · ANOTHER DEVICE SAVED MEANWHILE" );

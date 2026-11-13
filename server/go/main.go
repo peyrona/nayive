@@ -102,6 +102,7 @@ package main
 //	office.go, api_office.go    LibreOffice documents, given an Office twin
 //	fileid_unix.go, fileid_other.go  a file's identity (inode) where there is one
 //	static.go, sites.go     the /nayive/ apps; the static web sites
+//	sites_auth.go           a site's optional .password (the browser's login box)
 //
 // Testing from the shell:
 //
@@ -134,7 +135,17 @@ import (
 
 func main() {
 	configPath := flag.String("config", "config/server.json", "path to the config file")
+	sitePassword := flag.String("site-password", "",
+		"print a line for a web site's .password file for this name, and exit "+
+			"(the password is read from the keyboard or stdin)")
 	flag.Parse()
+
+	if *sitePassword != "" {
+		if err := printSitePasswordLine(*sitePassword, os.Stdin, os.Stdout, os.Stderr); err != nil {
+			fatal("site-password: %v", err)
+		}
+		return
+	}
 
 	cfg, err := LoadConfig(*configPath)
 	if err != nil {

@@ -369,12 +369,12 @@
             flex: none; width: auto; min-height: 0; padding-left: 0; gap: 6px;
             flex-wrap: nowrap; overflow: visible; container-type: normal; transition: none;
         }
-        html.ls-top #tools #gearBtn { position: static; transform: none; order: 1; }
+        html.ls-top #tools #gearBtn { position: relative; top: auto; transform: none; order: 1; }   /* relative, not static: its touch pad (::before) must stay on the gear, not cover the row */
         html.ls-top #tools .tool-extra { margin-left: 0; transition: none; }
         html.ls-top #tools:not(.open) .tool-extra { display: none; }
-        html.ls-top #lsBox:has(#tools.open) > :not(#tools):not(.ls-quick) { display: none; }
+        html.ls-top #lsBox:has(#tools.open) > :not(#tools):not(.ls-quick):not(.sos-btn) { display: none; }
         /* the open search takes the whole row: the other buttons step aside until it folds */
-        html.ls-top #lsBox:has(#lsField.is-open) > :not(#lsField):not(.ls-quick) { display: none; }
+        html.ls-top #lsBox:has(#lsField.is-open) > :not(#lsField):not(.ls-quick):not(.sos-btn) { display: none; }   /* SOS never hides */
 
         /* Chat's and eMail's unread counts: a disc on the tile's icon, top-right.
            Chat red, eMail blue - the desktop bar's mail dot colour (2026-10-09).
@@ -413,7 +413,7 @@
         /* Mi cuenta: under each phone, its photo upload switch and folder. */
         .dev-media { padding: 0 6px 0 12px; margin-bottom: 8px; }
         /* Top bar dialog: the row itself, as it will look; tap an icon to pick it, or drag it. */
-        .bar-edit { display: flex; justify-content: flex-end; gap: 6px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; }
+        .bar-edit { margin-top: 8px; display: flex; justify-content: flex-end; gap: 6px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; }
         .bar-edit .btn { width: 42px; height: 42px; touch-action: pan-y; user-select: none; }
         .bar-edit svg { width: 20px; height: 20px; pointer-events: none; }
         .bar-edit .btn.is-picked { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -454,6 +454,7 @@
             font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
             color: var(--text-faint); margin: 18px 0 8px;
         }
+        .acct-h:first-child { margin-top: 8px; }   /* first in a dialog: same gap under the title everywhere */
 
         .acct-list { display: flex; flex-direction: column; gap: 6px; }
         .acct-msg { font-size: 0.8rem; color: var(--danger); margin: 10px 0 0; }
@@ -669,9 +670,10 @@
               if( window.top !== window || ! window.NayiveNotes ) return;
               Ayni.i18n.ready.then( function ()
               {
-                  NayiveNotes.wall( document.getElementById( 'notesHost' ) );
+                  var wall = NayiveNotes.wall( document.getElementById( 'notesHost' ) );
                   // the top row (html.ls-top): its "new note" goes where My account › Top bar puts it
                   if( window.NayiveBar ) NayiveBar.render();
+                  wall.render();   // the button moved out: no notes = no notes area
               } );
           } );
       </script>

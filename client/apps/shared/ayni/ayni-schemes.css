@@ -5,6 +5,7 @@
     font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-faint); margin: 18px 0 8px;
 }
+.scm-h:first-child { margin-top: 8px; }
 
 .scm-list { display: flex; flex-direction: column; gap: 6px; }
 .scm-msg { font-size: 0.8rem; color: var(--danger); margin: 10px 0 0; }

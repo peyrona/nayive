@@ -98,7 +98,7 @@ body.composing #listTools { display: none; }
 
 /* A phone: what is on screen, and the button that slides the tree in. */
 .mail-where        { display: none; }
-.mail-where-name   { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-where-name   { flex: 1; min-width: 0; font-weight: 600; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .mail-main { flex: 1 1 auto; min-width: 0; overflow-y: auto; }
 /* The list fills its pane: a click (or right-click) under the last row is

@@ -26,9 +26,10 @@ type ChatHit struct {
 }
 
 // chatMsgText is what a message says, for the search: its text, a file's
-// name, a card's name, a place, a poll's question and options.
+// name, a card's name, a place, a poll's question and options. A translated
+// text, the translation only (chatOrig).
 func chatMsgText(m *ChatMsg) string {
-	parts := []string{m.Text}
+	parts := []string{translationOnly(m.Text)}
 	if m.File != nil {
 		parts = append(parts, m.File.Name)
 	}

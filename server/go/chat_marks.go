@@ -116,9 +116,24 @@ func marksInline(w *strings.Builder, s []rune, a, b int, L []marksSpan) {
 	}
 }
 
+// chatOrig starts a translated text's original (client chat/core.js C.ORIG:
+// a line break, then an invisible separator): one-line places - a push, a
+// quote, a search hit - show the translation only.
+const chatOrig = "\n\u2063"
+
+// translationOnly is `text` without the original after chatOrig, if any.
+func translationOnly(text string) string {
+	if i := strings.Index(text, chatOrig); i >= 0 {
+		return text[:i]
+	}
+	return text
+}
+
 // stripMarks: the words without their marks ("*hi*" -> "hi"), list lines
-// as "• item". Only the first marksMax runes.
+// as "• item". Only the first marksMax runes; a translation's original
+// (chatOrig) not at all.
 func stripMarks(text string) string {
+	text = translationOnly(text)
 	if len(text) > marksMax {
 		if r := []rune(text); len(r) > marksMax {
 			text = string(r[:marksMax])

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -261,5 +262,47 @@ func TestPasskeyRemoveAndRename(t *testing.T) {
 	}
 	if _, code, _ := pkLogin(t, ts.URL, f, handle, nil); code != 401 {
 		t.Errorf("login with a removed passkey = %d, want 401", code)
+	}
+}
+
+// TestPasskeyLoginBeginPerAddress: one address cannot fill the shared table
+// of login challenges; others still get theirs, and its own come back once
+// they expire.
+func TestPasskeyLoginBeginPerAddress(t *testing.T) {
+	srv, ts, _ := newTestServer(t)
+	c := noFollow()
+	for i := 0; i < loginNonceAddr; i++ {
+		if code := pkCall(t, c, ts.URL, "POST", "login-begin", map[string]any{}, nil); code != 200 {
+			t.Fatalf("login-begin %d = %d", i, code)
+		}
+	}
+	if code := pkCall(t, c, ts.URL, "POST", "login-begin", map[string]any{}, nil); code != http.StatusTooManyRequests {
+		t.Errorf("login-begin past the per-address cap = %d, want 429", code)
+	}
+	lp := srv.loginPK
+	lp.mu.Lock()
+	if len(lp.nonces) != loginNonceAddr {
+		t.Errorf("table holds %d, want %d", len(lp.nonces), loginNonceAddr)
+	}
+	lp.mu.Unlock()
+
+	// Another address is not held back by this one.
+	req, _ := http.NewRequest("POST", "/api/passkey/login-begin", strings.NewReader("{}"))
+	req.RemoteAddr = "203.0.113.9:4000"
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", ts.URL)
+	req.Host = strings.TrimPrefix(ts.URL, "http://")
+	rec := httptest.NewRecorder()
+	srv.httpd.Handler.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Errorf("another address = %d, want 200 (%s)", rec.Code, rec.Body.String())
+	}
+
+	// Expired, they no longer count.
+	lp.mu.Lock()
+	lp.now = func() time.Time { return time.Now().Add(confirmChallengeTTL + time.Second) }
+	lp.mu.Unlock()
+	if code := pkCall(t, c, ts.URL, "POST", "login-begin", map[string]any{}, nil); code != 200 {
+		t.Errorf("login-begin after the old ones expired = %d", code)
 	}
 }

@@ -1876,11 +1876,27 @@ func (o *chatOwner) onlineFor(pid string) []string {
 // as their pages last said (every wait, ?tz=). The sender's page offers "Send
 // without sound" when it is night for one of them (compose.js nightAsk). In
 // memory only: after a restart a zone is known again once its page waits.
-func (o *chatOwner) zonesFor(pid string) map[string]string {
+// A Nayive user whose page has not waited yet: their account's timezone.
+func (h *ChatHub) zonesFor(o *chatOwner, pid string) map[string]string {
 	out := map[string]string{}
 	for _, id := range o.visible(pid) {
 		for _, p := range o.members(id) {
-			if z := o.zones[p]; z != "" && p != pid {
+			if _, seen := out[p]; seen || p == pid {
+				continue
+			}
+			z := o.zones[p]
+			if z == "" {
+				acct := ""
+				if p == "o" {
+					acct = o.user
+				} else if c := o.contact(p); c != nil {
+					acct = c.User
+				}
+				if t := h.users.UserTZ("user", acct); acct != "" && t != nil && validZone(*t) {
+					z = *t
+				}
+			}
+			if z != "" {
 				out[p] = z
 			}
 		}

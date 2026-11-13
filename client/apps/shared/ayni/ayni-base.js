@@ -366,7 +366,12 @@ const matcher = (raw) => {
 
 /* ---------- Tooltips: data-tip on any element ---------- */
 let tip, tipTimer, tipEl = null;
+/* A button whose label already says what its tooltip says shows none (unless the label is cut short) */
+const tipNorm = (s) => (s || '').replace(/\s+/g, ' ').replace(/(…|\.\.\.)$/, '').trim().toLowerCase();
+const tipIsLabel = (el) => el.matches('button, .btn') && !!tipNorm(el.innerText) && tipNorm(el.innerText) === tipNorm(el.dataset.tip)
+  && ![el, ...el.querySelectorAll('*')].some((x) => x.scrollWidth > x.clientWidth + 1);
 const showTip = (el) => {
+  if (tipIsLabel(el)) { if (tip.matches(':popover-open')) tip.hidePopover(); return; }
   tip.textContent = el.dataset.tip; tip.showPopover();
   const r = el.getBoundingClientRect(), t = tip.getBoundingClientRect();
   let y = r.bottom + 6; if (y + t.height > innerHeight - 8) y = r.top - t.height - 6;

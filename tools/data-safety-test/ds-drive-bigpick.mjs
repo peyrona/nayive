@@ -53,6 +53,9 @@ section( "COMPRESS 1,300 PICKED FILES" );
     await c.evaluate( "compressSelection(); true" );
     ok( await until( () => fs.readdirSync( dir ).some( n => n.endsWith( ".zip" ) ) ), "a .zip is made beside them",
         fs.readdirSync( dir ).filter( n => ! n.endsWith( ".jpg" ) ) );
+    // Then Drive reloads the folder and picks the .zip: wait, or that reload drops the next pick.
+    ok( await c.until( "! listingLoading && actionTargets().length === 1 && actionTargets()[ 0 ].endsWith( '.zip' )", 60000 ),
+        "the folder is read again, the .zip picked" );
 }
 
 //------------------------------------------------------------------------//

@@ -128,6 +128,29 @@ try
     ok( "refused, with a hint to use the password", ( await until( "document.getElementById('error').textContent" ) || "" ).indexOf( "password" ) !== -1 );
     ok( "still on the login page", await c.evaluate( "location.pathname" ) === "/nayive/login.html" );
 
+    //------------------------------------------------------------------------//
+    section( "AUTOFILL COMES BACK; NO SERVER, NO LOOP" );
+
+    // Count the login challenges the page asks for.
+    await c.evaluate( `window.__lb = 0; window.__f = window.fetch; window.__down = false;
+        window.fetch = function ( u, o ) { if( /login-begin/.test( String( u ) ) ) { window.__lb++; if( window.__down ) return Promise.reject( new TypeError( 'offline' ) ); }
+            return window.__f.apply( this, arguments ); }; true` );
+    const auto = await c.evaluate( "PublicKeyCredential.isConditionalMediationAvailable ? PublicKeyCredential.isConditionalMediationAvailable() : false" );
+    await click( "#pkBtn" );
+    await sleep( 5000 );
+    const n1 = await c.evaluate( "window.__lb" );
+    // Chromium's virtual authenticator answers the autofill offer by itself:
+    // each refusal starts it again, until the third.
+    ok( "after a refusal the autofill offer starts again", auto ? n1 >= 2 && n1 <= 3 : n1 === 1, { auto, n1 } );
+    await sleep( 3000 );
+    ok( "...and stops after three refusals", await c.evaluate( "window.__lb" ) === n1 );
+    await c.evaluate( "window.__down = true; window.__lb = 0; true" );
+    await click( "#pkBtn" );
+    await sleep( 4000 );
+    const n2 = await c.evaluate( "window.__lb" );
+    ok( "no server: one try, no loop", n2 === 1, n2 );
+    ok( "and it says so", !! await c.evaluate( "document.getElementById('error').textContent" ) );
+
     const errs = c.logs.filter( l => /^EXCEPTION/.test( l ) );
     ok( "no page exceptions", errs.length === 0, errs );
 }

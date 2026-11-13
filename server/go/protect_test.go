@@ -242,3 +242,59 @@ func TestTrackersMoveFromOwntracks(t *testing.T) {
 		t.Errorf("owntracks.json is still there: %v", err)
 	}
 }
+
+// TestPasskeysFileProtected - homes/<user>/data/passkeys.json holds the
+// sign-in passkeys: the file API (PUT, mkdir, copy onto, move onto, trash)
+// must never write it, absent or present, for the user or the admin. A
+// session alone must not add a way into the account.
+func TestPasskeysFileProtected(t *testing.T) {
+	srv, ts, client := newTestServer(t)
+	signIn(t, client, ts.URL, "ana", "abc")
+	pk := filepath.Join(srv.cfg.HomesDir, "ana", "data", "passkeys.json")
+	os.WriteFile(filepath.Join(srv.cfg.HomesDir, "ana", "files", "pk.json"), []byte(`{"keys":[]}`), 0o644)
+	os.Remove(pk)
+
+	try := func(c *http.Client, prefix, when string) {
+		t.Helper()
+		for _, req := range []struct{ method, url, body string }{
+			{"PUT", "/api/files?file=" + prefix + "data/passkeys.json", `{"keys":[]}`},
+			{"PUT", "/api/files?type=dir&parent=" + prefix + "data&name=passkeys.json", ""},
+			{"POST", "/api/files?from=" + prefix + "files/pk.json&new=" + prefix + "data/passkeys.json", ""},
+			{"POST", "/api/files?old=" + prefix + "files/pk.json&new=" + prefix + "data/passkeys.json", ""},
+			{"DELETE", "/api/files?paths=" + prefix + "data/passkeys.json", ""},
+			{"POST", "/api/files?old=" + prefix + "data/passkeys.json&new=" + prefix + "data/otro.json", ""},
+		} {
+			if when == "absent" && (req.method == "DELETE" || strings.Contains(req.url, "old="+prefix+"data/passkeys")) {
+				continue // nothing there to trash or move away
+			}
+			var body io.Reader
+			if req.body != "" {
+				body = strings.NewReader(req.body)
+			}
+			resp := do(t, c, req.method, ts.URL+req.url, body, nil)
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusForbidden {
+				t.Errorf("%s: %s %s = %d, want 403", when, req.method, req.url, resp.StatusCode)
+			}
+		}
+	}
+
+	try(client, "", "absent")
+	if pathExists(pk) {
+		t.Errorf("the file API made data/passkeys.json")
+	}
+	keep := `{"user_handle":"x","keys":[]}` + "\n"
+	os.WriteFile(pk, []byte(keep), 0o600)
+	try(client, "", "present")
+	if readOr(pk) != keep {
+		t.Errorf("the file API changed data/passkeys.json: %q", readOr(pk))
+	}
+
+	admin := signedInClient(t, ts.URL, "jefe", "secreto")
+	try(admin, "homes/ana/", "present, admin")
+	os.Remove(pk)
+	try(admin, "homes/ana/", "absent, admin")
+	if pathExists(pk) {
+		t.Errorf("the admin's file API made homes/ana/data/passkeys.json")
+	}
+}

@@ -26,3 +26,19 @@ func TestStripMarks(t *testing.T) {
 		}
 	}
 }
+
+// A "Translate and send" message: the translation, then chatOrig and the
+// original. Pushes, quotes and search hits show the translation only, as the
+// page's C.stripMarks does.
+func TestStripMarksTranslation(t *testing.T) {
+	text := "Bonjour, *ça va* ?" + chatOrig + "Hola, ¿qué tal?"
+	if got := stripMarks(text); got != "Bonjour, ça va ?" {
+		t.Errorf("stripMarks = %q", got)
+	}
+	if got := chatMsgText(&ChatMsg{Text: text}); got != "Bonjour, *ça va* ?" {
+		t.Errorf("chatMsgText = %q", got)
+	}
+	if chatOrig != "\n⁣" {
+		t.Errorf("chatOrig drifted from the page's C.ORIG")
+	}
+}

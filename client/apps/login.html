@@ -331,40 +331,73 @@
             // from the one picked. The password stays the way in without one.
             // Where the browser can, the name field's autofill list offers them
             // too ("conditional"); the button stops that wait first.
-            var pkBtn = document.getElementById( 'pkBtn' ), pkWait = null;
+            var pkBtn = document.getElementById( 'pkBtn' ), pkWait = null, pkRun = null, pkAuto = false, pkRefused = 0;
 
-            async function passkey( conditional )
+            // A login challenge lives 3 minutes (server confirmChallengeTTL):
+            // an autofill offer left waiting is renewed before then, and only
+            // while the page is seen.
+            function renewLater( wait )
+            {
+                setTimeout( function tick()
+                {
+                    if( pkWait !== wait || wait.signal.aborted ) return;
+                    if( document.hidden ) { document.addEventListener( 'visibilitychange', tick, { once: true } ); return; }
+                    passkey( true );
+                }, 150000 );
+            }
+
+            function passkey( conditional )
             {
                 if( pkWait ) pkWait.abort();
-                var wait = pkWait = new AbortController();
-                try
+                var wait = pkWait = new AbortController(), prev = pkRun;
+                var again = false, picked = ! conditional;   // again: offer the autofill once more after this
+                return pkRun = ( async function ()
                 {
-                    await leftovers;
-                    var post = function ( what, body )
+                    try
                     {
-                        return fetch( '/api/passkey/' + what, { method: 'POST', credentials: 'same-origin',
-                            headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( body ) } );
-                    };
-                    var res = await post( 'login-begin', {} );
-                    if( ! res.ok ) throw new Error( Ayni.t( 'login.failed' ) );
-                    var b = await res.json();
-                    var got = await AyniPasskey.get( { challenge: AyniPasskey.bytes( b.challenge ), rpId: b.rp_id,
-                        mediation: conditional ? 'conditional' : undefined, signal: wait.signal } );
-                    if( ! conditional ) pkBtn.disabled = true;
-                    errBox.textContent = '';
-                    var r = got.cred.response, remember = document.getElementById( 'remember' ).checked;
-                    res = await post( 'login', { nonce: b.nonce, id: got.id, user_handle: got.userHandle, remember: remember,
-                        client_data: AyniPasskey.b64u( r.clientDataJSON ), auth_data: AyniPasskey.b64u( r.authenticatorData ),
-                        signature: AyniPasskey.b64u( r.signature ) } );
-                    if( res.ok ) { goIn( await res.json().catch( function () { return {}; } ), remember ); return; }
-                    throw new Error( Ayni.t( res.status === 401 ? 'login.passkeyRefused' : 'login.failed' ) );
-                }
-                catch ( e )
-                {
-                    if( wait.signal.aborted ) return;              // the button took over
-                    if( ! conditional ) errBox.textContent = ( e && e.message ) || Ayni.t( 'login.noServer' );
-                }
-                finally { pkBtn.disabled = false; }
+                        await prev;                                // the browser takes one request at a time
+                        await leftovers;
+                        if( wait.signal.aborted ) return;
+                        var post = function ( what, body )
+                        {
+                            return fetch( '/api/passkey/' + what, { method: 'POST', credentials: 'same-origin',
+                                headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( body ) } );
+                        };
+                        var res = await post( 'login-begin', {} );
+                        if( ! res.ok ) throw new Error( Ayni.t( 'login.failed' ) );   // no server, no challenge: no loop
+                        var b = await res.json();
+                        again = pkAuto;
+                        if( conditional ) renewLater( wait );
+                        var asked = Date.now();
+                        var got = await AyniPasskey.get( { challenge: AyniPasskey.bytes( b.challenge ), rpId: b.rp_id,
+                            mediation: conditional ? 'conditional' : undefined, signal: wait.signal } ).catch( function ( e )
+                            {
+                                if( conditional && Date.now() - asked < 2000 ) again = false;   // refused at once: never a loop
+                                throw e;
+                            } );
+                        picked = true;
+                        if( ! conditional ) pkBtn.disabled = true;
+                        errBox.textContent = '';
+                        var r = got.cred.response, remember = document.getElementById( 'remember' ).checked;
+                        res = await post( 'login', { nonce: b.nonce, id: got.id, user_handle: got.userHandle, remember: remember,
+                            client_data: AyniPasskey.b64u( r.clientDataJSON ), auth_data: AyniPasskey.b64u( r.authenticatorData ),
+                            signature: AyniPasskey.b64u( r.signature ) } );
+                        if( res.ok ) { again = false; goIn( await res.json().catch( function () { return {}; } ), remember ); return; }
+                        throw new Error( Ayni.t( res.status === 401 ? 'login.passkeyRefused' : 'login.failed' ) );
+                    }
+                    catch ( e )
+                    {
+                        if( wait.signal.aborted ) return;          // the button, or a renewal, took over
+                        if( picked ) errBox.textContent = ( e && e.message ) || Ayni.t( 'login.noServer' );
+                        if( picked && ++pkRefused >= 3 ) again = false;   // the button still works
+                    }
+                    finally
+                    {
+                        pkBtn.disabled = false;
+                        if( again && pkWait === wait && ! wait.signal.aborted )
+                            setTimeout( function () { if( pkWait === wait ) passkey( true ); }, 1000 );
+                    }
+                } )();
             }
 
             window.addEventListener( 'DOMContentLoaded', function ()
@@ -375,7 +408,7 @@
                 try
                 {
                     if( PublicKeyCredential.isConditionalMediationAvailable )
-                        PublicKeyCredential.isConditionalMediationAvailable().then( function ( ok ) { if( ok ) passkey( true ); }, function () {} );
+                        PublicKeyCredential.isConditionalMediationAvailable().then( function ( ok ) { if( ok ) { pkAuto = true; passkey( true ); } }, function () {} );
                 }
                 catch ( e ) {}
             } );

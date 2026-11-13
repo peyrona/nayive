@@ -5,7 +5,8 @@
 // S2 a save keeps the other users' rows; only real other users become contacts.
 // S3 a refused save (bad hours, bad time) leaves the file byte for byte.
 // S4 an admin rename / delete follows the owner and the contact.
-// S5 a damaged file is never written over: moved aside, dated, before a save.
+// S5 a danger watch writes only its own time; "I'm safe" before it goes out sends nothing.
+// S6 a damaged file is never written over: moved aside, dated, before a save.
 import fs from "node:fs";
 import path from "node:path";
 import { server, ok, section, done, sleep } from "./lib.mjs";
@@ -58,7 +59,21 @@ if( admin )
 }
 
 //------------------------------------------------------------------------//
-section( "S5 · A DAMAGED FILE" );
+section( "S5 · DANGER WATCH" );
+{
+    const post = p => test.post( "/api/sos" + p, "{}", { "Content-Type": "application/json" } );
+    const others = () => JSON.stringify( ( ( json() || {} ).users || [] ).filter( r => r.owner !== "test" ) );
+    const keep = others(), before = row( "test" );
+    ok( ( await post( "/watch" ) ).status === 200, "a watch starts" );
+    const r = row( "test" );
+    ok( r?.watch > Date.now() / 1000 && JSON.stringify( r.contacts ) === JSON.stringify( before?.contacts ), "its time is kept, the settings untouched", r );
+    ok( others() === keep, "the other rows are untouched" );
+    ok( ( await post( "/watch/stop" ) ).status === 200 && ! row( "test" ).watch, "I'm safe: the watch is gone" );
+    ok( ( json().alerts || [] ).every( a => a.kind !== "watch" && a.kind !== "safe" ), "nothing was sent" );
+}
+
+//------------------------------------------------------------------------//
+section( "S6 · A DAMAGED FILE" );
 {
     await s.stop();
     const s2 = await server( { test: "test", beto: "beto" } );

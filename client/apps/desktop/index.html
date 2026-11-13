@@ -131,7 +131,7 @@
                  window out of the way, a second press brings them back; ayni-deskpage.js SHOW THE DESK), a new note. -->
             <div class="notes-pair" id="notesPair" role="group" data-i18n-attr="aria-label:notes.title">
                 <button class="btn" id="deskBtn" type="button" aria-pressed="false" data-i18n-attr="data-tip:desktop.showDesk, aria-label:desktop.showDesk"><span class="icon" data-icon="show-desk"></span></button>
-                <button class="btn" id="noteNewBtn" type="button" data-i18n-attr="data-tip:notes.new, aria-label:notes.new"><span class="icon" data-icon="plus"></span></button>
+                <button class="btn" id="noteNewBtn" type="button" data-i18n-attr="data-tip:notes.new, aria-label:notes.new"><span class="icon" data-icon="sticky-plus"></span></button>
             </div>
             <!-- COUNTDOWNS - one chip each (see THE COUNTDOWNS), cloned from cdTpl. -->
             <span id="cds"></span>
@@ -794,7 +794,7 @@
                 { sel: '#menuBtn',       icon: 'grid', text: t( 'desktop.helpMenu' ) },
                 // the notes pair sits in the menu's top row (another document): no sel, the rows always show
                 { icon: 'show-desk', name: t( 'desktop.showDesk' ), text: t( 'desktop.helpShowDesk' ) },
-                { icon: 'plus', name: t( 'notes.new' ), text: t( 'desktop.helpNewNote' ) },
+                { icon: 'sticky-plus', name: t( 'notes.new' ), text: t( 'desktop.helpNewNote' ) },
                 // tour: ("Ver el tour" in the card) a window, its bar button, the
                 // ⋮'s Tile switch, the bar's weather and battery - or, with no
                 // window open / the item off, the desk or the bar as a ghost.
