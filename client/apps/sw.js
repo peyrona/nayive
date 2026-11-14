@@ -30,7 +30,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-f1767ac8bbb6";
+var CACHE_VERSION = "nayive-2269642e58bc";
 /* @end */
 
 /* @generated:precache */
@@ -196,6 +196,7 @@ var PRECACHE_SHELL = [
     "shared/ayni/ayni-doc.js",
     "shared/ayni/ayni-fields.css",
     "shared/ayni/ayni-fields.js",
+    "shared/ayni/ayni-fx.js",
     "shared/ayni/ayni-help.css",
     "shared/ayni/ayni-help.js",
     "shared/ayni/ayni-i18n.js",
@@ -249,6 +250,9 @@ var PRECACHE_SHELL = [
     "shared/ayni/i18n/es.json",
     "shared/ayni/i18n/fr.json",
     "shared/ayni/i18n/pt.json",
+    "shared/ayni/lockers/clock.js",
+    "shared/ayni/lockers/life.js",
+    "shared/ayni/lockers/matrix.js",
     "shared/ayni/tz-geo.json",
     "shared/file-kinds.js",
     "shared/i18n.js",

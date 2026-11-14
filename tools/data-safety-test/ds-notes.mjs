@@ -142,6 +142,7 @@ section( "N3 · NO SERVER, NOTHING CACHED" );
 //------------------------------------------------------------------------//
 section( "N6 · THE DESKTOP" );
 {
+    const before = json();
     const d = await browser( s, { mouse: true } );
     await d.open( "/nayive/desktop/" );
     await d.until( "document.querySelectorAll( '.notes-pane .note.sheet, .notes-layer .note.sticky' ).length" );
@@ -156,7 +157,7 @@ section( "N6 · THE DESKTOP" );
     await type( d, "on the desk" );
     ok( await has( l => l.some( x => x.text === "on the desk" ) ), "a note in the desktop's panel saves" );
     ok( ! /"(x|y|w|h|z|left|top)"\s*:/.test( onDisk( s, F ) ), "its place is not in the shared file" );
-    ok( json().length === 4, "nothing else changed", json().length );
+    ok( json().length === before.length + 1 && before.every( b => json().some( x => x.id === b.id && x.text === b.text ) ), "nothing else changed", json() );
     d.stop();
 }
 

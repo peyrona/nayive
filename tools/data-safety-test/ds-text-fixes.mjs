@@ -69,7 +69,7 @@ const saveAs = async name =>
 {
     await c.evaluate( "document.getElementById( 'saveAsBtn' ).click(); true" );
     await c.until( "document.querySelector( '#saveAsBackdrop[open]' )" );
-    await c.evaluate( `const i = document.getElementById( 'saveName' ); i.value = ${JSON.stringify( name )}; i.dispatchEvent( new Event( 'input' ) ); document.getElementById( 'saveAsConfirmBtn' ).click(); true` );
+    await c.evaluate( `( () => { const i = document.getElementById( 'saveName' ); i.value = ${JSON.stringify( name )}; i.dispatchEvent( new Event( 'input' ) ); document.getElementById( 'saveAsConfirmBtn' ).click(); return true; } )()` );
 };
 await saveAs( "other-utf8.txt" );
 ok( await disk( () => fs.existsSync( path.join( F, "other-utf8.txt" ) ) ), "the UTF-8 copy is written" );
