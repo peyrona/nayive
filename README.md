@@ -18,11 +18,12 @@ One small Go program, no database, your data in plain files.
 | | |
 |---|---|
 | **Files** | Drive, Photos, Music, Movies, an image editor |
-| **Office** | Write (.docx), Calc (.xlsx), Text (Markdown), Calculator |
-| **Talk** | eMail, Chat with voice and video calls |
+| **Office** | Write (.docx), Calc (.xlsx), Text (Markdown), quick notes |
+| **Talk** | eMail, Chat with voice and video calls and translation |
 | **Plan** | Calendar, Tasks, Habits, Trips, Split (shared expenses) |
 | **Keep** | Contacts, Bookmarks, locked documents |
-| **More** | Games, Language tools, an admin panel |
+| **Tools** | Calculator, Language tools, Find my devices, SOS (alerts the people you choose) |
+| **More** | Games (chess, checkers, solitaire, sudoku and more), search across all apps, your own web sites, an admin panel |
 
 ## Why Nayive
 
