@@ -69,6 +69,37 @@ func TestQuotedTZID(t *testing.T) {
 	}
 }
 
+// TestOutlookTZID: a Windows zone name and a vendor-prefixed one are read as
+// the Calendar reads them; an unknown one is floating (the owner's zone), not
+// the box's (S1).
+func TestOutlookTZID(t *testing.T) {
+	paris, err1 := time.LoadLocation("Europe/Paris")
+	berlin, err2 := time.LoadLocation("Europe/Berlin")
+	tokyo, err3 := time.LoadLocation("Asia/Tokyo")
+	if err1 != nil || err2 != nil || err3 != nil {
+		t.Skip("no tzdata")
+	}
+	cases := []struct {
+		tzid string
+		loc  *time.Location
+	}{
+		{"Romance Standard Time", paris},
+		{"/mozilla.org/20050126_1/Europe/Berlin", berlin},
+		{"Nowhere Standard Time", tokyo}, // the owner's zone, passed below
+	}
+	for _, c := range cases {
+		ics := "BEGIN:VEVENT\r\nUID:w\r\nSUMMARY:Cita\r\n" +
+			"DTSTART;TZID=" + c.tzid + ":20260829T100000\r\nEND:VEVENT\r\n"
+		events := ParseEvents(ics, tokyo)
+		if len(events) != 1 || events[0].StartEpoch == nil {
+			t.Fatalf("%s: events = %+v", c.tzid, events)
+		}
+		if got, want := *events[0].StartEpoch, time.Date(2026, 8, 29, 10, 0, 0, 0, c.loc).Unix(); got != want {
+			t.Errorf("%s: start = %d, want %d", c.tzid, got, want)
+		}
+	}
+}
+
 // TestUnfoldAndEscapes pins the two text rules: RFC 5545 continuation lines,
 // and a SUMMARY that carries escaped punctuation.
 func TestUnfoldAndEscapes(t *testing.T) {

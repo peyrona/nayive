@@ -286,6 +286,58 @@ try
     ok( /multipart\/alternative/.test( body ) && /<b><a href=3D"https:\/\/x\.es">negrita<\/a><\/b>/.test( body ) && /\n- uno/.test( body ), "it goes as HTML and plain text", body.slice( -900 ) );
 
     // -----------------------------------------------------------------------
+    console.log( "DRAFT RACES (review 2026-11-14)" );
+    const SET = ( id, v ) => `( () => { var e = document.getElementById( ${ JSON.stringify( id ) } ); e.value = ${ JSON.stringify( v ) }; e.dispatchEvent( new Event('input') ); } )();`;
+    const DRAFTS = "( async () => { const E = NayiveMail, a = encodeURIComponent( E.S.acct ); const p = await E.api( 'GET', a + '/list?tray=drafts' ); return ( p.items || [] ).map( m => ( { s: m.subject, ref: m.ref } ) ); } )()";
+    const drafts = () => c.evaluate( DRAFTS );
+    const dropDraft = ref => c.evaluate( `NayiveMail.api( 'POST', encodeURIComponent( NayiveMail.S.acct ) + '/draft/delete', { ref: ${ JSON.stringify( ref ) } } ).then( () => true )` );
+
+    // C5: Send while the first save is on its way - still an Undo, the later words go
+    const sentBefore2 = ( await get( "/e2e/sent" ) || [] ).length;
+    await c.evaluate( "document.getElementById('composeBtn').click(); true" );
+    await fetch( BASE + "/e2e/draft?slow=2500" );
+    await c.evaluate( SET( "cTo", "dora@example.com" ) + SET( "cSubject", "Carrera" ) + " true" );
+    ok( await waitFor( c, "/Guardando/.test( document.getElementById('cStatus').textContent )", 8000 ), "C5: a first save starts" );
+    await c.evaluate( SET( "cSubject", "Carrera dos" ) + " document.getElementById('cSend').click(); true" );
+    ok( await waitFor( c, "document.getElementById('composeView').hidden && !! document.querySelector('#ayni-toasts .toast.undo .act')", 15000 ), "C5: Send during a save still has its Undo" );
+    await fetch( BASE + "/e2e/draft?slow=0" );
+    await c.evaluate( "Ayni.settleUndo(); true" );
+    let out2 = false;
+    for( let i = 0; i < 100 && ! out2; i++ ) { out2 = ( await get( "/e2e/sent" ) || [] ).length > sentBefore2; if( ! out2 ) await sleep( 100 ); }
+    const sent2 = ( await get( "/e2e/sent" ) || [] ).pop();
+    ok( out2 && /Subject: Carrera dos/.test( sent2.raw ), "C5: …and it goes with the words typed after the save began", sent2 && sent2.raw.slice( 0, 300 ) );
+
+    // C9: emptied while its first save is on its way, then ←: no draft stays
+    await c.evaluate( "document.getElementById('composeBtn').click(); true" );
+    await fetch( BASE + "/e2e/draft?slow=2500" );
+    await c.evaluate( SET( "cSubject", "Vaciado" ) + " true" );
+    ok( await waitFor( c, "/Guardando/.test( document.getElementById('cStatus').textContent )", 8000 ), "C9: a first save starts" );
+    await c.evaluate( SET( "cSubject", "" ) + " document.getElementById('backBtn').click(); true" );
+    ok( await waitFor( c, "document.getElementById('composeView').hidden", 3000 ), "C9: ← leaves the emptied writer" );
+    await fetch( BASE + "/e2e/draft?slow=0" );
+    let left = true;
+    for( let i = 0; i < 40 && left; i++ ) { await sleep( 250 ); left = ( await drafts() ).some( d => d.s === "Vaciado" ); }
+    ok( ! left, "C9: …and its save, landing late, leaves no draft" );
+
+    // C11: bin, start a new one, Undo the bin: the binned words go to Drafts
+    await c.evaluate( "document.getElementById('composeBtn').click(); true" );
+    await c.evaluate( SET( "cSubject", "Papelera" ) + " true" );
+    ok( await waitFor( c, "/Borrador guardado/.test( document.getElementById('cStatus').textContent )", 10000 ), "C11: its draft is saved" );
+    await c.evaluate( TYPE( "<div>Palabras nuevas</div>" ) );
+    await c.evaluate( "document.getElementById('cText').dispatchEvent( new Event('input', { bubbles: true }) ); document.getElementById('cDiscard').click(); true" );
+    ok( await waitFor( c, "document.getElementById('composeView').hidden && !! document.querySelector('#ayni-toasts .toast.undo .act')" ), "C11: binned, with an Undo" );
+    await c.evaluate( "window.__c11 = document.querySelector('#ayni-toasts .toast.undo .act'); true" );
+    await c.evaluate( "window.__toasts = []; document.getElementById('composeBtn').click(); true" );
+    await c.evaluate( "window.__c11.click(); true" );
+    ok( await waitFor( c, "window.__toasts.some( t => /Guardado en Borradores/.test( t ) )", 10000 ), "C11: Undo while writing another: saved in Drafts", await lastToast( c ) );
+    const pap = ( await drafts() ).filter( d => d.s === "Papelera" );
+    const papText = pap.length ? await c.evaluate( `NayiveMail.api( 'GET', encodeURIComponent( NayiveMail.S.acct ) + '/msg/' + encodeURIComponent( ${ JSON.stringify( pap[ 0 ].ref ) } ) ).then( m => m.text || m.html || '' )` ) : "";
+    ok( pap.length === 1 && /Palabras nuevas/.test( papText ), "C11: …one draft, with the words typed after its last save", { n: pap.length, papText } );
+    for( const d of pap ) await dropDraft( d.ref );
+    await c.evaluate( "document.getElementById('backBtn').click(); true" );
+    await waitFor( c, "document.getElementById('composeView').hidden", 8000 );
+
+    // -----------------------------------------------------------------------
     console.log( "READING: the frame" );
     await c.evaluate( OPEN( "Pictures" ) + "; true" );
     ok( await waitFor( c, "document.querySelector('#readBody iframe')" ), "the HTML message opens in a frame" );

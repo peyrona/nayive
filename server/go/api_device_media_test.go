@@ -269,6 +269,15 @@ func TestDeviceMediaUpload(t *testing.T) {
 
 	// Taken during a trip: its photo folder. The phone's own folder otherwise.
 	writeTripDates(t, srv, -1, 1)
+	// A trip folder that is not there (moved or renamed in Drive) is never
+	// made again: the phone's own folder (Trips review T13).
+	if p := m.send("img-7", "moved.jpg", []byte("m"), now); p != "files/Camera/"+year+"/moved.jpg" {
+		t.Fatalf("trip folder moved away = %q", p)
+	}
+	if _, err := os.Stat(filepath.Join(home, "files/fotos/porto")); err == nil {
+		t.Fatalf("a moved trip folder was made again")
+	}
+	os.MkdirAll(filepath.Join(home, "files/fotos/porto"), 0o755)
 	if p := m.send("img-3", "trip.jpg", []byte("trip"), now); p != "files/fotos/porto/trip.jpg" {
 		t.Fatalf("during the trip = %q", p)
 	}

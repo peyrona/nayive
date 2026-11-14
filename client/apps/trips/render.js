@@ -260,6 +260,11 @@ function applySearch()
 
 function renderContent()
 {
+    // A stage drag is on: drawing now would take away the card that holds the
+    // pointer, and leave its ghost frozen on screen. Every end of the drag
+    // draws (drag.js), so nothing is missed (T4).
+    if( stageDragCtx ) return;
+
     const content = document.getElementById( 'tripContent' );
     content.innerHTML = '';
 
@@ -379,7 +384,7 @@ function buildTripCard( t, bPast )
     actions.className = 'trip-card-actions';
 
     // trip-pdf-btn / trip-share-btn: the help dialog points at them.
-    const pdfBtn = iconBtn( 'btn sm trip-pdf-btn', T( 'trips.exportPdf' ), ICON_EXPORT, 17, function() { exportTripPdf( t ); } );
+    const pdfBtn = iconBtn( 'btn sm trip-pdf-btn', T( 'trips.exportPdf' ), ICON_EXPORT, 17, function( e ) { exportTripPdf( t, e.currentTarget ); } );
     actions.appendChild( pdfBtn );
 
     // A trip somebody shared with us is not ours to pass on - the server refuses
@@ -921,7 +926,9 @@ function buildStageItem( trip, st, sViewerTz, bIsLast, hereId )
     // opens the stage editor. Press-and-drag on the card body reorders instead
     // (onStageCardPointerDown) - and leaves a fresh stageDragEndedAt so the
     // click the browser fires after a drop doesn't also open the editor.
-    card.addEventListener( 'pointerdown', function( e ) { onStageCardPointerDown( e, st.id, card ); } );
+    // Not on a trip shared with us: it is read-only, the reorder would not be saved (T11).
+    if( ! tripIsRO( trip ) )
+        card.addEventListener( 'pointerdown', function( e ) { onStageCardPointerDown( e, st.id, card ); } );
 
     // Pointing at a card draws the leg it departs on as a solid line, so you can see on
     // the map which hop of the trip the card is. Mouse only - a touch screen has no

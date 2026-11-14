@@ -22,12 +22,12 @@ import
 {
     table, doc, activeSheet, gridBooting, lastSelection, htThemeName, CM_ICONS,
     addSheet, renameActiveSheet, deleteActiveSheet, switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles, editText, styleOf,
-    blankDoc, calcPrefs, setCalcPrefs, numberLocale, printSheet
+    blankDoc, calcPrefs, setCalcPrefs, numberLocale, printSheet, isLocked, sheetHasLock, tellLocked, selectQuietly
 }
 from './grid.js';
 import
 {
-    toggleStyleField, setStyleField, clearSelectionStyle, setOrClearStyleField, setColorBar, togglePainter,
+    toggleStyleField, toggleLock, setStyleField, clearSelectionStyle, setOrClearStyleField, setColorBar, togglePainter,
     updateToolbarActiveState, mergeSelection, splitSelection, mergesInSelection, toggleFreezeColumns, toggleFreezeRows, openBorderPopup,
     closeBorderPopup, syncBorderPopupState, applyBorder, openNumFmtDialog,
     updateNumFmtPreview, confirmNumFmt, cancelNumFmt
@@ -384,6 +384,7 @@ function wireStaticUI()
     document.getElementById( 'fmtValignMiddleBtn').addEventListener( 'click', function() { setStyleField( 'valign', 'middle' ); } );
     document.getElementById( 'fmtValignBottomBtn').addEventListener( 'click', function() { setStyleField( 'valign', 'bottom' ); } );
     document.getElementById( 'fmtWrapBtn'        ).addEventListener( 'click', function() { toggleStyleField( 'wrap' ); } );
+    document.getElementById( 'fmtLockBtn'        ).addEventListener( 'click', toggleLock );
     document.getElementById( 'fmtPainterBtn'     ).addEventListener( 'click', togglePainter );
     document.getElementById( 'fmtClearBtn'       ).addEventListener( 'click', clearSelectionStyle );
     document.getElementById( 'fmtFontColor'      ).addEventListener( 'input', function( e ) { setStyleField( 'color', e.target.value.replace( '#', '' ).toUpperCase() ); setColorBar( e.target ); } );
@@ -596,8 +597,11 @@ function gotoReference( raw )
 
     if( bang !== -1 )
     {
-        const wanted = text.slice( 0, bang ).replace( /^'|'$/g, '' );
-        const i      = doc.sheets.findIndex( function( sh ) { return sh.name === wanted; } );
+        // Sheet names are case-blind, as in Excel; 'It''s'!A1 is "It's".
+        // A hidden sheet cannot be gone to: no tab would show it.
+        const quoted = /^'[\s\S]*'$/.test( text.slice( 0, bang ) );
+        const wanted = ( quoted ? text.slice( 1, bang - 1 ).replace( /''/g, "'" ) : text.slice( 0, bang ) ).toLowerCase();
+        const i      = doc.sheets.findIndex( function( sh ) { return ! sh.hidden && sh.name.toLowerCase() === wanted; } );
 
         if( i === -1 ) { Ayni.toast( 'warn', T( 'calc.gotoNoSheet' ) ); return; }
 
@@ -623,7 +627,7 @@ function gotoReference( raw )
     const r2 = Math.min( isFinite( r.e.r ) ? r.e.r : r.s.r, lastRow );
     const c2 = Math.min( isFinite( r.e.c ) ? r.e.c : r.s.c, lastCol );
 
-    table.selectCell( r1, c1, r2, c2 );
+    selectQuietly( r1, c1, r2, c2 );
     table.listen();
 }
 
@@ -681,7 +685,7 @@ function commitFormulaBar( move )
     if( ! move ) return;
 
     bar.blur();                         // so the refreshes below are not fought off
-    table.selectCell( Math.min( at.r + 1, table.countRows() - 1 ), at.c );
+    selectQuietly( Math.min( at.r + 1, table.countRows() - 1 ), at.c );
     table.listen();
 }
 
@@ -824,8 +828,12 @@ function insertFunction( name )
 
     if( s.r1 === s.r2 && s.c1 === s.c2 )
     {
-        table.selectCell( s.r1, s.c1 );
+        selectQuietly( s.r1, s.c1 );
         table.listen();
+
+        // beginEditing() below skips the grid's own lock check (it is made
+        // only when Handsontable opens the editor itself).
+        if( isLocked( activeSheet, s.r1, s.c1 ) ) { tellLocked(); return; }
 
         // Opened the way a keystroke opens it, then "typed" into: a text
         // handed to beginEditing() would open it in F2 mode, where the arrow
@@ -845,10 +853,14 @@ function insertFunction( name )
 
     let r = s.r2 + 1;
     while( r < table.countRows() && cellSourceText( r, s.c1 ) !== '' ) r++;
+
+    // Refused before anything changes: no row added for a formula that cannot land.
+    if( isLocked( activeSheet, r, s.c1 ) ) { tellLocked(); return; }
+
     if( r >= table.countRows() ) table.alter( 'insert_row_below', table.countRows() - 1 );
 
     table.setDataAtCell( r, s.c1, '=' + name + '(' + arg + ')' );
-    table.selectCell( r, s.c1 );
+    selectQuietly( r, s.c1 );
     table.listen();
 }
 
@@ -916,7 +928,8 @@ function csvLosses()
                   ( activeSheet.rowStyles || [] ).some( shows ) || ( activeSheet.colStyles || [] ).some( shows );
     const notes = ( table.getCellsMeta() || [] ).some( function( m ) { return m && m.comment && m.comment.value; } );
 
-    if( looks || notes || activeSheet.merges.length || Object.keys( activeSheet.links ).length )
+    // Locked cells too: a .csv has no lock.
+    if( looks || notes || activeSheet.merges.length || Object.keys( activeSheet.links ).length || sheetHasLock( activeSheet ) )
         out.push( 'calc.lossyCsvFormat' );
 
     return out;
@@ -1348,6 +1361,7 @@ const MENUS =
         { key: 'calc.wrapText', el: 'fmtWrapBtn', checked: styleOn( 'wrap' ) },
         { sep: true },
         { key: 'calc.borders',   el:  'fmtBorderBtn', checked: styleOn( 'border' ) },
+        { key: 'calc.lockCells', el:  'fmtLockBtn', icon: 'cell-lock', checked: styleOn( 'locked' ) },
         { key: 'calc.cellFormat', sub: selectItems( 'fmtNumFormat' ) },
         { sep: true },
         { key: 'calc.mergeCells', el: 'fmtMergeBtn' },

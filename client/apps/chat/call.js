@@ -41,6 +41,7 @@
     S.callsOn = false;     // the server has coturn: the buttons show
 
     var call = null;       // the one call on this page, or null
+    var saidBusy = {};     // call id -> true: answered "busy" (onCalls)
     var ENDED_FOR = 2200;  // ms the "how it ended" words stay up
     var CONNECT_MAX = 25000, RESTART_AFTER = 3000, FAIL_AFTER = 20000;
 
@@ -68,6 +69,14 @@
             if( ours && c.id === call.id ) { seen = call.known = true; update( c ); return; }
             if( ! call && c.state === "ringing" && c.to === w.me ) incoming( c, w );
             else if( ! call && c.group && c.ring ) incoming( c, w );   // a group rings everybody not in it
+            // Already in a call in ANOTHER home (busy only counts inside one:
+            // chat_call.go cs.live - in the same one the server answers it,
+            // glare included): a 1:1 ringing for me hears "busy", once.
+            else if( call && call.w !== w && call.state !== "ended" && ! c.group && c.state === "ringing" && c.to === w.me && ! saidBusy[ c.id ] )
+            {
+                saidBusy[ c.id ] = true;
+                C.api( "POST", "call/" + c.id + "/end", { reason: "busy" }, { base: w.api } ).catch( function () {} );
+            }
         } );
         w.calls = list;
         // Gone from the server altogether (it restarted): nothing to wait for.

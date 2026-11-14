@@ -32,7 +32,15 @@
     //------------------------------------------------------------------------//
     // DATES
 
-    var pad2 = Ayni.dates.pad, toIso = Ayni.dates.iso, todayIso = Ayni.dates.today;
+    // Ayni's (shared/ayni/ayni-util.js) in the browser; the same three here under Node (N6).
+    var D = ( typeof Ayni !== "undefined" && Ayni.dates ) || ( function ()
+    {
+        function pad( n ) { return String( n ).padStart( 2, "0" ); }
+        function iso( d ) { return d.getFullYear() + "-" + pad( d.getMonth() + 1 ) + "-" + pad( d.getDate() ); }
+        return { pad: pad, iso: iso, today: function () { return iso( new Date() ); } };
+    } )();
+
+    var pad2 = D.pad, toIso = D.iso, todayIso = D.today;
 
     function isIso( s ) { return /^\d{4}-\d{2}-\d{2}$/.test( String( s || "" ) ); }
 
@@ -93,7 +101,8 @@
     function newId() { return "h_" + Date.now().toString( 36 ) + Math.random().toString( 36 ).slice( 2, 6 ); }
 
     // A clean copy of one habit as read from the file: defaults for what is
-    // missing, junk dropped, `done` sorted and unique. Returns null for an
+    // missing, bad values dropped, `done` sorted and unique; fields it does not
+    // know are kept as they came. Returns null for an
     // unusable record (no name) so the caller can filter it out.
     function normalise( h )
     {
@@ -131,7 +140,9 @@
             return Array.isArray( r ) && isIso( r[ 0 ] ) && isIso( r[ 1 ] ) && r[ 0 ] < r[ 1 ];
         } ).map( function ( r ) { return [ r[ 0 ], r[ 1 ] ]; } );
 
-        return {
+        // Fields this build does not know (a newer build's) ride along as they
+        // came: an older cached build must not strip them on its next save (H1).
+        return Object.assign( {}, h, {
             id:       String( h.id || newId() ),
             name:     name,
             icon:     String( h.icon || "star" ),
@@ -143,7 +154,7 @@
             paused:   paused,
             done:     done,
             counts:   counts
-        };
+        } );
     }
 
     // Does the habit apply on that day? Only between created and archived.

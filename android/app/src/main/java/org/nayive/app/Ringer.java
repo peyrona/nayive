@@ -46,6 +46,17 @@ final class Ringer {
 
     static void setOnStop(Runnable r) { onStop = r; }
 
+    /** At the app's start: a find or SOS that died while ringing left the alarm at full volume. */
+    static void restoreVolume(Context c) {
+        int before = Prefs.alarmVolume(c);
+        if (before < 0 || kind != NONE) return;
+        try {
+            c.getSystemService(AudioManager.class).setStreamVolume(AudioManager.STREAM_ALARM, before, 0);
+        } catch (SecurityException ignored) {
+        }
+        Prefs.setAlarmVolume(c, -1);
+    }
+
     static void startCall(Context c, String callId) {
         if (kind == CALL && id.equals(callId)) return;
         stop(c);
@@ -68,6 +79,7 @@ final class Ringer {
         id = findId;
         AudioManager am = c.getSystemService(AudioManager.class);
         alarmVolumeBefore = am.getStreamVolume(AudioManager.STREAM_ALARM);
+        Prefs.setAlarmVolume(c, alarmVolumeBefore);   // put back at the next start if the app dies now
         try {
             am.setStreamVolume(AudioManager.STREAM_ALARM, am.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0);
         } catch (SecurityException e) {
@@ -83,7 +95,12 @@ final class Ringer {
         startFind(c, tag);
         kind = SOS;
         later.removeCallbacksAndMessages(null);
-        later.postDelayed(() -> { if (kind == SOS && id.equals(tag)) stop(c); }, SOS_RING_MS);
+        later.postDelayed(() -> {
+            if (kind == SOS && id.equals(tag)) {
+                stop(c);
+                LinkService.reapply();   // a find that was waiting under the SOS rings now
+            }
+        }, SOS_RING_MS);
     }
 
     static void stop(Context c) {
@@ -106,6 +123,7 @@ final class Ringer {
             } catch (SecurityException ignored) {
             }
             alarmVolumeBefore = -1;
+            Prefs.setAlarmVolume(c, -1);
         }
         boolean was = kind != NONE;
         kind = NONE;
@@ -113,10 +131,23 @@ final class Ringer {
         if (was && onStop != null) onStop.run();
     }
 
+    /**
+     * Settings' own copy of the sound first (content://settings/...): any app
+     * can read it, while the real file of a user's own tone may need a media
+     * permission the app does not have. If one cannot play, the next one.
+     */
     private static void play(Context c, int type, int usage) {
-        Uri uri = RingtoneManager.getActualDefaultRingtoneUri(c, type);
-        if (uri == null) uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
-        if (uri == null) uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+        int[] order = type == RingtoneManager.TYPE_ALARM
+                ? new int[]{RingtoneManager.TYPE_ALARM, RingtoneManager.TYPE_RINGTONE, RingtoneManager.TYPE_NOTIFICATION}
+                : new int[]{type, RingtoneManager.TYPE_NOTIFICATION};
+        for (int t : order) {
+            if (play(c, RingtoneManager.getDefaultUri(t), usage)) return;
+            if (play(c, RingtoneManager.getActualDefaultRingtoneUri(c, t), usage)) return;
+        }
+    }
+
+    private static boolean play(Context c, Uri uri, int usage) {
+        if (uri == null) return false;
         MediaPlayer p = new MediaPlayer();
         try {
             p.setAudioAttributes(new AudioAttributes.Builder()
@@ -128,9 +159,11 @@ final class Ringer {
             p.prepare();
             p.start();
             player = p;
+            return true;
         } catch (Exception e) {
             Log.w("Nayive", "cannot play " + uri, e);
             p.release();
+            return false;
         }
     }
 

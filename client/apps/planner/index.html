@@ -427,7 +427,7 @@
                 {
                     var el = paneDot( f );
                     if( ! el ) return;
-                    new MutationObserver( mirrorSync ).observe( el, { attributes: true, attributeFilter: [ 'class', 'title' ] } );
+                    new MutationObserver( mirrorSync ).observe( el, { attributes: true, attributeFilter: [ 'class', 'title', 'data-tip' ] } );
                     mirrorSync();
                 } );
             } );

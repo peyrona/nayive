@@ -81,8 +81,22 @@ ok( await P.until( "PHOTOS.length === 1 && document.querySelectorAll( '#grid .ti
 ok( await P.evaluate( "window.__sweeps" ) === 0, "a reload made by another page's news does not sweep the notes",
     await P.evaluate( "window.__sweeps" ) );
 
-// An explicit reload sweeps: the dead note goes (the sentinel that the sweep
-// ran to the end), the binned photo's note stays.
+// An explicit reload sweeps, but only a note this device has seen orphaned
+// for a day (P14: its photo may have moved on another device whose note move
+// still waits there). The first Reload only starts its clock.
+const orphans = () => P.evaluate( "JSON.parse( localStorage.getItem( orphansKey() ) || '{}' )" );
+// Sets the clock of `key` back 25 hours (as if first seen orphaned yesterday).
+const ageOrphan = key => P.evaluate( `( () => {
+    const m = JSON.parse( localStorage.getItem( orphansKey() ) || '{}' );
+    m[ ${JSON.stringify( key )} ] = Date.now() - 25 * 3600 * 1000;
+    localStorage.setItem( orphansKey(), JSON.stringify( m ) );
+    return true; } )()` );
+await P.evaluate( "document.getElementById( 'reloadBtn' ).click(); true" );
+ok( await P.until( "( JSON.parse( localStorage.getItem( orphansKey() ) || '{}' ) )[ 'files/F/gone.png' ] > 0" ), "Reload: the orphan note's clock starts", await orphans() );
+ok( "files/F/gone.png" in notes(), "...and the note is still there (seen orphaned for less than a day)", notes() );
+// A day later (the clock set back), the next Reload sweeps it: the dead note
+// goes (the sentinel that the sweep ran to the end), the binned photo's note stays.
+await ageOrphan( "files/F/gone.png" );
 await P.evaluate( "document.getElementById( 'reloadBtn' ).click(); true" );
 ok( await disk( () => ! ( "files/F/gone.png" in notes() ) ), "Reload: the note of a photo that is gone is swept" );
 ok( notes()[ "files/F/a.png" ] === "note a", "Reload: the note of the BINNED photo is kept", notes() );
@@ -101,6 +115,7 @@ const n2 = notes();
 n2[ "files/F/gone2.png" ] = "dead note 2";
 ok( ( await phone.put( NOTES, JSON.stringify( n2 ) ) ).status === 200, "...and adds a note of a photo gone for good" );
 await P.front();
+await ageOrphan( "files/F/gone2.png" );          // seen orphaned a day ago: this sweep may take it
 await P.evaluate( `( () => { const real = AyniNet.trashList;
     AyniNet.trashList = async function () {
         await fetch( '/api/files?trash=restore&ids=' + encodeURIComponent( ${JSON.stringify( ( binned || [] ).join( ";" ) )} ), { method: 'POST' } );

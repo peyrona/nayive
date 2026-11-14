@@ -148,6 +148,7 @@ func (t *mailTag) drop(ref string) bool {
 type mailLabelsFile struct {
 	Labels []MailLabel         `json:"labels"`
 	Tags   map[string]*mailTag `json:"tags"`
+	Next   int                 `json:"next,omitempty"` // the highest label number given: ids are never reused
 }
 
 type mailTrashEntry struct {
@@ -419,6 +420,7 @@ func clampTrashDays(n int) int {
 }
 
 func (h *MailHub) saveLabelsLocked(user string, u *mailUser) error {
+	u.labelsVer = time.Now().UnixNano()
 	return h.writeMailFile(user, "labels.json", u.labels)
 }
 
@@ -434,6 +436,17 @@ func (h *MailHub) Labels(user string) []MailLabel {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return append([]MailLabel{}, h.userLocked(user).labels.Labels...)
+}
+
+// LabelsVer changes whenever a label or a tag does (see mailUser.labelsVer).
+func (h *MailHub) LabelsVer(user string) string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	u := h.userLocked(user)
+	if u.labelsVer == 0 { // none since the start: a new one, never an old one again
+		u.labelsVer = time.Now().UnixNano()
+	}
+	return strconv.FormatInt(u.labelsVer, 36)
 }
 
 func cleanLabelName(name string) (string, bool) {
@@ -461,13 +474,19 @@ func (h *MailHub) AddLabel(user, name, color string) (MailLabel, error) {
 			max = k
 		}
 	}
+	if u.labels.Next > max {
+		max = u.labels.Next
+	}
 	if !contains(mailLabelColors, color) {
 		color = mailLabelColors[len(u.labels.Labels)%len(mailLabelColors)]
 	}
 	l := MailLabel{ID: "l" + strconv.Itoa(max+1), Name: name, Color: color}
+	beforeNext := u.labels.Next
 	u.labels.Labels = append(u.labels.Labels, l)
+	u.labels.Next = max + 1
 	if err := h.saveLabelsLocked(user, u); err != nil {
 		u.labels.Labels = u.labels.Labels[:len(u.labels.Labels)-1]
+		u.labels.Next = beforeNext
 		return MailLabel{}, err
 	}
 	return l, nil
@@ -525,9 +544,13 @@ func (h *MailHub) DeleteLabel(user, id string) (bool, error) {
 	if i < 0 {
 		return false, nil
 	}
-	beforeLabels := u.labels.Labels
+	beforeLabels, beforeNext := u.labels.Labels, u.labels.Next
 	beforeTags := map[string][]string{} // key -> its labels before, to undo a failed save
 	u.labels.Labels = append(u.labels.Labels[:i:i], u.labels.Labels[i+1:]...)
+	// its number is never given again (a labels.json from before "next" too)
+	if k, _ := strconv.Atoi(strings.TrimPrefix(id, "l")); k > u.labels.Next {
+		u.labels.Next = k
+	}
 	gone := map[string]*mailTag{}
 	for key, t := range u.labels.Tags {
 		if !contains(t.Labels, id) {
@@ -541,7 +564,7 @@ func (h *MailHub) DeleteLabel(user, id string) (bool, error) {
 		}
 	}
 	if err := h.saveLabelsLocked(user, u); err != nil {
-		u.labels.Labels = beforeLabels
+		u.labels.Labels, u.labels.Next = beforeLabels, beforeNext
 		for key, t := range gone {
 			u.labels.Tags[key] = t
 		}

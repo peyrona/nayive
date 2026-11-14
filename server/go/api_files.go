@@ -221,6 +221,10 @@ func (s *Server) apiFiles(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
+		if s.inConfig(target.Abs) { // G1: config/ is never read through Drive
+			sendError(w, r, http.StatusForbidden, "forbidden")
+			return
+		}
 		// A shortcut is its owner's own: never read through a share.
 		if IsSharedPath(fileRel) && isLinkName(path.Base(fileRel)) {
 			sendError(w, r, http.StatusNotFound, "not found")
@@ -687,6 +691,10 @@ func (s *Server) filesDelete(w http.ResponseWriter, r *http.Request, role, user 
 				continue
 			}
 			ids = append(ids, id)
+			// What the owner lent of it goes into the bin with it (T10).
+			if gOwner, rel, _ := s.movedInHome(role, user, j.rel, j.rel); gOwner != "" {
+				s.shares.Park(gOwner, rel, id)
+			}
 			if role == "admin" && owner != "" {
 				s.users.ForgetUsage(owner)
 			}
@@ -958,6 +966,16 @@ func (s *Server) isServerConfig(t string) bool {
 	}
 	config, err := resolveExisting(s.cfg.ConfigDir)
 	return err == nil && dir == config
+}
+
+// inConfig is config/ itself or anything at any depth inside it (G1): the
+// file API must never READ there either. It holds what a session alone must
+// not get - the SSH tab's setup code and authenticator secret, mail.key,
+// sessions.json, the app signing key. The admin panel is the way in.
+// `t` must already be resolved.
+func (s *Server) inConfig(t string) bool {
+	config, err := resolveExisting(s.cfg.ConfigDir)
+	return err == nil && t != "" && isInside(config, t)
 }
 
 // isServerData is anything under homes/<someone>/data/chat or data/mail: the

@@ -43,10 +43,10 @@ await c.send( "Page.addScriptToEvaluateOnNewDocument", { source: STUB } );
 
 const reset = async ( { offline = false, rates = null, prefs = null } = {} ) =>
 {
-    await c.evaluate( `localStorage.removeItem( 'balata-fx' ); localStorage.removeItem( 'balata-calculator' ); localStorage.removeItem( 'balata-calculator-history' );
+    await c.evaluate( `localStorage.removeItem( 'ayni-fx' ); localStorage.removeItem( 'balata-calculator' ); localStorage.removeItem( 'balata-calculator-history' );
         localStorage.setItem( 'balata-intro-dismiss:calculator', '1' );
         ${ offline ? "localStorage.setItem( 'test-fx-offline', '1' );" : "localStorage.removeItem( 'test-fx-offline' );" }
-        ${ rates ? `localStorage.setItem( 'balata-fx', ${JSON.stringify( JSON.stringify( rates ) )} );` : "" }
+        ${ rates ? `localStorage.setItem( 'ayni-fx', ${JSON.stringify( JSON.stringify( rates ) )} );` : "" }
         ${ prefs ? `localStorage.setItem( 'balata-calculator', ${JSON.stringify( JSON.stringify( prefs ) )} );` : "" } true` );
 };
 const open = async ( q = "" ) => ok( await c.open( "/nayive/calculator/" + q, "/nayive/calculator/" ) && await c.until( "window.calcPress" ), "Calculator opens " + q );
@@ -73,6 +73,11 @@ for( const [ name, keys, want ] of [
     const got = await run( keys );
     ok( same( got, want ), name, got );
 }
+// Past 1e308: an error state, and the history keeps no null.
+const big = await run( [ ...Array( 9 ).fill( "9" ), "*", ...Array( 40 ).fill( "=" ) ] );
+ok( big[ 0 ] === "Error", "a result past 1e308 is an Error", big );
+ok( await c.evaluate( "calcPress( '7' ).text" ) === "7", "...and the next key starts afresh" );
+ok( ! /null/.test( await c.evaluate( "localStorage.getItem( 'balata-calculator-history' ) || ''" ) ), "...with no null in the history" );
 ok( await c.evaluate( "document.querySelector( '[data-k=dot]' ).textContent" ) === ".", "the decimal key shows English's mark" );
 
 await c.evaluate( "calcPress( 'clear' ); localStorage.removeItem( 'balata-calculator-history' ); true" );
@@ -105,6 +110,8 @@ await click( "#modeSwitch .track" );
 ok( same( await modeNow(), [ "arith", false ] ), "the track flips back", await modeNow() );
 await c.evaluate( "document.querySelector( '#modeSwitch input[value=arith]' ).focus(); document.querySelector( '#modeSwitch input[value=arith]' ).dispatchEvent( new KeyboardEvent( 'keydown', { key: 'ArrowRight', bubbles: true } ) ); true" );
 ok( same( await modeNow(), [ "fx", true ] ), "→ picks the right side", await modeNow() );
+await c.evaluate( "calcPress( 'clear' ); document.querySelector( '#modeSwitch input[value=fx]' ).focus(); document.querySelector( '#modeSwitch input[value=fx]' ).dispatchEvent( new KeyboardEvent( 'keydown', { key: '4', bubbles: true, cancelable: true } ) ); true" );
+ok( await txt( "display" ) === "4", "a digit typed with the focus on the switch still counts", await txt( "display" ) );
 ok( await c.evaluate( "document.getElementById( 'calc' ).getBoundingClientRect().bottom <= innerHeight" ), "the calculator fits the screen" );
 
 section( "CURRENCY - THE CROSS-CHECK" );
@@ -130,7 +137,7 @@ ok( await c.until( "document.getElementById( 'fxCheckBackdrop' ).open" ), "the n
 const chk = await c.evaluate( "[ document.querySelectorAll( '#fxCheckBody .fx-source-row' ).length, !! document.querySelector( '#fxCheckBody .warn-box' ) ]" );
 ok( same( chk, [ 3, true ] ), "...with the three sources and the warning", chk );
 await click( "#fxCheckBackdrop header [data-close]" );
-ok( await c.evaluate( "AyniFx.rate( 'EUR', 'XXX' ) === null && ! /1INCH/.test( localStorage.getItem( 'balata-fx' ) )" ), "only the offered currencies are kept" );
+ok( await c.evaluate( "AyniFx.rate( 'EUR', 'XXX' ) === null && ! /1INCH/.test( localStorage.getItem( 'ayni-fx' ) )" ), "only the offered currencies are kept" );
 
 section( "CURRENCY - OFFLINE" );
 const kept = { fetched: 0, sources: [ { ok: true, source: "A", asOf: "2026-10-20", rates: { USD: 1.1 } }, { ok: true, source: "B", asOf: "2026-10-20", rates: { USD: 1.1 } } ] };
@@ -146,6 +153,9 @@ await c.evaluate( "calcPress( '7' ); true" );
 await c.until( "AyniFx.offline()" );
 const none = [ await txt( "displayTo" ), await txt( "fxNote" ) ];
 ok( same( none, [ "—", "No rates yet: offline" ] ), "first visit offline: no rates at all", none );
+ok( await c.evaluate( "localStorage.getItem( 'ayni-fx' ) === null" ), "...and that failure is not kept" );
+await c.evaluate( "localStorage.removeItem( 'test-fx-offline' ); true" );
+ok( await c.evaluate( "AyniFx.start().then( () => AyniFx.rate( 'EUR', 'USD' ) )" ) === 1.08, "the next refresh tries again (no 6-hour wait)" );
 
 section( "LAYOUT" );
 ok( await c.evaluate( "document.documentElement.scrollWidth <= innerWidth" ), "no side scroll at 390 px" );
@@ -169,6 +179,9 @@ await c.open( "/nayive/calculator/?mode=fx&from=EUR&to=EUR&place=Somewhere", "/n
 await c.until( "window.calcPress" );
 ok( await c.evaluate( "! document.getElementById( 'fxGuess' ).hidden && /Somewhere/.test( document.getElementById( 'fxGuess' ).textContent )" ),
     "an unknown place's currency is said plainly" );
+await c.open( "/nayive/calculator/?mode=fx&from=DOP&to=EUR", "/nayive/calculator/" );
+await c.until( "window.calcPress" );
+ok( await c.evaluate( "Ayni.picker( document.getElementById( 'fxFrom' ) ).value" ) === "DOP", "a Dominican trip opens on DOP" );
 
 const errors = c.logs.filter( l => /^EXCEPTION/.test( l ) );
 ok( ! errors.length, "no page errors", errors );

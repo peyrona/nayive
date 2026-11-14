@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -506,5 +508,176 @@ func TestSosDangerWatch(t *testing.T) {
 	srv.sosCheck(time.Now().Add(3 * time.Minute))
 	if n := len(sosAlertsOf(srv, "watch")); n != 2 {
 		t.Fatalf("the tick sent it again: %d", n)
+	}
+}
+
+// TestSosDangerPin: with a PIN only the right one stops a watch; a wrong one
+// answers the same but tells the contacts "may be forced", keeps the phone's
+// positions coming and hides it from the sender. A contact can end it.
+func TestSosDangerPin(t *testing.T) {
+	srv, ts, client := newTestServer(t)
+	service := newFakePush(t, true, nil)
+	service.wire(srv.push)
+	p256, au := testPushKeys(t)
+	srv.users.AddPushSub("beto", "https://fcm.googleapis.com/fcm/send/beto", p256, au, "es", "Beto", nil)
+	signIn(t, client, ts.URL, "ana", "abc")
+	jsonCall(t, client, "PUT", ts.URL+"/api/sos", `{"contacts":["beto"]}`, 200, nil)
+
+	// Setting it: digits only; changing it needs the old one.
+	jsonCall(t, client, "PUT", ts.URL+"/api/sos/pin", `{"pin":"12a4"}`, 400, nil)
+	jsonCall(t, client, "PUT", ts.URL+"/api/sos/pin", `{"pin":"1234"}`, 200, nil)
+	jsonCall(t, client, "PUT", ts.URL+"/api/sos/pin", `{"pin":"9999"}`, 403, nil)
+	jsonCall(t, client, "PUT", ts.URL+"/api/sos/pin", `{"old":"0000","pin":"9999"}`, 403, nil)
+	jsonCall(t, client, "PUT", ts.URL+"/api/sos/pin", `{"old":"1234","pin":"2468"}`, 200, nil)
+	var got struct {
+		Pin   bool
+		Watch int64
+	}
+	jsonCall(t, client, "GET", ts.URL+"/api/sos", "", 200, &got)
+	if !got.Pin || strings.Contains(srv.sos.Get("ana").Pin, "2468") {
+		t.Fatalf("pin set = %v, stored %q (must be hashed)", got.Pin, srv.sos.Get("ana").Pin)
+	}
+
+	// The right PIN in time: nothing goes out, the phone stops sending.
+	jsonCall(t, client, "POST", ts.URL+"/api/sos/watch", `{}`, 200, nil)
+	if srv.sosEveryFor("ana") != 180 {
+		t.Fatalf("a running watch: every = %d, want 180", srv.sosEveryFor("ana"))
+	}
+	var stop struct{ Safe *struct{ ID string } }
+	jsonCall(t, client, "POST", ts.URL+"/api/sos/watch/stop", `{"pin":"2468"}`, 200, &stop)
+	if stop.Safe != nil || service.count("") != 0 || srv.sosEveryFor("ana") != 0 {
+		t.Fatalf("right PIN in time: safe %+v, pushes %d, every %d", stop.Safe, service.count(""), srv.sosEveryFor("ana"))
+	}
+
+	// A wrong PIN in time: the same answer, but "forced" goes out at once.
+	jsonCall(t, client, "POST", ts.URL+"/api/sos/watch", `{}`, 200, nil)
+	raw := jsonCall(t, client, "POST", ts.URL+"/api/sos/watch/stop", `{"pin":"1111"}`, 200, &stop)
+	if stop.Safe != nil || strings.Contains(string(raw), "forced") {
+		t.Fatalf("a wrong PIN answered differently: %s", raw)
+	}
+	forced := sosAlertsOf(srv, "forced")
+	if len(forced) != 1 || service.count("") != 1 || srv.sosEveryFor("ana") != 180 {
+		t.Fatalf("forced alerts %d, pushes %d, every %d", len(forced), service.count(""), srv.sosEveryFor("ana"))
+	}
+	jsonCall(t, client, "GET", ts.URL+"/api/sos", "", 200, &got)
+	if got.Watch != 0 {
+		t.Fatalf("GET shows a watch after a fake stop: %d", got.Watch)
+	}
+	jsonCall(t, client, "GET", ts.URL+"/api/sos/alert/"+forced[0].ID, "", 404, nil) // hidden from the sender
+
+	// The app's positions move the open alert.
+	lat, lon := 40.43, -3.73
+	srv.sosFollow("ana", lastPos{Lat: lat, Lon: lon, Acc: 9, At: time.Now().Unix(), Source: "nayive"})
+	if p := sosAlertsOf(srv, "forced")[0].Pos; p == nil || p.Lat != roundedForFind(lastPos{Lat: lat, Lon: lon}).Lat {
+		t.Fatalf("forced alert position = %+v", p)
+	}
+
+	// No PIN at all (an old page) on a went-out watch: the same answer as the right one.
+	jsonCall(t, client, "POST", ts.URL+"/api/sos/watch", `{}`, 200, nil)
+	jsonCall(t, client, "POST", ts.URL+"/api/sos/watch/send", `{}`, 200, nil)
+	stop.Safe = nil
+	jsonCall(t, client, "POST", ts.URL+"/api/sos/watch/stop", `{}`, 200, &stop)
+	if stop.Safe == nil || len(sosAlertsOf(srv, "forced")) != 2 || len(sosAlertsOf(srv, "safe")) != 0 {
+		t.Fatalf("no PIN after it went out: safe %+v, forced %d, safe alerts %d",
+			stop.Safe, len(sosAlertsOf(srv, "forced")), len(sosAlertsOf(srv, "safe")))
+	}
+
+	// beto sees it is live and ends it: everyone is told, the phone stops.
+	beto := noFollow()
+	signIn(t, beto, ts.URL, "beto", "xyz")
+	var a sosAlert
+	jsonCall(t, beto, "GET", ts.URL+"/api/sos/alert/"+sosAlertsOf(srv, "forced")[1].ID, "", 200, &a)
+	if !a.Live {
+		t.Fatalf("the open alert is not live for the contact")
+	}
+	jsonCall(t, client, "POST", ts.URL+"/api/sos/alert/"+a.ID+"/end", `{}`, 404, nil) // not by the sender
+	jsonCall(t, beto, "POST", ts.URL+"/api/sos/alert/"+a.ID+"/end", `{}`, 200, nil)
+	if e := sosAlertsOf(srv, "ended"); len(e) != 1 || e[0].By != "beto" || srv.sosEveryFor("ana") != 0 {
+		t.Fatalf("ended = %+v, every %d", e, srv.sosEveryFor("ana"))
+	}
+	jsonCall(t, beto, "POST", ts.URL+"/api/sos/alert/"+a.ID+"/end", `{}`, 409, nil)
+
+	// The right PIN after it went out: "safe", as before.
+	jsonCall(t, client, "POST", ts.URL+"/api/sos/watch", `{}`, 200, nil)
+	jsonCall(t, client, "POST", ts.URL+"/api/sos/watch/send", `{}`, 200, nil)
+	stop.Safe = nil
+	jsonCall(t, client, "POST", ts.URL+"/api/sos/watch/stop", `{"pin":"2468"}`, 200, &stop)
+	if stop.Safe == nil || len(sosAlertsOf(srv, "safe")) != 1 || srv.sosEveryFor("ana") != 0 {
+		t.Fatalf("right PIN after: safe %+v", stop.Safe)
+	}
+
+	// An open alert ends by itself after sosAlertTTL.
+	jsonCall(t, client, "POST", ts.URL+"/api/sos/watch", `{}`, 200, nil)
+	jsonCall(t, client, "POST", ts.URL+"/api/sos/watch/send", `{}`, 200, nil)
+	srv.sos.mu.Lock()
+	srv.sos.data.Alerts[len(srv.sos.data.Alerts)-1].At -= sosAlertTTL
+	srv.sos.mu.Unlock()
+	if srv.sosEveryFor("ana") != 0 {
+		t.Fatalf("an old alert still asks for positions")
+	}
+	srv.sosCheck(time.Now())
+	if srv.sos.Get("ana").WatchAlert != "" {
+		t.Fatalf("the tick did not close the old alert")
+	}
+
+	// Removing the PIN needs it too.
+	jsonCall(t, client, "PUT", ts.URL+"/api/sos/pin", `{"pin":""}`, 403, nil)
+	jsonCall(t, client, "PUT", ts.URL+"/api/sos/pin", `{"old":"2468","pin":""}`, 200, nil)
+	if srv.sos.Get("ana").Pin != "" {
+		t.Fatalf("PIN not removed")
+	}
+}
+
+// TestSosDangerPhone: the app's wait says "sos" while a watch is open, its
+// reports move the open alert, and a contact's GET shows the newest position.
+func TestSosDangerPhone(t *testing.T) {
+	shortHold(t)
+	srv, ts, client := newTestServer(t)
+	base := ts.URL
+	signIn(t, client, base, "ana", "abc")
+	enrolPhone(t, client, base)
+	jsonCall(t, client, "PUT", base+"/api/sos", `{"contacts":["beto"]}`, 200, nil)
+	sosOf := func() int {
+		var st struct{ Sos int }
+		_, raw := phone(t, base, "GET", "/api/device/wait?v=", phoneToken, "")
+		if err := json.Unmarshal(raw, &st); err != nil {
+			t.Fatalf("wait JSON: %v %s", err, raw)
+		}
+		return st.Sos
+	}
+	if n := sosOf(); n != 0 {
+		t.Fatalf("no watch: sos = %d", n)
+	}
+	jsonCall(t, client, "POST", base+"/api/sos/watch", `{}`, 200, nil)
+	if n := sosOf(); n != 180 {
+		t.Fatalf("a watch counts: sos = %d, want 180", n)
+	}
+	var sent struct{ ID string }
+	jsonCall(t, client, "POST", base+"/api/sos/watch/send", `{}`, 200, &sent)
+	if n := sosOf(); n != 180 {
+		t.Fatalf("it went out: sos = %d, want 180", n)
+	}
+
+	// The app reports: the open alert moves, and beto sees where now.
+	at := time.Now().Unix()
+	body := fmt.Sprintf(`{"positions":[{"lat":40.45,"lon":-3.75,"acc":6,"at":%d}]}`, at)
+	if code, raw := phone(t, base, "POST", "/api/device/report", phoneToken, body); code != 200 {
+		t.Fatalf("report = %d %s", code, raw)
+	}
+	want := roundedForFind(lastPos{Lat: 40.45, Lon: -3.75})
+	if p := sosAlertsOf(srv, "watch")[0].Pos; p == nil || p.Lat != want.Lat {
+		t.Fatalf("alert position = %+v, want %v", p, want.Lat)
+	}
+	beto := noFollow()
+	signIn(t, beto, base, "beto", "xyz")
+	var a sosAlert
+	jsonCall(t, beto, "GET", base+"/api/sos/alert/"+sent.ID, "", 200, &a)
+	if !a.Live || a.Pos == nil || a.Pos.Lat != want.Lat {
+		t.Fatalf("beto's view = live %v pos %+v", a.Live, a.Pos)
+	}
+
+	jsonCall(t, client, "POST", base+"/api/sos/watch/stop", `{}`, 200, nil)
+	if n := sosOf(); n != 0 {
+		t.Fatalf("stopped: sos = %d", n)
 	}
 }

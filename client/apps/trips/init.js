@@ -10,7 +10,10 @@ Ayni.i18n.ready.then( function()
     store.onMerged( onTripMerged );   // see persistence.js
 
     // Escape: Ayni presses the open dialog's × (its data-close button), which
-    // runs that sheet's own close (closeTripSheet, closeStageSheet...).
+    // runs that sheet's own close (closeTripSheet, closeStageSheet...). Any
+    // other way a sheet closes (Android's Back) goes through onSheetClosed.
+    [ 'tripSheetBackdrop', 'stageSheetBackdrop', 'mapSheetBackdrop', 'setSheetBackdrop', 'discoverSheetBackdrop', 'filePickerSheetBackdrop' ]
+        .forEach( function( id ) { document.getElementById( id ).addEventListener( 'close', function() { onSheetClosed( id ); } ); } );
 
     // Crossing the 920px breakpoint toggles whether the route panel is visible at all
     // (see renderRoutePanel()) - re-render on the transition so resizing/rotating into
@@ -145,11 +148,29 @@ function hereStageId( trip )
 {
     if( ! viewerPos ) return null;
 
-    let best = null, bestKm = HERE_RADIUS_KM;
-    trip.stages.filter( stageHasCoords ).forEach( function( st )
+    // Two stages in one place (a round trip Madrid -> ... -> Madrid): the one
+    // whose days hold today wins, else the one nearest today in time, then the
+    // closest (N4). Dates are YYYY-MM-DD, so they compare as text.
+    const today = Ayni.dates.today();
+    const off   = function( st )
     {
-        const km = distanceKm( viewerPos.lat, viewerPos.lon, st.lat, st.lon );
-        if( km <= bestKm ) { best = st.id; bestKm = km; }
+        if( st.startDate && today < st.startDate ) return Date.parse( st.startDate ) - Date.parse( today );
+        if( st.endDate   && today > st.endDate )   return Date.parse( today ) - Date.parse( st.endDate );
+        return 0;
+    };
+
+    // "One place" = within 3 km of the closest stage: two towns 20 km apart
+    // still go by distance.
+    const near  = trip.stages.filter( stageHasCoords ).map( function( st ) { return { st: st, km: distanceKm( viewerPos.lat, viewerPos.lon, st.lat, st.lon ) }; } );
+    const minKm = near.reduce( function( m, x ) { return Math.min( m, x.km ); }, Infinity );
+
+    let best = null, bestOff = Infinity, bestKm = Infinity;
+    near.forEach( function( x )
+    {
+        const st = x.st, km = x.km;
+        if( km > HERE_RADIUS_KM || km > minKm + 3 ) return;
+        const o = off( st );
+        if( o < bestOff || ( o === bestOff && km < bestKm ) ) { best = st.id; bestOff = o; bestKm = km; }
     });
     return best;
 }

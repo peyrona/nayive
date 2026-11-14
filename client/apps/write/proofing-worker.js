@@ -22,6 +22,27 @@ importScripts( 'lib/proofing/typo.js' );
 
 const WORD_RE     = /\p{L}[\p{L}'’‘\-]*/gu;
 const TRAIL_MARKS = /[-'’‘]+$/u;
+const APOSTROPHES = /[’‘ʼ]/g;      // typographic: Word writes ’, and so does Write's autocorrect
+
+// Is this word right in one of the dictionaries? Typo.js reads neither the
+// .aff's ICONV (’ is ') nor its BREAK (a hyphen splits a word), so both are
+// done here: "don’t" and "l’homme" are looked up as "don't" and "l'homme",
+// and "well-known" is right when each of its parts is.
+function known( dicts, word )
+{
+    const ok = w => dicts.some( t => t.check( w ) || t.check( w.toLowerCase() ) );
+    if( ok( word ) ) return true;
+
+    const plain = word.replace( APOSTROPHES, "'" );
+    if( plain !== word && ok( plain ) ) return true;
+
+    if( plain.indexOf( '-' ) > 0 )
+    {
+        const parts = plain.split( '-' ).filter( Boolean );
+        if( parts.length > 1 && parts.every( p => p.length < 2 || ok( p ) || ok( p.replace( /'$/, '' ) ) ) ) return true;
+    }
+    return false;
+}
 
 let dictPaths = {};                 // lang -> { aff, dic }, sent by proofing.js
 const loaded   = {};                // lang -> Promise<Typo|null>
@@ -80,7 +101,7 @@ async function check( msg )
 
             if( word.length < 2 || /\d/.test( word ) ) continue;
             if( personal.has( word.toLowerCase() ) )  continue;
-            if( dicts.some( t => t.check( word ) || t.check( word.toLowerCase() ) ) ) continue;
+            if( known( dicts, word ) ) continue;
 
             issues.push( { segmentId: seg.id, start: m.index, end: m.index + word.length, word } );
 
@@ -119,9 +140,16 @@ function pump()
 
             for( const t of await dictsFor( job.langs ) )
             {
+                // Asked with the plain apostrophe the dictionaries know, and
+                // given back with the word's own one.
+                const curly = /[’‘ʼ]/.test( job.word );
                 let got = [];
-                try { got = t.suggest( job.word, 5 ) || []; } catch( _ ) {}
-                for( const r of got ) if( out.indexOf( r ) === -1 ) out.push( r );
+                try { got = t.suggest( curly ? job.word.replace( APOSTROPHES, "'" ) : job.word, 5 ) || []; } catch( _ ) {}
+                for( let r of got )
+                {
+                    if( curly ) r = r.replace( /'/g, '’' );
+                    if( out.indexOf( r ) === -1 ) out.push( r );
+                }
             }
 
             out.length = Math.min( out.length, 5 );

@@ -32,9 +32,13 @@ public class Launcher extends LauncherActivity {
 
     @Override
     protected void onCreate(Bundle b) {
-        String callId = getIntent().getStringExtra(EXTRA_ANSWER);
+        // Only a real tap: rebuilt from Recents (or after the system killed it),
+        // Android hands back the same old intent - it must not stop an alarm
+        // ringing now, nor answer "Are you OK?" again.
+        boolean replay = b != null || (getIntent().getFlags() & Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0;
+        String callId = replay ? null : getIntent().getStringExtra(EXTRA_ANSWER);
         if (callId != null) Actions.answered(this, callId);
-        String sosTag = getIntent().getStringExtra(EXTRA_SOS);
+        String sosTag = replay ? null : getIntent().getStringExtra(EXTRA_SOS);
         if (sosTag != null) Actions.stopSos(this, sosTag);   // a tap on an SOS note
         LinkService.start(this);
         LinkService.kick();
@@ -46,6 +50,7 @@ public class Launcher extends LauncherActivity {
         Uri data = getIntent().getData();
         if (data == null && !Prefs.enrolled(this)) {
             String name = (Build.MANUFACTURER + " " + Build.MODEL).trim();
+            Prefs.setEnrolPage(this);
             return Uri.parse(BuildConfig.ORIGIN + "/nayive/device.html#t=" + Prefs.token(this)
                     + "&n=" + Uri.encode(name));
         }

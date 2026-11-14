@@ -102,6 +102,7 @@ type chatSig struct {
 	From string          `json:"from,omitempty"` // a group call: the page it comes from
 	Data json.RawMessage `json:"data"`
 	to   string          // the device it is for
+	who  string          // and the participant it is for: only they read it (G6)
 	at   time.Time
 }
 
@@ -177,6 +178,43 @@ func validDev(d string) bool {
 
 func (cs *chatCalls) touch(dev string, now time.Time) { cs.seen[dev] = now }
 
+// devTaken: page id `dev` is ANOTHER participant's page in a call that is
+// not over (G6). A group call shows every member every page id; one taken
+// over would get the calls and signals meant for that page.
+func (cs *chatCalls) devTaken(dev, pid string) bool {
+	for _, c := range cs.byID {
+		if c.State == "ended" {
+			continue
+		}
+		if (c.FromDev == dev && c.From != pid) || (c.ToDev == dev && c.To != pid) {
+			return true
+		}
+		for p, d := range c.In {
+			if d == dev && p != pid {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// sigTo is the participant whose page `dev` is in call c, or "".
+func (c *chatCall) sigTo(dev string) string {
+	switch {
+	case c.Group:
+		for p, d := range c.In {
+			if d == dev {
+				return p
+			}
+		}
+	case c.ToDev == dev:
+		return c.To
+	case c.FromDev == dev:
+		return c.From
+	}
+	return ""
+}
+
 func (cs *chatCalls) waitStart(dev string) { cs.waits[dev]++ }
 
 func (cs *chatCalls) waitEnd(dev string, now time.Time) {
@@ -226,31 +264,33 @@ func allowIn(m map[string][]time.Time, pid string, per int, now time.Time) bool 
 	return true
 }
 
-// pending: a signal for `dev` newer than `s` is waiting (the wait must not block).
-func (cs *chatCalls) pending(dev string, s int64) bool {
+// pending: a signal for `pid`'s page `dev` newer than `s` is waiting (the
+// wait must not block). Every signal is read - and dropped - by its page AND
+// its participant: knowing a page id alone reads nothing (G6).
+func (cs *chatCalls) pending(dev, pid string, s int64) bool {
 	for _, g := range cs.sigs {
-		if g.to == dev && g.Seq > s {
+		if g.to == dev && g.who == pid && g.Seq > s {
 			return true
 		}
 	}
 	return false
 }
 
-// ack drops what `dev` says it has already read.
-func (cs *chatCalls) ack(dev string, s int64) {
+// ack drops what `pid`'s page `dev` says it has already read.
+func (cs *chatCalls) ack(dev, pid string, s int64) {
 	keep := cs.sigs[:0]
 	for _, g := range cs.sigs {
-		if !(g.to == dev && g.Seq <= s) {
+		if !(g.to == dev && g.who == pid && g.Seq <= s) {
 			keep = append(keep, g)
 		}
 	}
 	cs.sigs = keep
 }
 
-func (cs *chatCalls) sigsFor(dev string, s int64) []*chatSig {
+func (cs *chatCalls) sigsFor(dev, pid string, s int64) []*chatSig {
 	out := []*chatSig{}
 	for _, g := range cs.sigs {
-		if g.to == dev && g.Seq > s {
+		if g.to == dev && g.who == pid && g.Seq > s {
 			out = append(out, g)
 		}
 	}
@@ -392,6 +432,10 @@ func (s *Server) chatCallStart(w http.ResponseWriter, r *http.Request, conv stri
 			sendError(w, r, http.StatusForbidden, "no estás en esta conversación")
 			return
 		}
+		if a.o.cs().devTaken(body.Dev, a.pid) {
+			sendError(w, r, http.StatusForbidden, "ese dispositivo no es tuyo")
+			return
+		}
 		if strings.HasPrefix(conv, "g-") {
 			jobs = h.startGroupCall(w, r, a, conv, body.Video, body.Dev)
 			return
@@ -475,6 +519,10 @@ func (s *Server) chatCallAct(w http.ResponseWriter, r *http.Request, id, act str
 		}
 		now := time.Now()
 		if validDev(body.Dev) {
+			if cs.devTaken(body.Dev, a.pid) {
+				sendError(w, r, http.StatusForbidden, "ese dispositivo no es tuyo")
+				return
+			}
 			cs.touch(body.Dev, now)
 		}
 		switch act {
@@ -516,10 +564,17 @@ func (s *Server) chatCallAct(w http.ResponseWriter, r *http.Request, id, act str
 				reason = "fail"
 			case c.State == "ringing" && a.pid == c.From:
 				reason = "cancel"
+			case c.State == "ringing" && body.Reason == "busy":
+				// The called page is already in a call (one in another home,
+				// which cs.live does not see): the caller hears "busy".
+				reason = "busy"
 			case c.State == "ringing":
 				reason = "decline"
 			}
 			jobs = h.endCall(a.o, c, reason, now)
+			if reason == "busy" {
+				jobs = h.callPushes(a.o, c, "quiet") // it rang on their other devices: they stop
+			}
 			sendJSON(w, r, http.StatusOK, map[string]any{"state": c.State, "reason": c.Reason})
 
 		case "sig":
@@ -563,7 +618,7 @@ func (s *Server) chatCallAct(w http.ResponseWriter, r *http.Request, id, act str
 				return
 			}
 			cs.seq++
-			cs.sigs = append(cs.sigs, &chatSig{Seq: cs.seq, Call: c.ID, From: from, Data: body.Data, to: to, at: now})
+			cs.sigs = append(cs.sigs, &chatSig{Seq: cs.seq, Call: c.ID, From: from, Data: body.Data, to: to, who: c.sigTo(to), at: now})
 			a.o.changed(false)
 			w.WriteHeader(http.StatusNoContent)
 		}

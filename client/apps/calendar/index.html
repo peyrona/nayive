@@ -662,6 +662,7 @@
         let refetchHeld = false;   // a re-read landed meanwhile; repaint once the drop is done
         let editingKey   = null;   // key (uid + recurrence-id) of the event being edited in the sheet, or null when adding
         let editingOcc   = null;   // ...and the occurrence it was opened from (occKey), for "delete only this one"
+        let editingDef   = null;   // ...and its def, put back if a merge removes it meanwhile (C3)
         let undoHold     = false;  // an Undo is on show: no re-read until it goes (see undoable)
         let undoKeep     = false;  // ...and it still works after a merge (it re-finds by key)
         let calendar     = null;
@@ -1400,7 +1401,8 @@
             else
             {
                 first = DateTime.fromMillis( inst.startMs ).startOf( 'day' );
-                last  = DateTime.fromMillis( inst.endMs - 1 ).startOf( 'day' );   // -1: ending at midnight does not spill over
+                // -1: ending at midnight does not spill over; a zero-length one keeps its own day (N4).
+                last  = DateTime.fromMillis( Math.max( inst.startMs, inst.endMs - 1 ) ).startOf( 'day' );
             }
 
             const out = [];
@@ -1614,7 +1616,8 @@
         {
             const day   = parseInt( document.getElementById( 'gDay' ).value, 10 );
             const month = parseInt( pick( 'gMonth' ).value, 10 );
-            const year  = parseInt( document.getElementById( 'gYear' ).value, 10 );
+            let   year  = parseInt( document.getElementById( 'gYear' ).value, 10 );
+            if( year >= 0 && year < 100 ) year += 2000;   // "26" is 2026, not 1926 (new Date reads 0-99 as 19xx) (N2)
 
             if( calendar && Number.isFinite( year ) )
             {
@@ -1716,7 +1719,9 @@
             {
                 // First step, or the hit went away: from now (or from where it was).
                 const ms   = searchHit ? searchHit.ms : Date.now();
-                const next = hits.findIndex( h => searchHit ? h.ms > ms : h.inst.endMs > ms );
+                // An all-day hit ends at the viewer's midnight, not UTC's (N3).
+                const endMs = h => h.inst.allDay ? DateTime.fromISO( h.inst.end ).toMillis() : h.inst.endMs;
+                const next = hits.findIndex( h => searchHit ? h.ms > ms : endMs( h ) > ms );
                 at = dir > 0 ? ( next < 0 ? 0 : next )
                              : ( next < 0 ? hits.length : next ) - 1;
                 if( at < 0 ) at = hits.length - 1;
@@ -2057,6 +2062,7 @@
 
             editingKey = null;
             editingOcc = null;
+            editingDef = null;
 
             const d  = DateTime.fromJSDate( date );
             const e  = endDate ? DateTime.fromJSDate( endDate ) : d.plus( allDay ? { days: 1 } : { minutes: 30 } );
@@ -2087,6 +2093,7 @@
 
             editingKey = key;
             editingOcc = occ || null;
+            editingDef = def;
 
             resetSheet();
             document.getElementById( 'sheetTitle' ).textContent = T( 'calendar.editEvent' );
@@ -2302,8 +2309,13 @@
             if( datesTouched && ( ! sDate || ! eDate ) ) { setMoreOpen( true ); Ayni.toast( 'warn', T( 'calendar.needDates' ) );      return; }
             if( datesTouched && eAt < sAt )              { setMoreOpen( true ); Ayni.toast( 'warn', T( 'calendar.endBeforeStart' ) ); return; }
 
-            const def = editingKey ? findDef( editingKey ) : makeEventDef();
+            // A merge (this tab's earlier save meeting the other device's) may have
+            // removed the event under the open sheet: the edit beats the delete, the
+            // event goes back with what was typed, as in Tasks (C3).
+            let def = editingKey ? findDef( editingKey ) : makeEventDef();
+            if( ! def && editingDef ) eventDefs.push( def = editingDef );
             if( ! editingKey ) eventDefs.push( def );
+            if( ! def ) { closeSheet(); return; }
 
             // A field left as it was keeps its exact text (an imported note that ends
             // in a newline is not an edit): only edited fields are rewritten in the file.
@@ -2411,7 +2423,9 @@
                 }
                 // Nothing before it: the whole series goes, below.
             }
-            const goes = d => d.key === key || ( gone && ! gone.rid && d.uid === gone.uid );
+            // A series takes its moved occurrences (same UID + RECURRENCE-ID) with it;
+            // a twin with the same UID and no RECURRENCE-ID is its own event and stays (C1).
+            const goes = d => d.key === key || ( gone && ! gone.rid && d.uid === gone.uid && !! d.rid );
 
             // What leaves and where it stood, for the Undo. The same def objects: a
             // save writes each back from its own lines, as it came (calendarToIcs).

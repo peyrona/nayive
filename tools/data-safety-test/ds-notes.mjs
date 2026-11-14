@@ -1,5 +1,5 @@
 // ds-notes.mjs - Quick notes (shared/notes.js, data/notes/notes.json), the
-// launcher's cards and the desktop's sticky notes. Real pages in Chromium, a
+// launcher's cards and the desktop's notes panel. Real pages in Chromium, a
 // second "device" over plain HTTP.
 //
 // N1 the first note makes the file; a note left blank is never saved.
@@ -7,15 +7,17 @@
 // N3 no server and nothing cached is not "no notes": nothing is written.
 // N4 another device's save meanwhile: both kept (412 -> merge by id).
 // N5 delete + Undo: back as it was, in the list as it is now.
-// N6 the desktop: a sticky note saves; its place never reaches the file.
-import { server, browser, ok, section, done, onDisk, disk, type, sleep } from "./lib.mjs";
+// N6 the desktop: a note in its panel saves; no place reaches the file.
+// N7 shared text (share-target/ › Note -> ?note=): one note with it, beside the
+//    others; a reload of that page makes no second one.
+import { server, browser, ok, section, done, onDisk, disk, type, click, sleep } from "./lib.mjs";
 
 const F = "data/notes/notes.json";
 const s = await server();
 const phone = await s.client();
 const json = () => { try { return JSON.parse( onDisk( s, F ) ); } catch { return null; } };
 const has  = pred => disk( () => { const l = json(); return l && pred( l ); }, 30000 );
-// "+" (pressed in the page: on a phone it may sit in the top row) until a note opens - it is refused until the first read is back.
+// "+" (pressed in the page: on a phone with no notes its area is hidden) until a note opens - it is refused until the first read is back.
 async function plusOpens( c, ms = 20000 )
 {
     const end = Date.now() + ms;
@@ -76,6 +78,19 @@ section( "N5 · DELETE AND UNDO" );
 }
 
 //------------------------------------------------------------------------//
+section( "N7 · SHARED TEXT TO A NOTE" );
+{
+    const before = json().length;
+    await c.open( "/nayive/index.html?note=" + encodeURIComponent( "Shared\nline two" ), "/nayive/index.html" );
+    ok( await has( l => l.length === before + 1 && l.filter( x => x.text === "Shared\nline two" ).length === 1 ), "one note with the shared text, the others kept", json() );
+    ok( await c.until( "! location.search" ), "?note= is off the address" );
+    await closeFull( c );
+    await c.evaluate( "location.reload(); true" );
+    await sleep( 3000 );
+    ok( json().filter( x => x.text === "Shared\nline two" ).length === 1 && json().length === before + 1, "a reload makes no second one" );
+}
+
+//------------------------------------------------------------------------//
 section( "N2 · A DAMAGED FILE" );
 {
     const good = onDisk( s, F );
@@ -129,18 +144,17 @@ section( "N6 · THE DESKTOP" );
 {
     const d = await browser( s, { mouse: true } );
     await d.open( "/nayive/desktop/" );
-    await d.until( "document.querySelectorAll( '.notes-layer .note.sticky' ).length" );
-    // the notes pair sits in the launcher menu's top row (a frame): open the menu, press at frame offset + its place
+    await d.until( "document.querySelectorAll( '.notes-pane .note.sheet, .notes-layer .note.sticky' ).length" );
+    // Office › Notes in the launcher menu (a frame) opens the notes panel, whose own + makes the note
     await d.evaluate( "document.getElementById( 'menu' ).hidden && document.getElementById( 'menuBtn' ).click(); true" );
-    const NB = "document.querySelector( '#menu iframe' ).contentDocument.getElementById( 'noteNewBtn' )";
-    await d.until( `( () => { try { return ${NB}.getBoundingClientRect().width > 0; } catch( e ) { return false; } } )()` );
-    const nr = await d.evaluate( `( () => { const f = document.querySelector( '#menu iframe' ).getBoundingClientRect(), b = ${NB}.getBoundingClientRect();
-        return { x: f.left + b.left + b.width / 2, y: f.top + b.top + b.height / 2 }; } )()` );
-    for( const type of [ "mouseMoved", "mousePressed", "mouseReleased" ] )
-        await d.send( "Input.dispatchMouseEvent", { type, x: nr.x, y: nr.y, button: "left", buttons: type === "mouseReleased" ? 0 : 1, clickCount: 1 } );
-    await d.until( "document.activeElement && document.activeElement.closest( '.note.sticky' )" );
+    const MD = "document.querySelector( '#menu iframe' ).contentDocument";
+    await d.until( `( () => { try { return !! ${MD}.getElementById( 'notesBtn' ) && ${MD}.readyState === 'complete'; } catch( e ) { return false; } } )()` );
+    await d.evaluate( `( doc => { doc.getElementById( 'officeBtn' ).click(); doc.getElementById( 'notesBtn' ).click(); return true; } )( ${MD} )` );
+    await d.until( "! document.querySelector( '.notes-pane' ).hidden" );
+    await click( d, ".notes-phead .btn:nth-child(3)" );
+    await d.until( "document.activeElement && document.activeElement.closest( '.notes-pane .note.sheet' )" );
     await type( d, "on the desk" );
-    ok( await has( l => l.some( x => x.text === "on the desk" ) ), "a sticky note saves" );
+    ok( await has( l => l.some( x => x.text === "on the desk" ) ), "a note in the desktop's panel saves" );
     ok( ! /"(x|y|w|h|z|left|top)"\s*:/.test( onDisk( s, F ) ), "its place is not in the shared file" );
     ok( json().length === 4, "nothing else changed", json().length );
     d.stop();

@@ -116,6 +116,9 @@ html, body { height: 100%; overflow: hidden; }
 /* Toolbar buttons: Ayni's .btn at 30 px (a toggle is aria-pressed); B / I / U
    are letters, in bold. */
 .btn.fmt-btn, .btn.fmt-color-btn { --btn: 30px; font-weight: 700; font-size: 0.95rem; }
+/* The lock button shows the active cell's state: an open padlock, or a
+   closed one while it is locked. */
+#fmtLockBtn[aria-pressed="true"] .lock-off, #fmtLockBtn:not([aria-pressed="true"]) .lock-on { display: none; }
 /* Text/fill colour buttons — the same TinyMCE 'text-color' / 'highlight-bg-color'
    glyphs the Write app shows; the bar under each glyph tracks the current colour.
    The real <input type=color> is visually hidden but still opened by a click

@@ -156,7 +156,10 @@ func (s *Server) apiLogout(w http.ResponseWriter, r *http.Request) {
 	if (live && !remembered && sess.Role != "admin") || (!live && r.Header.Get("X-Nayive-Forget") == "1") {
 		w.Header().Set("Clear-Site-Data", `"cache", "storage"`)
 	}
-	s.sessions.Drop(tokenFrom(r))
+	if !s.sessions.Drop(tokenFrom(r)) {
+		// Gone now; on disk at the next Sweep that can write (G7).
+		s.log.Error("sign-out: sessions.json not written - retried by the sweep")
+	}
 	w.Header().Set("Set-Cookie", clearCookieHeader())
 	w.Header().Add("Set-Cookie", clearWhoCookieHeader())
 	w.Header().Add("Set-Cookie", clearWasCookieHeader())
@@ -316,16 +319,25 @@ func (s *Server) apiPassword(w http.ResponseWriter, r *http.Request) {
 	if !remember {
 		ttl = s.cfg.SessionTTL
 	}
-	s.sessions.DropUser(sess.User)
+	dropped := s.sessions.DropUser(sess.User)
 	// And every push device: an intruder's browser would still get each chat
 	// line and mail subject. This page registers its own again (index.html).
-	s.users.DropPushSubs(sess.User)
+	pushed := s.users.DropPushSubs(sess.User)
 	// And every sign-in passkey: one an intruder added would still let them in.
 	s.dropLoginKeys(sess.Role, sess.User)
 	token := s.sessions.Create(sess.User, sess.Role, ttl, remember)
 	w.Header().Set("Set-Cookie", sessionCookieHeader(token, ttl, remember, r.TLS != nil))
 
 	s.log.Info("password changed", "user", sess.User, "role", sess.Role)
+	if !dropped || !pushed {
+		// The password IS changed; what keeps other devices out did not all
+		// reach the disk (G7). Never answered as a clean success.
+		s.log.Error("password changed, but the sign-out of other devices was not saved",
+			"user", sess.User, "sessions", dropped, "push", pushed)
+		sendError(w, r, http.StatusInternalServerError,
+			"contraseña cambiada, pero no se pudo cerrar la sesión en los otros dispositivos: vuelve a cambiarla")
+		return
+	}
 	sendJSON(w, r, http.StatusOK, map[string]string{"message": "contraseña actualizada"})
 }
 

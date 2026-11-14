@@ -102,6 +102,10 @@ type mailUser struct {
 	// retryAt: when the damaged files that could not be READ (EIO, EMFILE -
 	// not those that do not parse) are tried again; zero = none to retry.
 	retryAt time.Time
+	// labelsVer: when labels.json was last written (in memory only): part
+	// of a list's "nothing changed" stamp, as labels live here, not on the
+	// mail server - a tag put on elsewhere shows in a tray left open
+	labelsVer int64
 }
 
 type MailHub struct {
@@ -164,16 +168,29 @@ func (h *MailHub) secret() ([]byte, error) {
 	if _, err := rand.Read(k); err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	// A synced temp, LINKED into place (G15): a power cut never leaves an
+	// empty or missing key behind a sealed password already on disk, and a
+	// key that is there is never replaced (the link fails on it).
+	tmp := atomicTempName(path)
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return nil, err
 	}
 	_, err = f.WriteString(base64.StdEncoding.EncodeToString(k) + "\n")
+	if err == nil {
+		err = f.Sync()
+	}
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
+	if err == nil {
+		err = os.Link(tmp, path)
+	}
+	os.Remove(tmp)
 	if err != nil {
-		os.Remove(path)
+		return nil, err
+	}
+	if err := syncDir(filepath.Dir(path)); err != nil {
 		return nil, err
 	}
 	h.key = k

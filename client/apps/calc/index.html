@@ -97,6 +97,7 @@
                 { sel: '#moreToolsBtn', text: Ayni.t( 'calc.introMoreBar' ) },
                 { sel: '#fmtBoldBtn', name: Ayni.t( 'calc.introFormatName' ), text: Ayni.t( 'calc.introFormat' ) },
                 { sel: '#fmtTableBtn',     name: Ayni.t( 'calc.introRowsColsName' ), text: Ayni.t( 'calc.introRowsCols' ) },
+                { sel: '#fmtLockBtn',      text: Ayni.t( 'calc.introLockCells' ) },
                 { sel: '#fmtAlignBtn',     text: Ayni.t( 'calc.introAlign' ) },
                 { sel: '#fmtSortBtn',      text: Ayni.t( 'calc.introSort' ) },
                 { sel: '#fmtFreezeGrpBtn', text: Ayni.t( 'calc.introFreeze' ) },
@@ -276,6 +277,13 @@
             </button>
             <button id="fmtBorderBtn" class="btn fmt-btn fmt-keep" data-i18n-attr="data-tip:calc.borders" aria-haspopup="true">
                 <span class="icon" data-icon="borders" style="--icon:17px"></span>
+            </button>
+            <!-- Locked cells (grid.js, LOCKED CELLS): open padlock = the active
+                 cell can be edited, closed = it is locked; a press sets the
+                 selection to the other one. -->
+            <button id="fmtLockBtn" class="btn fmt-btn" type="button" aria-pressed="false" data-i18n-attr="data-tip:calc.lockCells, aria-label:calc.lockCells">
+                <span class="icon lock-off" data-icon="cell-unlock" style="--icon:17px"></span>
+                <span class="icon lock-on" data-icon="cell-lock" style="--icon:17px"></span>
             </button>
             <div class="fmt-sep"></div>
             <button id="fxBtn" class="btn fmt-btn fmt-keep" style="font-size: 1.05rem;" data-i18n-attr="data-tip:calc.insertFx">&sum;</button>

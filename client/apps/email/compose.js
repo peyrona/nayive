@@ -116,6 +116,8 @@
             var own = S.accounts.map( function ( a ) { return a.email.toLowerCase(); } );
             var mine = function ( a ) { return own.indexOf( ( a.addr || "" ).toLowerCase() ) >= 0; };
             var to = ( msg.replyTo && msg.replyTo.length ? msg.replyTo : msg.from ) || [];
+            // your own mail (Sent): the answer goes to whom it went to
+            if( to.length && to.every( mine ) && ( msg.to || [] ).length ) to = msg.to;
             if( opts.mode === "all" )
             {
                 var seen = {};
@@ -220,6 +222,7 @@
         if( ! msg.html ) return "";
         var html = msg.html.replace( /<(br|\/p|\/div|\/tr|\/h[1-6]|\/li)\b[^>]*>/gi, "$&\n" );
         var doc = new DOMParser().parseFromString( html, "text/html" );      // inert: loads nothing
+        doc.querySelectorAll( "style, script, title, noscript, template" ).forEach( function ( n ) { n.remove(); } );
         return ( doc.body ? doc.body.textContent : "" ).replace( /\n{3,}/g, "\n\n" ).trim();
     }
 
@@ -667,20 +670,22 @@
     }
 
     // Save now; one at a time (a change during a save saves again after it).
-    function saveDraft()
+    // Given `mine` + `fields`: one no longer in the writer (Send).
+    function saveDraft( m, fields )
     {
-        if( ! C ) return Promise.resolve();
-        clearTimeout( C.timer );
-        if( C.saving ) { C.again = true; return C.saving; }
-        if( ! C.dirty ) return Promise.resolve();
-        var mine = C, acct = C.acct;
+        var mine = m || C;
+        if( ! mine ) return Promise.resolve();
+        clearTimeout( mine.timer );
+        if( mine.saving ) { mine.again = true; return mine.saving; }
+        if( ! mine.dirty ) return Promise.resolve();
+        var acct = mine.acct;
         mine.dirty = false;
-        E.$( "cStatus" ).textContent = E.T( "mail.draftSaving" );
+        if( C === mine ) E.$( "cStatus" ).textContent = E.T( "mail.draftSaving" );
         mine.saving = ( async function ()
         {
             try
             {
-                var fd = form( acct, mine );
+                var fd = form( acct, mine, fields );
                 var r = await post( acct, "draft", fd );
                 if( mine.staleDraft ) { dropDraft( mine.staleDraft.acct, mine.staleDraft.ref ); mine.staleDraft = null; }
                 if( mine.acct === acct )
@@ -730,7 +735,8 @@
             finally
             {
                 mine.saving = null;
-                if( mine.again ) { mine.again = false; if( C === mine ) saveDraft(); }
+                // Send while a save was on its way: the words it read go too
+                if( mine.again ) { mine.again = false; if( C === mine ) saveDraft(); else if( mine.sending && mine.sendFields ) saveDraft( mine, mine.sendFields ); }
             }
             mine.failed = null;
         } )();
@@ -780,7 +786,17 @@
             }
             Ayni.toast( "ok", E.T( "mail.savedToDrafts" ) );
         }
-        else if( mine.draftRef ) dropDraft( mine.draftAcct, mine.draftRef );    // emptied: nothing to keep
+        else
+        {
+            // emptied: nothing to keep - a save on its way lands first, then goes
+            var drop = function ()
+            {
+                if( mine.draftRef ) dropDraft( mine.draftAcct, mine.draftRef );
+                if( mine.staleDraft ) dropDraft( mine.staleDraft.acct, mine.staleDraft.ref );
+            };
+            if( mine.saving ) mine.saving.then( drop );
+            else drop();
+        }
         leave( fromCode );
     };
 
@@ -829,7 +845,20 @@
         leave( true );
         Ayni.toast( "ok", E.T( "mail.discarded" ), { undo: function ()
         {
-            if( C ) return;                 // already writing another one
+            if( C )
+            {
+                // already writing another one: this one back in Drafts, as it was
+                localNow( mine, fields );
+                ( async function ()
+                {
+                    while( mine.saving ) await mine.saving;
+                    mine.dirty = true;
+                    await saveDraft( mine, fields );
+                    if( mine.dirty ) Ayni.toast( "warn", E.TF( "mail.draftNotSaved", { why: E.errText( mine.failed ) } ) );
+                    else Ayni.toast( "ok", E.T( "mail.savedToDrafts" ) );
+                } )();
+                return;
+            }
             reopen( mine, fields );
         }, final: function ()
         {
@@ -863,10 +892,11 @@
         mine.sending = true;
         mine.dirty = mine.dirty || ! mine.draftRef;
         var fields = fieldsNow();
+        mine.sendFields = fields;
         var w = { mine: mine, fields: fields, off: false };
         waiting = w;                    // its draft opened from the tray meanwhile: that is its Undo
         localNow( mine );               // the words here, until the server has them
-        var saving = saveDraft();       // reads the fields now, before they go
+        var saving = saveDraft( mine, fields );
         detach();
         E.plug( "saving" );
         E.busy( true );
@@ -942,6 +972,7 @@
                 // time eMail opens (restoreLocal) (data-safety I5).
                 if( ! mine.dirty && mine.draftRef && mine.draftAcct === mine.acct )
                 {
+                    if( mine.staleDraft ) dropDraft( mine.staleDraft.acct, mine.staleDraft.ref );     // the old account's draft: it went
                     Ayni.toast( "warn", E.T( "mail.sentNoCopy" ) );
                     sentOk( mine );
                     return;

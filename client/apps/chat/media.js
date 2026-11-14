@@ -184,11 +184,11 @@
 
     async function vote( m, i )
     {
+        var conv = S.open;
         try
         {
-            var out = await C.api( "POST", "conv/" + S.open + "/messages/" + m.id + "/vote", { opt: i } );
-            S.msgs.set( out.id, out );
-            C.redraw( out.id );
+            var out = await C.api( "POST", "conv/" + conv + "/messages/" + m.id + "/vote", { opt: i } );
+            if( S.open === conv ) { S.msgs.set( out.id, out ); C.redraw( out.id ); }   // ids are per chat
         }
         catch( e ) { C.fail( e ); }
     }
@@ -242,7 +242,8 @@
     {
         var pics = files.filter( isPicture );
         var docs = files.filter( function ( f ) { return ! isPicture( f ); } );
-        if( docs.length ) C.nightGate( S.open, function ( silent ) { docs.forEach( function ( f ) { upload( f, "file", "", 0, null, silent ); } ); } );
+        var reply = docs.length ? C.takeReply() : 0;      // the first document answers the quote
+        if( docs.length ) C.nightGate( S.open, function ( silent ) { docs.forEach( function ( f, i ) { upload( f, "file", "", i ? 0 : reply, null, silent ); } ); } );
         if( pics.length ) previewPhotos( pics );
     }
 
@@ -385,7 +386,7 @@
             var bytes = await AyniNet.readFileBytes( f.path );
             if( S.open !== conv ) return;
             var file = new File( [ bytes ], f.name );
-            if( ! photo ) C.nightGate( conv, function ( silent ) { upload( file, "file", "", 0, null, silent ); } );
+            if( ! photo ) { var reply = C.takeReply(); C.nightGate( conv, function ( silent ) { upload( file, "file", "", reply, null, silent ); } ); }
             else if( /\.jpe?g$/i.test( f.name ) && C.canEditPhotos() ) previewPhotos( [ file ], function ( caption, reply, url, silent )
             {
                 measure( file ).then( function ( dims )
@@ -451,8 +452,7 @@
             if( Array.from( cap.value.trim() ).length > 4000 ) { C.toast( "warn", "chat.tooLong" ); return; }
             if( busy ) return;                                  // a turn still being drawn
             sh.close();
-            var reply = S.replyTo ? S.replyTo.id : 0, caption = cap.value.trim();
-            C.resetComposer();
+            var reply = C.takeReply(), caption = cap.value.trim();     // the box's words stay (J3)
             C.nightGate( S.open, function ( silent )
             {
                 // Edited here: sent as a new file - sendOne's file is the unedited one.
@@ -721,6 +721,11 @@
         var photos = S.order.filter( function ( x ) { var m = S.msgs.get( x ); return x > 0 && m.kind === "photo" && ! m.deleted; } );
         var at = photos.indexOf( id );
         if( at < 0 ) return;
+        // Ids are per chat: another chat opened under the viewer (a
+        // notification) has its own photo with this id - Copiar / Editar
+        // then do nothing.
+        var conv = S.open;
+        function cur() { return S.open === conv ? S.msgs.get( photos[ at ] ) : null; }
         var dl = h( "a", { class: "btn on-media", attrs: { "data-tip": T( "chat.download" ), "aria-label": T( "chat.download" ) } } );
         dl.appendChild( C.ic( "download" ) );
         // The owner: Copiar (into their Photos folder) and Editar.
@@ -728,12 +733,12 @@
         if( C.canEditPhotos() )
         {
             keepB = h( "button", { class: "btn on-media", attrs: { type: "button", "data-tip": T( "chat.keepPhoto" ), "aria-label": T( "chat.keepPhoto" ) },
-                                   on: { click: function () { C.keepPhoto( S.msgs.get( photos[ at ] ) ).then( show ); } } }, C.ic( "copy" ) );
+                                   on: { click: function () { C.keepPhoto( cur() ).then( show ); } } }, C.ic( "copy" ) );
             // Once kept, Copiar becomes "Abrir en Fotos".
             openB = h( "button", { class: "btn on-media", attrs: { type: "button", "data-tip": T( "chat.openInPhotos" ), "aria-label": T( "chat.openInPhotos" ) },
-                                   on: { click: function () { C.openInPhotos( S.msgs.get( photos[ at ] ) ); } } }, C.ic( "external" ) );
+                                   on: { click: function () { var m = cur(); if( m ) C.openInPhotos( m ); } } }, C.ic( "external" ) );
             editB = h( "button", { class: "btn on-media", attrs: { type: "button", "data-tip": T( "chat.editPhoto" ), "aria-label": T( "chat.editPhoto" ) },
-                                   on: { click: function () { C.editPhoto( S.msgs.get( photos[ at ] ), show ); } } }, C.ic( "edit" ) );
+                                   on: { click: function () { C.editPhoto( cur(), show ); } } }, C.ic( "edit" ) );
         }
         var f = fullLayer( "", [ keepB, openB, editB, dl ] );
         var img = h( "img", { attrs: { alt: "" } } );
@@ -748,7 +753,7 @@
         f.layer.appendChild( cap );
         function show()
         {
-            var m = S.msgs.get( photos[ at ] );
+            var m = cur();
             if( ! m ) return;
             img.src = photoUrl( m );
             if( keepB ) { keepB.hidden = !! m.kept; openB.hidden = ! m.kept; }
@@ -1119,9 +1124,11 @@
             var f = { lat: fix.latitude, lon: fix.longitude, acc: fix.accuracy };
             C.popNav( "picker" );
             close();
+            var reply = S.open === conv ? C.takeReply() : 0;
+            // The town's name, if it comes soon: a slow or blocked Nominatim never holds the message.
             var place = "";
-            try { place = await NayiveUI.townName( f.lat, f.lon ); } catch( _ ) {}
-            C.nightGate( conv, function ( silent ) { C.sendMsg( { kind: "loc", loc: { lat: f.lat, lon: f.lon, acc: f.acc, place: place }, silent: silent || undefined }, conv ); } );
+            try { place = await Promise.race( [ NayiveUI.townName( f.lat, f.lon ), new Promise( function ( ok ) { setTimeout( ok, 2500, "" ); } ) ] ); } catch( _ ) {}
+            C.nightGate( conv, function ( silent ) { C.sendMsg( { kind: "loc", loc: { lat: f.lat, lon: f.lon, acc: f.acc, place: place || "" }, replyTo: reply, silent: silent || undefined }, conv ); } );
         } );
     };
 
@@ -1211,7 +1218,8 @@
             card = cardFit( card );
             if( ! card.name || ! ( card.tels.length || card.emails.length ) ) { C.toast( "warn", "chat.cardNeeds" ); return; }
             if( sh ) sh.close();
-            C.nightGate( conv, function ( silent ) { C.sendMsg( { kind: "card", card: card, silent: silent || undefined }, conv ); } );
+            var reply = S.open === conv ? C.takeReply() : 0;
+            C.nightGate( conv, function ( silent ) { C.sendMsg( { kind: "card", card: card, replyTo: reply, silent: silent || undefined }, conv ); } );
         }
         go.addEventListener( "click", function ()
         {
@@ -1279,7 +1287,7 @@
         function addOpt( focus )
         {
             if( opts.children.length >= 12 ) return;
-            var inp = h( "input", { class: "input", attrs: { type: "text", maxlength: "100", placeholder: C.TF( "chat.optionN", { n: opts.children.length + 1 } ) } } );
+            var inp = h( "input", { class: "input", attrs: { type: "text", maxlength: "60", placeholder: C.TF( "chat.optionN", { n: opts.children.length + 1 } ) } } );
             var rm = C.btn( "x", "chat.remove", function () { if( opts.children.length > 2 ) row.remove(); }, "sm" );
             var row = h( "div", { class: "opt-row" }, inp, rm );
             opts.appendChild( row );
@@ -1297,21 +1305,21 @@
         var sh = C.sheet( T( "chat.newPoll" ), body, go );
         go.addEventListener( "click", function ()
         {
-            // Two options the server would read as the same one (see oneLine:
-            // it keeps 60 characters of each) are one option here as well.
+            // The server keeps 60 characters of each option (cleanChatName):
+            // two the same there are one option here as well.
             var seen = [];
-            var list = Array.prototype.map.call( opts.querySelectorAll( "input" ), function ( i ) { return oneLine( i.value, 100 ); } )
+            var list = Array.prototype.map.call( opts.querySelectorAll( "input" ), function ( i ) { return oneLine( i.value, 60 ); } )
                                       .filter( function ( v )
                                       {
-                                          var k = oneLine( v, 60 );
-                                          if( ! k || seen.indexOf( k ) >= 0 ) return false;
-                                          seen.push( k );
+                                          if( ! v || seen.indexOf( v ) >= 0 ) return false;
+                                          seen.push( v );
                                           return true;
                                       } );
             if( ! q.value.trim() || list.length < 2 ) { C.toast( "warn", "chat.pollNeeds" ); return; }
             sh.close();
             var poll = { q: q.value.trim(), opts: list, multi: multi.checked };
-            C.nightGate( conv, function ( silent ) { C.sendMsg( { kind: "poll", poll: poll, silent: silent || undefined }, conv ); } );
+            var reply = S.open === conv ? C.takeReply() : 0;
+            C.nightGate( conv, function ( silent ) { C.sendMsg( { kind: "poll", poll: poll, replyTo: reply, silent: silent || undefined }, conv ); } );
         } );
         setTimeout( function () { q.focus(); }, 50 );
     };

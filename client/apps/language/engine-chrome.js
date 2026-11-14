@@ -19,6 +19,19 @@ let detector = null;
 
 const api = () => globalThis.Translator;
 
+// p, or the signal's abort, whichever comes first.
+function untilAbort( p, signal )
+{
+    if( ! signal ) return p;
+    if( signal.aborted ) return Promise.reject( abortError( signal ) );
+    let onAbort;
+    return Promise.race( [ p, new Promise( ( _, reject ) =>
+    {
+        onAbort = () => reject( abortError( signal ) );
+        signal.addEventListener( 'abort', onAbort, { once: true } );
+    } ) ] ).finally( () => signal.removeEventListener( 'abort', onAbort ) );
+}
+
 export default {
     id: 'chromeBuiltin',
     location: 'local',
@@ -100,8 +113,17 @@ export default {
         if( ! D ) throw new TranslationError( 'unavailable', 'No LanguageDetector' );
         try
         {
-            if( ! detector ) { detector = D.create( { signal } ); detector.catch( () => { detector = null; } ); }
-            const list = await ( await detector ).detect( text, { signal } );
+            // Made once, WITHOUT this call's signal: a Cancel must not destroy the kept detector.
+            if( ! detector ) { const p = D.create(); detector = p; p.catch( () => { if( detector === p ) detector = null; } ); }
+            const kept = detector;
+            const d = await untilAbort( kept, signal );
+            let list;
+            try { list = await d.detect( text, { signal } ); }
+            catch( e )
+            {
+                if( ! ( signal && signal.aborted ) && detector === kept ) { detector = null; try { d.destroy && d.destroy(); } catch( x ) {} }
+                throw e;
+            }
             for( const r of list || [] )
             {
                 const language = normalizeLanguage( r.detectedLanguage );

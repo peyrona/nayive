@@ -2147,6 +2147,11 @@
         {
             await saver.flush();               // a named document keeps its waiting autosave
             await saver.upload();              // ...and its parked one goes up
+            // Keys typed while those ran went into the document on screen:
+            // saved to IT now, as Open does - the blank replaces it, and
+            // untitled() drops a waiting timer with its edits. Not for an
+            // untitled one being thrown away: its draft is about to go.
+            if( ! dropping ) await saver.catchUp();
             if( dropping ) await saver.dropDraft();
 
             try { await o.blank(); }
@@ -2314,6 +2319,18 @@
             if( name ) input.value = withExt( name, sel.value );
         }
 
+        // ...and the other way: a name typed with a listed extension moves the
+        // Format list to it ("notes.md" -> Markdown), so ✓ does not add the
+        // old one ("notes.md.txt"). Any other name leaves the list alone.
+        function formatToName()
+        {
+            var sel = byId( "saveFormat" ) && Ayni.picker( byId( "saveFormat" ) );
+            if( ! sel ) return;
+
+            var ext = extOf( byId( "saveName" ).value.trim() );
+            if( ext && ext !== sel.value && sel.options.some( function ( op ) { return op.value === ext; } ) ) sel.set( ext );
+        }
+
         // asCopy: the conflict question's "save my version as a copy" - never
         // offered the name it conflicts with (saving there only meets the
         // same conflict again), but the next free one: "hoja (2).xlsx".
@@ -2393,6 +2410,11 @@
             // limpia" the user backed out of must not wipe anything later).
             var wipeThis = wipeAfter;
             wipeAfter = null;
+
+            // ANOTHER file this page read earlier and held as not ours to write
+            // (Text: not UTF-8): what goes there now is the document on screen,
+            // whole - the hold was for that old reading, not for this save.
+            if( p !== path && o.store.isBlocked && o.store.isBlocked( p ) === "bad" ) o.store.unblock( p );
 
             document.getElementById( "saveAsBackdrop" ).close();
 
@@ -2505,7 +2527,7 @@
             // Kept in its own folder, which need not be appDir (the Open browser
             // reaches anywhere in Drive).
             var to = ( dirName( path ) || o.appDir ) + "/" + ( o.renameName ? o.renameName( name, path ) : name );
-            if( to === path ) return;
+            if( to === path ) { showLabel(); return; }   // the label shows the name it keeps
             if( notOwner() ) { showLabel(); return; }
 
             sync( "saving" );
@@ -2656,7 +2678,7 @@
             var swap = false;
             if( o.restoreBytes )
                 try { swap = await o.restoreBytes( prev, p ); }
-                catch ( e ) { toast( "err", "write.actionFailed" ); return; }
+                catch ( e ) { if( ! ( e && e.said ) ) toast( "err", "write.actionFailed" ); return; }
             if( swap ) { await swapFiles( p, bak, raw, prev, undoable, doneKey ); return; }
 
             var bakWas = undoable ? prev.slice() : null;     // the .bak's own bytes, whatever load() does with prev
@@ -2666,15 +2688,24 @@
                 // The copy going up takes the document's own state with it.
                 var now = await o.encode( path );
                 var up  = saver.lock() ? await AyniCrypt.seal( saver.lock(), now ) : now;
-                await AyniNet.writeFileBytes( bak, typeof up === "string" ? new TextEncoder().encode( up ) : up );
+
+                // The copy goes on screen FIRST: one the app cannot read
+                // throws here, with nothing written - the .bak still holds it.
+                await o.load( prev, path, "restore" );
+
+                try { await AyniNet.writeFileBytes( bak, typeof up === "string" ? new TextEncoder().encode( up ) : up ); }
+                catch ( e )
+                {
+                    // What was on screen is in the .bak nowhere: back on screen.
+                    try { await o.load( now, path, "restore" ); } catch ( e2 ) {}
+                    throw e;
+                }
                 // The session's first save must not take a NEW .bak over it: it
                 // holds what was on screen - the way back (Undo, or Restore again).
                 saver.bakTaken( p );
-
-                await o.load( prev, path, "restore" );
                 saver.edited();                // the restored copy still has to be saved over the document
             }
-            catch ( e ) { toast( "err", "write.actionFailed" ); return; }
+            catch ( e ) { if( ! ( e && e.said ) ) toast( "err", "write.actionFailed" ); return; }
 
             if( ! undoable ) { toast( "ok", doneKey ); return; }
 
@@ -2945,6 +2976,7 @@
         on( "saveAsDeleteBtn",  "click",   function () { discardUntitled(); } );
         on( "saveName",         "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); confirmSaveAs(); } } );
         on( "saveFormat",       "ayni:change", function () { nameToFormat(); } );
+        on( "saveName",         "input",   function () { formatToName(); } );
 
         // ---- a desktop window ---------------------------------------------------
         //
@@ -3021,7 +3053,18 @@
             return cfg || {};
         }
 
-        async function write( patch )
+        // One write at a time, in order: two quick changes (wrap, then indent)
+        // both read the old file, and the second write dropped the first.
+        var queue = Promise.resolve();
+
+        function write( patch )
+        {
+            var run = queue.then( function () { return writeNow( patch ); } );
+            queue = run.catch( function () {} );
+            return run;
+        }
+
+        async function writeNow( patch )
         {
             var cfg;
             try { cfg = await read(); }
@@ -3031,7 +3074,10 @@
                 return null;
             }
             Object.assign( cfg, patch );
-            try { await AyniNet.writeJson( path, cfg ); } catch ( e ) {}
+            // A write that failed is said, and answers null like an unread
+            // file: the caller must not take the setting as kept.
+            try { await AyniNet.writeJson( path, cfg ); }
+            catch ( e ) { Ayni.toast( "err", t( "ayni.saveFailed" ) ); return null; }
             return cfg;
         }
 

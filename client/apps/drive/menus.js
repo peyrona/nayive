@@ -240,10 +240,12 @@ async function doPaste()
         return;
     }
 
+    // A copy can be pasted again; a cut goes once, and stays when its move
+    // was stopped (parkedFirst) - unless a new Cut / Copy came meanwhile (N1).
+    if( mode !== 'move' ) { await doCopy( paths, dest ); return; }
+    const cut = clipboard;
     clipboard = null;
-
-    if( mode === 'move' ) await doMove( paths, dest );
-    else                  await doCopy( paths, dest );
+    if( await doMove( paths, dest ) === false && clipboard === null ) clipboard = cut;
 }
 
 // A dialog opens as modal / closes (Ayni's dialog.panel); the full-screen

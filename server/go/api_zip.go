@@ -132,7 +132,7 @@ func (s *Server) apiZip(w http.ResponseWriter, r *http.Request) {
 	virt := strings.Join(splitPath(q.Get("file")), "/")
 
 	src, ok := s.users.Resolve(role, user, virt)
-	if !ok {
+	if !ok || s.inConfig(src.Abs) {
 		sendError(w, r, http.StatusForbidden, "forbidden")
 		return
 	}
@@ -203,6 +203,13 @@ func (s *Server) apiZip(w http.ResponseWriter, r *http.Request) {
 	}
 	destRel := filepath.Join(parent.Rel, name)
 	destVirt := path.Join(dirVirt, name)
+	// The folder it MAKES must be ours to fill too (G12): a "chat" or "mail"
+	// made in data/ IS the Chat or eMail server's own folder.
+	if dest := filepath.Join(parent.Abs, name); s.isServerData(dest) || s.inConfig(dest) {
+		root.Remove(destRel) // empty: claimFolder just made it
+		sendError(w, r, http.StatusForbidden, "no se puede extraer ahí")
+		return
+	}
 
 	made := &madeHere{root: root, dirs: []string{destRel}} // claimFolder made the top
 	written, files, skipped, err := unzipInto(r.Context(), made, destRel, plan, room)
@@ -449,6 +456,9 @@ func unzipInto(ctx context.Context, made *madeHere, destRel string, plan zipPlan
 			continue
 		}
 		err = inflateEntry(it.f, out, cw)
+		if err == nil {
+			err = out.Sync() // on disk before "done" (G13)
+		}
 		if cerr := out.Close(); err == nil {
 			err = cerr
 		}
@@ -459,6 +469,13 @@ func unzipInto(ctx context.Context, made *madeHere, destRel string, plan zipPlan
 			root.Chtimes(rel, it.f.Modified, it.f.Modified) // a photo keeps its date
 		}
 		files++
+	}
+	// Every new name durable too (G13): the folders this job made, and the
+	// one its top folder sits in.
+	for _, d := range append([]string{filepath.Dir(destRel)}, made.dirs...) {
+		if err := syncRootDir(root, d); err != nil {
+			return cw.written, files, skipped, err
+		}
 	}
 	return cw.written, files, skipped, nil
 }
@@ -630,9 +647,10 @@ func (s *Server) zipSources(role, user string, virts []string) (items []zipSourc
 
 	for i, v := range virts {
 		src, ok := s.users.Resolve(role, user, v)
-		if !ok {
+		if !ok || s.inConfig(src.Abs) {
 			return items, total, firstDir, roots, http.StatusForbidden, "forbidden"
 		}
+		config, _ := resolveExisting(s.cfg.ConfigDir)
 		// A home the admin moved under the request: 503, never 404 (missingStatus).
 		info, err := src.Stat()
 		if err != nil || !(info.Mode().IsRegular() || info.IsDir()) {
@@ -663,6 +681,9 @@ func (s *Server) zipSources(role, user string, virts []string) (items []zipSourc
 			}
 			if d.IsDir() && d.Name() == ".trash" {
 				return fs.SkipDir
+			}
+			if d.IsDir() && config != "" && filepath.Join(src.Root, filepath.FromSlash(p)) == config {
+				return fs.SkipDir // G1: the admin's base dir packs everything but config/
 			}
 			isDir := d.IsDir()
 			if !isDir && (!d.Type().IsRegular() || isTempName(d.Name()) || isLinkName(d.Name())) {
@@ -759,6 +780,9 @@ func writeZip(ctx context.Context, root *os.Root, dirRel, base string, items []z
 	if err == nil {
 		err = zw.Close()
 	}
+	if err == nil {
+		err = tmp.Sync() // on disk before "done" (G13)
+	}
 	if cerr := tmp.Close(); err == nil {
 		err = cerr
 	}
@@ -779,6 +803,10 @@ func writeZip(ctx context.Context, root *os.Root, dirRel, base string, items []z
 		// Readable like an upload; while it was a temp it stayed 0600, so a
 		// crash before this line leaves the sweep something it recognises.
 		root.Chmod(final, 0o644)
+		if err := syncRootDir(root, dirRel); err != nil {
+			root.Remove(final)
+			return "", 0, 0, err
+		}
 		return name, cw.written, files, nil
 	}
 	return "", 0, 0, fs.ErrExist

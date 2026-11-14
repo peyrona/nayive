@@ -3,8 +3,8 @@
 //
 // The service worker keeps every shared file (not only photos) and says what
 // they are: "media" (photos/videos -> a Photos album) or "files" (anything
-// else, or a mix -> a Drive folder). A link opens a choice (Bookmarks / Chat)
-// and writes nothing. Files go up as NEW files only: a name already in the
+// else, or a mix -> a Drive folder). A link opens a choice (Bookmarks / Chat /
+// Note), plain text too (Chat / Note); neither writes anything here. Files go up as NEW files only: a name already in the
 // folder gets the next free one, never written over; a folder that cannot be
 // read sends nothing. The service worker is ON for the first section only.
 import { server, browser, ok, section, done, onDisk, disk } from "./lib.mjs";
@@ -117,7 +117,8 @@ section( "SW · WHAT A SHARE LEAVES IN THE INBOX" );
         new URL( url ).searchParams.get( "text" ) === "Look at this https://youtu.be/xyz", "a link inside the text (YouTube's Share): the same choice", url );
 
     url = await share( [ [ "text", "Just some words" ] ] );
-    ok( new URL( url ).pathname === "/nayive/chat/" && new URL( url ).searchParams.get( "text" ) === "Just some words", "plain text: straight to Chat", url );
+    ok( new URL( url ).pathname === "/nayive/share-target/" && new URL( url ).searchParams.get( "text" ) === "Just some words" && ! new URL( url ).searchParams.get( "link" ),
+        "plain text: the share page asks (Chat or a note)", url );
 
     await c.send( "Page.removeScriptToEvaluateOnNewDocument", { identifier: arrived.result.identifier } );
     await c.send( "Network.setBypassServiceWorker", { bypass: true } );

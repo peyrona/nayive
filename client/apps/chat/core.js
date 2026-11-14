@@ -9,6 +9,8 @@
  *     media.js    photos, files, location, contact cards, polls
  *     info.js     a chat's info screen, and the app's help
  *     call.js     voice and video calls (the call screen, its bubble)
+ *     ear.js      a voice call held to the ear (no stray presses)
+ *     watch.js    "Play for everyone": one YouTube video in step on every page
  *     guest.js    a person's first visit (notifications, home-screen icon)
  *     chat.js     start()
  *
@@ -235,7 +237,7 @@
     {
         opts = opts || {};
         var init = { method: method, headers: { Accept: "application/json" }, signal: opts.signal,
-                     credentials: "same-origin" };
+                     credentials: "same-origin", keepalive: !! opts.keepalive };   // keepalive: sent as the page closes
         // the page's owner on a change (L5): a tab of another account gets 423
         var who = C.S.mode === "owner" && method !== "GET" && window.AyniNet && AyniNet.owner && AyniNet.owner();
         if( who ) init.headers[ "X-Nayive-User" ] = who;
@@ -505,6 +507,11 @@
         var cut = text.indexOf( C.ORIG );
         return window.Ayni.marks.strip( cut < 0 ? text : text.slice( 0, cut ) );
     };
+
+    // A translated text cut in two: what was sent (Copy, Edit) and its
+    // original with the marker ("" when it has none), put back on an edit.
+    C.cutOrig  = function ( text ) { text = text || ""; var cut = text.indexOf( C.ORIG ); return cut < 0 ? text : text.slice( 0, cut ); };
+    C.origPart = function ( text ) { text = text || ""; var cut = text.indexOf( C.ORIG ); return cut < 0 ? "" : text.slice( cut ); };
 
     C.convOf = function ( id )
     {

@@ -72,6 +72,7 @@ func NewServer(cfg *Config, log Logger) (*Server, error) {
 	users := NewUsers(cfg, shares, log)
 	tree := NewFileTree(cfg.BaseDir, cfg.HomesDir, cfg.ConfigDir, shares)
 	trash := NewTrash(cfg.BaseDir, cfg.HomesDir, users, log)
+	trash.shares = shares // a bin entry's grants follow it out (T10)
 
 	var contact string
 	cfg.Read(func(s *ServerConfig) { contact = s.PushContact })

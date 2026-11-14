@@ -30,7 +30,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-b061c4220970";
+var CACHE_VERSION = "nayive-f1767ac8bbb6";
 /* @end */
 
 /* @generated:precache */
@@ -126,6 +126,10 @@ var PRECACHE_SHELL = [
     "games/icons/icon-512.png",
     "games/index.html",
     "games/invaders.html",
+    "games/machines-board.js",
+    "games/machines-levels.js",
+    "games/machines-sim.js",
+    "games/machines.html",
     "games/manifest.json",
     "games/mines.html",
     "games/solitaire.html",
@@ -331,6 +335,8 @@ var PRECACHE_REST = [
     "calendar/lib/fullcalendar-locale-fr_v6.1.21.min.js",
     "calendar/lib/fullcalendar-locale-pt_v6.1.21.min.js",
     "calendar/lib/fullcalendar-timegrid_v6.1.21.min.js",
+    "games/lib/nape.LICENSE",
+    "games/lib/nape_v3.43.5.min.js",
     "shared/lib/fabric_v7.4.0.min.js",
     "shared/lib/luxon_v3.7.2.min.js",
     "shared/lib/rrule_v2.8.1.min.js",
@@ -610,7 +616,7 @@ self.addEventListener( "fetch", function ( event )
 
 // Web Share Target POST -> stash the shared files in SHARE_INBOX, redirect to
 // the page that uploads them. A link (no files) goes to the same page, which
-// asks Bookmarks or Chat; plain text goes straight to Chat.
+// asks Bookmarks, Chat or a note; plain text too, which asks Chat or a note.
 //
 // The inbox manifest says what the files are: kind "media" (every one a photo
 // or a video: they go to a Photos album) or "files" (anything else, or a mix:
@@ -644,9 +650,9 @@ async function handleShare( req )
             return f && typeof f === "object" && f.size > 0;
         } );
 
-        // No files, only a link or text (YouTube's "Share", a web page). A
-        // link: the page asks where it goes (Bookmarks or Chat). Text alone:
-        // Chat opens with it in the box, to pick who gets it.
+        // No files, only a link or text (YouTube's "Share", a web page). The
+        // page asks where it goes: a link to Bookmarks, Chat or a note; text
+        // alone to Chat (in the box, to pick who gets it) or a note.
         if( ! files.length )
         {
             var text  = String( form.get( "text" )  || "" ).trim();
@@ -665,8 +671,7 @@ async function handleShare( req )
                 return Response.redirect( base + "?" + q.toString(), 303 );
             }
             if( text )
-                return Response.redirect( new URL( "chat/?text=" + encodeURIComponent( text ),
-                                                   self.registration.scope ).toString(), 303 );
+                return Response.redirect( base + "?" + new URLSearchParams( { text: text, title: title } ).toString(), 303 );
         }
 
         var kind  = files.every( isMedia ) ? "media" : "files";

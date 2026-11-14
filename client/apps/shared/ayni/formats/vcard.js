@@ -32,15 +32,22 @@
     // so are vCard 2.1 QUOTED-PRINTABLE soft breaks (a line that ends in "=",
     // as Android exports), that "=" dropped. A blank line rides along with the
     // line above it: vCard 2.1 ends a base64 PHOTO with one.
+    // In a 3.0 / 4.0 card a line that starts with a space is always a fold,
+    // even after a "=": 3.0 has no soft breaks (Contacts once folded a kept
+    // QUOTED-PRINTABLE line right after a "=", and such cards read right too).
     function contentLines( text )
     {
         const out  = [];
         let   cur  = null;
         let   soft = false;     // `cur` ends in a QUOTED-PRINTABLE soft break
+        let   v3   = false;     // the card being read says VERSION:3.0 or 4.0
 
         for( const p of text.replace( /\r\n/g, '\n' ).replace( /\r/g, '\n' ).split( '\n' ) )
         {
-            if( cur && soft )
+            if( /^BEGIN\s*:\s*VCARD\s*$/i.test( p ) ) v3 = false;
+            else if( /^VERSION\s*:\s*[34]/i.test( p ) ) v3 = true;
+
+            if( cur && soft && ! ( v3 && /^[ \t]/.test( p ) ) )
             {
                 cur.text = cur.text.slice( 0, -1 ) + p;
                 cur.phys.push( p );
@@ -225,7 +232,8 @@
 
     // RFC 6350 §3.2: fold content lines longer than 75 octets. Continuation lines begin
     // with a single space. Folding is done on UTF-8 octet boundaries without splitting a
-    // multi-byte character.
+    // multi-byte character, and never right after a "=": a reader would take a
+    // QUOTED-PRINTABLE line's "=" at a line end for a 2.1 soft break.
     function foldLine( line )
     {
         const bytes = new TextEncoder().encode( line );
@@ -243,6 +251,9 @@
             let end = Math.min( pos + max, bytes.length );
 
             while( end < bytes.length && ( bytes[ end ] & 0xC0 ) === 0x80 )
+                end--;
+
+            while( end < bytes.length && end > pos + 1 && bytes[ end - 1 ] === 0x3D )   // "="
                 end--;
 
             out += ( pos === 0 ? '' : '\r\n ' ) + dec.decode( bytes.slice( pos, end ) );

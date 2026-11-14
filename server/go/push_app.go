@@ -23,11 +23,18 @@ package main
 // a phone not seen for appNotesStale gets nothing here - its Chrome gets web
 // push again, as before the app.
 //
-// The queue lives in memory, like the rings and the finds: a restart loses
-// what an offline phone had not fetched yet.
+// The queue is kept on disk too, config/device-notes.json (D4): a note is
+// "sent" only once it is there, so a restart (every deploy) never loses what
+// an offline phone had not fetched yet. A note that could not be written is
+// answered 503 and the sender tries again. Full (appNotesMax), the oldest
+// plain note goes first - never an SOS one - and each one dropped is logged
+// (D5).
 
 import (
 	"encoding/json"
+	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -52,6 +59,58 @@ type deviceNote struct {
 	Quiet bool   `json:"quiet,omitempty"`
 	Sos   bool   `json:"sos,omitempty"` // an SOS alert or "Are you OK?": the app rings it (sos.go)
 	exp   int64  // unix ms: dropped after, like a push's TTL
+}
+
+// storedNote is a note as config/device-notes.json keeps it: with its expiry.
+type storedNote struct {
+	deviceNote
+	Exp int64 `json:"exp"`
+}
+
+type deviceNotesFile struct {
+	Phones map[string][]storedNote `json:"phones"`
+}
+
+func (d *Devices) notesPath() string {
+	return filepath.Join(filepath.Dir(d.path), "device-notes.json")
+}
+
+// loadNotes reads the queue kept on disk: only live notes of phones still
+// enrolled. Caller holds mu, from ensureLoaded.
+func (d *Devices) loadNotes() {
+	var file deviceNotesFile
+	if ok, broken := loadTable(d.notesPath(), &file, d.log, "starting with no queued notes"); !ok {
+		d.notesBroken = broken
+		return
+	}
+	now := time.Now().UnixMilli()
+	for id, ns := range file.Phones {
+		if d.rowLocked(id) == nil {
+			continue
+		}
+		for _, n := range ns {
+			if n.Exp > now {
+				n.deviceNote.exp = n.Exp
+				d.notes[id] = append(d.notes[id], n.deviceNote)
+				d.noteSeq = max(d.noteSeq, n.ID)
+			}
+		}
+	}
+}
+
+// saveNotes writes the whole queue. Caller holds mu. false: not written.
+func (d *Devices) saveNotes() bool {
+	file := deviceNotesFile{Phones: map[string][]storedNote{}}
+	for id, ns := range d.notes {
+		for _, n := range ns {
+			file.Phones[id] = append(file.Phones[id], storedNote{deviceNote: n, Exp: n.exp})
+		}
+	}
+	if !saveTable(d.notesPath(), &d.notesBroken, file, d.log) {
+		return false
+	}
+	_ = os.Chmod(d.notesPath(), 0o600) // the notes' words: nobody else's business
+	return true
 }
 
 // phoneLocale is what the phone's wait says about it.
@@ -169,8 +228,9 @@ func (d *Devices) localeOf(id string) phoneLocale {
 }
 
 // queueNote is VapidStore.local: one push for phone `id`, kept for its wait.
-// False when there is no such phone showing notes (the sender then sees a 410).
-func (d *Devices) queueNote(id string, raw []byte, ttl int) bool {
+// 201 kept (on disk too), 410 no such phone showing notes, 503 not written
+// (nothing kept: the sender tries again, D4).
+func (d *Devices) queueNote(id string, raw []byte, ttl int) int {
 	var p struct {
 		Title string `json:"title"`
 		Body  string `json:"body"`
@@ -180,7 +240,7 @@ func (d *Devices) queueNote(id string, raw []byte, ttl int) bool {
 		Sos   bool   `json:"sos"`
 	}
 	if json.Unmarshal(raw, &p) != nil {
-		return false
+		return http.StatusGone
 	}
 	if p.Title == "" {
 		p.Title = "Nayive"
@@ -198,7 +258,7 @@ func (d *Devices) queueNote(id string, raw []byte, ttl int) bool {
 	d.ensureLoaded()
 	row := d.rowLocked(id)
 	if row == nil || row.App < appNotesMin {
-		return false
+		return http.StatusGone
 	}
 	now := time.Now().UnixMilli()
 	d.noteSeq = max(d.noteSeq+1, now)
@@ -212,18 +272,39 @@ func (d *Devices) queueNote(id string, raw []byte, ttl int) bool {
 		}
 	}
 	kept = append(kept, note)
-	if len(kept) > appNotesMax {
-		kept = kept[len(kept)-appNotesMax:]
+	// Full: the oldest plain note goes first, never an SOS one (D5) - and
+	// never silently.
+	for len(kept) > appNotesMax {
+		drop := 0
+		for i, n := range kept {
+			if !n.Sos {
+				drop = i
+				break
+			}
+		}
+		d.log.Warn("app phone: queue full, a note it never fetched dropped",
+			"phone", id, "title", kept[drop].Title, "sos", kept[drop].Sos)
+		kept = append(kept[:drop:drop], kept[drop+1:]...)
 	}
+	before, had := d.notes[id]
 	d.notes[id] = kept
+	if !d.saveNotes() {
+		if had {
+			d.notes[id] = before
+		} else {
+			delete(d.notes, id)
+		}
+		return http.StatusServiceUnavailable
+	}
 	d.kickLocked()
-	return true
+	return http.StatusCreated
 }
 
 // notesFor is what phone `id` has not acked yet, oldest first; nil when none.
 func (d *Devices) notesFor(id string) []deviceNote {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.ensureLoaded() // right after a restart: the queue kept on disk
 	now := time.Now().UnixMilli()
 	var out []deviceNote
 	for _, n := range d.notes[id] {
@@ -238,16 +319,37 @@ func (d *Devices) notesFor(id string) []deviceNote {
 func (d *Devices) ackNotes(id string, last int64) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.ensureLoaded()
 	var kept []deviceNote
 	for _, n := range d.notes[id] {
 		if n.ID > last {
 			kept = append(kept, n)
 		}
 	}
+	gone := len(kept) < len(d.notes[id])
 	if len(kept) == 0 {
 		delete(d.notes, id)
 	} else {
 		d.notes[id] = kept
 	}
+	// Not written: the shown notes may show once more after a restart -
+	// never one lost.
+	if gone && !d.saveNotes() {
+		d.log.Warn("app phone: acked notes not written; they may show again after a restart", "phone", id)
+	}
 	d.kickLocked()
+}
+
+// dropNotesLocked forgets the queue of phones that are gone. Caller holds mu.
+func (d *Devices) dropNotesLocked(ids ...string) {
+	changed := false
+	for _, id := range ids {
+		if _, ok := d.notes[id]; ok {
+			delete(d.notes, id)
+			changed = true
+		}
+	}
+	if changed {
+		d.saveNotes()
+	}
 }

@@ -740,7 +740,7 @@ const isVideo   = name => VIDEO_EXT.indexOf( extOf( name ) ) !== -1;
 const st = {
     mode: "grid", q: "", cluster: undefined, lb: 0, list: [],
     paseIdx: 0, playing: false, speed: 6000, timer: null, ab: false, paseStarted: false,
-    map: null, markers: [], geoReady: false,
+    map: null, markers: [], geoReady: false, mapFit: "",
 };
 
 /* PHOTOS: [{ id, path, name, url, ts, day, time, lat, lon, place, cluster, bust }] */
@@ -803,8 +803,11 @@ const NOTE_MARK = '<span class="note-mark" aria-hidden="true">' + Ayni.icon( 'co
  *
  * keyed by the photo's size + mtime: a move or rename keeps both (so the thumb
  * follows the photo with no re-keying), an edit changes them (so a fresh one
- * gets made). How a tile finds its thumb, with zero extra requests when it
- * exists:
+ * gets made). Two photos of one listing with the same size AND mtime second
+ * (same-size BMPs uploaded together) would share one: those two add a hash of
+ * their path, <size>_<mtime>_<hash>.jpg (NayiveMedia.thumbNames) - and for
+ * them alone a move makes a new thumb. How a tile finds its thumb, with zero
+ * extra requests when it exists:
  *
  *   1. <img src=thumb URL>. Present -> done (the common case, every visit
  *      after the first).
@@ -830,7 +833,8 @@ const PENDING_FILES = new Map();       // file name -> File just uploaded from t
 const THUMB_QUEUE   = [];              // [ { p, source } ] waiting for a worker
 let   thumbWorkers  = 0;
 
-function thumbKey( p )  { return p.size + "_" + p.mtime + ".jpg"; }
+// p.twin: another photo of the listing has the same size + mtime (loadFolder).
+function thumbKey( p )  { return NayiveMedia.thumbNames( p.size, p.mtime, p.path )[ p.twin ? 1 : 0 ]; }
 function thumbPath( p ) { return THUMB_DIR + "/" + thumbKey( p ); }
 
 function srcFor( p )
@@ -888,6 +892,16 @@ document.addEventListener( "error", e =>
         THUMB_STATE.set( thumbKey( p ), "missing" );
         img.dataset.stage = "fallback";
         img.src = srcFor( p );
+        return;
+    }
+    // Drawn with the local bytes of a photo just uploaded, but loaded (lazily)
+    // only after its thumb was made and those bytes freed (dropLocalUrl): the
+    // copy on the server now - a tile its thumb, the lightbox the photo.
+    if( p && ! p.localUrl && img.src.indexOf( "blob:" ) === 0 )
+    {
+        const t = img.closest( ".tile" ) ? thumbSrc( p ) : { src: srcFor( p ), stage: "full" };
+        img.dataset.stage = t.stage;
+        img.src = t.src;
         return;
     }
     img.style.display = "none";                // the photo itself won't load
@@ -1007,7 +1021,7 @@ async function homeImageKeys()
         const r = await AyniNet.search( { exts: SHOW_EXT, since, until } );
         if( ! r.truncated )
         {
-            ( r.nodes || [] ).forEach( n => { if( n.size && n.mtime ) keys.add( n.size + "_" + n.mtime + ".jpg" ); } );
+            ( r.nodes || [] ).forEach( n => { if( n.size && n.mtime ) NayiveMedia.thumbNames( n.size, n.mtime, n.path ).forEach( k => keys.add( k ) ); } );
             return true;
         }
         if( until - since <= 1 ) return false;
@@ -1040,9 +1054,10 @@ async function sweepThumbs()
         listing = { nodes: [] };                                                // no thumbs folder yet
     }
 
+    // Both names of each picture: the plain one and its twin's (thumbKey).
     const keep = new Set();
-    for( const e of Object.values( SCAN_CACHE.map ) )
-        if( e && e.size && e.mtime ) keep.add( e.size + "_" + e.mtime + ".jpg" );
+    for( const [ path, e ] of Object.entries( SCAN_CACHE.map ) )
+        if( e && e.size && e.mtime ) NayiveMedia.thumbNames( e.size, e.mtime, path ).forEach( k => keep.add( k ) );
     for( const p of PHOTOS ) if( p.size && p.mtime ) keep.add( thumbKey( p ) );
     const home = await homeImageKeys();
     if( ! home ) return;                                                        // not sure: keep them all, try another day
@@ -1175,13 +1190,33 @@ function showCamBtn() { $( "#camBtn" ).hidden = $( "#addBtn" ).hidden || ! AyniP
 
 /* Upload the picked images into the folder Photos is showing (DIR), then
  * reload so the scan cache picks up just the new files. Wired to #addBtn. */
+let uploading = false;       // an upload runs: Upload, the camera and "Upload here" start no second one
+let sending   = false;       // ...and its PUTs have begun (the dot is "saving")
 async function handleAddPhotos( fileList )
 {
     const files = Array.from( fileList || [] ).filter( f => f && ( f.type.indexOf( "image/" ) === 0 || f.type.indexOf( "video/" ) === 0 || isVideo( f.name ) ) );
     $( "#addInput" ).value = "";
-    if( ! files.length ) return;
+    if( ! files.length || ! DIR ) return;          // no folder picked: nowhere to put them
     if( DEMO ) { Ayni.toast( 'warn', Ayni.t( 'photos.demoNoUpload' ) ); return; }
 
+    // One at a time: a second one's end set the dot "synced" and reloaded
+    // the folder while the first still sent. Marked before the first await,
+    // and let go whatever happens (finally), or every upload control stays dead.
+    if( uploading ) return;
+    uploading = true;
+    try { await addPhotos( files ); }
+    catch( err ) { if( sending ) { sending = false; setSync( "error" ); } throw err; }
+    finally { uploadEnded(); }
+}
+function uploadEnded()
+{
+    uploading = false;
+    Ayni.setBusy( $( "#addBtn" ), false );
+    Ayni.setBusy( $( "#camBtn" ), false );
+}
+
+async function addPhotos( files )
+{
     // Friendly up-front space check, with the offer to empty the papelera when
     // that alone would make room (the server enforces the quota too).
     // Skipped on somebody else's album: ?stat=disk reports OUR free space, but
@@ -1199,9 +1234,12 @@ async function handleAddPhotos( fileList )
     const taken   = new Set( PHOTOS.map( p => p.name ) );
     const emptied = ! PHOTOS.length;          // nothing on screen -> ok to use the grid for progress
     let   done    = 0;
+    let   failed  = false;                    // a photo that should have gone up did not
 
     setSync( 'saving' );
+    sending = true;
     Ayni.setBusy( $( "#addBtn" ), Ayni.t( "ayni.sync.saving" ) );
+    Ayni.setBusy( $( "#camBtn" ), Ayni.t( "ayni.sync.saving" ) );
 
     for( let i = 0; i < files.length; i++ )
     {
@@ -1243,6 +1281,7 @@ async function handleAddPhotos( fileList )
             {
                 Ayni.toast( 'err', RO ? Ayni.t( 'photos.ownerNoSpace' )
                                    : Ayni.t( "ui.quotaExceeded" ) );
+                failed = true;
                 break;
             }
 
@@ -1255,12 +1294,17 @@ async function handleAddPhotos( fileList )
             }
 
             Ayni.toast( "err", Ayni.tf( "photos.uploadFailed", { name: name } ) );
+            failed = true;
         }
     }
 
-    Ayni.setBusy( $( "#addBtn" ), false );
-    setSync( "synced" );
-    Ayni.toast( "ok", Ayni.tf( done === 1 ? "st.oneUploaded" : "st.nUploaded", { n: done } ) );
+    uploadEnded();
+    // Not "synced" when a photo failed: the dot stays red until the next
+    // save from this page goes through. No green "0 uploaded" either: the
+    // warnings above already said why nothing went.
+    sending = false;
+    setSync( failed ? "error" : "synced" );
+    if( done ) Ayni.toast( "ok", Ayni.tf( done === 1 ? "st.oneUploaded" : "st.nUploaded", { n: done } ) );
 
     if( done ) await loadFolder();
     else if( emptied ) await loadFolder();     // restore the "no images" hint
@@ -1268,8 +1312,15 @@ async function handleAddPhotos( fileList )
 
 // fromNews: a reload made by another page's file news (applyNews) - it never
 // sweeps the notes (see sweepComments).
+// Two at once (two bursts of news, Reload twice) may end out of order: only
+// the newest one goes on to the screen, or an older listing came back.
+let folderSeq = 0;
 async function loadFolder( folder, fromNews )
 {
+    // No folder picked (boot's message): Reload must not turn Upload / Share
+    // on for a DIR of null - an upload went to "null/<name>".
+    if( ! DIR ) return;
+    const my = ++folderSeq;
     setGridMsg( Ayni.t( 'photos.loadingPhotos' ), true );
     // Upload: our own album, or one we were given permission to add to.
     $( "#addBtn" ).hidden = DEMO || ( RO && ! CAN_ADD );
@@ -1283,7 +1334,8 @@ async function loadFolder( folder, fromNews )
     if( ! folder )
     {
         try { folder = await AyniNet.listDir( DIR ); }
-        catch( _ ) { setGridMsg( Ayni.t( 'photos.loadFailed' ) ); return; }
+        catch( _ ) { if( my === folderSeq ) setGridMsg( Ayni.t( 'photos.loadFailed' ) ); return; }
+        if( my !== folderSeq ) return;
     }
 
     const files = ( ( folder && folder.nodes ) || [] ).filter( n => n.nodes == null );
@@ -1297,10 +1349,18 @@ async function loadFolder( folder, fromNews )
 
     if( ! imgs.length )
     {
+        // The last photo went: the counts, the map and the picks go with it
+        // (as dropPhotos does) - they showed the old folder.
         PHOTOS = [];
-        if( UNSHOWN.length ) { setCrumb(); renderGrid(); return; }
-        setGridMsg( DEMO ? Ayni.t( 'photos.noImages' )
-                         : Ayni.t( 'photos.noPhotosYet' ) );
+        buildClusters();
+        setCrumb();
+        updateNoGeoChip();
+        if( st.mode === "map" ) drawMap();
+        relistViewers();
+        if( UNSHOWN.length ) renderGrid();
+        else setGridMsg( DEMO ? Ayni.t( 'photos.noImages' )
+                              : Ayni.t( 'photos.noPhotosYet' ) );
+        if( browse ) browse.refresh();
         return;
     }
 
@@ -1314,6 +1374,11 @@ async function loadFolder( folder, fromNews )
             size: n.size || 0, mtime: n.mtime || 0, video: isVideo( n.path ),
         };
     } );
+    // Same size and same mtime as another photo here: its thumb's name has
+    // its path in it too (thumbKey), or the two would share one.
+    const bySizeTime = new Map();
+    for( const p of PHOTOS ) { const k = p.size + "_" + p.mtime; bySizeTime.set( k, ( bySizeTime.get( k ) || 0 ) + 1 ); }
+    for( const p of PHOTOS ) if( bySizeTime.get( p.size + "_" + p.mtime ) > 1 ) p.twin = true;
     sortPhotos();
 
     // Photos uploaded from this page a moment ago: show the local bytes and
@@ -1333,10 +1398,12 @@ async function loadFolder( folder, fromNews )
 
     await loadComments();
     await loadOwnerNotes();
+    if( my !== folderSeq ) return;              // a newer load took over
     if( ! fromNews ) sweepComments();
 
     setCrumb();
     renderGrid();
+    relistViewers();          // the lightbox / slideshow held the old photos
 
     enrich();                 // EXIF dates + GPS, then clusters + place names
 }
@@ -1363,9 +1430,16 @@ async function scanExif()
     for( const p of PHOTOS )
     {
         const hit = SCAN_CACHE.hit( p );
-        if( hit )
+        // A zeroed camera date cached before exifTime() refused it (it read
+        // as 1899): read again, its other date or the file's is the right one.
+        const bad = hit && hit.ts && hit.ts < EXIF_MIN;
+        if( hit && ! bad )
         {
-            if( hit.ts ) { p.ts = hit.ts; p.day = dayOf( hit.ts ); p.time = timeOf( hit.ts ); }
+            // The camera's wall time (dt), read in THIS device's zone: the
+            // same hour and day on every device. An entry from before dt
+            // keeps the ts the scanning device worked out.
+            const ts = ( hit.dt && exifTime( hit.dt ) ) || hit.ts;
+            if( ts ) { p.ts = ts; p.day = dayOf( ts ); p.time = timeOf( ts ); }
             if( hit.lat != null ) { p.lat = hit.lat; p.lon = hit.lon; }
         }
         else if( EXIF_EXT.indexOf( extOf( p.name ) ) === -1 )
@@ -1387,7 +1461,9 @@ async function scanExif()
         if( ! x ) return;                       // fetch failed - try again next open
         if( x.ts ) { p.ts = x.ts; p.day = dayOf( x.ts ); p.time = timeOf( x.ts ); }
         if( x.lat != null ) { p.lat = x.lat; p.lon = x.lon; }
-        SCAN_CACHE.set( p, { ts: x.ts || 0, lat: x.lat, lon: x.lon } );
+        // dt always written (also ""): set() lays the fields over the old
+        // entry, whose date would otherwise win on the next open.
+        SCAN_CACHE.set( p, { ts: x.ts || 0, dt: x.dt || "", lat: x.lat, lon: x.lon } );
     } );
 
     // Only this folder's own entries (not a sub-folder's) can be judged dead
@@ -1408,7 +1484,7 @@ async function enrich()
     buildClusters();
     refreshGrid();
     updateNoGeoChip();
-    if( $( "#lb" ).classList.contains( "open" ) ) paintLb();
+    relistViewers();          // the re-sort moved the photos under the lightbox / slideshow
     if( st.mode === "map" ) drawMap();
 
     await geocode();
@@ -1456,6 +1532,17 @@ async function purgeRevokedShares()
 }
 
 /* ---- EXIF : capture date + GPS from a JPEG's first bytes ---- */
+// An Exif date, "2026:05:01 10:00:00": the camera's wall clock, with no zone,
+// as this device's local time. null when it is no date - a camera whose clock
+// was never set writes "0000:00:00 00:00:00", which read as 30 November 1899.
+const EXIF_MIN = new Date( 1900, 0, 1 ).getTime();
+function exifTime( s )
+{
+    const m = String( s ).match( /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/ );
+    if( ! m || +m[ 1 ] < 1900 || +m[ 2 ] === 0 || +m[ 3 ] === 0 ) return null;
+    return new Date( +m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6] ).getTime();
+}
+
 async function exifFor( p )
 {
     if( EXIF_EXT.indexOf( extOf( p.name ) ) === -1 ) return null;
@@ -1463,7 +1550,7 @@ async function exifFor( p )
     {
         // a JPEG with no Exif still counts as "scanned" - return an empty
         // result (not null) so scanExif() caches it and never re-reads it.
-        return parseJpegExif( await exifHead( p ) ) || { ts: null, lat: null, lon: null };
+        return parseJpegExif( await exifHead( p ) ) || { ts: null, dt: "", lat: null, lon: null };
     }
     catch( _ ) { return null; }
 }
@@ -1532,18 +1619,15 @@ function parseJpegExif( u8, full )
     function rat( o ) { const d = u32( o + 4 ); return d ? u32( o ) / d : 0; }
     function sub( ent ) { return ent ? readIfd( tiff + u32( ent.off ) ) : null; }
 
-    function parseDT( s )
-    {
-        const m = String( s ).match( /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/ );
-        return m ? new Date( +m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6] ).getTime() : null;
-    }
-
     const ifd0 = readIfd( tiff + u32( tiff + 4 ) );
-    let ts = null, lat = null, lon = null;
+    let ts = null, dt = "", lat = null, lon = null;
 
+    // The first of the three dates that is one (taken, digitised, changed).
+    // Its text goes into the scan cache too: each device reads it in its
+    // own zone (scanExif).
     const exif = sub( ifd0[ 0x8769 ] );
-    if( exif ) ts = parseDT( ascii( exif[ 0x9003 ] ) ) || parseDT( ascii( exif[ 0x9004 ] ) );
-    if( ! ts ) ts = parseDT( ascii( ifd0[ 0x0132 ] ) );
+    for( const s of [ exif ? ascii( exif[ 0x9003 ] ) : "", exif ? ascii( exif[ 0x9004 ] ) : "", ascii( ifd0[ 0x0132 ] ) ] )
+        if( s && ( ts = exifTime( s ) ) ) { dt = s.slice( 0, 19 ); break; }
 
     const gps = sub( ifd0[ 0x8825 ] );
     if( gps && gps[ 0x0002 ] && gps[ 0x0004 ] &&
@@ -1557,7 +1641,7 @@ function parseJpegExif( u8, full )
             Math.abs( la ) <= 90 && Math.abs( lo ) <= 180 ) { lat = la; lon = lo; }
     }
 
-    if( ! full ) return { ts, lat, lon };
+    if( ! full ) return { ts, dt, lat, lon };
 
     // The Info dialog's extras. A number is read only from a tag of the type
     // it should have; anything else is left out.
@@ -1585,7 +1669,7 @@ function parseJpegExif( u8, full )
         alt:       num( g[ 0x0006 ] ),          // metres (below the sea: GPS 0x0005 = 1)
         altBelow:  num( g[ 0x0005 ] ) === 1
     };
-    return { ts, lat, lon, tags };
+    return { ts, dt, lat, lon, tags };
 }
 
 /* ---- clustering (proximity, no plugin) ---- */
@@ -1686,6 +1770,11 @@ async function geocodeRun( my )
         if( knownPlace( c ) != null ) continue;
         if( my !== geoRun ) return;              // a newer run took over
         const name = await reverseGeocode( c.lat, c.lon );
+        // null: the question failed (offline, 429, 5xx) - nothing is kept, so
+        // the place is asked again on a later open; "" stays the real "no name".
+        // The run stops: the next places would fail the same way, and each
+        // try counts against Nominatim's budget.
+        if( name === null ) break;
         PLACES[ placeKey( c ) ] = name;          // "" is a valid cached "unknown"
         mine[ placeKey( c ) ] = name;
         applyPlaces();
@@ -1730,7 +1819,7 @@ async function reverseGeocode( lat, lon )
         const url = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=16&accept-language=" + Ayni.i18n.lang()
                   + "&lat=" + lat + "&lon=" + lon;
         const r = await fetch( url, { headers: { Accept: "application/json" }, referrerPolicy: "strict-origin-when-cross-origin" } );
-        if( ! r.ok ) return "";
+        if( ! r.ok ) return null;                // failed, not "no name": never cached (geocodeRun)
         const j = await r.json();
         const a = j.address || {};
         const local = a.neighbourhood || a.suburb || a.quarter || a.city_district || a.hamlet || a.village || "";
@@ -1740,7 +1829,7 @@ async function reverseGeocode( lat, lon )
         if( j.name ) return j.name;
         return ( j.display_name || "" ).split( "," ).slice( 0, 2 ).join( "," ).trim();
     }
-    catch( _ ) { return ""; }
+    catch( _ ) { return null; }
 }
 
 /* ---------------------------------------------------------------------------
@@ -1785,7 +1874,30 @@ function noteFor( id ) { return COMMENTS[ id ] || OWNER_NOTES[ id ] || ""; }
  * that its Undo or a Restore brings the photo back WITH its note - a note is
  * dropped only when its photo is neither listed nor binned. loadFolder() does
  * not call this on a reload made by another page's file news either: that
- * news is very often a move to the bin, its Undo still on the screen. */
+ * news is very often a move to the bin, its Undo still on the screen.
+ * And only once this device has seen it orphaned for ORPHAN_AGE (below). */
+const ORPHAN_AGE = 24 * 3600 * 1000;
+// localStorage, per account: note key -> when this device first saw it with
+// no photo. null when the storage cannot be read (then nothing is swept).
+function orphansKey() { return "nayive-notes-orphans:" + ( ( AyniNet.owner && AyniNet.owner() ) || "" ); }
+function readOrphans()
+{
+    let raw;
+    try { raw = localStorage.getItem( orphansKey() ); } catch( _ ) { return null; }
+    let m = null;
+    try { m = JSON.parse( raw || "{}" ); } catch( _ ) {}
+    return m && typeof m === "object" && ! Array.isArray( m ) ? m : {};     // a spoilt value starts again
+}
+function storeOrphans( m )
+{
+    try
+    {
+        if( Object.keys( m ).length ) localStorage.setItem( orphansKey(), JSON.stringify( m ) );
+        else localStorage.removeItem( orphansKey() );
+        return true;
+    }
+    catch( _ ) { return false; }
+}
 async function sweepComments()
 {
     // Not in an album someone shared with us: its photos go to the OWNER's
@@ -1804,7 +1916,16 @@ async function sweepComments()
         if( rest.indexOf( "/" ) !== -1 ) continue;             // inside a sub-folder
         if( ! alive.has( rest.toLowerCase() ) ) dead.push( key );
     }
-    if( ! dead.length ) return;
+
+    // Since when this device has seen each of them with no photo (orphans).
+    // A note whose photo came back, or that is gone, leaves the map - only
+    // this folder's own keys: another album's clocks run on.
+    let   seen = readOrphans();
+    if( ! seen ) return;                                      // no storage: no clock, so no sweep
+    const inDir  = key => key.indexOf( prefix ) === 0 && key.slice( prefix.length ).indexOf( "/" ) === -1;
+    const prune  = still => { for( const k of Object.keys( seen ) ) if( inDir( k ) && still.indexOf( k ) === -1 ) delete seen[ k ]; };
+    prune( dead );
+    if( ! dead.length ) { storeOrphans( seen ); return; }
 
     // What is in the bin keeps its note. And the folder is listed again AFTER
     // the bin: a photo restored since the listing above (Drive's Undo) is in
@@ -1818,6 +1939,19 @@ async function sweepComments()
                                           ( it.orig === key || ( it.dir && key.indexOf( it.orig + "/" ) === 0 ) ) );
     const here = new Set( ( ( now && now.nodes ) || [] ).map( n => baseName( n.path ).toLowerCase() ) );
     dead = dead.filter( key => ! binned( key ) && ! here.has( key.slice( prefix.length ).toLowerCase() ) );
+    seen = readOrphans();                                     // read again: another tab may have changed it meanwhile
+    if( ! seen ) return;
+    prune( dead );
+
+    // Only a note this device has seen orphaned for a day goes. Its photo may
+    // have moved on ANOTHER device whose note move still waits there
+    // (noteMoveWaits knows this device's only): that device's next open
+    // makes the move, well within a day. A clock that cannot be kept
+    // deletes nothing.
+    const t = Date.now();
+    for( const key of dead ) if( ! ( seen[ key ] > 0 ) ) seen[ key ] = t;
+    if( ! storeOrphans( seen ) ) return;
+    dead = dead.filter( key => t - seen[ key ] >= ORPHAN_AGE );
     if( ! dead.length ) return;
     for( const key of dead ) delete COMMENTS[ key ];
 
@@ -2070,6 +2204,7 @@ async function drawMap()
     if( ! geo.length )
     {
         if( st.map ) { st.map.remove(); st.map = null; st.markers = []; }
+        st.mapFit = "";
         return;
     }
 
@@ -2100,8 +2235,16 @@ async function drawMap()
         return m.addTo( st.map );
     } );
 
-    const b = L.latLngBounds( geo.map( p => [ p.lat, p.lon ] ) );
-    st.map.fitBounds( b.pad( 0.25 ), { maxZoom: 16, animate: false } );
+    // Fitted to the photos on the first draw and when they changed - not
+    // on every draw: the one after the place names came (minutes later)
+    // undid the user's own pan and zoom, and "See on map"'s.
+    const fit = geo.map( p => p.id + "@" + p.lat + "," + p.lon ).join( "|" );
+    if( fit !== st.mapFit )
+    {
+        st.mapFit = fit;
+        const b = L.latLngBounds( geo.map( p => [ p.lat, p.lon ] ) );
+        st.map.fitBounds( b.pad( 0.25 ), { maxZoom: 16, animate: false } );
+    }
     setTimeout( () => { if( st.map ) st.map.invalidateSize(); }, 60 );
 }
 
@@ -2151,18 +2294,34 @@ function closeStrip()
 // The lightbox holds the photo's id (st.lbId), not only its place in the
 // list: the scan re-sorts the photos under it, and ?photo= (Chat's "Abrir en
 // Fotos") then jumped to another one.
+// `list`: a map strip's photos; none = the album's (photos()).
 function openLb( id, list )
 {
+    st.lbAll = ! list;
     st.list = list || photos();
     st.lb   = Math.max( 0, st.list.findIndex( p => p.id === id ) );
     st.lbId = id;
     paintLb();
     $( "#lb" ).classList.add( "open" );
 }
+// The photos were read again under the lightbox or the slideshow (a reload,
+// the scan's re-sort): the lightbox steps through the new list - the album's,
+// or the strip's photos found again by id - on the same photo, and the
+// slideshow's day ticks are drawn again (its photo: st.paseId).
+function relistViewers()
+{
+    if( $( "#lb" ).classList.contains( "open" ) )
+    {
+        st.list = st.lbAll ? photos() : st.list.map( p => photoById( p.id ) ).filter( Boolean );
+        if( st.list.length ) paintLb(); else closeLb();
+    }
+    if( st.paseStarted ) renderTicks( pasePhotos() );
+}
 function paintLb()
 {
     const at = st.list.findIndex( p => p.id === st.lbId );
     if( at !== -1 ) st.lb = at;
+    else st.lb = Math.min( st.lb, st.list.length - 1 );   // its photo went: the one now in its place
     const p = st.list[ st.lb ];
     if( ! p ) return;
     st.lbId = p.id;
@@ -2225,6 +2384,7 @@ function showPase()
     const list = pasePhotos();
     const p    = list[ st.paseIdx ];
     if( ! p ) return;
+    st.paseId  = p.id;                      // paseStep finds it again after a re-sort
     const cur  = st.ab ? $( "#paseB" ) : $( "#paseA" );
     const nxt  = st.ab ? $( "#paseA" ) : $( "#paseB" );
 
@@ -2254,7 +2414,10 @@ function paseStep( d )
 {
     const list = pasePhotos();
     if( ! list.length ) return;
-    st.paseIdx = ( st.paseIdx + d + list.length ) % list.length;
+    // From the photo on screen, wherever the scan or a reload put it: by
+    // its index alone the show jumped to another photo.
+    const at = list.findIndex( p => p.id === st.paseId );
+    st.paseIdx = ( ( at !== -1 ? at : Math.min( st.paseIdx, list.length - 1 ) ) + d + list.length ) % list.length;
     showPase();
     if( st.playing ) armTimer();
 }
@@ -2295,7 +2458,7 @@ function editPhoto( id )
     if( EDIT_EXT.indexOf( extOf( p.name ) ) === -1 )
     {
         Ayni.toast( 'warn', Ayni.t( 'photos.cantEdit' ) );
-        openLb( id, photos() );
+        openLb( id );
         return;
     }
     const url = "../image/index.html?file=" + encodeURIComponent( p.path );
@@ -2307,15 +2470,21 @@ let newsPaths   = new Set();
 let newsFolders = false;     // something was binned, renamed or made
 let newsTimer   = 0;
 let newsWaiting = false;     // news came while hidden
+let newsAlbums  = false;     // a folder under the albums' top was made, renamed or binned
 
 function onFilesNews( msg )
 {
     if( DEMO ) return;
-    const mine = ( msg.paths || [] ).filter( p => typeof p === "string" &&
-                   ( p === COMMENTS_FILE || p.slice( 0, p.lastIndexOf( "/" ) ) === DIR ) );
-    if( ! mine.length ) return;
+    const paths = ( msg.paths || [] ).filter( p => typeof p === "string" );
+    // A file in this album, the notes - or the album itself, or a folder it is
+    // in (renamed, moved, binned in Drive): then the listing is read again.
+    const mine  = paths.filter( p => p === COMMENTS_FILE || p.slice( 0, p.lastIndexOf( "/" ) ) === DIR || under( DIR, p ) );
+    // An album made, renamed or binned in Drive: the tree reads again.
+    const tree  = !! msg.folders && !! ROOT && paths.some( p => under( p, ROOT ) || under( ROOT, p ) );
+    if( ! mine.length && ! tree ) return;
     mine.forEach( p => newsPaths.add( p ) );
-    if( msg.folders ) newsFolders = true;
+    if( msg.folders && mine.length ) newsFolders = true;
+    if( tree ) newsAlbums = true;
     if( document.hidden ) { newsWaiting = true; return; }
     clearTimeout( newsTimer );
     newsTimer = setTimeout( applyNews, 400 );     // a burst of saves = one refresh
@@ -2323,19 +2492,23 @@ function onFilesNews( msg )
 
 async function applyNews()
 {
-    const paths = [ ...newsPaths ], folders = newsFolders;
+    const paths = [ ...newsPaths ], folders = newsFolders, albums = newsAlbums;
     newsPaths   = new Set();
     newsFolders = false;
+    newsAlbums  = false;
 
+    if( albums ) loadAlbums();
+    if( ! paths.length ) return;
     if( paths.includes( COMMENTS_FILE ) ) await loadComments();
 
     const shown = p => SHOW_EXT.indexOf( extOf( p ) ) !== -1 || HEIC_EXT.indexOf( extOf( p ) ) !== -1;
     const files = paths.filter( p => p !== COMMENTS_FILE && shown( p ) );
     const known = files.map( f => PHOTOS.find( x => x.path === f ) );
-    if( folders || known.some( p => ! p ) ) { await loadFolder( null, true ); return; }
+    const self  = paths.some( p => under( DIR, p ) );            // the album itself (or a folder above it)
+    if( folders || self || known.some( p => ! p ) ) { await loadFolder( null, true ); return; }
 
     for( const p of known ) { p.bust = Date.now(); await refreshStat( p ); }
-    renderGrid();
+    renderGrid( $( "#grid" ).scrollTop );          // an edit or a note elsewhere: the grid stays where it is
     if( st.cluster != null ) openCluster( st.cluster );
     if( $( "#lb" ).classList.contains( "open" ) ) paintLb();
 }
@@ -2386,7 +2559,9 @@ function setMode( m )
     }
     else setPlaying( false );
 
-    if( m === "map" ) drawMap();
+    // Its promise: a strip opened right after waits for the map's first fit,
+    // which would otherwise undo its pan (showOnMap).
+    if( m === "map" ) return drawMap();
 }
 
 /* ---------------------------------------------------------------------------
@@ -2409,6 +2584,7 @@ NayiveMedia.wireSearchToggle();                        // the search fold
 $( "#reloadBtn" ).addEventListener( "click", () =>
 {
     if( DEMO ) { Ayni.toast( 'warn', Ayni.t( 'photos.demoNoReload' ) ); return; }
+    if( ! DIR ) return;                          // no folder picked: nothing to list (the crumb picks one)
     loadFolder();
 } );
 
@@ -2430,6 +2606,7 @@ $( "#addBtn"   ).addEventListener( "click", () => $( "#addInput" ).click() );
 // Take a photo: it goes up like any other, into this folder.
 $( "#camBtn"   ).addEventListener( "click", () =>
 {
+    if( uploading ) return;                      // one upload at a time (handleAddPhotos)
     if( AyniPhoto.ownCamera() ) AyniPhoto.camera( file => { if( file ) handleAddPhotos( [ file ] ); } );
     else $( "#camInput" ).click();
 } );
@@ -2475,12 +2652,12 @@ $( "#lbNext" ).addEventListener( "click", () => lbStep( 1 ) );
     }, { passive: true } );
 } )();
 $( "#lbX" ).addEventListener( "click", closeLb );
-$( "#lbMap" ).addEventListener( "click", () =>
+$( "#lbMap" ).addEventListener( "click", async () =>
 {
     const p = st.list[ st.lb ];
     closeLb();
-    setMode( "map" );
-    if( p && p.cluster != null ) openCluster( p.cluster );
+    await setMode( "map" );
+    if( st.mode === "map" && p && p.cluster != null ) openCluster( p.cluster );
 } );
 $( "#lbPlay" ).addEventListener( "click", () =>
 {
@@ -2712,7 +2889,7 @@ function areaActions()
 {
     return [
         { id: "upload", label: Ayni.t( "photos.uploadHere" ), icon: "upload", where: () => ! $( "#addBtn" ).hidden,
-          run: () => $( "#addInput" ).click() },
+          when: () => ! uploading, run: () => $( "#addInput" ).click() },
         { id: "newAlbum", label: Ayni.t( "photos.newAlbum" ), icon: "folder-plus", where: () => ! RO && ! DEMO,
           run: () => newAlbum( DIR ) }
     ];
@@ -2730,20 +2907,24 @@ function wireBrowser()
         // Not while a photo is full screen, nor on the map or in the slideshow.
         active:  () => ! $( "#lb" ).classList.contains( "open" ) && ( st.mode === "grid" || st.mode === "lista" ),
         grid:    () => st.mode !== "lista",
+        // The grid draws a few days at a time as it scrolls: Select all (and a
+        // redraw) go by every photo it would show, drawn or not - Ctrl+A then
+        // Bin acted on the first days only.
+        allIds:  () => photos().map( p => p.id ),
         open:    id => openPhoto( id ),
         drag:    { can: () => ! RO && ! DEMO, text: ids => ids.map( baseName ).join( "\n" ) }
     } );
 }
 
 // Open: the lightbox. (Editing is the "Edit in Image" action.)
-function openPhoto( id ) { openLb( id, photos() ); }
+function openPhoto( id ) { openLb( id ); }
 
-function showOnMap( ids )
+async function showOnMap( ids )
 {
     const p = photoById( ids[ 0 ] );
     browse.clear();
-    setMode( "map" );
-    if( p && p.cluster != null ) openCluster( p.cluster );
+    await setMode( "map" );
+    if( st.mode === "map" && p && p.cluster != null ) openCluster( p.cluster );
 }
 
 // Download: the server sends it, one photo as it is, several as one .zip

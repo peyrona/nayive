@@ -24,14 +24,22 @@ final class Prefs {
         String t = sp(c).getString("token", null);
         if (t == null) {
             t = freshToken();
-            sp(c).edit().putString("token", t).apply();
+            // commit(): Launcher hands it to device.html at once; a lost write would
+            // leave the page enrolling a token the app no longer has.
+            sp(c).edit().putString("token", t).commit();
         }
         return t;
     }
 
-    /** Revoked on the server: forget the old token, the next one is enrolled anew. */
-    static synchronized void newToken(Context c) {
-        sp(c).edit().putString("token", freshToken()).putBoolean("enrolled", false).putBoolean("revoked", true).apply();
+    /**
+     * A token that worked was refused: revoked - or the server lost its phone
+     * list for a while (a bad deploy, a restore). The token is kept: once the
+     * list is back it works again by itself, and a revoked phone is enrolled
+     * anew with it (the server takes a known token again). Only "enrolled" goes,
+     * so the app opens device.html again.
+     */
+    static synchronized void refused(Context c) {
+        sp(c).edit().putBoolean("enrolled", false).putBoolean("revoked", true).apply();
     }
 
     /** A token that worked was refused (revoked): asking again can wait long. Off once enrolled anew. */
@@ -47,8 +55,13 @@ final class Prefs {
     static boolean enrolled(Context c) { return sp(c).getBoolean("enrolled", false); }
 
     static void setEnrolled(Context c, boolean on) {
-        sp(c).edit().putBoolean("enrolled", on).putBoolean("revoked", false).apply();
+        sp(c).edit().putBoolean("enrolled", on).putBoolean("revoked", false).putBoolean("enrolPage", false).apply();
     }
+
+    /** device.html was opened since the last enrolment: it may enrol this phone to another account. */
+    static boolean enrolPage(Context c) { return sp(c).getBoolean("enrolPage", false); }
+
+    static void setEnrolPage(Context c) { sp(c).edit().putBoolean("enrolPage", true).apply(); }
 
     /** The permissions screen has been through once. */
     static boolean setupDone(Context c) { return sp(c).getBoolean("setup", false); }
@@ -80,8 +93,23 @@ final class Prefs {
 
     static void setUpdateChecked(Context c, long at) { sp(c).edit().putLong("updateChecked", at).apply(); }
 
+    /** Whether the update note for version `code` may show now; counts it if so (Updater). */
+    static synchronized boolean updateNag(Context c, int code) {
+        SharedPreferences s = sp(c);
+        long now = System.currentTimeMillis();
+        int shows = s.getInt("updateCode", 0) == code ? s.getInt("updateShows", 0) : 0;
+        if (shows >= 4 && now - s.getLong("updateShownAt", 0) < 7 * 86400_000L) return false;
+        s.edit().putInt("updateCode", code).putInt("updateShows", shows + 1).putLong("updateShownAt", now).apply();
+        return true;
+    }
+
     /** The newest server notification already shown here (its id). */
     static long lastNote(Context c) { return sp(c).getLong("lastNote", 0); }
 
     static void setLastNote(Context c, long id) { sp(c).edit().putLong("lastNote", id).apply(); }
+
+    /** The alarm volume before a find or SOS turned it up; -1 = nothing to put back (Ringer). */
+    static int alarmVolume(Context c) { return sp(c).getInt("alarmVolume", -1); }
+
+    static void setAlarmVolume(Context c, int v) { sp(c).edit().putInt("alarmVolume", v).commit(); }
 }

@@ -2,9 +2,10 @@
 // data/launcher/bar.json), edited in My account › Top bar. Real pages in
 // Chromium, a second "device" over plain HTTP.
 //
-// B1 no file: the default row; opening the launcher and My account writes nothing.
+// B1 no file: the default row (search, settings; no notes buttons since 2026-11-14); opening the launcher and My account writes nothing.
 // B2 "+ Add" makes the file; ↑ moves; × removes.
-// B3 another device's save meanwhile: kept (one change over the file as it is now), other keys too.
+// B3 another device's save meanwhile: kept (one change over the file as it is now), other keys too;
+//    an old id ("desk", the gone notes button) stays in the file, unshown.
 // B4 a damaged file is never written over: the editor is read-only.
 import { server, browser, ok, section, done, onDisk, disk, sleep } from "./lib.mjs";
 
@@ -32,7 +33,8 @@ const addApp = async ( c, name ) =>
 section( "B1 · NO FILE YET" );
 const c = await browser( s, { width: 390, height: 844 } );
 await c.open( "/nayive/" );
-ok( await c.until( "document.querySelector( '#quickBar #notesNewBtn' )" ), "the default row: the new-note button" );
+ok( await c.until( "document.querySelector( '.notes-wall' ) && document.querySelector( '#lsBox > [data-search]' )" ) &&
+    await c.evaluate( "! document.querySelector( '#quickBar' ).children.length && ! document.querySelector( '#lsBox #notesNewBtn' )" ), "the default row: search and settings only" );
 await openAccount( c );
 ok( await listReady( c ), "My account shows the list" );
 await sleep( 1500 );
@@ -42,23 +44,24 @@ ok( onDisk( s, F ) === null, "nothing written by just looking" );
 section( "B2 · ADD, MOVE, REMOVE" );
 // Write sits in a group: a first-level tile (Drive...) is always in sight and never offered by Add
 await addApp( c, "Write" );
-ok( await has( f => same( f.items, [ "write/index.html", "search", "desk", "note", "gear" ] ) ), "+ Add makes the file (new one first)", onDisk( s, F ) );
+ok( await has( f => same( f.items, [ "write/index.html", "search", "gear" ] ) ), "+ Add makes the file (new one first)", onDisk( s, F ) );
 ok( await c.until( "document.querySelector( '#quickBar a.qb-app[href=\"write/index.html\"]' )" ), "the row shows it" );
-ok( await c.until( "document.querySelectorAll( '#barList [data-id]' ).length === 5" ), "the editor shows the row's five icons" );
+ok( await c.until( "document.querySelectorAll( '#barList [data-id]' ).length === 3" ), "the editor shows the row's three icons" );
 ok( await press( c, "down", "Write" ), "→ pressed" );
-ok( await has( f => same( f.items, [ "search", "write/index.html", "desk", "note", "gear" ] ) ), "→ moves it", onDisk( s, F ) );
+ok( await has( f => same( f.items, [ "search", "write/index.html", "gear" ] ) ), "→ moves it", onDisk( s, F ) );
 ok( ! await press( c, "del", "Search" ) && ! await press( c, "del", "Settings" ), "Search and Settings cannot be removed" );
 ok( await press( c, "up", "Settings" ), "← on Settings pressed" );
-ok( await has( f => same( f.items, [ "search", "write/index.html", "desk", "gear", "note" ] ) ), "Settings moves like the rest", onDisk( s, F ) );
+ok( await has( f => same( f.items, [ "search", "gear", "write/index.html" ] ) ), "Settings moves like the rest", onDisk( s, F ) );
 
 //------------------------------------------------------------------------//
 section( "B3 · ANOTHER DEVICE SAVED MEANWHILE" );
 {
-    ok( ( await other.put( F, JSON.stringify( { items: [ "desk", "drive/index.html", "note", "photos/index.html" ], later: 1 }, null, 1 ) ) ).status === 200, "the other device saves" );
-    // this page still shows the old list: remove "New note" from it
-    ok( await press( c, "del", "New note" ), "× pressed" );
+    ok( ( await other.put( F, JSON.stringify( { items: [ "desk", "write/index.html", "drive/index.html", "photos/index.html" ], later: 1 }, null, 1 ) ) ).status === 200, "the other device saves" );
+    // this page still shows the old list: remove Write from it
+    ok( await press( c, "del", "Write" ), "× pressed" );
     ok( await has( f => same( f.items, [ "search", "desk", "drive/index.html", "photos/index.html", "gear" ] ) && f.later === 1 ),
-        "only the one change; the other device's Photos and its own key are kept", onDisk( s, F ) );
+        "only the one change; the other device's Photos, the old \"desk\" and its own key are kept", onDisk( s, F ) );
+    ok( await c.until( "document.querySelectorAll( '#quickBar > *' ).length === 2 && document.querySelector( '#quickBar a[href=\"photos/index.html\"]' )" ), "the row shows Drive and Photos; \"desk\" unshown" );
 }
 
 //------------------------------------------------------------------------//

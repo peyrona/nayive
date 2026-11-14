@@ -391,7 +391,8 @@
             var pinned = list.map( function ( m ) { return { acct: E.acctOf( m ), ref: m.ref }; } );
             var keys = pinned.map( function ( p ) { return p.acct + "|" + p.ref; } );
             var where = S.acct + "|" + S.tray + "|" + S.label;
-            var here = function () { return where === S.acct + "|" + S.tray + "|" + S.label && ! S.open; };
+            // the same list on screen (beside a mail open in split: a reload keeps it)
+            var here = function () { return where === S.acct + "|" + S.tray + "|" + S.label && ( ! S.open || E.split ); };
             keys.forEach( function ( k ) { S.goneRows.add( k ); } );
             if( S.open ) E.closeMessage( true );
             E.dropRows( list );
@@ -411,7 +412,7 @@
                     // one's ref never comes again: it may stay in the set)
                     pinned.forEach( function ( p, i ) { if( r.done.indexOf( p ) < 0 ) S.goneRows.delete( keys[ i ] ); } );
                     // some stayed: the list shows them again
-                    if( ( r.err || r.refused ) && here() ) E.loadList( false );
+                    if( r.err || r.refused ) { if( here() ) E.loadList( false ); else S.listStamp = ""; }
                     tell( r );
                 } );
             };
@@ -421,6 +422,7 @@
                 if( forgetOnLeave === expire ) forgetOnLeave = null;
                 keys.forEach( function ( k ) { S.goneRows.delete( k ); } );
                 if( here() ) E.loadList( false );
+                else S.listStamp = "";      // the next refresh reads it (nothing changed on the server)
             }, keepOnLeave: true, final: function () { expire( false ); } } );
             forgetOnLeave = expire;      // after the toast: it settled the Undo before it
         },

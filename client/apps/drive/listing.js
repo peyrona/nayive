@@ -17,7 +17,8 @@ function buildQuery( raw )
     if( q.indexOf( '*' ) !== -1 || q.indexOf( '?' ) !== -1 ) return { glob: q };
     const m = Ayni.matcher( q );
     if( ! m ) return null;
-    if( m.terms.length === 1 && ! m.not.length ) return { glob: '*' + m.terms[ 0 ] + '*' };
+    // ?find= is fnmatch, where "[" opens a class: "[[]" is a plain "[" (D9).
+    if( m.terms.length === 1 && ! m.not.length ) return { glob: '*' + m.terms[ 0 ].replace( /\[/g, '[[]' ) + '*' };
     return { spec: { rules: m.terms.map( t => ( { op: 'has', text: t } ) )
                             .concat( m.not.map( t => ( { op: 'not', text: t } ) ) ) } };
 }

@@ -89,7 +89,11 @@ try
     console.log( "SETTINGS" );
     c.logs.length = 0;
     await open( "index.html", 1280 );
-    ok( await ev( "! document.getElementById('sosBtn')" ), "no contacts: no SOS button" );
+    ok( await until( "!! document.getElementById('sosBtn') && document.getElementById('sosBtn').classList.contains('off')" ), "no contacts: the SOS button is there (off)" );
+    await click( "#sosBtn" );
+    ok( await until( "!! document.querySelector('#ayni-info:popover-open') && /SOS is off/.test( document.getElementById('ayni-info').textContent )" ), "...a tap shows how to turn it on" );
+    ok( await ev( "! document.querySelector('.sos-screen')" ), "...and starts nothing" );
+    await click( "#sosBtn" );
     ok( await until( "!! document.getElementById('sosSetBtn')" ), "\"SOS\" in My account's header" );
     await click( "#sosSetBtn" );
     ok( await until( "document.getElementById('sosBackdrop') && document.getElementById('sosBackdrop').open" ), "the settings dialog opens" );
@@ -97,7 +101,7 @@ try
     ok( await ev( "[ ...document.querySelectorAll('#sosBackdrop .sos-quiet .time-field input') ].map( i => i.value ).join() === '23:00,08:00'" ), "quiet hours in 24 hours" );
     await shot( "settings" );
     await ev( "document.querySelector('#sosContacts [role=option]').dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true } ) ); true" );
-    ok( await until( "!! document.getElementById('sosBtn') && ! document.getElementById('sosBtn').hidden" ), "a contact ticked: the SOS button appears" );
+    ok( await until( "!! document.getElementById('sosBtn') && ! document.getElementById('sosBtn').classList.contains('off')" ), "a contact ticked: the SOS button is on" );
     const pos = await ev( `JSON.stringify( [ document.getElementById('sosBtn').getBoundingClientRect().left, document.getElementById('lsField').getBoundingClientRect().left,
         getComputedStyle( document.getElementById('sosBtn') ).backgroundColor ] )` );
     const [ sl, fl, bg ] = JSON.parse( pos );
@@ -145,6 +149,40 @@ try
     ok( await until( "! document.querySelector('.sos-screen')" ), "I'm safe after it went out: the screen goes" );
     await sleep( 300 );
     ok( alerts().filter( a => a.kind === "safe" ).length === 1, "...and the contacts are told \"safe\"", alerts() );
+
+    console.log( "DANGER PIN" );
+    const put = await ev( "fetch('/api/sos/pin',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin:'1234'})}).then(r=>r.status)" );
+    ok( put === 200 && /^\$pbkdf2/.test( myRow().pin || "" ), "a PIN is set, stored hashed", myRow().pin );
+    await open( "index.html", 1280 );
+    await click( "#sosSetBtn" );
+    ok( await until( "document.querySelectorAll('#sosBackdrop .sos-pin-in').length === 2" ), "settings: current + new PIN fields" );
+    await ev( "document.getElementById('sosBackdrop').close(); true" );
+    const pinIn = ( v ) => ev( `( f => { f.querySelector('input').value = ${JSON.stringify( v )}; f.requestSubmit(); true } )( document.querySelector('.sos-screen .sos-pin') )` );
+    await hold();
+    ok( await until( "!! document.querySelector('.sos-screen.watch .sos-count')" ), "held down: the watch screen" );
+    await sleep( 500 );
+    await click( ".sos-screen.watch .sos-cancel" );
+    ok( await until( "!! document.querySelector('.sos-screen .sos-pin input')" ) && await ev( "!! document.querySelector('.sos-screen.watch')" ), "I'm safe asks for the PIN, the screen stays" );
+    await shot( "pin" );
+    await pinIn( "12" );
+    await sleep( 400 );
+    ok( await ev( "!! document.querySelector('.sos-screen.watch')" ) && ! alerts().some( a => a.kind === "forced" ), "too short: nothing happens" );
+    await pinIn( "9999" );
+    ok( await until( "! document.querySelector('.sos-screen')" ), "a wrong PIN: the screen goes, as if stopped" );
+    await sleep( 300 );
+    ok( alerts().filter( a => a.kind === "forced" ).length === 1 && myRow().watchAlert && ! myRow().watch, "...but \"forced\" went out and it stays open", myRow() );
+    await open( "index.html", 1280 );
+    ok( await ev( "! document.querySelector('.sos-screen')" ), "the page opened again shows nothing" );
+    await hold();
+    await until( "!! document.querySelector('.sos-screen.watch .sos-cancel')" );
+    await sleep( 500 );
+    await click( ".sos-screen.watch .sos-cancel" );
+    await until( "!! document.querySelector('.sos-screen .sos-pin input')" );
+    const safeBefore = alerts().filter( a => a.kind === "safe" ).length;
+    await pinIn( "1234" );
+    ok( await until( "! document.querySelector('.sos-screen')" ), "the right PIN: the screen goes" );
+    await sleep( 300 );
+    ok( alerts().filter( a => a.kind === "safe" ).length === safeBefore + 1 && ! myRow().watchAlert && ! myRow().watch, "...really stopped, the contacts told \"safe\"", myRow() );
 
     console.log( "LINKS" );
     await open( "index.html?sos=" + ( as[ 0 ] || {} ).id, 1280 );

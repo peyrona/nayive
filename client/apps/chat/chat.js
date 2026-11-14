@@ -89,7 +89,8 @@
             var url = e.data && e.data.open;
             if( ! url ) return;
             var c = new URL( url, location.href ).searchParams.get( "c" );
-            if( ! C.inCall() && c && C.convOf( c ) ) C.openConv( c );
+            // A chat not known yet (just started by someone): openConv loads the list first.
+            if( ! C.inCall() && c ) C.openConv( c );
         } );
 
         C.startLoop();

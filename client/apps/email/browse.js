@@ -340,6 +340,13 @@
         return eyesApply() && liveKeys().every( function ( k ) { return veil.has( k ); } );
     };
 
+    // a label deleted for good: its eye goes too (labels.js)
+    E.unveil = function ( key )
+    {
+        if( ! veil.delete( key ) ) return;
+        try { localStorage.setItem( VEIL_KEY, JSON.stringify( Array.from( veil ) ) ); } catch( e ) {}
+    };
+
     function toggleVeil( key )
     {
         if( veil.has( key ) ) veil.delete( key ); else veil.add( key );

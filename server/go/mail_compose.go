@@ -442,19 +442,28 @@ func (h *MailHub) Contacts(user string) []MailContact {
 // vcardLines are a vCard file's logical lines: a folded line (a space or tab
 // first) goes on with the one before; so does the line after a
 // QUOTED-PRINTABLE value that ends in "=" (vCard 2.1's soft break, Android's
-// exports). Mail's address book and the launcher's search (search_all.go).
+// exports). In a 3.0 / 4.0 card a line that starts with a space is always a
+// fold, even after a "=" (as vcard.js contentLines). Mail's address book and
+// the launcher's search (search_all.go).
 func vcardLines(f io.Reader) []string {
 	var lines []string
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 64<<10), 4<<20)
 	qpOpen := false
+	v3 := false // the card being read says VERSION:3.0 or 4.0
 	for sc.Scan() {
 		l := strings.TrimRight(sc.Text(), "\r")
+		if u := strings.ToUpper(strings.TrimSpace(l)); u == "BEGIN:VCARD" {
+			v3 = false
+		} else if strings.HasPrefix(u, "VERSION:3") || strings.HasPrefix(u, "VERSION:4") {
+			v3 = true
+		}
+		folded := strings.HasPrefix(l, " ") || strings.HasPrefix(l, "\t")
 		switch {
-		case qpOpen && len(lines) > 0:
+		case qpOpen && len(lines) > 0 && !(v3 && folded):
 			last := lines[len(lines)-1]
 			lines[len(lines)-1] = last[:len(last)-1] + strings.TrimLeft(l, " \t")
-		case (strings.HasPrefix(l, " ") || strings.HasPrefix(l, "\t")) && len(lines) > 0:
+		case folded && len(lines) > 0:
 			lines[len(lines)-1] += l[1:]
 		default:
 			lines = append(lines, l)

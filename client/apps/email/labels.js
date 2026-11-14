@@ -28,6 +28,7 @@
         var r = await E.api( "GET", "labels" );
         S.labels = ( r.labels || [] ).filter( function ( l ) { return ! S.goneLabels.has( l.id ); } );
         S.colors = r.colors || S.colors;
+        S.labelsVer = r.ver || "";      // labels live here, not on the mail server: part of the list's stamp
     };
 
     E.loadSettings = async function ()
@@ -240,6 +241,7 @@
         function done()
         {
             S.goneLabels.delete( l.id );
+            E.unveil( l.id );
             var off = function ( m ) { if( m && ( m.labels || [] ).indexOf( l.id ) >= 0 ) m.labels = m.labels.filter( function ( id ) { return id !== l.id; } ); };
             S.items.forEach( off );
             off( S.open );

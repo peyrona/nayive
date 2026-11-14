@@ -86,8 +86,8 @@
     };
 
     // list.js, for each page: the rows that pass. Also keeps the count of
-    // pages in a row that gave none, and ends the list once a page reaches
-    // past "Since" (rows come newest first).
+    // pages in a row that gave none, and ends the list once a whole page is
+    // older than "Since".
     E.advFilter = function ( items, more )
     {
         if( ! more ) S.advDry = 0;
@@ -112,8 +112,10 @@
             return true;
         } );
         S.advDry = out.length ? 0 : S.advDry + 1;
-        var last = items[ items.length - 1 ];
-        if( since && last && new Date( last.date ).getTime() < since ) S.next = "";
+        // rows come by arrival, not by date (a mail moved in later keeps its
+        // old date): end only when even the page's NEWEST mail is older
+        var newest = items.reduce( function ( n, m ) { var t = new Date( m.date ).getTime(); return t > n ? t : n; }, -Infinity );
+        if( since && isFinite( newest ) && newest < since ) S.next = "";
         return out;
     };
 

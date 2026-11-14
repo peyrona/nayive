@@ -124,7 +124,7 @@ function vEventToDef( ev )
             freq:      recur.freq,
             interval:  recur.interval || 1,
             byweekday: (recur.parts && recur.parts.BYDAY) ? recur.parts.BYDAY.map( d => d.replace(/^[+-]?\d*/, '') ) : null,
-            until:     recur.until ? icalDateToStr( recur.until ) : null,
+            until:     recur.until ? untilDate( recur.until, def ) : null,
             count:     recur.count || null
         };
 
@@ -142,6 +142,21 @@ function vEventToDef( ev )
     if( rid ) def.ridKey = wallKey( rid, def );
 
     return def;
+}
+
+// A rule's UNTIL as the date of its last day. A UTC UNTIL ("...Z", Google,
+// Apple) is an instant: moved onto the series' own wall clock, and when it
+// falls before the series' start time that day is not in it - the day before
+// is the last (C2). The raw branch of expandEventDef reads it the same way.
+function untilDate( u, def )
+{
+    if( u.isDate || def.allDay || u.zone !== ICAL.Timezone.utcTimezone ) return icalDateToStr( u );
+
+    const w = DateTime.fromObject( { year: u.year, month: u.month, day: u.day, hour: u.hour, minute: u.minute, second: u.second },
+                                   { zone: 'utc' } ).setZone( def.floating ? VIEWER_TZ : def.tzid );
+    if( ! w.isValid ) return icalDateToStr( u );
+
+    return ( w.toFormat( 'HH:mm' ) < def.start.time ? w.minus( { days: 1 } ) : w ).toISODate();
 }
 
 // An occurrence as the series' own wall clock, "yyyy-mm-dd" (all-day) or

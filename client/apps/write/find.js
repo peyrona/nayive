@@ -172,12 +172,39 @@ export function createFindBar( o )
         matches = find();
         if( ! matches.length ) { current = -1; paint(); return; }
 
-        const i = Math.max( 0, Math.min( current, matches.length - 1 ) );
-        if( ! putOver( ed, matches[ i ], text ) ) { Ayni.toast( 'err', Ayni.t( 'write.actionFailed' ) ); return; }
+        const i    = Math.max( 0, Math.min( current, matches.length - 1 ) );
+        const m    = matches[ i ];
+        const old  = matches;
+        if( ! putOver( ed, m, text ) ) { Ayni.toast( 'err', Ayni.t( 'write.actionFailed' ) ); return; }
 
-        // The next one is the match that now sits at the same index.
         matches = find();
-        if( matches.length ) select( i ); else { current = -1; paint(); }
+        if( ! matches.length ) { current = -1; paint(); return; }
+        select( nextAfter( m, text.length, old[ i + 1 ] ) );
+    }
+
+    // Where to go after replacing `m` with `len` characters: the first match
+    // AFTER the new text - never one inside it. With "nayive" -> "Nayive" (Match
+    // case off), or "cat" -> "cats", the new text matches again, and stepping to
+    // the same index would replace the same word for ever.
+    function nextAfter( m, len, oldNext )
+    {
+        const end    = m.start + len;
+        const inside = function( x ) { return x.blockId === m.blockId && x.start >= m.start && x.start < end; };
+
+        // Later in the same paragraph.
+        let j = matches.findIndex( function( x ) { return x.blockId === m.blockId && x.start >= end; } );
+        if( j >= 0 ) return j;
+
+        // The one that came next before (another paragraph: its offsets did not move).
+        if( oldNext && oldNext.blockId !== m.blockId )
+        {
+            j = matches.findIndex( function( x ) { return x.blockId === oldNext.blockId && x.start === oldNext.start; } );
+            if( j >= 0 ) return j;
+        }
+
+        // Round to the top, past the text just put in.
+        j = matches.findIndex( function( x ) { return ! inside( x ); } );
+        return j >= 0 ? j : matches.findIndex( inside );
     }
 
     function replaceAll( text )

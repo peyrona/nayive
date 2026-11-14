@@ -9,14 +9,25 @@ import { TranslationError } from './errors.js';
 import { fetchJson, checkBaseUrl } from './net.js';
 import { normalizeLanguage } from './languages.js';
 
-const langsOf = new Map();                         // baseUrl -> Promise<Set of codes>
+const langsOf = new Map();                         // baseUrl -> Promise<Map: our code -> the server's ("zh" -> "zh-Hans")>
 
 function languages( base, signal )
 {
     if( ! langsOf.has( base ) )
     {
         const p = fetchJson( base + '/languages', { signal } ).then( ( list ) =>
-            new Set( ( Array.isArray( list ) ? list : [] ).map( ( l ) => normalizeLanguage( l.code, true ) ).filter( Boolean ) ) );
+        {
+            const codes = new Map();
+            for( const l of Array.isArray( list ) ? list : [] )
+            {
+                const ours = l && normalizeLanguage( l.code, true );
+                if( ! ours ) continue;
+                // "zh" itself or "zh-Hans" (simplified, what we mean) beat "zh-Hant".
+                const best = l.code === ours || /^zh[-_]hans/i.test( l.code );
+                if( ! codes.has( ours ) || best ) codes.set( ours, l.code );
+            }
+            return codes;
+        } );
         p.catch( () => langsOf.delete( base ) );
         langsOf.set( base, p );
     }
@@ -54,7 +65,10 @@ export default {
     async translate( { text, source, target, options, signal } )
     {
         if( ! options.baseUrl ) throw new TranslationError( 'unavailable', 'No server address' );
-        const j = await post( options.baseUrl, '/translate', { q: text, source, target, format: 'text' }, signal );
+        // The codes the server listed (newer servers say "zh-Hans", not "zh").
+        const have = await languages( options.baseUrl, signal ).catch( () => null );
+        const code = ( c ) => ( have && have.get( c ) ) || c;
+        const j = await post( options.baseUrl, '/translate', { q: text, source: code( source ), target: code( target ), format: 'text' }, signal );
         if( j && j.error ) throw new TranslationError( 'invalid-response', String( j.error ) );
         const out = String( ( j && j.translatedText ) || '' );
         if( ! out.trim() ) throw new TranslationError( 'invalid-response', 'Empty answer' );

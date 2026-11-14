@@ -22,15 +22,20 @@ function ensureRouteCoords( trip )
 }
 
 // sDate: a stage's start date, so its weather comes in the same call (location.js).
+// The answer is kept only while the stage (or trip) still has the text that was
+// looked up and no pin yet: a place edited meanwhile gets its own lookup, never
+// the old place's pin (T12). A stage's zone comes with it, as the sheet's
+// lookup gives it (a stage saved before that lookup answered has none, T1).
 async function geocodeInto( tripId, sKind, id, sQuery, sDate )
 {
-    const key = tripId + ':' + sKind + ':' + id;
+    const text = ( sQuery || '' ).trim();
+    const key  = tripId + ':' + sKind + ':' + id + ':' + text;
 
     if( pendingGeocodes.has( key ) )
         return;
 
     pendingGeocodes.add( key );
-    const result = await geocodeLocation( sQuery, sDate );
+    const result = await geocodeLocation( text, sDate );
     pendingGeocodes.delete( key );
 
     if( selectedTripId !== tripId )
@@ -39,20 +44,33 @@ async function geocodeInto( tripId, sKind, id, sQuery, sDate )
     if( result && result.unreachable )
         return;   // offline / service down - leave lat === undefined so it retries later
 
-    const coords = result ? { lat: result.lat, lon: result.lon } : { lat: null, lon: null };
+    const trip = findTrip( tripId );
+    if( ! trip ) return;
 
     if( sKind === 'trip' )
     {
+        if( trip.lat !== undefined || ( trip.destination || '' ).trim() !== text ) return;
+        const coords = result ? { lat: result.lat, lon: result.lon } : { lat: null, lon: null };
         mutateTrip( tripId, function( t ) { return { ...t, lat: coords.lat, lon: coords.lon }; } );
+        return;
     }
-    else
+
+    const still = function( st ) { return st.id === id && st.lat === undefined && ( st.location || '' ).trim() === text; };
+    if( ! trip.stages.some( still ) ) return;
+
+    const fix = result ? { lat: result.lat, lon: result.lon } : { lat: null, lon: null };
+
+    mutateTrip( tripId, function( t )
     {
-        mutateTrip( tripId, function( t )
+        const stages = t.stages.map( function( st )
         {
-            const stages = t.stages.map( function( st ) { return st.id === id ? { ...st, lat: coords.lat, lon: coords.lon } : st; } );
-            return { ...t, stages };
+            if( ! still( st ) ) return st;
+            const out = { ...st, ...fix };
+            if( result && ! st.tz ) { out.tz = result.timezone; out.tzLabel = result.label; out.tzStatus = 'found'; }
+            return out;
         });
-    }
+        return { ...t, stages };
+    });
 }
 
 // Phone map (below 920px): the whole screen, no dialog. Top-right corner: Plan,

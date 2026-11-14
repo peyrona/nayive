@@ -386,6 +386,10 @@
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3h4v2h2l-1.5 3.5A5 5 0 0 1 16 12l-1 1h-6l-1-1a5 5 0 0 1 1.5-3.5L8 5h2z"></path><path d="M9 13c0 2.5-.7 4.4-2 6h10c-1.3-1.6-2-3.5-2-6"></path><line x1="5" y1="21" x2="19" y2="21"></line></svg>
                             <span data-i18n="games.chess"></span>
                         </button>
+                        <button class="btn large game-tile" type="button" data-game="machines">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5.5"></circle><circle cx="12" cy="12" r="1.5"></circle><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"></path></svg>
+                            <span data-i18n="games.machines"></span>
+                        </button>
                     </div>
                 </div>
             </section>
@@ -1616,9 +1620,10 @@
         // A game's script reaches the helpers above through window.NayiveGames
         // and hands its module back with NayiveGames.add( name, module ).
 
-        var FILES = [ 'sudoku', 'g2048', 'mines', 'invaders', 'asteroids', 'tetris', 'solitaire', 'checkers', 'chess' ];   // the cards' order
+        var FILES = [ 'sudoku', 'g2048', 'mines', 'invaders', 'asteroids', 'tetris', 'solitaire', 'checkers', 'chess', 'machines' ];   // the cards' order
         var MODS  = {};                        // name -> the module its file handed back
         var G2048, Mines, Sudoku, Invaders, Asteroids, Tetris, Chess, Solitaire, Checkers;
+        var MachinesGame;                      // not "Machines": that is the name machines-sim.js gives its rules
 
         window.NayiveGames = {
             T: T, TF: TF, STEP: STEP, clock: clock, keyBusy: keyBusy,
@@ -1887,6 +1892,7 @@
             GAMES.chess    = Chess.init();
             GAMES.solitaire = Solitaire.init();
             GAMES.checkers = Checkers.init();
+            GAMES.machines = MachinesGame.init();
 
             // The nine toolbars are written inside their panes - that is where
             // they are read, next to the board they act on - and MOVED into the
@@ -1910,6 +1916,7 @@
                     { sel: '.game-tile[data-game="solitaire"]', text: T( 'games.introSolitaire' ) },
                     { sel: '.game-tile[data-game="checkers"]',  text: T( 'games.introCheckers' ) },
                     { sel: '.game-tile[data-game="chess"]',     text: T( 'games.introChess' ) },
+                    { sel: '.game-tile[data-game="machines"]',  text: T( 'games.introMachines' ) },
                     { sel: '#gamesSound',                       text: T( 'games.introSound' ) }
                 ]
             } );
@@ -1940,6 +1947,7 @@
             Chess     = MODS.chess;
             Solitaire = MODS.solitaire;
             Checkers  = MODS.checkers;
+            MachinesGame = MODS.machines;
 
             store = AyniStore.createStore( { apiBase: AyniNet.API_FILES, conflicts: true, merge: mergeGames } );
 

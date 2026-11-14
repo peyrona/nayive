@@ -7,6 +7,8 @@
 // S4 an admin rename / delete follows the owner and the contact.
 // S5 a danger watch writes only its own time; "I'm safe" before it goes out sends nothing.
 // S6 a damaged file is never written over: moved aside, dated, before a save.
+// S7 the danger PIN: stored hashed, changed only with the old one, the other
+//    rows untouched; a wrong PIN on a watch keeps it open ("forced").
 import fs from "node:fs";
 import path from "node:path";
 import { server, ok, section, done, sleep } from "./lib.mjs";
@@ -70,6 +72,27 @@ section( "S5 · DANGER WATCH" );
     ok( others() === keep, "the other rows are untouched" );
     ok( ( await post( "/watch/stop" ) ).status === 200 && ! row( "test" ).watch, "I'm safe: the watch is gone" );
     ok( ( json().alerts || [] ).every( a => a.kind !== "watch" && a.kind !== "safe" ), "nothing was sent" );
+}
+
+//------------------------------------------------------------------------//
+section( "S7 · DANGER PIN" );
+{
+    const J = { "Content-Type": "application/json" };
+    const pin = b => test.call( "PUT", "/api/sos/pin", JSON.stringify( b ), J );
+    const others = () => JSON.stringify( ( ( json() || {} ).users || [] ).filter( r => r.owner !== "test" ) );
+    const keep = others(), contacts = JSON.stringify( row( "test" )?.contacts );
+    ok( ( await pin( { pin: "4321" } ) ).status === 200, "a PIN is set" );
+    ok( /^\$pbkdf2/.test( row( "test" )?.pin || "" ) && ! raw().includes( "4321" ), "stored hashed, never plain", row( "test" ) );
+    const set = raw();
+    ok( ( await pin( { old: "0000", pin: "1111" } ) ).status === 403 && raw() === set, "a wrong old PIN changes nothing, byte for byte" );
+    ok( ( await pin( { pin: "12x4" } ) ).status === 400 && raw() === set, "a bad PIN is refused, nothing written" );
+    ok( others() === keep && JSON.stringify( row( "test" ).contacts ) === contacts, "the other rows and the contacts are untouched" );
+    const post = ( p, b ) => test.post( "/api/sos" + p, JSON.stringify( b || {} ), J );
+    ok( ( await post( "/watch" ) ).status === 200, "a watch starts" );
+    ok( ( await post( "/watch/stop", { pin: "9999" } ) ).status === 200, "a wrong PIN answers OK" );
+    ok( row( "test" ).watchAlert && ! row( "test" ).watch && ( json().alerts || [] ).some( a => a.kind === "forced" ), "...but the alert stays open, \"forced\" kept", row( "test" ) );
+    ok( ( await post( "/watch/stop", { pin: "4321" } ) ).status === 200 && ! row( "test" ).watchAlert, "the right PIN closes it" );
+    ok( ( await pin( { old: "4321", pin: "" } ) ).status === 200 && ! row( "test" ).pin, "removed with the old PIN" );
 }
 
 //------------------------------------------------------------------------//

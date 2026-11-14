@@ -3,9 +3,9 @@ package main
 // =============================================================================
 // Chat text marks (WhatsApp's): *bold*, _italic_, ~strike~ and "- " list
 // lines. Messages keep them as typed; the page draws them
-// (client/apps/chat/marks.js). Here they are only taken out, for the
+// (client/apps/shared/ayni/ayni-compose.js). Here they are only taken out, for the
 // one-line places the server writes: notifications and quotes.
-// The rules are marks.js's, line for line - change both together.
+// The rules are ayni-compose.js's (Ayni.marks), line for line - change both together.
 // =============================================================================
 
 import (
@@ -25,7 +25,7 @@ const marksTail = `*_~.,;:!?)]'"`
 // marksMax: only a text's first runes are stripped (SS1). The scan is slow on
 // a long text packed with marks and links, it runs for every quote under the
 // hub's lock, and every place that strips clips the line far shorter anyway.
-// marks.js's MAX is the same.
+// ayni-compose.js's MAX is the same.
 const marksMax = 600
 
 type marksSpan struct{ a, b int } // [a, b) in runes

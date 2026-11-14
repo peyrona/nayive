@@ -55,11 +55,19 @@ func TestSearchAll(t *testing.T) {
 	write("d-p2", ms(0), `{"messages":[{"id":1,"rev":1,"at":`+itoa64(ms(0))+`,"from":"p2","kind":"text","text":"factura vieja"}]}`)
 	os.WriteFile(filepath.Join(data, "chat", "conv", "d-p2", "state.json"), []byte(`{"rev":1,"next":2,"read":{},"cleared":{"o":1}}`), 0o644)
 
+	os.MkdirAll(filepath.Join(data, "notes"), 0o755)
+	os.WriteFile(filepath.Join(data, "notes", "notes.json"), []byte(`[
+		{"id":"n1","title":"","text":"Llamar al fontanero","pinned":false,"color":null,"updated":5},
+		{"id":"n2","title":"Compra","text":"","list":true,"items":[{"id":"i1","text":"Huevos"}],"pinned":false,"updated":9},
+		{"id":"n3","title":"Fontanería","text":"presupuesto","pinned":true,"color":2,"updated":1},
+		{"id":"","title":"sin id fontanero","text":""}]`), 0o644)
+
 	signIn(t, client, ts.URL, "ana", "abc")
 	type answer struct {
 		Contacts []ContactHit   `json:"contacts"`
 		Events   []EventHit     `json:"events"`
 		Chats    []ChatHit      `json:"chats"`
+		Notes    []NoteHit      `json:"notes"`
 		More     map[string]any `json:"more"`
 	}
 	ask := func(q string) answer {
@@ -127,6 +135,17 @@ func TestSearchAll(t *testing.T) {
 	}
 	if a := ask(has("factura") + "&limit=1"); len(a.Chats) != 1 || a.More["chats"] != true {
 		t.Errorf("limit: %+v", a)
+	}
+
+	// notes: title, text, an old checklist's items; pinned first; no id = not found
+	if a := ask(has("fontaner")); len(a.Notes) != 2 || a.Notes[0].ID != "n3" || !a.Notes[0].Pinned || a.Notes[0].Color == nil || *a.Notes[0].Color != 2 || a.Notes[1].ID != "n1" {
+		t.Errorf("notes: %+v", a.Notes)
+	}
+	if a := ask(has("huevos")); len(a.Notes) != 1 || a.Notes[0].Title != "Compra" || a.Notes[0].Text != "Huevos" {
+		t.Errorf("checklist items: %+v", a.Notes)
+	}
+	if a := ask(has("fontanero") + "&since=1"); a.Notes != nil {
+		t.Errorf("a date leaves notes out: %+v", a.Notes)
 	}
 	if code, _ := callJSON(t, client, "GET", ts.URL+"/api/search?name=bad:x", ""); code != http.StatusBadRequest {
 		t.Errorf("bad rule = %d", code)

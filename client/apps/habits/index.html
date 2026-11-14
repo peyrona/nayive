@@ -461,7 +461,7 @@
         let loaded = false;     // true once the file (or a real "no file yet") has been read;
                                 // until then nothing may be written, or an offline first
                                 // load would upload an empty list over the real file
-        let corrupt = false;    // the file was read but is not JSON: a tap says so, not "check the connection"
+        let corrupt = false;    // the file was read but cannot be used: the i18n key a tap says (not "check the connection")
         let loadSeq = 0;        // bumped by every load() and save() - see load()
         let view   = 'today';
         let month  = H.monthOf( H.todayIso() );   // the month the grid shows, "yyyy-mm"
@@ -510,7 +510,7 @@
         function canEdit()
         {
             if( loaded ) return true;
-            Ayni.toast( ( corrupt ? 'err' : 'warn' ), T( corrupt ? 'habits.corrupt' : 'habits.noData' ) );
+            Ayni.toast( ( corrupt ? 'err' : 'warn' ), T( corrupt || 'habits.noData' ) );
             return false;
         }
 
@@ -627,16 +627,22 @@
                 try
                 {
                     const parsed = JSON.parse( res.body );
-                    habits = ( Array.isArray( parsed ) ? parsed : [] ).map( H.normalise ).filter( Boolean );
-                    loaded = true;
-                    corrupt = false;
+                    const list   = Array.isArray( parsed ) ? parsed : [];
+                    habits = list.map( H.normalise ).filter( Boolean );
+
+                    // Not a list (`{}`, a newer format) or items it cannot read: shown
+                    // as far as it can, never written over - a save would drop the rest (H1).
+                    const whole = Array.isArray( parsed ) && habits.length === list.length;
+                    loaded  = whole;
+                    corrupt = whole ? false : 'ui.store.badFile';
+                    if( ! whole ) Ayni.toast( 'warn', T( 'ui.store.badFile' ) );
                 }
                 catch( _ )
                 {
                     // A damaged file is shown as empty but is never written over.
                     habits = [];
                     loaded = false;
-                    corrupt = true;
+                    corrupt = 'habits.corrupt';
                     Ayni.toast( 'err', T( 'habits.corrupt' ) );
                 }
             }

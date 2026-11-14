@@ -108,7 +108,7 @@ async function doMove( paths, dest )
 {
     // Changes of these files still on a device first (actions.js parkedFirst).
     const going = paths.filter( function( p ) { return Ayni.dirOf( p ) !== dest; } );
-    if( going.length && ! await parkedFirst( going ) ) return;
+    if( going.length && ! await parkedFirst( going ) ) return false;     // stopped: nothing moved (doPaste keeps the cut)
     setStatus( T( 'drive.moving' ) );
 
     // A move onto an existing item would destroy it (the server refuses,
@@ -119,6 +119,18 @@ async function doMove( paths, dest )
     {
         return Ayni.dirOf( p ) !== dest && destNames.has( p.split( '/' ).pop() );
     } );
+
+    // Two picked items with the same name (a search): only the first goes,
+    // the others are skipped - never a "Replace" of what this move just put there (D6).
+    const seen  = new Set();
+    const dupes = new Set( paths.filter( function( p )
+    {
+        if( Ayni.dirOf( p ) === dest ) return false;
+        const name = p.split( '/' ).pop();
+        if( seen.has( name ) ) return true;
+        seen.add( name );
+        return false;
+    } ) );
 
     let replace = false;
     if( clashes.length )
@@ -144,7 +156,7 @@ async function doMove( paths, dest )
             const name   = p.split( '/' ).pop();
             const parent = Ayni.dirOf( p );
 
-            if( parent === dest ) { skipped++; continue; }      // already there
+            if( parent === dest || dupes.has( p ) ) { skipped++; continue; }      // already there / same name as one before
 
             const to    = joinPath( dest, name );
             const clash = clashes.indexOf( p ) !== -1;
@@ -167,8 +179,7 @@ async function doMove( paths, dest )
         }
 
         await NayiveMedia.remapPaths( remapped );
-        const movedCur = remapped.find( function( r ) { return r[0] === currentFolder; } );
-        if( movedCur ) currentFolder = movedCur[1];   // moved the folder we're in — follow it
+        currentFolder = Ayni.followPath( currentFolder, remapped );   // moved the folder we're in (or one above it) — follow it
         clearSel();
         await reload();
 
@@ -254,10 +265,9 @@ async function doCopy( paths, dest )
 
         for( const p of paths )
         {
-            const node = rowNode( p );
-            if( ! node ) continue;
-
-            const topName = AyniNet.uniqueName( nameOf( node ), taken, T( 'drive.copyWord' ) );
+            // The name comes from the path: a file copied in another folder
+            // is in no listing here any more (D1).
+            const topName = AyniNet.uniqueName( p.split( '/' ).pop(), taken, T( 'drive.copyWord' ) );
             taken.add( topName );
 
             // A folder comes whole, sub-folders and all. The server never

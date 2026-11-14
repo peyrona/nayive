@@ -45,7 +45,7 @@ package main
 //
 // Nayive's own, for every account (mail_labels.go):
 //
-//	GET    labels                       {"labels": [{id,name,color}]}
+//	GET    labels                       {"labels": [{id,name,color}], "colors": [...], "ver": "<changes with any label or tag>"}
 //	POST   labels                       {"name","color"?} -> the label
 //	PATCH  labels/<id>                  {"name"?,"color"?}
 //	DELETE labels/<id>                  and off every message
@@ -754,7 +754,7 @@ func (s *Server) mailUserRoute(w http.ResponseWriter, r *http.Request, user stri
 	}
 	switch {
 	case len(rest) == 1 && rest[0] == "labels" && r.Method == http.MethodGet:
-		sendJSON(w, r, http.StatusOK, map[string]any{"labels": s.mail.Labels(user), "colors": mailLabelColors})
+		sendJSON(w, r, http.StatusOK, map[string]any{"labels": s.mail.Labels(user), "colors": mailLabelColors, "ver": s.mail.LabelsVer(user)})
 
 	case len(rest) == 1 && rest[0] == "labels" && r.Method == http.MethodPost:
 		if !body() {

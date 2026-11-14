@@ -226,6 +226,7 @@ async function translate( allowRemote )
     catch( err )
     {
         if( busy !== controller ) return;
+        busy = null; setBusy( false );             // ended: a "Use online" yes below starts a new one
         await showError( err, allowRemote );
     }
     finally

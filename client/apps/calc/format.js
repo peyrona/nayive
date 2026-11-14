@@ -18,7 +18,7 @@ import
 from './calc.js';
 import
 {
-    table, activeSheet, lastSelection, localMarks, undoStep, lineStyle, styleOf
+    table, activeSheet, lastSelection, localMarks, undoStep, lineStyle, styleOf, isLocked
 }
 from './grid.js';
 
@@ -256,6 +256,71 @@ function toggleStyleField( field )
     restyle( null, function( st ) { st[ field ] = turnOn; } );
 }
 
+// The lock button: on or off for the selection, as the active cell is (see
+// LOCKED CELLS in grid.js). Off is { locked: false } only where a locked
+// line would show through - a cell in a locked row or column, a row across
+// a locked column; elsewhere the lock just goes, so an unlocked range adds
+// nothing to the file.
+function toggleLock()
+{
+    if( ! lastSelection ) return;
+
+    const sh     = activeSheet;
+    const lines  = lastSelection.lines;
+    const anchor = styleOf( sh, lastSelection.r1, lastSelection.c1 );
+    const turnOn = ! ( anchor && anchor.locked );
+    const colLock = function() { return ( sh.colStyles || [] ).some( function( st ) { return st && st.locked; } ); };
+
+    // What a target would show with no lock of its own, once the lines
+    // picked are unlocked too (a row's look wins over a column's).
+    const under = function( r, c )
+    {
+        if( isNaN( r ) ) return false;                                  // a column: nothing under it
+        if( isNaN( c ) ) return lines !== 'all' && colLock();           // a row: the locked columns it crosses
+        if( lines === 'all' || lines === 'rows' ) return false;         // its row is unlocked (or says so)
+        if( lines === 'cols' ) { const rw = sh.rowStyles[ r ]; return !! ( rw && rw.locked ); }
+        const ln = lineStyle( sh, r, c );
+        return !! ( ln && ln.locked );
+    };
+
+    const fn = function( st, r, c )
+    {
+        if( turnOn )             st.locked = true;
+        else if( under( r, c ) ) st.locked = false;
+        else                     delete st.locked;
+    };
+
+    // restyle's steps, plus one: a cell whose own look was only its lock is
+    // left with {} - which says "plain" under a styled line, and so would
+    // keep it plain the day its row or column gets a look. With no line
+    // over it, that {} goes.
+    const t = lookTargets();
+    withLookUndo( null, function()
+    {
+        changeLook( t, fn );
+        if( turnOn ) return;
+        t.addrs.forEach( function( a )
+        {
+            const st = sh.cellStyles[ a ];
+            if( ! st || Object.keys( st ).length ) return;
+            const rc = decodeCell( a );
+            if( ! lineStyle( sh, rc.r, rc.c ) ) delete sh.cellStyles[ a ];
+        } );
+    }, t );
+
+    table.render();
+    updateToolbarActiveState();
+    scheduleAutosave();
+}
+
+// A cell keeps the lock it had when its look is taken away or replaced
+// (Clear format, the painter, cut, paste): the lock is not part of the look.
+function keepLock( sh, a, was )
+{
+    const rc = decodeCell( a );
+    if( was !== isLocked( sh, rc.r, rc.c ) ) sh.cellStyles[ a ] = Object.assign( {}, sh.cellStyles[ a ], { locked: was } );
+}
+
 function setStyleField( field, value )
 {
     // The two colour pickers fire on every move (see withLookUndo).
@@ -289,13 +354,27 @@ function clearSelectionStyle()
 
         withLookUndo( null, function()
         {
+            const lockWas = {};
+            t.addrs.forEach( function( a ) { const rc = decodeCell( a ); lockWas[ a ] = isLocked( sheet, rc.r, rc.c ); } );
+
+            // A line keeps its lock, on or off (one object for each, as a line's look).
+            const on = { locked: true }, off = { locked: false };
+            const bare = function( list, i )
+            {
+                const st = list[ i ];
+                if( st && st.locked === true )       list[ i ] = on;
+                else if( st && st.locked === false ) list[ i ] = off;
+                else                                 delete list[ i ];
+            };
+
             t.addrs.forEach( function( a ) { delete sheet.cellStyles[ a ]; } );
-            t.rows.forEach( function( r ) { delete sheet.rowStyles[ r ]; } );
-            t.cols.forEach( function( c ) { delete sheet.colStyles[ c ]; } );
+            t.rows.forEach( function( r ) { bare( sheet.rowStyles, r ); } );
+            t.cols.forEach( function( c ) { bare( sheet.colStyles, c ); } );
             t.addrs.forEach( function( a )
             {
                 const rc = decodeCell( a );
                 if( lineStyle( sheet, rc.r, rc.c ) ) sheet.cellStyles[ a ] = {};
+                keepLock( sheet, a, lockWas[ a ] );
             });
         }, t );
 
@@ -310,17 +389,25 @@ function clearSelectionStyle()
     // gives it a new cellStyles object (and clears Ctrl+Z anyway). A cell in
     // a styled row or column is kept plain ({}) rather than bare, or the
     // line's look would come straight back.
-    const was   = {};
-    const plain = function( a ) { const rc = decodeCell( a ); return !! lineStyle( sheet, rc.r, rc.c ); };
+    const was     = {};
+    const lockWas = {};
+    const plain   = function( a ) { const rc = decodeCell( a ); return !! lineStyle( sheet, rc.r, rc.c ); };
+    const clear   = function( a )
+    {
+        if( plain( a ) ) sheet.cellStyles[ a ] = {};
+        else             delete sheet.cellStyles[ a ];
+        keepLock( sheet, a, lockWas[ a ] );
+    };
 
     forEachSelectedCell( function( addr )
     {
         const own = sheet.cellStyles[ addr ];
         if( own && ! Object.keys( own ).length && plain( addr ) ) return;    // already plain
 
+        const rc = decodeCell( addr );
+        lockWas[ addr ] = isLocked( sheet, rc.r, rc.c );
         if( own || plain( addr ) ) was[ addr ] = own || null;
-        if( plain( addr ) ) sheet.cellStyles[ addr ] = {};
-        else                delete sheet.cellStyles[ addr ];
+        clear( addr );
     } );
 
     if( Object.keys( was ).length ) undoStep(
@@ -330,10 +417,12 @@ function clearSelectionStyle()
             {
                 const now = sheet.cellStyles[ a ];
                 if( was[ a ] ) sheet.cellStyles[ a ] = Object.assign( {}, was[ a ], now );
-                else if( now && ! Object.keys( now ).length ) delete sheet.cellStyles[ a ];
+                // No look of its own before: the line's comes back, with
+                // the line's lock - the very lock keepLock kept.
+                else if( now && Object.keys( now ).every( function( k ) { return k === 'locked'; } ) ) delete sheet.cellStyles[ a ];
             }
         },
-        function() { for( const a in was ) { if( plain( a ) ) sheet.cellStyles[ a ] = {}; else delete sheet.cellStyles[ a ]; } } );
+        function() { for( const a in was ) clear( a ); } );
 
     table.render();
     updateToolbarActiveState();
@@ -401,8 +490,11 @@ function paintFormat()
     restyle( null, function( st, r, c )
     {
         const look = p.looks[ at( r, sel.r1, p.h ) ][ at( c, sel.c1, p.w ) ];
+        const lock = st.locked;            // the lock is not part of the look (keepLock)
         for( const k of Object.keys( st ) ) delete st[ k ];
         if( look ) Object.assign( st, JSON.parse( JSON.stringify( look ) ) );
+        delete st.locked;
+        if( lock !== undefined ) st.locked = lock;
     } );
 }
 
@@ -437,6 +529,7 @@ function updateToolbarActiveState()
     document.getElementById( 'fmtUnderlineBtn'    ).setAttribute( 'aria-pressed', !! ( style && style.underline ) );
     document.getElementById( 'fmtBorderBtn'       ).setAttribute( 'aria-pressed', !! ( style && style.border ) );
     document.getElementById( 'fmtWrapBtn'         ).setAttribute( 'aria-pressed', !! ( style && style.wrap ) );
+    document.getElementById( 'fmtLockBtn'         ).setAttribute( 'aria-pressed', !! ( style && style.locked ) );
     document.getElementById( 'fmtAlignLeftBtn'    ).setAttribute( 'aria-pressed', !! style && style.align  === 'left' );
     document.getElementById( 'fmtAlignCenterBtn'  ).setAttribute( 'aria-pressed', !! style && style.align  === 'center' );
     document.getElementById( 'fmtAlignRightBtn'   ).setAttribute( 'aria-pressed', !! style && style.align  === 'right' );
@@ -827,7 +920,7 @@ function cancelNumFmt()
 
 export
 {
-    toggleStyleField, setStyleField, clearSelectionStyle, setOrClearStyleField, setColorBar,
+    toggleStyleField, toggleLock, keepLock, setStyleField, clearSelectionStyle, setOrClearStyleField, setColorBar,
     updateToolbarActiveState, mergeSelection, splitSelection, mergesInSelection, toggleFreezeColumns, toggleFreezeRows,
     openBorderPopup, closeBorderPopup, syncBorderPopupState, applyBorder, openNumFmtDialog,
     updateNumFmtPreview, confirmNumFmt, cancelNumFmt, gridColors, togglePainter, paintFormat, setPainter, MAX_COLS

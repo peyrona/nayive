@@ -135,6 +135,9 @@
                 { sel: '#printBtn',     text: Ayni.t( 'write.introPrint' ),   tour: { open: '#moreBtn' } },
                 { sel: '#langSelect',   text: Ayni.t( 'text.introLang' ) },
                 { sel: '#previewBtn',   text: Ayni.t( 'text.introPreview' ) },
+                { sel: '#undoBtn',      text: Ayni.t( 'calc.introUndo' ) },
+                { sel: '#redoBtn',      text: Ayni.t( 'calc.introRedo' ) },
+                { sel: '#findBtn',      text: Ayni.t( 'text.introFind' ) },
                 { sel: '#wrapBtn',      text: Ayni.t( 'text.introWrap' ) },
                 { sel: '#indentSelect', text: Ayni.t( 'text.introIndent' ) },
                 { sel: '#marginInput',  text: Ayni.t( 'text.introMargin' ) },
@@ -379,6 +382,18 @@
             <button id="copyBtn"  class="btn tb-btn" data-i18n-attr="data-tip:ui.copy"></button>
             <button id="pasteBtn" class="btn tb-btn" data-i18n-attr="data-tip:ui.paste"></button>
 
+            <!-- Undo / redo and Find: the keys do them too; these are for a phone
+                 or a tablet. Find opens #findMenu, built from #findTools below. -->
+            <button id="undoBtn" class="btn tb-btn" type="button" data-i18n-attr="data-tip:ui.undo, aria-label:ui.undo">
+                <span class="icon" data-icon="undo-arrow" style="--icon:17px"></span>
+            </button>
+            <button id="redoBtn" class="btn tb-btn" type="button" data-i18n-attr="data-tip:ui.redo, aria-label:ui.redo">
+                <span class="icon" data-icon="redo-arrow" style="--icon:17px"></span>
+            </button>
+            <button id="findBtn" class="btn tb-btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="data-tip:write.sc.find, aria-label:write.sc.find">
+                <span class="icon" data-icon="search" style="--icon:17px"></span>
+            </button>
+
             <div class="tb-sep"></div>
 
             <button id="wrapBtn" class="btn tb-btn" data-i18n-attr="data-tip:text.wrap">
@@ -447,6 +462,25 @@
                 </button>
             </div>
 
+            <!-- FIND: the entries of #findMenu (CodeMirror's search add-ons). -->
+            <div id="findTools" hidden>
+                <button id="findGoBtn" class="btn tb-btn" type="button" data-i18n-attr="data-tip:write.sc.find, aria-label:write.sc.find">
+                    <span class="icon" data-icon="search" style="--icon:17px"></span>
+                </button>
+                <button id="findNextBtn" class="btn tb-btn" type="button" data-i18n-attr="data-tip:text.sc.findNext, aria-label:text.sc.findNext">
+                    <span class="icon" data-icon="arrow-down" style="--icon:17px"></span>
+                </button>
+                <button id="findPrevBtn" class="btn tb-btn" type="button" data-i18n-attr="data-tip:text.sc.findPrev, aria-label:text.sc.findPrev">
+                    <span class="icon" data-icon="arrow-up" style="--icon:17px"></span>
+                </button>
+                <button id="replaceBtn" class="btn tb-btn" type="button" data-i18n-attr="data-tip:write.sc.replace, aria-label:write.sc.replace">
+                    <span class="icon" data-icon="swap-arrows" style="--icon:17px"></span>
+                </button>
+                <button id="gotoBtn" class="btn tb-btn" type="button" data-i18n-attr="data-tip:text.sc.goLine, aria-label:text.sc.goLine">
+                    <span class="icon" data-icon="text-cursor" style="--icon:17px"></span>
+                </button>
+            </div>
+
             <!-- AYUDA: Statistics and Keyboard shortcuts have no button of their
                  own on the bar. Hidden: the Help menu clones their glyph and title
                  and clicks them, so there is one set of handlers (O.helpMenu). -->
@@ -466,6 +500,9 @@
 
         <!-- File menu - built by wireStaticUI() from #fileTools above. -->
         <div id="topMenu" class="panel menu" popover role="menu"></div>
+
+        <!-- Find menu - built by wireFind() from #findTools above. -->
+        <div id="findMenu" class="panel menu" popover role="menu"></div>
 
         <div id="panes">
             <div id="editorHost"><textarea id="editor"></textarea></div>
@@ -530,6 +567,17 @@
             return ! OWNED_EXTS.has( e ) && ! BINARY_EXTS.has( e );
         }
 
+        // Refused by its name before a byte is read (Drive's "Abrir con", an
+        // import): binary, or another app's binary format. A .csv, .rtf, .vcf
+        // or .ics is another app's but still text: it opens.
+        const OWNED_TEXT = new Set( [ 'rtf', 'csv', 'vcf', 'ics' ] );
+
+        function notTextByName( path )
+        {
+            const e = Ayni.extOf( path );
+            return BINARY_EXTS.has( e ) || ( OWNED_EXTS.has( e ) && ! OWNED_TEXT.has( e ) );
+        }
+
         // The browser never walks above the user's files/ root (the first path
         // segment of APP_DIR — "files" when Text is opened from the launcher).
         const OPEN_ROOT = APP_DIR.split( '/' )[ 0 ] || 'files';
@@ -568,6 +616,9 @@
         let   lineWrap   = ( storedWrap === null ? window.matchMedia( '( max-width: 640px )' ).matches : storedWrap === '1' );
         const storedIdt  = readPref( INDENT_KEY );
         const indentPref = ( INDENTS.includes( storedIdt ) ? storedIdt : '4' );   // a stale value must never reach setIndent()
+        // A setting changed here while the boot read (syncCfg) was still on its
+        // way: the read must not undo it on screen (the account gets the new value).
+        const cfgTouched = { wrap: false, indent: false };
         let suppressChange = false;   // true while the editor is being loaded programmatically
 
         // MARKDOWN PREVIEW (see that section below). Declared here with the rest of
@@ -619,10 +670,12 @@
             ],
             canOpen    : textCanOpen,              // what the Open dialog lists
             emptyKey   : 'text.noTextFiles',
-            encode     : function() { return getEditorText(); },
+            encode     : function() { return fileText(); },
             load       : loadText,
             blank      : blankText,
             finishName : textSaveName,
+            renameName : textRenameName,
+            restoreBytes: restoreAsBytes,
             onSavedAs  : function( p )
             {
                 if( tooBig ) { store.block( p ); return; }   // the copy is just as big: read-only too
@@ -648,7 +701,7 @@
             // is not text is refused before it is even downloaded, and start-up
             // goes on as if it had not been asked for (the rest: loadText).
             const q = new URLSearchParams( location.search );
-            if( q.get( 'file' ) && BINARY_EXTS.has( Ayni.extOf( q.get( 'file' ) ) ) )
+            if( q.get( 'file' ) && notTextByName( q.get( 'file' ) ) )
             {
                 notText( q.get( 'file' ) );
                 q.delete( 'file' );
@@ -667,7 +720,7 @@
             // (shared/ayni/ayni-doc.js); the dialogs' × buttons and Escape once for every
             // app by shared/ui.js.
 
-            document.getElementById( 'langSelect' ).addEventListener( 'ayni:change', function( e ) { setLanguage( e.detail.value ); editor.focus(); } );
+            document.getElementById( 'langSelect' ).addEventListener( 'ayni:change', function( e ) { setLanguage( e.detail.value ); backToText(); } );
             document.getElementById( 'previewBtn' ).addEventListener( 'click',  togglePreview );
             document.getElementById( 'preview'    ).addEventListener( 'click',  mdAnchorClick );
             // Drag the bar to share the width; double-click: half and half again.
@@ -683,9 +736,10 @@
                     if( editor ) editor.refresh();
                 }
             } );
-            document.getElementById( 'indentSelect' ).addEventListener( 'ayni:change', function( e ) { setIndent( e.detail.value ); textCfg.write( { indent: e.detail.value } ); editor.focus(); } );
+            document.getElementById( 'indentSelect' ).addEventListener( 'ayni:change', function( e ) { cfgTouched.indent = true; setIndent( e.detail.value ); textCfg.write( { indent: e.detail.value } ); backToText(); } );
             document.getElementById( 'wrapBtn'      ).addEventListener( 'click', toggleWrap );
             wireClipboard();
+            wireFind();
             document.getElementById( 'wrapBtn'      ).setAttribute( 'aria-pressed', lineWrap );   // reflect the remembered choice
             Ayni.picker( document.getElementById( 'indentSelect' ) ).set( indentPref );            // ditto
             document.getElementById( 'zoomOutBtn'   ).addEventListener( 'click', function() { bumpFontSize( -1 ); } );
@@ -811,9 +865,9 @@
             try { cfg = await textCfg.read(); }
             catch( _ ) { return; }   // offline, or unreadable: the device copy stands
 
-            if( typeof cfg.wrap === 'boolean' && cfg.wrap !== lineWrap ) applyWrap( cfg.wrap );
+            if( ! cfgTouched.wrap && typeof cfg.wrap === 'boolean' && cfg.wrap !== lineWrap ) applyWrap( cfg.wrap );
 
-            if( INDENTS.includes( cfg.indent ) && cfg.indent !== Ayni.picker( document.getElementById( 'indentSelect' ) ).value )
+            if( ! cfgTouched.indent && INDENTS.includes( cfg.indent ) && cfg.indent !== Ayni.picker( document.getElementById( 'indentSelect' ) ).value )
             {
                 Ayni.picker( document.getElementById( 'indentSelect' ) ).set( cfg.indent );
                 setIndent( cfg.indent );
@@ -875,6 +929,53 @@
             editor.focus();
         }
 
+        // After a toolbar button: the caret back in the text - but not on a
+        // touch screen, where that pops the on-screen keyboard over half the page.
+        function backToText()
+        {
+            if( editor && ! Ayni.isTouch() ) editor.focus();
+        }
+
+        // Undo / redo, and the Find menu: CodeMirror's own commands, for a
+        // screen with no keyboard. Find stays open (Enter = next match).
+        function wireFind()
+        {
+            const run = function( id, cmd )
+            {
+                document.getElementById( id ).addEventListener( 'click', function() { if( editor ) editor.execCommand( cmd ); } );
+            };
+
+            document.getElementById( 'undoBtn' ).addEventListener( 'click', function() { if( editor ) { editor.undo(); backToText(); } } );
+            document.getElementById( 'redoBtn' ).addEventListener( 'click', function() { if( editor ) { editor.redo(); backToText(); } } );
+
+            run( 'findGoBtn',   'findPersistent'     );
+            run( 'findNextBtn', 'findPersistentNext' );
+            run( 'findPrevBtn', 'findPersistentPrev' );
+            run( 'replaceBtn',  'replace'            );
+            run( 'gotoBtn',     'jumpToLine'         );
+
+            O.fileMenu( { btn: 'findBtn', menu: 'findMenu',
+                          ids: [ 'findGoBtn', 'findNextBtn', 'findPrevBtn', 'replaceBtn', 'gotoBtn' ] } );
+
+            // A file dropped on the page is IMPORTED (read as what it is, as
+            // Import does), never pasted as UTF-8 by CodeMirror nor opened by the
+            // browser in place of the app. Text dragged inside the editor is not
+            // a file: CodeMirror moves it as before.
+            const hasFiles = function( e ) { return !! e.dataTransfer && Array.from( e.dataTransfer.types || [] ).includes( 'Files' ); };
+            document.addEventListener( 'dragover', function( e ) { if( hasFiles( e ) ) e.preventDefault(); }, true );
+            document.addEventListener( 'drop', function( e )
+            {
+                if( ! hasFiles( e ) ) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const files = e.dataTransfer.files;
+                if( ! files || ! files.length || document.querySelector( 'dialog.panel[open]' ) ) return;
+                const input = document.getElementById( 'importInput' );
+                input.files = files;
+                input.dispatchEvent( new Event( 'change' ) );
+            }, true );
+        }
+
         //------------------------------------------------------------------------//
         // EDITOR
 
@@ -905,6 +1006,7 @@
             {
                 theme            : 'default',   // paper in both colour schemes (see the CSS)
                 mode              : null,
+                readOnly          : true,   // until boot() has put the document on screen (setEditorText): a key before would be lost
                 lineNumbers       : true,
                 lineWrapping      : lineWrap,
                 inputStyle        : 'contenteditable',   // the browser's spell check needs it (autoDetectLanguage)
@@ -927,13 +1029,10 @@
                 {
                     'Ctrl-S'      : function() { saveNow(); },
                     'Cmd-S'       : function() { saveNow(); },
-                    'Ctrl-/'      : 'toggleComment',
-                    'Cmd-/'       : 'toggleComment',
+                    // Ctrl+/ (comment) and Ctrl+ + / - (zoom): by the character
+                    // typed, in the 'keydown' below - "/" is Shift+7 on a Spanish
+                    // or German keyboard, "+" is Shift+= on a US one.
                     'Ctrl-Q'      : function( cm ) { cm.foldCode( cm.getCursor() ); },
-                    'Ctrl-=' : function() { bumpFontSize(  1 ); },
-                    'Cmd-='  : function() { bumpFontSize(  1 ); },
-                    'Ctrl--' : function() { bumpFontSize( -1 ); },
-                    'Cmd--'  : function() { bumpFontSize( -1 ); },
                     'Shift-Tab'   : 'indentLess',
                     'Tab'         : function( cm )
                     {
@@ -945,6 +1044,17 @@
 
             editor.on( 'change', scheduleAutosave );
             editor.on( 'change', schedulePreview );
+            // Taken before CodeMirror's own keys (a handled key is preventDefault-ed,
+            // so its keymap skips it). AltGr is Ctrl+Alt: never one of these.
+            editor.on( 'keydown', function( cm, e )
+            {
+                if( ! ( e.ctrlKey || e.metaKey ) || e.altKey ) return;
+                if( e.key === '/' )                       { if( ! cm.isReadOnly() ) cm.execCommand( 'toggleComment' ); }
+                else if( e.key === '+' || e.key === '=' ) bumpFontSize(  1 );
+                else if( e.key === '-' )                  bumpFontSize( -1 );
+                else return;
+                e.preventDefault();
+            } );
             // Every redraw that can move the text grid - a zoom, a resize, the first
             // paint, a theme swap - ends in a refresh, so the guide line is redrawn
             // from one place instead of from each of them.
@@ -972,7 +1082,7 @@
 
             fontSize = next;
             applyFontSize();
-            editor.focus();
+            backToText();
         }
 
         // RIGHT MARGIN
@@ -1014,25 +1124,68 @@
             try { localStorage.setItem( MARGIN_KEY, String( marginCols ) ); } catch( _ ) {}
         }
 
-        // Lines end as the file ends them: CodeMirror reads "\r\n" and hands back
-        // "\n", so a Windows file would change on every line at its first save.
-        let eol = '\n';
+        // Lines end as the file ends them: CodeMirror reads "\r\n", "\r" and "\n"
+        // alike and hands back "\n", so a Windows file would change on every line
+        // at its first save. `eol` is the file's most common ending (new lines
+        // get it); a file that mixes them keeps each line's own (eolOf, by
+        // CodeMirror's line handle, made only for such a file).
+        let eol   = '\n';
+        let eolOf = null;
+        // A UTF-8 file that starts with a BOM keeps it (loadText finds it, the
+        // store's text has lost it): Windows tools read the accents by it.
+        let bom   = false;
 
         function setEditorText( text )
         {
+            const t = text || '';
+
             editor.setOption( 'readOnly', false );   // another document: only loadText says it is not ours to write
             tooBig = false;
-            eol = ( text || '' ).indexOf( '\r\n' ) !== -1 ? '\r\n' : '\n';
+            bom    = false;                          // loadText says when it has one
+
+            const seps  = t.match( /\r\n?|\n/g ) || [];   // CodeMirror's own split
+            const count = { '\n': 0, '\r\n': 0, '\r': 0 };
+            seps.forEach( function( s ) { count[ s ]++; } );
+            const kinds = Object.keys( count ).filter( function( k ) { return count[ k ]; } );
+            eol   = kinds.reduce( function( a, k ) { return count[ k ] > count[ a ] ? k : a; }, kinds[ 0 ] || '\n' );
+            eolOf = null;
+
             suppressChange = true;
-            editor.setValue( text || '' );
+            editor.setValue( t );
             editor.clearHistory();
             suppressChange = false;
+
+            if( kinds.length > 1 )
+            {
+                let i = 0;
+                eolOf = new WeakMap();
+                editor.eachLine( function( h ) { if( i < seps.length ) eolOf.set( h, seps[ i ] ); i++; } );
+            }
+
             editor.refresh();
         }
 
+        // The text as it reads (the preview, print, the counts).
         function getEditorText()
         {
-            return editor.getValue( eol );
+            return editor.getValue( '\n' );
+        }
+
+        // The text as the FILE gets it: its line endings and its BOM.
+        function fileText()
+        {
+            let out;
+
+            if( ! eolOf ) out = editor.getValue( eol );
+            else
+            {
+                const parts = [], last = editor.lastLine();
+                let   i     = 0;
+                editor.eachLine( function( h ) { parts.push( h.text ); if( i++ < last ) parts.push( eolOf.get( h ) || eol ); } );
+                out = parts.join( '' );
+            }
+
+            return bom ? '﻿' + out : out;
         }
 
         // The MIMEs the language <select> offers — also the only values setLanguage()
@@ -1123,9 +1276,10 @@
 
         function toggleWrap()
         {
+            cfgTouched.wrap = true;
             applyWrap( ! lineWrap );
             textCfg.write( { wrap: lineWrap } );
-            editor.focus();
+            backToText();
         }
 
         //------------------------------------------------------------------------//
@@ -1164,7 +1318,7 @@
             mdPreview = ! mdPreview;
             try { localStorage.setItem( PREVIEW_KEY, mdPreview ? '1' : '0' ); } catch( _ ) {}
             syncPreview();
-            editor.focus();
+            backToText();
         }
 
         // Every edit: render again once the typing pauses, not on each key.
@@ -1358,6 +1512,9 @@
             // An <img> is fetched whole: a film beside the .md is not an image.
             if( kind === 'img' ) return MD_IMG_EXTS.has( Ayni.extOf( path ) ) ? AyniNet.fileUrl( path ) : null;
 
+            // A link to a FOLDER ("docs/") opens it in Drive, never Text on a folder.
+            if( /\/$/.test( b.split( /[?#]/ )[ 0 ] ) ) return new URL( '../drive/', location.href ).pathname + '?open=' + encodeURIComponent( path );
+
             // Text reads the #part too (mdScrollTo, once the file is on screen).
             if( textCanOpen( path ) ) return location.pathname + '?file=' + encodeURIComponent( path ) + hash;
             return AyniNet.fileUrl( path );
@@ -1441,8 +1598,12 @@
         // wrapped. The copy (#printDoc) lives for one print. "Save as PDF" is the
         // same browser dialog, plus a line saying where to pick it, as in Write.
 
+        let printWaiting = false;   // a print is waiting for its pictures (see below)
+
         function printDoc( pdfHint )
         {
+            if( printWaiting ) return;
+
             const box = document.createElement( 'div' );
             box.id = 'printDoc';
 
@@ -1467,6 +1628,14 @@
                 box.appendChild( pre );
             }
 
+            // Tabs print as wide as the editor shows them.
+            box.style.tabSize = String( editor ? editor.getOption( 'tabSize' ) : 4 );
+
+            // One print at a time: a second press while the first waits for its
+            // pictures would queue a second dialog, and the first one's
+            // afterprint would take the second one's copy away (blank paper).
+            printWaiting = true;
+
             const old = document.getElementById( 'printDoc' );
             if( old ) old.remove();
             document.body.appendChild( box );
@@ -1482,7 +1651,7 @@
             const late  = new Promise( function( ok ) { setTimeout( ok, 3000 ); } );
             Promise.race( [ Promise.all( waits ), late ] ).then( function()
             {
-                setTimeout( function() { window.print(); }, pdfHint ? 350 : 0 );
+                setTimeout( function() { printWaiting = false; window.print(); }, pdfHint ? 350 : 0 );
             } );
         }
 
@@ -1518,13 +1687,31 @@
         // Throws, with nothing on screen changed, for a file that is not text.
         async function loadText( body, name, how )
         {
-            if( BINARY_EXTS.has( Ayni.extOf( name || '' ) ) ) throw notText( name );
+            if( notTextByName( name || '' ) ) throw notText( name );
 
-            let text = body, enc = 'UTF-8';
+            // An import that big would sit in this device's draft and go up whole
+            // with every save: refused before it is even decoded.
+            if( how === 'import' && ( typeof body === 'string' ? body.length : body.byteLength ) > TOO_BIG )
+            {
+                Ayni.toast( 'warn', TF( 'text.tooBigImport', { name: Ayni.baseName( name ), mb: Math.round( TOO_BIG / 1e6 ) } ) );
+                const e = new Error( 'too big to import: ' + name );
+                e.said = true;
+                throw e;
+            }
+
+            let text = body, enc = 'UTF-8', hasBom = false;
 
             if( typeof body !== 'string' )
             {
-                ( { text, enc } = decodeText( body instanceof Uint8Array ? body : new Uint8Array( body ), name ) );
+                const bytes = body instanceof Uint8Array ? body : new Uint8Array( body );
+                ( { text, enc } = decodeText( bytes, name ) );
+                hasBom = enc === 'UTF-8' && startsWithBom( bytes );
+            }
+            else if( body.charCodeAt( 0 ) === 0xFEFF )
+            {
+                // Our own text coming back (the device draft, a Restore's Undo): fileText() put it there.
+                text   = body.slice( 1 );
+                hasBom = true;
             }
             else if( how === 'open' )
             {
@@ -1543,6 +1730,7 @@
                         const got = await AyniNet.readVersion( name, { bytes: true } );
                         if( got.offline ) throw new Error( 'offline copy' );
                         ( { text, enc } = decodeText( got.body, name ) );
+                        hasBom = enc === 'UTF-8' && startsWithBom( got.body );
                     }
                     catch( e )
                     {
@@ -1552,16 +1740,28 @@
                     }
                 }
                 else if( nul ) throw notText( name );
+                // The store's text has lost a BOM (Response.text()): ask the file's first 3 bytes.
+                else if( body ) hasBom = await fileHasBom( name );
             }
 
             setEditorText( text );
+            bom = hasBom;
             mdOpening = ( how === 'open' || how === 'restore' ) ? name : '';   // an import or a draft is nowhere yet
             try     { setLanguage( detectMime( name || '' ) ); }
             finally { mdOpening = null; }
 
+            // An "other.md#part" link's #part is for the file it came with: once
+            // read (renderPreview), it leaves the address, or the next .md opened
+            // in this tab would jump to a "#part" of its own.
+            if( how === 'open' && location.hash ) history.replaceState( history.state, '', location.pathname + location.search );
+
+            // A file opened, or a copy Restore brought back (restoreAsBytes swapped
+            // the FILES for one of these, so both keep their own bytes):
+            const judged = how === 'open' || how === 'restore';
+
             // Too big to autosave: every save sends the whole text again (a 300 MB
             // log, over and over). It opens to read; nothing is written back.
-            if( how === 'open' && ( text || '' ).length > TOO_BIG )
+            if( judged && ( text || '' ).length > TOO_BIG )
             {
                 store.block( name );
                 tooBig = true;
@@ -1570,16 +1770,29 @@
             }
             // Not UTF-8, or no way to tell: on screen as it really reads, but a
             // save would write it back as UTF-8 - so it is not written at all.
-            else if( how === 'open' && enc !== 'UTF-8' )
+            else if( judged && enc !== 'UTF-8' )
             {
                 store.block( name );
                 editor.setOption( 'readOnly', true );
                 Ayni.toast( 'warn', TF( 'text.notUtf8', { name: Ayni.baseName( name ) } ) );
             }
+            // A plain, small copy back over a file that was read-only: ours to save.
+            else if( how === 'restore' && store.isBlocked( name ) === 'bad' ) store.unblock( name );
+        }
 
-            // "Restaurar" has already put what was on screen into the .bak: the
-            // copy coming back must be saved, even over a file opened read-only.
-            if( how === 'restore' && store.isBlocked( name ) === 'bad' ) store.unblock( name );
+        // Restore (shared/ayni/ayni-doc.js, restorePrevious): true = swap the
+        // file and its .bak as BYTES. For a file Text does not write (not UTF-8,
+        // too big) or a copy it could not write back as it is: re-encoding
+        // either side as UTF-8 would lose the other's own bytes. A copy that is
+        // not text at all throws here, before anything is written.
+        async function restoreAsBytes( copy, p )
+        {
+            if( typeof copy === 'string' ) return false;
+            if( store.isBlocked( p ) === 'bad' ) return true;
+
+            const bytes = copy instanceof Uint8Array ? copy : new Uint8Array( copy );
+            const { text, enc } = decodeText( bytes, p );
+            return enc !== 'UTF-8' || text.length > TOO_BIG;
         }
 
         //------------------------------------------------------------------------//
@@ -1614,6 +1827,21 @@
             catch( _ ) { return { text: new TextDecoder( 'windows-1252' ).decode( bytes ), enc: 'Windows-1252' }; }
         }
 
+        function startsWithBom( b ) { return b.length >= 3 && b[ 0 ] === 0xEF && b[ 1 ] === 0xBB && b[ 2 ] === 0xBF; }
+
+        // The file's first 3 bytes (a Range read). No answer (offline, an old
+        // server): no BOM, as before.
+        async function fileHasBom( path )
+        {
+            try
+            {
+                const r = await fetch( AyniNet.fileUrl( path ), { headers: { Range: 'bytes=0-2' }, cache: 'no-store', signal: AbortSignal.timeout( 5000 ) } );
+                if( ! r.ok ) return false;
+                return startsWithBom( new Uint8Array( await r.arrayBuffer() ) );
+            }
+            catch( _ ) { return false; }
+        }
+
         // Says so, and returns the error to throw. `said`: the session adds no
         // "could not be opened" of its own on top (shared/ayni/ayni-doc.js).
         function notText( name )
@@ -1635,13 +1863,34 @@
         // app owns (.docx) or a binary one, which Text could never reopen. The
         // same test the Open browser uses, so "saveable" and "openable" cannot
         // drift apart. null keeps the dialog open.
+        // A name typed with an extension Text knows ("notes.md", "foo.log")
+        // keeps it, whatever the Format list still says: in Text the extension
+        // IS what the file is. Any other ("v1.2") gets the format's.
         function textSaveName( name, fmt )
         {
-            name = O.withExt( name, fmt );
+            if( ! knownExt( Ayni.extOf( name ) ) ) name = O.withExt( name, fmt );
             if( textCanOpen( name ) ) return name;
 
             Ayni.toast( 'warn', TF( 'text.badExt', { ext: Ayni.extOf( name ) } ) );
             return null;
+        }
+
+        function knownExt( e )
+        {
+            // A number is a version, not a type ("v1.2"), though CodeMirror lists .1-.9 (man pages).
+            return !! e && ( e === 'txt' || e === 'log' || e === 'text' || !! EXT_MIME[ e ] ||
+                             ( /[a-z]/.test( e ) && !! CodeMirror.findModeByExtension( e ) ) );
+        }
+
+        // Rename in the top-bar label: the same test as "Guardar como" - a
+        // name Text could not reopen keeps the old one (the toast says why).
+        function textRenameName( name, path )
+        {
+            // Its own extension is always fine (a .csv opened here stays a .csv).
+            if( textCanOpen( name ) || Ayni.extOf( name ) === Ayni.extOf( path ) ) return name;
+
+            Ayni.toast( 'warn', TF( 'text.badExt', { ext: Ayni.extOf( name ) } ) );
+            return Ayni.baseName( path );
         }
 
     </script>

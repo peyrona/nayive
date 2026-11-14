@@ -565,6 +565,7 @@
         document.body.appendChild( layer );
 
         var stream = null, cams = [], at = 0;
+        var starts = 0;          // bumped by every start(): a switch clicked twice must not leave the first camera on
 
         function stop() { if( stream ) stream.getTracks().forEach( function ( t ) { t.stop(); } ); stream = null; }
         function cancel() { layer.remove(); document.removeEventListener( "keydown", key, true ); stop(); }
@@ -579,20 +580,30 @@
 
         async function start( deviceId )
         {
+            var my = ++starts, got;
             stop();
             shutter.ariaDisabled = true;
             try
             {
-                stream = await navigator.mediaDevices.getUserMedia( { audio: false,
+                got = await navigator.mediaDevices.getUserMedia( { audio: false,
                     video: deviceId ? { deviceId: { exact: deviceId } } : { width: { ideal: 1920 }, height: { ideal: 1080 } } } );
             }
-            catch( _ ) { if( layer.isConnected ) { finish( null ); Ayni.toast( "err", Ayni.t( "ayni.camera.failed" ) ); } return; }
-            if( ! layer.isConnected ) { stop(); return; }                 // closed while it asked
+            catch( _ )
+            {
+                if( my !== starts ) return;                                // a newer start took over: it decides
+                if( layer.isConnected ) { finish( null ); Ayni.toast( "err", Ayni.t( "ayni.camera.failed" ) ); }
+                return;
+            }
+            // Closed while it asked, or a newer start asked meanwhile: this
+            // stream is nobody's - stopped here, or the camera light stays on.
+            if( my !== starts || ! layer.isConnected ) { got.getTracks().forEach( function ( t ) { t.stop(); } ); return; }
+            stream = got;
             video.srcObject = stream;
             shutter.ariaDisabled = false;
             // With the permission given, every camera is listed: more than one = a switch.
             try { cams = ( await navigator.mediaDevices.enumerateDevices() ).filter( function ( d ) { return d.kind === "videoinput"; } ); }
             catch( _ ) { cams = []; }
+            if( my !== starts || ! stream ) return;
             flip.hidden = cams.length < 2;
             var cur = stream.getVideoTracks()[ 0 ].getSettings().deviceId;
             at = Math.max( 0, cams.findIndex( function ( d ) { return d.deviceId === cur; } ) );

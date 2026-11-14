@@ -246,6 +246,15 @@
         if( ! keep ) C.keepDraft();
     };
 
+    // The reply quote alone, taken by a photo, a file, a place, a contact or
+    // a poll (media.js): the box's words and an edit stay (J3). Its id, or 0.
+    C.takeReply = function ()
+    {
+        var id = S.replyTo ? S.replyTo.id : 0;
+        if( S.replyTo ) { S.replyTo = null; if( quoteSlot ) quoteSlot.textContent = ""; }
+        return id;
+    };
+
     // ---------------------------------------------------------------------
     // WHAT IS BEING WRITTEN, per chat (data-safety J3, mail-chat #26)
     //
@@ -335,7 +344,7 @@
         S.replyTo = null;
         S.editing = m;
         quoteBar( T( "chat.editing" ), C.preview( m )[ 1 ], 0 );
-        ta.value = m.text || "";
+        ta.value = C.cutOrig( m.text );        // a translation: its original stays as it is (send)
         grow();
         C.keepDraft();
         C.focusComposer();
@@ -354,13 +363,14 @@
         {
             var m = S.editing, conv = S.open;
             if( ! text && m.kind === "text" ) return;
+            var full = text ? text + C.origPart( m.text ) : "";     // a translation keeps its original
+            if( Array.from( full ).length > 4000 ) { C.toast( "warn", "chat.tooLong" ); return; }
             C.resetComposer();
             fmtBar.classList.remove( "on" );   // sent: the format bar folds
             try
             {
-                var out = await C.api( "PATCH", "conv/" + conv + "/messages/" + m.id, { text: text } );
-                S.msgs.set( out.id, out );
-                C.redraw( out.id );
+                var out = await C.api( "PATCH", "conv/" + conv + "/messages/" + m.id, { text: full } );
+                if( S.open === conv ) { S.msgs.set( out.id, out ); C.redraw( out.id ); }   // ids are per chat
             }
             catch( e )
             {
@@ -657,9 +667,10 @@
     // sends it then - this page may be closed by that time.
     function schedule()
     {
-        var text = ta.value.trim();
+        var raw = ta.value.trim(), text = smileyTail( raw );     // as a normal Send (send)
         var conv = S.open;
         if( ! text || ! conv ) return;
+        if( Array.from( text ).length > 4000 ) { C.toast( "warn", "chat.tooLong" ); return; }
         var reply = S.replyTo ? S.replyTo.id : 0;
         var cid = C.rid();                         // one scheduled text, however many taps
         var start = new Date( Date.now() + 60 * 60 * 1000 );
@@ -680,8 +691,8 @@
             {
                 var l = await C.api( "POST", "conv/" + conv + "/later", { text: text, at: at, replyTo: reply, cid: cid } );
                 sh.close();
-                if( S.open === conv && ta.value.trim() === text ) { C.resetComposer(); fmtBar.classList.remove( "on" ); }
-                else dropDraftIf( conv, text );
+                if( S.open === conv && ta.value.trim() === raw ) { C.resetComposer(); fmtBar.classList.remove( "on" ); }
+                else dropDraftIf( conv, raw );
                 Ayni.toast( "ok", C.TF( "chat.scheduledFor", { when: whenLabel( l.at ) } ) );
                 var c = C.convOf( conv );
                 if( c && ! ( c.later || [] ).some( function ( x ) { return x.id === l.id; } ) )
@@ -1283,6 +1294,7 @@
     C.openCtx = function ( m, at )
     {
         if( document.querySelector( ".ctx" ) ) return;
+        var conv0 = S.open;        // another chat opened under it (a notification): its buttons only close it
         var mine = m.from === C.me();
         var unsent = m.id < 0;     // still on this device (THE OUTBOX, a failed upload): no reactions, its own three
         var layer = h( "div", { class: "ctx " + ( at ? "at" : mine ? "out" : "in" ) } );
@@ -1306,13 +1318,13 @@
         QUICK.forEach( function ( e )
         {
             reacts.appendChild( h( "button", { class: e === mineReact ? "on" : "", attrs: { type: "button" }, text: e,
-                                               on: { click: function () { done(); C.react( m, e === mineReact ? "" : e ); } } } ) );
+                                               on: { click: function () { done(); if( S.open === conv0 ) C.react( m, e === mineReact ? "" : e ); } } } ) );
         } );
         var moreB = h( "button", { class: "more", attrs: { type: "button", "data-tip": T( "chat.moreEmoji" ) },
                                    on: { click: function ( ev )
                                    {
                                        ev.stopPropagation();
-                                       reacts.replaceWith( emojiPanel( function ( e ) { done(); C.react( m, e ); } ) );
+                                       reacts.replaceWith( emojiPanel( function ( e ) { done(); if( S.open === conv0 ) C.react( m, e ); } ) );
                                        place();
                                    } } } );
         moreB.appendChild( C.ic( "plus" ) );
@@ -1331,6 +1343,7 @@
             menu.appendChild( h( "button", { class: "menu-item" + ( danger ? " danger" : "" ), attrs: { type: "button" },
                                              on: { click: function ()
                                              {
+                                                 if( S.open !== conv0 ) { done(); return; }
                                                  if( opensLayer ) { C.popNav( "ctx", fn ); close(); } else { done(); fn(); }
                                              } } }, C.ic( icon ), T( key ) ) );
         }
@@ -1338,16 +1351,16 @@
         {
             if( m.failed ) item( "refresh", "chat.retry", function () { C.retry( m ); } );
             if( m.text || ( m.card && m.card.name ) )
-                item( "copy", "chat.copy", function () { C.copyText( m.text || m.card.name ); } );
+                item( "copy", "chat.copy", function () { C.copyText( C.cutOrig( m.text ) || m.card.name ); } );
             menu.appendChild( h( "div", { class: "menu-sep" } ) );
             item( "trash", "chat.delete", function () { C.dropUnsent( m ); }, true );
         }
         else
         {
             item( "reply", "chat.reply", function () { C.replyTo( m ); } );
-            item( "forward", "chat.forward", function () { C.openForward( m ); } );
+            if( m.kind !== "call" ) item( "forward", "chat.forward", function () { C.openForward( m ); } );   // the server forwards no call
             if( m.text || ( m.card && m.card.name ) )
-                item( "copy", "chat.copy", function () { C.copyText( m.text || m.card.name ); } );
+                item( "copy", "chat.copy", function () { C.copyText( C.cutOrig( m.text ) || m.card.name ); } );
             if( mine && ( m.kind === "text" || m.kind === "file" ) )
                 item( "edit", "chat.edit", function () { C.editMsg( m ); } );
             // A photo has two: its caption, and (the owner) the picture itself.
@@ -1376,11 +1389,11 @@
 
     C.react = async function ( m, emoji )
     {
+        var conv = S.open;
         try
         {
-            var out = await C.api( "POST", "conv/" + S.open + "/messages/" + m.id + "/react", { emoji: emoji } );
-            S.msgs.set( out.id, out );
-            C.redraw( out.id );
+            var out = await C.api( "POST", "conv/" + conv + "/messages/" + m.id + "/react", { emoji: emoji } );
+            if( S.open === conv ) { S.msgs.set( out.id, out ); C.redraw( out.id ); }   // ids are per chat
         }
         catch( e ) { C.fail( e ); }
     };
@@ -1443,15 +1456,27 @@
         var d = Ayni.dialog( { cls: cls, title: title } );
         d.body.appendChild( body );
         d.place( actions ? [ close, actions ] : [ close ] );
+        var me = { conv: S.open, close: done };
         function done()
         {
+            sheets.delete( me );
             if( d.close() && onClose ) onClose();
         }
         close.addEventListener( "click", done );
         d.dialog.addEventListener( "close", done );
+        sheets.add( me );
         d.show();
         NayiveUI.applySheetButtons( d.dialog );
         return { el: d.dialog, close: done };
+    };
+
+    // Another chat opening under a sheet (a notification tapped while it is
+    // on screen): the sheet goes. Its buttons read the open chat when pressed
+    // - a Send or a Forward would reach the wrong chat (conv.js openConv).
+    var sheets = new Set();
+    C.closeSheets = function ( conv )
+    {
+        Array.from( sheets ).forEach( function ( s ) { if( s.conv && s.conv !== conv ) s.close(); } );   // opened with no chat: not one's
     };
 
     C.showReactions = function ( m )
@@ -1497,14 +1522,14 @@
         var sh;
         // Only to chats of the same home: the server copies a message within
         // one home (a chat in another user's home is another world).
-        var world = C.W( S.open );
+        var from = S.open, world = C.W( from );
         C.sortedConvs().filter( function ( c ) { return C.W( c ) === world; } ).forEach( function ( c )
         {
             rows.appendChild( h( "button", { class: "row", attrs: { type: "button" },
                 on: { click: async function ()
                 {
                     sh.close();
-                    var out = await C.sendMsg( { fwdConv: S.open, fwdId: m.id }, c.id );
+                    var out = await C.sendMsg( { fwdConv: from, fwdId: m.id }, c.id );
                     if( out ) Ayni.toast( "ok", C.TF( "chat.forwardedTo", { name: c.name } ) );
                 } } },
                 C.avatar( c.id, c.name ), h( "div", { class: "body" }, h( "span", { class: "name", text: c.name } ) ) ) );

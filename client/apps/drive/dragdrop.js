@@ -21,6 +21,7 @@ function canDropInto( destPath, paths )
     if( paths.some( NayiveUI.isShared ) ) return false;
 
     return paths.indexOf( destPath ) === -1          // onto itself
+        && ! paths.every( function( p ) { return Ayni.dirOf( p ) === destPath; } )    // already there (N6)
         && ! intoOwnTree( paths, destPath );         // into its own subtree
 }
 

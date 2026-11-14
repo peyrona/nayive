@@ -191,7 +191,7 @@
                 S.items = [];
                 E.$( "list" ).textContent = "";
             }
-            items.forEach( function ( m ) { if( ! m._id ) m._id = "m" + ( ++rowSeq ); } );
+            items.forEach( function ( m ) { if( ! m._id ) m._id = E.rowId(); } );
             S.items = S.items.concat( items );
             E.showProblem( null );
             E.plug( "synced" );
@@ -254,6 +254,7 @@
     };
 
     var rowSeq = 0;
+    E.rowId = function () { return "m" + ( ++rowSeq ); };
 
     function appendRows( items )
     {

@@ -38,6 +38,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -101,6 +102,29 @@ type Trash struct {
 	homesDir string
 	users    *Users
 	log      Logger
+
+	// shares, when set, follow a bin entry out: restored or purged (T10).
+	// The grants went in with it at the delete (Shares.Park, api_files.go).
+	shares *Shares
+}
+
+// unpark hands a bin entry's way out to its parked grants: home-relative rel
+// it was restored to, or "" = gone for good. Called under t.mu; the shares
+// lock never calls back into the bin.
+func (t *Trash) unpark(role, user, id, rel string) {
+	if t.shares == nil {
+		return
+	}
+	if rel != "" && role == "admin" {
+		// The admin's paths carry homes/<owner>/ in front; grants are kept
+		// home-relative. Anywhere else no grant can have gone in with it.
+		parts := splitPath(rel)
+		if len(parts) < 3 || parts[0] != "homes" {
+			return
+		}
+		rel = strings.Join(parts[2:], "/")
+	}
+	t.shares.Unpark(id, rel)
 }
 
 func NewTrash(baseDir, homesDir string, users *Users, log Logger) *Trash {
@@ -470,9 +494,12 @@ func (t *Trash) Restore(role, user string, ids []string) ([]string, error) {
 			continue
 		}
 		index.Remove(id)
+		back := entry.Orig
 		if newName != "" {
 			renamed = append(renamed, newName)
+			back = path.Join(path.Dir(entry.Orig), newName)
 		}
+		t.unpark(role, user, id, back)
 		t.log.Info("trash: restored", "id", id, "to", dest.Abs, "as", newName)
 	}
 	saveIndex(tdir, index)
@@ -512,6 +539,7 @@ func (t *Trash) Purge(role, user string, ids []string) (int, error) {
 			n++
 		}
 		index.Remove(id)
+		t.unpark(role, user, id, "")
 	}
 	saveIndex(tdir, index)
 	t.mu.Unlock()
@@ -595,6 +623,7 @@ func (t *Trash) SweepExpired(defaultDays int) {
 			if entryRE.MatchString(id) && entry.Deleted < cutoff {
 				os.RemoveAll(filepath.Join(c.dir, id))
 				index.Remove(id)
+				t.unpark("", "", id, "")
 				gone++
 			}
 		}
@@ -628,6 +657,7 @@ func (t *Trash) SweepExpired(defaultDays int) {
 				// is better than a wrong deletion.
 				if epoch, err := strconv.ParseInt(stamp, 10, 64); err == nil && epoch < cutoff {
 					os.RemoveAll(filepath.Join(c.dir, id))
+					t.unpark("", "", id, "")
 					gone++
 				}
 			}

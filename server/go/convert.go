@@ -102,6 +102,9 @@ type ConvertJob struct {
 	User  string `json:"user"`
 	Path  string `json:"path"` // the virtual path: "files/Pelis/x.avi"
 	Added int64  `json:"added"`
+	// Again: queued while a job of the same path ran (G14). That one may have
+	// taken the original to the bin by now: finding no file then is quiet.
+	Again bool `json:"again,omitempty"`
 }
 
 // ConvertStatus is one job as GET /api/convert shows it.
@@ -187,13 +190,21 @@ func (c *Converter) EnqueueAt(user, rel string, at accountEpoch) bool {
 		c.log.Warn("convert: not queued, its account changed hands meanwhile", "user", user, "path", rel)
 		return false
 	}
-	for _, j := range c.queue {
-		if j.User == user && j.Path == rel {
+	again := false
+	for i, j := range c.queue {
+		if j.User != user || j.Path != rel {
+			continue
+		}
+		// Only a job not started yet takes this one in (G14): the RUNNING one
+		// may be converting the file this name held before - a re-upload while
+		// it runs needs a run of its own.
+		if !(i == 0 && c.running) {
 			c.mu.Unlock()
 			return true
 		}
+		again = true
 	}
-	c.queue = append(c.queue, ConvertJob{User: user, Path: rel, Added: time.Now().Unix()})
+	c.queue = append(c.queue, ConvertJob{User: user, Path: rel, Added: time.Now().Unix(), Again: again})
 	c.saveLocked()
 	c.mu.Unlock()
 
@@ -360,6 +371,11 @@ func (c *Converter) runOne(ctx context.Context, job ConvertJob) {
 		c.log.Info("convert: its owner changed while it ran; nobody told", "user", job.User, "path", job.Path, "err", err)
 		return
 	}
+	if err != nil && job.Again && errors.Is(err, errConvertGone) {
+		// The run before it converted that file and binned it: nothing left.
+		c.log.Info("convert: nothing left to convert again", "user", job.User, "path", job.Path)
+		return
+	}
 	if err != nil {
 		c.log.Warn("convert: failed", "user", job.User, "path", job.Path, "err", err)
 		c.notify(job, "")
@@ -368,6 +384,9 @@ func (c *Converter) runOne(ctx context.Context, job ConvertJob) {
 	c.log.Info("convert: done", "user", job.User, "path", job.Path, "mp4", out)
 	c.notify(job, out)
 }
+
+// errConvertGone: the job's file is not there any more.
+var errConvertGone = errors.New("the file is gone")
 
 // convert does the work and returns the new file's virtual path.
 func (c *Converter) convert(ctx context.Context, job ConvertJob) (string, error) {
@@ -382,7 +401,7 @@ func (c *Converter) convert(ctx context.Context, job ConvertJob) (string, error)
 	}
 	info, err := src.Stat()
 	if err != nil || !info.Mode().IsRegular() {
-		return "", errors.New("the file is gone")
+		return "", errConvertGone
 	}
 
 	// The original AND the mp4 exist until the end; count on the mp4 being

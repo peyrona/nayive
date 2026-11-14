@@ -81,11 +81,13 @@ import (
 	"html"
 	"io"
 	"io/fs"
+	"maps"
 	"math"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -252,11 +254,16 @@ func (s *Server) chatRoute(w http.ResponseWriter, r *http.Request, who func() (c
 				sendError(w, r, http.StatusBadRequest, "falta el nombre")
 				return
 			}
+			was := a.o.data.Me
 			a.o.data.Me.Name = name
 			if body.Motto != nil {
 				a.o.data.Me.Motto = cleanChatMotto(*body.Motto)
 			}
-			s.chat.saveData(a.o)
+			if err := s.chat.saveData(a.o); err != nil {
+				a.o.data.Me = was // G9: as on disk
+				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+				return
+			}
 			a.o.changed(true)
 			sendJSON(w, r, http.StatusOK, map[string]string{"name": name, "motto": a.o.data.Me.Motto})
 		})
@@ -556,11 +563,11 @@ func (s *Server) chatWait(w http.ResponseWriter, r *http.Request, who func() (ch
 	if dev != "" {
 		cs := a.o.cs()
 		cs.touch(dev, time.Now())
-		cs.ack(dev, sigSeen)
+		cs.ack(dev, a.pid, sigSeen) // only this participant's own signals (G6)
 	}
 	// A signal this page has not read yet must not sit out a 25 s wait: a lost
 	// reply would otherwise stall a call's setup.
-	if a.o.version == v && (dev == "" || !a.o.cs().pending(dev, sigSeen)) {
+	if a.o.version == v && (dev == "" || !a.o.cs().pending(dev, a.pid, sigSeen)) {
 		o, pid := a.o, a.pid
 		// Presence first, THEN the channel: coming online wakes everybody
 		// else's wait, and must not wake this one.
@@ -607,7 +614,7 @@ func (s *Server) chatWait(w http.ResponseWriter, r *http.Request, who func() (ch
 		"now":    nowMs(),
 	}
 	if dev != "" {
-		res["sig"] = a.o.cs().sigsFor(dev, sigSeen)
+		res["sig"] = a.o.cs().sigsFor(dev, a.pid, sigSeen)
 	}
 	h.mu.Unlock()
 	sendJSON(w, r, http.StatusOK, res)
@@ -662,12 +669,27 @@ func (s *Server) chatPush(w http.ResponseWriter, r *http.Request, resolve func(f
 				sendError(w, r, http.StatusForbidden, "no permitido")
 				return
 			}
+			// The same device again, as it is: nothing to write, nobody to
+			// wake (G23). Anything else counts against the link's limit.
+			if n := len(a.c.Subs); n > 0 && sameChatSub(a.c.Subs[n-1], sub) {
+				sendJSON(w, r, http.StatusOK, map[string]bool{"subscribed": true})
+				return
+			}
+			if !a.o.allowAct(a.pid) {
+				sendError(w, r, http.StatusTooManyRequests, "demasiados cambios seguidos")
+				return
+			}
+			was := slices.Clone(a.c.Subs)
 			removeSub(a.c, sub.Endpoint)
 			a.c.Subs = append(a.c.Subs, sub)
 			if len(a.c.Subs) > chatMaxSubs {
 				a.c.Subs = a.c.Subs[len(a.c.Subs)-chatMaxSubs:]
 			}
-			s.chat.saveData(a.o)
+			if err := s.chat.saveData(a.o); err != nil {
+				a.c.Subs = was // G9
+				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+				return
+			}
 			a.o.changed(true)
 			sendJSON(w, r, http.StatusOK, map[string]bool{"subscribed": true})
 		})
@@ -679,8 +701,18 @@ func (s *Server) chatPush(w http.ResponseWriter, r *http.Request, resolve func(f
 				sendError(w, r, http.StatusForbidden, "no permitido")
 				return
 			}
+			was := slices.Clone(a.c.Subs)
 			if removeSub(a.c, endpoint) {
-				s.chat.saveData(a.o)
+				if !a.o.allowAct(a.pid) {
+					a.c.Subs = was
+					sendError(w, r, http.StatusTooManyRequests, "demasiados cambios seguidos")
+					return
+				}
+				if err := s.chat.saveData(a.o); err != nil {
+					a.c.Subs = was // G9
+					sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+					return
+				}
 				a.o.changed(true)
 			}
 			sendJSON(w, r, http.StatusOK, map[string]bool{"subscribed": false})
@@ -744,6 +776,7 @@ func (s *Server) chatContacts(w http.ResponseWriter, r *http.Request, rest []str
 				Created: time.Now().Unix()}
 			a.o.data.Contacts = append(a.o.data.Contacts, c)
 			if err := h.saveData(a.o); err != nil {
+				a.o.data.Contacts = a.o.data.Contacts[:len(a.o.data.Contacts)-1] // G9: no second one on a retry
 				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
 				return
 			}
@@ -762,6 +795,9 @@ func (s *Server) chatContacts(w http.ResponseWriter, r *http.Request, rest []str
 				sendError(w, r, http.StatusNotFound, "no existe")
 				return
 			}
+			was := *c
+			undoGroups := snapshotGroups(a.o)
+			photo := int64(0)
 			if r.Method == http.MethodPatch {
 				name := cleanChatName(body.Name)
 				if name == "" {
@@ -770,9 +806,22 @@ func (s *Server) chatContacts(w http.ResponseWriter, r *http.Request, rest []str
 				}
 				c.Name = name
 			} else {
+				photo, c.Photo = c.Photo, 0 // its picture goes only once the delete is written
 				h.dropContact(a.o, c)
 			}
-			h.saveData(a.o)
+			if err := h.saveData(a.o); err != nil {
+				// G9: as on disk - the person and their link are still there.
+				*c = was
+				undoGroups()
+				if r.Method == http.MethodDelete && was.Token != "" {
+					h.tokens[tokenKey(was.Token)] = chatTokenRef{owner: a.o.user, contact: c.ID}
+				}
+				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+				return
+			}
+			if photo > 0 {
+				os.Remove(filepath.Join(a.o.dir, "avatars", c.ID+".jpg"))
+			}
 			a.o.changed(true)
 			sendJSON(w, r, http.StatusOK, h.contactOut(a.o, c))
 		})
@@ -788,10 +837,19 @@ func (s *Server) chatContacts(w http.ResponseWriter, r *http.Request, rest []str
 				return
 			}
 			h.ensureIndex()
+			was := *c
 			delete(h.tokens, tokenKey(c.Token))
 			c.Token, c.Subs, c.Opened = newToken(), nil, 0
 			h.tokens[tokenKey(c.Token)] = chatTokenRef{owner: a.o.user, contact: c.ID}
-			h.saveData(a.o)
+			if err := h.saveData(a.o); err != nil {
+				// G9: a new link lost at restart would bring the OLD one
+				// back - so the old one stays, and the page is told.
+				delete(h.tokens, tokenKey(c.Token))
+				*c = was
+				h.tokens[tokenKey(c.Token)] = chatTokenRef{owner: a.o.user, contact: c.ID}
+				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+				return
+			}
 			a.o.changed(true)
 			sendJSON(w, r, http.StatusOK, h.contactOut(a.o, c))
 		})
@@ -867,6 +925,30 @@ func (s *Server) chatAddUser(w http.ResponseWriter, r *http.Request, user string
 	})
 }
 
+// snapshotGroups keeps every group's members and "left" lists as they are
+// now (dropContact edits them in place) and answers what puts them back -
+// for a change whose chat.json could not be written (G9).
+func snapshotGroups(o *chatOwner) (undo func()) {
+	type was struct {
+		g             *ChatGroup
+		members, left []string
+	}
+	kept := make([]was, 0, len(o.data.Groups))
+	for _, g := range o.data.Groups {
+		kept = append(kept, was{g, slices.Clone(g.Members), slices.Clone(g.Left)})
+	}
+	return func() {
+		for _, k := range kept {
+			k.g.Members, k.g.Left = k.members, k.left
+		}
+	}
+}
+
+// sameChatSub: the device a link already has, keys and language included.
+func sameChatSub(a, b PushSub) bool {
+	return a.Endpoint == b.Endpoint && a.Keys == b.Keys && a.Lang == b.Lang
+}
+
 func without(list []string, x string) []string {
 	out := list[:0]
 	for _, v := range list {
@@ -925,6 +1007,7 @@ func (s *Server) chatGroups(w http.ResponseWriter, r *http.Request, rest []strin
 				Created: time.Now().Unix()}
 			a.o.data.Groups = append(a.o.data.Groups, g)
 			if err := h.saveData(a.o); err != nil {
+				a.o.data.Groups = a.o.data.Groups[:len(a.o.data.Groups)-1] // G9: no second one on a retry
 				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
 				return
 			}
@@ -942,12 +1025,12 @@ func (s *Server) chatGroups(w http.ResponseWriter, r *http.Request, rest []strin
 				sendError(w, r, http.StatusNotFound, "no existe")
 				return
 			}
+			was := *g
+			was.Members, was.Left = slices.Clone(g.Members), slices.Clone(g.Left)
+			photo := int64(0)
 			if r.Method == http.MethodDelete {
 				g.Deleted = true
-				if g.Photo > 0 {
-					os.Remove(filepath.Join(a.o.dir, "avatars", g.ID+".jpg"))
-					g.Photo = 0
-				}
+				photo, g.Photo = g.Photo, 0 // its picture goes only once the delete is written
 			} else {
 				if body.Name != nil {
 					name := cleanChatName(*body.Name)
@@ -975,7 +1058,14 @@ func (s *Server) chatGroups(w http.ResponseWriter, r *http.Request, rest []strin
 					g.Members = next
 				}
 			}
-			h.saveData(a.o)
+			if err := h.saveData(a.o); err != nil {
+				*g = was // G9: as on disk
+				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+				return
+			}
+			if photo > 0 {
+				os.Remove(filepath.Join(a.o.dir, "avatars", g.ID+".jpg"))
+			}
 			a.o.changed(true)
 			sendJSON(w, r, http.StatusOK, groupOut{g.ID, g.Name, g.Members, g.Created})
 		})
@@ -1073,6 +1163,10 @@ func (s *Server) chatPhoto(w http.ResponseWriter, r *http.Request, kind, id stri
 			return
 		}
 		path := filepath.Join(a.o.dir, "avatars", file+".jpg")
+		wasPhoto, wasFace, hadFace := *photo, a.o.data.Faces[id], false
+		if kind == "users" {
+			_, hadFace = a.o.data.Faces[id]
+		}
 		if clean != "" {
 			if err := os.Rename(clean, path); err != nil {
 				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
@@ -1093,7 +1187,20 @@ func (s *Server) chatPhoto(w http.ResponseWriter, r *http.Request, kind, id stri
 				delete(a.o.data.Faces, id)
 			}
 		}
-		h.saveData(a.o)
+		if err := h.saveData(a.o); err != nil {
+			// G9: the numbers as on disk (the picture file itself is already
+			// the new one, or gone); the page is told it did not save.
+			*photo = wasPhoto
+			if kind == "users" {
+				if hadFace {
+					a.o.data.Faces[id] = wasFace
+				} else {
+					delete(a.o.data.Faces, id)
+				}
+			}
+			sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+			return
+		}
 		a.o.changed(true)
 		sendJSON(w, r, http.StatusOK, map[string]int64{"photo": *photo})
 	})
@@ -1227,7 +1334,13 @@ func (s *Server) chatConvRoute(w http.ResponseWriter, r *http.Request, conv stri
 			if !readJSONBody(w, r, &body) {
 				return
 			}
-			in(func(a chatActor, c *chatConv) { s.chatEdit(w, r, a, c, id, body.Text) })
+			in(func(a chatActor, c *chatConv) {
+				if !a.o.allowAct(a.pid) {
+					sendError(w, r, http.StatusTooManyRequests, "demasiados cambios seguidos")
+					return
+				}
+				s.chatEdit(w, r, a, c, id, body.Text)
+			})
 		case http.MethodDelete:
 			in(func(a chatActor, c *chatConv) { s.chatDelete(w, r, a, c, id) })
 		default:
@@ -1247,6 +1360,10 @@ func (s *Server) chatConvRoute(w http.ResponseWriter, r *http.Request, conv stri
 		}
 		id := msgID(rest[1])
 		in(func(a chatActor, c *chatConv) {
+			if !a.o.allowAct(a.pid) {
+				sendError(w, r, http.StatusTooManyRequests, "demasiados cambios seguidos")
+				return
+			}
 			if rest[2] == "react" {
 				s.chatReact(w, r, a, c, id, body.Emoji)
 			} else {
@@ -1353,6 +1470,15 @@ func (s *Server) chatConvRoute(w http.ResponseWriter, r *http.Request, conv stri
 			if m := c.last(); m != nil {
 				last = m.ID
 			}
+			// Already cleared to here: nothing to write, nobody to wake (G23).
+			if was, ok := c.st.Cleared[a.pid]; ok && was == last && c.st.Read[a.pid] >= last {
+				sendJSON(w, r, http.StatusOK, map[string]int64{"cleared": last})
+				return
+			}
+			if !a.o.allowAct(a.pid) {
+				sendError(w, r, http.StatusTooManyRequests, "demasiados cambios seguidos")
+				return
+			}
 			if c.st.Cleared == nil {
 				c.st.Cleared = map[string]int64{}
 			}
@@ -1396,7 +1522,13 @@ func (s *Server) chatConvRoute(w http.ResponseWriter, r *http.Request, conv stri
 		if !readJSONBody(w, r, &body) {
 			return
 		}
-		in(func(a chatActor, c *chatConv) { s.chatWatchSet(w, r, a, c, conv, body) })
+		in(func(a chatActor, c *chatConv) {
+			if !a.o.allowAct(a.pid) {
+				sendError(w, r, http.StatusTooManyRequests, "demasiados cambios seguidos")
+				return
+			}
+			s.chatWatchSet(w, r, a, c, conv, body)
+		})
 
 	case len(rest) == 1 && rest[0] == "prefs":
 		if !method(http.MethodPost) {
@@ -1410,6 +1542,10 @@ func (s *Server) chatConvRoute(w http.ResponseWriter, r *http.Request, conv stri
 			return
 		}
 		in(func(a chatActor, c *chatConv) {
+			if !a.o.allowAct(a.pid) {
+				sendError(w, r, http.StatusTooManyRequests, "demasiados cambios seguidos")
+				return
+			}
 			if body.Pin != nil {
 				if c.st.Pin == nil {
 					c.st.Pin = map[string]bool{}
@@ -1994,9 +2130,14 @@ func (s *Server) chatEdit(w http.ResponseWriter, r *http.Request, a chatActor, c
 		return
 	}
 	if t != m.Text {
+		was := *m
 		m.Text, m.Edited = t, nowMs()
 		a.o.bump(c, m)
-		s.chat.saveMonth(c, m)
+		if err := s.chat.saveMonth(c, m); err != nil {
+			*m = was // G9: as on disk
+			sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+			return
+		}
 	}
 	sendJSON(w, r, http.StatusOK, c.out(m))
 }
@@ -2008,11 +2149,23 @@ func (s *Server) chatDelete(w http.ResponseWriter, r *http.Request, a chatActor,
 		return
 	}
 	if !m.Deleted {
-		s.chat.dropMedia(a.o, c, m) // a kept photo stays in the owner's files
+		was := *m
 		m.Deleted = true
 		m.Text, m.File, m.Loc, m.Card, m.Poll, m.Reacts, m.ReplyTo, m.Edited = "", nil, nil, nil, nil, nil, 0, 0
 		a.o.bump(c, m)
-		s.chat.saveMonth(c, m)
+		if err := s.chat.saveMonth(c, m); err != nil {
+			// G9: not deleted on disk, so not here either - and its photo
+			// stays: a restart would show the message again.
+			*m = was
+			sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+			return
+		}
+		// Only now its photo or file (a kept photo stays in the owner's files).
+		_, kept := c.st.Kept[was.ID]
+		s.chat.dropMedia(a.o, c, &was)
+		if kept {
+			s.chat.saveState(c) // its link to the owner's file is gone too
+		}
 	}
 	sendJSON(w, r, http.StatusOK, c.out(m))
 }
@@ -2030,6 +2183,8 @@ func (s *Server) chatReact(w http.ResponseWriter, r *http.Request, a chatActor, 
 		sendError(w, r, http.StatusBadRequest, "reacción no válida")
 		return
 	}
+	was := *m
+	was.Reacts = maps.Clone(m.Reacts)
 	if emoji == "" {
 		delete(m.Reacts, a.pid)
 	} else {
@@ -2042,7 +2197,11 @@ func (s *Server) chatReact(w http.ResponseWriter, r *http.Request, a chatActor, 
 		m.Reacts = nil
 	}
 	a.o.bump(c, m)
-	s.chat.saveMonth(c, m)
+	if err := s.chat.saveMonth(c, m); err != nil {
+		*m = was // G9: as on disk
+		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+		return
+	}
 	sendJSON(w, r, http.StatusOK, c.out(m))
 }
 
@@ -2053,6 +2212,7 @@ func (s *Server) chatVote(w http.ResponseWriter, r *http.Request, a chatActor, c
 		return
 	}
 	p := m.Poll
+	wasVotes, wasRev := maps.Clone(p.Votes), m.Rev
 	if p.Votes == nil {
 		p.Votes = map[string][]int{}
 	}
@@ -2081,7 +2241,11 @@ func (s *Server) chatVote(w http.ResponseWriter, r *http.Request, a chatActor, c
 		p.Votes[a.pid] = mine
 	}
 	a.o.bump(c, m)
-	s.chat.saveMonth(c, m)
+	if err := s.chat.saveMonth(c, m); err != nil {
+		p.Votes, m.Rev = wasVotes, wasRev // G9: as on disk
+		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+		return
+	}
 	sendJSON(w, r, http.StatusOK, c.out(m))
 }
 

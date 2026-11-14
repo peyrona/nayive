@@ -1,6 +1,6 @@
-/* sim.js - Machines proof of concept: the rules and the physics, no drawing.
+/* machines-sim.js - Machines, one of the games of Games: the rules and the physics, no drawing.
 
-   The same file runs in the page and in the headless tests (test.js), so what
+   The same file runs in the page and in the headless tests (tools/machines-test), so what
    the tests prove is what the player gets. It needs one global: Nape.
 
    THE MODEL. A machine is a list of plain objects, all on a grid (cell units):

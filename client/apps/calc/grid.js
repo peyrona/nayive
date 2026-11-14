@@ -20,7 +20,7 @@ import
 from './calc.js';
 import
 {
-    updateToolbarActiveState, gridColors, paintFormat, setPainter, MAX_COLS
+    updateToolbarActiveState, gridColors, paintFormat, setPainter, MAX_COLS, keepLock
 }
 from './format.js';
 import
@@ -87,7 +87,9 @@ function newSheet( name )
         links      : {},                 // { "A1": { target, tooltip } }
         unread     : false,              // the codec could not read it: it opened EMPTY (calc.js, loadSheet)
         csvRaw     : null,               // { "A1": { raw, value } }: a .csv's fields as the file has them (codec.js, writeCsv)
-        raw        : null                // xlsx fragments Calc cannot model, kept verbatim
+        raw        : null,               // xlsx fragments Calc cannot model, kept verbatim
+        protect    : null,               // the file's own <sheetProtection> tag, kept for the save (codec.js)
+        protectKeep: false               // ... protected with no cell locked: kept protected so (codec.js)
     };
 }
 
@@ -158,10 +160,107 @@ function styleOf( sh, r, c )
 }
 
 //------------------------------------------------------------------------//
+// LOCKED CELLS
+//
+// A cell is locked when its look says { locked: true } - the lock button on
+// the toolbar (format.js), on cells, whole rows or whole columns. Nothing
+// typed, pasted, filled, cut, deleted or sorted reaches it; its look may
+// still change. An .xlsx keeps it as a protected sheet (codec.js).
+
+function isLocked( sh, r, c )
+{
+    const st = styleOf( sh, r, c );
+    return !! ( st && st.locked );
+}
+
+// Any locked cell in rows r1..r2, columns c1..c2? Cell by cell, as
+// isLocked reads them: a look of its own decides, else its row's, else its
+// column's - a row unlocked on purpose across a locked column is free.
+function lockIn( sh, r1, r2, c1, c2 )
+{
+    const lo = Math.max( 0, c1 ), hi = Math.min( c2, MAX_COLS - 1 );
+    if( hi < lo ) return false;
+
+    const own    = new Set();     // "r,c" of the cells in range with a look of their own
+    const perRow = new Map();     // row -> how many of them
+    for( const a in sh.cellStyles )
+    {
+        const st = sh.cellStyles[ a ];
+        if( ! st ) continue;
+        const rc = decodeCell( a );
+        if( rc.r < r1 || rc.r > r2 || rc.c < lo || rc.c > hi ) continue;
+        if( st.locked ) return true;
+        own.add( rc.r + ',' + rc.c );
+        perRow.set( rc.r, ( perRow.get( rc.r ) || 0 ) + 1 );
+    }
+
+    // A locked row: locked wherever a cell in it has no look of its own.
+    const rs    = sh.rowStyles || [];
+    const width = hi - lo + 1;
+    if( rs.some( function( st, r ) { return st && st.locked && r >= r1 && r <= r2 && ( perRow.get( r ) || 0 ) < width; } ) ) return true;
+
+    // A locked column: locked in every row with no look of its own there.
+    const cs   = sh.colStyles || [];
+    const cols = [];
+    for( let c = lo; c <= hi; c++ ) if( cs[ c ] && cs[ c ].locked ) cols.push( c );
+    if( ! cols.length ) return false;
+    if( ! isFinite( r2 ) ) return true;          // rows past every styled one
+
+    for( let r = Math.max( 0, r1 ); r <= r2; r++ )
+    {
+        if( rs[ r ] ) continue;
+        for( const c of cols ) if( ! own.has( r + ',' + c ) ) return true;
+    }
+    return false;
+}
+
+function sheetHasLock( sh )
+{
+    return lockIn( sh, 0, Infinity, 0, Infinity );
+}
+
+let lockToldAt = 0;
+
+function tellLocked()
+{
+    if( Date.now() - lockToldAt < 2000 ) return;      // one key held down, one paste over many cells: one word
+    lockToldAt = Date.now();
+    Ayni.toast( 'warn', T( 'calc.cellLocked' ) );
+}
+
+// beforeChange: what the user typed, pasted, filled, cut or deleted into a
+// locked cell does not land. Undo, redo and loading a sheet are not edits.
+const LOCK_SOURCES = [ 'edit', 'CopyPaste.paste', 'CopyPaste.cut', 'Autofill.fill', 'autofill.fill', 'MergeCells' ];
+
+function lockedChanges( changes, source )
+{
+    if( ! changes || LOCK_SOURCES.indexOf( source ) === -1 ) return;
+
+    let hit = false;
+    changes.forEach( function( ch, i )
+    {
+        if( ch && typeof ch[ 1 ] === 'number' && isLocked( activeSheet, ch[ 0 ], ch[ 1 ] ) ) { changes[ i ] = null; hit = true; }
+    });
+    if( hit ) tellLocked();
+}
+
+//------------------------------------------------------------------------//
 // GRID
 
 let lastSelection = null;   // {r1,c1,r2,c2,lines} — captured on selection, since toolbar buttons steal focus
                             // lines: 'rows' / 'cols' / 'all' when picked from the headers or the corner
+
+let quietSelect = false;    // true while the app itself moves the selection (selectQuietly)
+
+// A selection the app makes - after Enter in the formula bar, fx, a jump
+// to a reference - is not the user picking cells: the format painter
+// waits for the cells the user picks.
+function selectQuietly( r1, c1, r2, c2 )
+{
+    quietSelect = true;
+    try     { table.selectCell( r1, c1, r2 === undefined ? r1 : r2, c2 === undefined ? c1 : c2 ); }
+    finally { quietSelect = false; }
+}
 
 // Handsontable's theme class follows the shared colour scheme. The --ht-* variables in
 // the stylesheet are wired to the app tokens for both classes; swapping the class here
@@ -463,7 +562,15 @@ async function deleteActiveSheet()
     const used  = doc.sheets.some( function( o, k )
     {
         return k !== i && ( o.data || [] ).some( function( row ) { return ( row || [] ).some( function( v ) { return typeof v === 'string' && v.charAt( 0 ) === '=' && names( v ); } ); } );
-    } ) || ( doc.names || [] ).some( function( n ) { return n && n.Sheet !== i && names( n.Ref ); } );
+    } ) || ( doc.names || [] ).some( function( n ) { return n && n.Sheet !== i && names( n.Ref ); } )
+       || doc.sheets.some( function( o, k )      // a link inside the workbook ("#Hoja2!A1")
+          {
+              return k !== i && Object.keys( o.links || {} ).some( function( a )
+              {
+                  const t = o.links[ a ] && o.links[ a ].target;
+                  return typeof t === 'string' && t.charAt( 0 ) === '#' && names( t.slice( 1 ) );
+              } );
+          } );
     if( used ) return Ayni.toast( 'warn', T( 'calc.sheetInUse' ) );
 
     if( ! await Ayni.confirm( { title: T( 'calc.deleteSheet' ), body: Ayni.tf( 'calc.deleteSheetBody', { name: sh.name } ),
@@ -519,6 +626,17 @@ function renameSheet( i, name, quiet )
         } );
     } );
     ( doc.names || [] ).forEach( function( n ) { if( n && typeof n.Ref === 'string' ) n.Ref = renameInFormula( n.Ref, old, name ); } );
+
+    // A link inside the workbook ("#Hoja2!A1") names the sheet too.
+    doc.sheets.forEach( function( o )
+    {
+        Object.keys( o.links || {} ).forEach( function( a )
+        {
+            const l = o.links[ a ];
+            if( l && typeof l.target === 'string' && l.target.charAt( 0 ) === '#' )
+                o.links[ a ] = Object.assign( {}, l, { target: '#' + renameInFormula( l.target.slice( 1 ), old, name ) } );
+        } );
+    } );
     sh.name = name;
 
     const sel = lastSelection;
@@ -699,8 +817,10 @@ function sortByColumn( descending )
     const col  = lastSelection.c1;
 
     // A selection of several rows sorts exactly those. A single cell sorts
-    // the whole column below row 1, keeping row 0 as the header.
-    const multi = lastSelection.r2 > lastSelection.r1;
+    // the whole column below row 1, keeping row 0 as the header - and so
+    // does a whole column picked from its header (or the corner), which
+    // would otherwise sort the header in with the data.
+    const multi = lastSelection.r2 > lastSelection.r1 && lastSelection.lines !== 'cols' && lastSelection.lines !== 'all';
     const first = multi ? lastSelection.r1 : 1;
     const last  = multi ? lastSelection.r2 : lastUsedRow( data );
 
@@ -711,6 +831,9 @@ function sortByColumn( descending )
         return m.row <= last && ( m.row + m.rowspan - 1 ) >= first;
     });
     if( touchesMerge ) { Ayni.toast( 'warn', T( 'calc.sortMerged' ) ); return; }
+
+    // A sort rewrites the whole rows.
+    if( lockIn( activeSheet, first, last, 0, MAX_COLS - 1 ) ) { tellLocked(); return; }
 
     for( let r = first; r <= last; r++ )
     {
@@ -1633,7 +1756,10 @@ function initGrid( d )
         afterPaste        : applyClipStyles,
         // A number or date typed as text is stored as one (see TYPED
         // NUMBERS AND DATES above).
-        beforeChange      : function( changes, source ) { mergedValue( changes, source ); typedValues( changes, source ); },
+        // Locked cells after the merge's own value (it may add one) and
+        // before typed dates put a format on a cell (see LOCKED CELLS).
+        beforeChange      : function( changes, source ) { mergedValue( changes, source ); lockedChanges( changes, source ); typedValues( changes, source ); },
+        beforeBeginEditing: function( row, col ) { if( row >= 0 && col >= 0 && isLocked( activeSheet, row, col ) ) { tellLocked(); return false; } },
         // The formula bar follows the cell under the cursor even when the
         // cursor does not move: undo, redo, paste, fill and fx all change
         // it in place.
@@ -1662,6 +1788,10 @@ function initGrid( d )
         // alter() calls and the context menu alike — carries no source at all.
         // What is keyed by row or column number moves with the cells (see
         // INSERTED AND REMOVED ROWS AND COLUMNS) - padding is not an insert.
+        // Deleting a row or column with a locked cell in it is refused, as
+        // in Excel; inserting is not.
+        beforeRemoveRow   : function( i, n, rows, source ) { if( lockedLines( 'row', rows, source ) ) return false; },
+        beforeRemoveCol   : function( i, n, cols, source ) { if( lockedLines( 'col', cols, source ) ) return false; },
         afterCreateRow    : function( i, n, source ) { if( source !== 'auto' ) { moveRowsOrCols( 'row', i,  n, source ); scheduleAutosave(); } },
         afterRemoveRow    : function( i, n, rows, source ) { moveRowsOrCols( 'row', i, -n, source ); scheduleAutosave(); },
         afterCreateCol    : function( i, n, source ) { if( source !== 'auto' ) { moveRowsOrCols( 'col', i,  n, source ); scheduleAutosave(); } },
@@ -1697,7 +1827,10 @@ function initGrid( d )
                               lines: ! hs ? null : hs.isSelectedByCorner()       ? 'all'
                                                  : hs.isSelectedByRowHeader()    ? 'rows'
                                                  : hs.isSelectedByColumnHeader() ? 'cols' : null };
-            paintFormat();           // the format painter lands here, when it is on (format.js)
+            // The format painter lands here, when it is on (format.js) - only
+            // on cells the user picks, not on a sheet switched to or the
+            // cell a commit moves on to (selectQuietly).
+            if( ! gridBooting && ! quietSelect ) paintFormat();
             updateToolbarActiveState();
             refreshNameBox();
             refreshFormulaBar();
@@ -1713,6 +1846,19 @@ function initGrid( d )
     if( activeSheet.hiddenCols.length ) table.getPlugin( 'hiddenColumns' ).hideColumns( activeSheet.hiddenCols.slice() );
     if( activeSheet.hiddenRows.length ) table.getPlugin( 'hiddenRows'    ).hideRows(    activeSheet.hiddenRows.slice() );
     if( activeSheet.hiddenCols.length || activeSheet.hiddenRows.length ) table.render();
+
+    // Every merge made by hand - the toolbar, the context menu, Ctrl+M -
+    // comes through the plugin's mergeSelection. A merge empties every cell
+    // but the first, so one over a locked cell is refused (LOCKED CELLS).
+    const mc    = table.getPlugin( 'mergeCells' );
+    const merge = mc.mergeSelection.bind( mc );
+    mc.mergeSelection = function( range )
+    {
+        const r = range || table.getSelectedRangeActive();
+        const a = r && r.getTopStartCorner(), b = r && r.getBottomEndCorner();
+        if( a && lockIn( activeSheet, a.row, b.row, a.col, b.col ) ) { tellLocked(); return; }
+        return merge.apply( null, arguments );
+    };
 
     // Selects A1 by default, like every other spreadsheet app — without this,
     // lastSelection stays null until the user clicks a cell, and every toolbar
@@ -1731,6 +1877,17 @@ function initGrid( d )
 // Handsontable's MergeCells plugin exposes no "get all current merges" call, so the
 // merge list is tracked independently here via the after(Un)mergeCells hooks — this
 // also fixes a jspreadsheet-era gap where a mid-session merge was silently lost on save.
+// For beforeRemoveRow / beforeRemoveCol: `list` holds the physical indexes.
+function lockedLines( kind, list, source )
+{
+    if( ! list || ! list.length || /^UndoRedo/.test( source || '' ) ) return false;
+
+    const lo = Math.min.apply( null, list ), hi = Math.max.apply( null, list );
+    const hit = kind === 'row' ? lockIn( activeSheet, lo, hi, 0, MAX_COLS - 1 ) : lockIn( activeSheet, 0, Infinity, lo, hi );
+    if( hit ) tellLocked();
+    return hit;
+}
+
 function trackMerge( m )
 {
     activeSheet.merges = activeSheet.merges.filter( function( e ) { return ! ( e.row === m.row && e.col === m.col ); } );
@@ -1935,9 +2092,16 @@ function cutClipStyles( data, coords )
     const c = clipBlock( coords );
     if( ! c ) return;
 
+    // A locked cell kept its value, so it keeps its look; the others keep
+    // their lock (format.js, keepLock).
     for( let r = c.startRow; r <= c.endRow; r++ )
         for( let k = c.startCol; k <= c.endCol; k++ )
-            delete activeSheet.cellStyles[ encodeCell( { r: r, c: k } ) ];
+        {
+            if( isLocked( activeSheet, r, k ) ) continue;
+            const addr = encodeCell( { r: r, c: k } );
+            delete activeSheet.cellStyles[ addr ];
+            keepLock( activeSheet, addr, false );
+        }
 
     table.render();
     updateToolbarActiveState();
@@ -1964,12 +2128,18 @@ function applyClipStyles( data, coords )
             const s    = st[ ( r - c.startRow ) % st.length ][ ( k - c.startCol ) % st[ 0 ].length ];
             const addr = encodeCell( { r: r, c: k } );
 
+            // A locked cell took nothing from the paste: not its look either.
+            // The rest keep their own lock (format.js, keepLock).
+            if( isLocked( activeSheet, r, k ) ) continue;
+
             // A fresh object per cell: the styles map is edited in place by the
             // toolbar, and two cells must never end up sharing one entry.
             // A plain cell pasted into a styled row or column stays plain.
             if( s )                                 activeSheet.cellStyles[ addr ] = JSON.parse( JSON.stringify( s ) );
             else if( lineStyle( activeSheet, r, k ) ) activeSheet.cellStyles[ addr ] = {};
             else                                    delete activeSheet.cellStyles[ addr ];
+            if( activeSheet.cellStyles[ addr ] ) delete activeSheet.cellStyles[ addr ].locked;
+            keepLock( activeSheet, addr, false );
         }
 
     table.render();
@@ -2745,7 +2915,7 @@ function feFinish( ed, cancel )
 
     setTimeout( function()
     {
-        if( ! cancel && ! ed.isOpened() ) table.selectCell( Math.min( r + 1, table.countRows() - 1 ), c );
+        if( ! cancel && ! ed.isOpened() ) selectQuietly( Math.min( r + 1, table.countRows() - 1 ), c );
         refreshFormulaBar();
         table.listen();
     }, 0 );
@@ -2888,7 +3058,15 @@ function printSheet( pdfHint )
             const style = styleOf( activeSheet, r, c );
             const isNum = typeof v === 'number' && isFinite( v );
 
-            if( m ) { td.rowSpan = m.rowspan; td.colSpan = m.colspan; }
+            // Hidden rows and columns are left out, so they do not count in the span.
+            if( m )
+            {
+                let rs = 0, cs = 0;
+                for( let k = m.row; k < m.row + m.rowspan; k++ ) if( showR( k ) ) rs++;
+                for( let k = m.col; k < m.col + m.colspan && k <= lastC; k++ ) if( showC( k ) ) cs++;
+                td.rowSpan = Math.max( 1, rs );
+                td.colSpan = Math.max( 1, cs );
+            }
             td.textContent = isNum ? showNumber( v, style && style.numFmt ) : ( v == null ? '' : String( v ) );
 
             if( ! style ) { if( isNum ) td.style.textAlign = 'right'; continue; }
@@ -2933,5 +3111,6 @@ export
 {
     table, newSheet, newDoc, doc, activeSheet, defaultSheetName, gridBooting, lastSelection, htThemeName,
     CM_ICONS, addSheet, renameActiveSheet, deleteActiveSheet, switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles,
-    editText, localMarks, undoStep, lineStyle, styleOf, blankDoc, calcPrefs, setCalcPrefs, numberLocale, printSheet
+    editText, localMarks, undoStep, lineStyle, styleOf, blankDoc, calcPrefs, setCalcPrefs, numberLocale, printSheet,
+    isLocked, lockIn, sheetHasLock, tellLocked, selectQuietly
 };

@@ -25,6 +25,8 @@ const REG_DAYS   = 7;
 const WORKER_URL = new URL( 'lib/bergamot-translator_v0.4.9/translator-worker.js', import.meta.url );
 
 let registryP = null;                         // Promise<{ "es-en": [file...] }>
+let retryAt   = 0;                            // registryP came from a failed read: read again after this
+const REG_RETRY_MS = 60e3;
 let s3P       = null;                         // Promise<{ "es-en": [file...] }>
 let proxyDown = false;                        // /api/translate failed this session: S3 only
 const usingS3 = new Set();                    // pairs switched to S3
@@ -34,12 +36,16 @@ const usingS3 = new Set();                    // pairs switched to S3
 
 const mozCode = ( c ) => BERGAMOT.code[ c ] || c;
 
+// { files, stale }. A list older than REG_DAYS is fetched again; when that
+// fails (offline) the old one is used, whatever its age: the models it
+// names are still in Cache Storage.
 function loadMozilla()
 {
+    let kept = null;
     try
     {
-        const kept = JSON.parse( localStorage.getItem( REG_KEY ) || 'null' );
-        if( kept && kept.at > Date.now() - REG_DAYS * 864e5 && kept.files ) return Promise.resolve( kept.files );
+        kept = JSON.parse( localStorage.getItem( REG_KEY ) || 'null' );
+        if( kept && kept.at > Date.now() - REG_DAYS * 864e5 && kept.files ) return Promise.resolve( { files: kept.files, stale: false } );
     }
     catch( e ) {}
     return fetch( BERGAMOT.records, { credentials: 'omit' } )
@@ -57,7 +63,12 @@ function loadMozilla()
                                                            size: r.attachment.size, hash: r.attachment.hash } ) );
             }
             try { localStorage.setItem( REG_KEY, JSON.stringify( { at: Date.now(), files } ) ); } catch( e ) {}
-            return files;
+            return { files, stale: false };
+        } )
+        .catch( ( e ) =>
+        {
+            if( kept && kept.files ) return { files: kept.files, stale: true };
+            throw e;
         } );
 }
 
@@ -81,9 +92,17 @@ function loadS3()
     return s3P;
 }
 
+// A failed read (or an old list used instead) is tried again a minute
+// later, not only after a reload.
 function registry()
 {
-    if( ! registryP ) { registryP = loadMozilla().catch( () => ( {} ) ); }
+    if( ! registryP || ( retryAt && Date.now() > retryAt ) )
+    {
+        retryAt = 0;
+        registryP = loadMozilla()
+            .then( ( r ) => { if( r.stale ) retryAt = Date.now() + REG_RETRY_MS; return r.files; } )
+            .catch( () => { retryAt = Date.now() + REG_RETRY_MS; return {}; } );
+    }
     return registryP;
 }
 

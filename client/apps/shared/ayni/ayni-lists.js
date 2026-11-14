@@ -200,7 +200,9 @@ const dropZone = (host, cfg) => {
    pickable(id), count (false: no count), ticks (false: none), grid() (rows flow as cards: arrows by place), drag
    ({ text(ids), can(id) }), tree (the navigation tree beside it), main (true: the view's main list, whose keys work
    while the focus is on the title row's buttons too), active() (false: not now, a sub-view), onSelect(ids),
-   contextmenu (false: none). The page never redraws the list on a pick: the list paints aria-selected in place */
+   contextmenu (false: none), allIds() (every id the list holds, drawn or not: a list drawn in batches as it scrolls;
+   Select all picks them all and a redraw keeps the picks among them). The page never redraws the list on a pick: the
+   list paints aria-selected in place */
 /* The tick square of a row, for a page that draws it in its own place in the row (else the list puts it first) */
 const tickHtml = () => `<button type="button" class="pick-tick" data-tick tabindex="-1" data-tip="${tx('pick')}" aria-label="${tx('pick')}">${icon('check')}</button>`;
 const list = (el, cfg = {}) => {
@@ -213,6 +215,8 @@ const list = (el, cfg = {}) => {
   const rows = () => $$(rowSel, box).filter((r) => !cfg.pickable || cfg.pickable(idOf(r)));
   const rowOf = (id) => rows().find((r) => idOf(r) === id) || null;
   const idsShown = () => rows().map(idOf);
+  /* What Select all and a redraw go by: the page's own ids when it draws only part of the list (allIds), else the rows */
+  const idsAll = () => (cfg.allIds ? cfg.allIds().filter((id) => !cfg.pickable || cfg.pickable(id)) : idsShown());
 
   /* ---- Picks ---- */
   const has = (id) => sel.includes(id);
@@ -236,14 +240,15 @@ const list = (el, cfg = {}) => {
     if (!sel.length) { paint(); drawBar(); return; }
     sel = []; anchor = null; changed();
   };
-  /* Every row on screen picked: Select all turns into Unselect all */
-  const allPicked = () => { const shown = idsShown(); return shown.length > 0 && shown.every(has); };
-  const selectAll = () => { sel = idsShown(); if (byFinger() && isPhone()) picking = true; changed(); };
-  /* The rows changed (a redraw): forget picks that are gone, put the ticks back */
+  /* Every row picked: Select all turns into Unselect all (a Set: thousands of picks are checked on every redraw) */
+  const allPicked = () => { const all = idsAll(), on = new Set(sel); return all.length > 0 && all.every((id) => on.has(id)); };
+  const selectAll = () => { sel = idsAll(); if (byFinger() && isPhone()) picking = true; changed(); };
+  /* The rows changed (a redraw): forget picks that are gone, put the ticks back. With allIds a pick whose row is not
+     drawn yet stays: Ctrl+A then Bin must act on the whole list, not on the part on screen */
   const refresh = () => {
-    const shown = idsShown(), before = sel.length;
-    sel = sel.filter((id) => shown.includes(id));
-    if (cursor != null && !shown.includes(cursor)) cursor = null;
+    const shown = new Set(idsShown()), keep = cfg.allIds ? new Set(idsAll()) : shown, before = sel.length;
+    sel = sel.filter((id) => keep.has(id));
+    if (cursor != null && !shown.has(cursor)) cursor = null;
     if (sel.length !== before) changed(); else { paint(); drawBar(); }
     if (seekRows != null && rows().length !== seekRows) { seekRows = null; jump(false); }
   };

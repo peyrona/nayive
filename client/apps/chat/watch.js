@@ -24,6 +24,8 @@
     var OFF_BY = 0.4;          // s the follower may drift before it jumps
     var TICK   = 2000;         // ms between the follower's checks
     var BLOCKED_AFTER = 1500;  // ms: a play that has not started was refused (autoplay)
+    var BEAT   = 20000;        // ms: the driver says "play" again this often (chat_watch.go chatWatchBeat)
+    var END_AT = 0.5;          // s before the end: a follower stops there, never starts it over
 
     // ---------------------------------------------------------------------
     // a YouTube link -> its video id
@@ -258,6 +260,14 @@
         var p = cur.player, at = target( cw );
         var state = p.getPlayerState();
         var off = Math.abs( ( p.getCurrentTime() || 0 ) - at );
+        // Past the end (its driver's "stop" not here yet, or never coming):
+        // it stays ended - a seek there would end it, and a play start it over.
+        var dur = p.getDuration() || 0;
+        if( cw.playing && dur && at >= dur - END_AT )
+        {
+            if( state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING ) p.pauseVideo();
+            return;
+        }
         if( cw.playing )
         {
             if( off > OFF_BY ) p.seekTo( at, true );
@@ -314,16 +324,33 @@
         if( ! cur || ! cur.ready || ! cur.driving ) return;
         var s = cur.sent, now = cur.player.getCurrentTime() || 0;
         var should = s.playing ? s.pos + ( Date.now() - s.at ) / 1000 : s.pos;
+        // Playing: a word now and then, or the server takes this page for gone.
         if( Math.abs( now - should ) > 1 ) send( s.playing ? "play" : "pause" );
+        else if( s.playing && Date.now() - s.at > BEAT ) send( "play", true );
     }
 
-    async function send( state )
+    // The driving page closing: off for everyone now, not when the server
+    // notices the silence.
+    if( window.addEventListener ) window.addEventListener( "pagehide", function ()
+    {
+        if( ! cur || ! cur.driving ) return;
+        C.api( "POST", "conv/" + cur.conv + "/watch", { state: "stop" }, { keepalive: true } ).catch( function () {} );
+    } );
+
+    // beat: only the "still here" word - a network blip is retried at the
+    // next beat; only a refusal (not mine any more, gone) takes the wheel away.
+    async function send( state, beat )
     {
         var me = cur;
         var pos = me.ready ? me.player.getCurrentTime() || 0 : 0;
         me.sent = { playing: state === "play", pos: pos, at: Date.now() };
         try { await C.api( "POST", "conv/" + me.conv + "/watch", { msg: me.msg, video: me.video, state: state, pos: pos } ); }
-        catch( e ) { if( cur === me ) { me.driving = false; failed( e ); } }
+        catch( e )
+        {
+            if( cur !== me || ( beat && e.status !== 403 && e.status !== 404 && e.status !== 409 ) ) return;
+            me.driving = false;
+            failed( e );
+        }
     }
 
     function failed( e )

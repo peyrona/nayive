@@ -617,6 +617,9 @@ const setup = () => {
 };
 const init = (root) => each(root, '.info-tip', 'info', initInfo);
 
-Object.assign(Ayni, { help, tour, coach });
+/* Ayni.infoTip(el): open (or close) the info popup on any element with data-help, from the page's own click */
+const infoTip = (el) => { if (infoFor === el) { infoClose(); return; } infoClose(); infoOpen(el); };
+
+Object.assign(Ayni, { help, tour, coach, infoTip });
 Ayni.core.family({ setup, init });
 })();

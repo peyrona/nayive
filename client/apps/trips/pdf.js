@@ -9,11 +9,35 @@
 // print stylesheet (see <style>) hides #app and shows only #printRoot on paper.
 
 // `trip` is the one to print - the button lives on that trip's card in the list.
-async function exportTripPdf( trip )
+// One run at a time: a second tap while one waits for weather and the map
+// printed twice, emptied the first run's page and left the tab titled with the
+// trip (T15). `btn` (the tapped button) shows it is busy meanwhile.
+let pdfRun = null;   // { btn, timer } while a run is on
+
+function endPdfRun()
 {
-    if( ! trip )
+    if( ! pdfRun ) return;
+    clearTimeout( pdfRun.timer );
+    if( pdfRun.btn ) pdfRun.btn.removeAttribute( 'aria-busy' );
+    pdfRun = null;
+}
+
+async function exportTripPdf( trip, btn )
+{
+    if( ! trip || pdfRun )
         return;
 
+    // Ended by the print dialog closing (afterprint); the timer is only for a
+    // browser that never says so, or the button would stay dead.
+    pdfRun = { btn: btn || null, timer: setTimeout( endPdfRun, 60000 ) };
+    if( btn ) btn.setAttribute( 'aria-busy', 'true' );
+
+    try { await exportTripPdfRun( trip ); }
+    catch( _ ) { endPdfRun(); }
+}
+
+async function exportTripPdfRun( trip )
+{
     // Forecasts are fetched lazily as the stage cards render, so a trip printed from
     // the list may have loaded none of them. Fill in what is missing before building
     // the sheet (capped, so a slow API never holds up the print dialog).
@@ -36,6 +60,7 @@ async function exportTripPdf( trip )
         if( printMapInstance ) { printMapInstance.remove(); printMapInstance = null; }
         root.innerHTML  = '';
         root.style.cssText = '';   // drop the off-screen staging styles (see below)
+        endPdfRun();
     }
 
     // Clear the print DOM again once the dialog closes so it never lingers.
@@ -254,6 +279,7 @@ function buildTripPrintDoc( trip )
             const h = prEl( 'div', 'pr-stage-head' );
             h.appendChild( prEl( 'span', 'pr-num', String( i + 1 ) ) );
             h.appendChild( prEl( 'span', 'pr-loc', st.location || T( 'trips.noLocation' ) ) );
+            if( ! stageEnabled( st ) ) h.appendChild( prEl( 'span', 'pr-off', T( 'trips.stageIsOff' ) ) );   // T9
             // A stage's transport is how you travel onward from it, so the last stage has none.
             if( ! isLast )
                 h.appendChild( prEl( 'span', 'pr-transport', ownKey( TRANSPORT_LABELS(), st.transport ) || T( 'trips.trOther' ) ) );
@@ -276,7 +302,7 @@ function buildTripPrintDoc( trip )
                 [ T( 'trips.transport' ),  isLast ? '' : ( ownKey( TRANSPORT_LABELS(), st.transport ) || T( 'trips.trOther' ) ) ],
                 [ T( 'trips.departure' ),      depTxt ],
                 [ T( 'trips.arrival' ),     arrTxt ],
-                [ T( 'trips.currency' ),      cur.code + ( cur.matched ? '' : ' (aproximada)' ) ],
+                [ T( 'trips.currency' ),      cur.code + ( cur.matched ? '' : ' ' + T( 'trips.curGuess' ) ) ],
                 [ T( 'trips.weather' ), stagePrintWeather( st ) ],
                 [ T( 'trips.lodging' ), st.accommodation && st.accommodation.trim() ? st.accommodation.trim() : '' ],
                 [ Ayni.t( 'ui.notes' ),       st.notes && st.notes.trim() ? st.notes.trim() : '' ],

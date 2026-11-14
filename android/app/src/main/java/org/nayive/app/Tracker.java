@@ -30,6 +30,7 @@ final class Tracker implements LocationListener {
     private final Context ctx;
     private final Consumer<Location> sink;
     private boolean running;
+    private long every = EVERY_MS;
 
     Tracker(Context ctx, Consumer<Location> sink) {
         this.ctx = ctx.getApplicationContext();
@@ -49,19 +50,33 @@ final class Tracker implements LocationListener {
 
     boolean running() { return running; }
 
+    /** How often it asks now (ms). */
+    long every() { return every; }
+
+    /**
+     * One position every `everyMs`; `high` asks the fused provider for GPS
+     * accuracy (an SOS danger watch, server/go/sos.go) instead of its balance.
+     */
     @SuppressLint("MissingPermission")
-    boolean start() {
+    boolean start(long everyMs, boolean high) {
         if (running) return true;
         if (!allowed(ctx)) return false;
+        every = everyMs;
         LocationManager lm = ctx.getSystemService(LocationManager.class);
         try {
             if (Build.VERSION.SDK_INT >= 31 && lm.hasProvider(LocationManager.FUSED_PROVIDER)) {
-                lm.requestLocationUpdates(LocationManager.FUSED_PROVIDER, EVERY_MS, 0, this, Looper.getMainLooper());
+                if (high) {
+                    android.location.LocationRequest req = new android.location.LocationRequest.Builder(everyMs)
+                            .setQuality(android.location.LocationRequest.QUALITY_HIGH_ACCURACY).build();
+                    lm.requestLocationUpdates(LocationManager.FUSED_PROVIDER, req, ctx.getMainExecutor(), this);
+                } else {
+                    lm.requestLocationUpdates(LocationManager.FUSED_PROVIDER, everyMs, 0, this, Looper.getMainLooper());
+                }
             } else {
                 boolean any = false;
                 for (String p : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) {
                     if (lm.getAllProviders().contains(p)) {
-                        lm.requestLocationUpdates(p, EVERY_MS, 0, this, Looper.getMainLooper());
+                        lm.requestLocationUpdates(p, everyMs, 0, this, Looper.getMainLooper());
                         any = true;
                     }
                 }
@@ -108,9 +123,11 @@ final class Tracker implements LocationListener {
         }
         LocationManager lm = c.getSystemService(LocationManager.class);
         boolean[] finished = {false};
+        LocationListener[] single = {null};   // below API 30: removed when done, or the GPS stays on
         Consumer<Location> once = l -> {
             if (finished[0]) return;
             finished[0] = true;
+            if (single[0] != null) lm.removeUpdates(single[0]);
             done.accept(l != null ? l : lastKnown(lm));
         };
         main.postDelayed(() -> once.accept(null), timeoutMs);
@@ -122,12 +139,34 @@ final class Tracker implements LocationListener {
                 main.postDelayed(cancel::cancel, timeoutMs);
                 lm.getCurrentLocation(p, cancel, c.getMainExecutor(), l -> main.post(() -> once.accept(l)));
             } else {
+                // A real class, not a lambda: below API 30 the other 3 methods are
+                // abstract, and Android calls onProviderDisabled at once when Location is off.
+                single[0] = new Once(once);
                 //noinspection deprecation
-                lm.requestSingleUpdate(LocationManager.GPS_PROVIDER, l -> once.accept(l), Looper.getMainLooper());
+                lm.requestSingleUpdate(LocationManager.GPS_PROVIDER, single[0], Looper.getMainLooper());
             }
         } catch (SecurityException | IllegalArgumentException e) {
             main.post(() -> once.accept(null));
         }
+    }
+
+    /** fresh()'s one position below API 30, with all 4 methods. */
+    private static final class Once implements LocationListener {
+        private final Consumer<Location> sink;
+
+        Once(Consumer<Location> sink) { this.sink = sink; }
+
+        @Override
+        public void onLocationChanged(Location l) { sink.accept(l); }
+
+        @Override
+        public void onStatusChanged(String provider, int status, android.os.Bundle extras) {}
+
+        @Override
+        public void onProviderEnabled(String provider) {}
+
+        @Override
+        public void onProviderDisabled(String provider) {}
     }
 
     @SuppressLint("MissingPermission")

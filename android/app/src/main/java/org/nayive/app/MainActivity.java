@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -100,8 +101,8 @@ public class MainActivity extends Activity {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
             return;
         }
-        startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()));
+        if (!go(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()))) appSettings();
     }
 
     private void askLoc() {
@@ -139,20 +140,30 @@ public class MainActivity extends Activity {
             startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
                     Uri.parse("package:" + getPackageName())));
         } catch (RuntimeException e) {
-            startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+            if (!go(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))) appSettings();
         }
     }
 
     private void askFull() {
         if (Build.VERSION.SDK_INT >= 34) {
-            startActivity(new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
-                    Uri.parse("package:" + getPackageName())));
+            if (!go(new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                    Uri.parse("package:" + getPackageName())))) appSettings();
         }
     }
 
     private void appSettings() {
-        startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                Uri.parse("package:" + getPackageName())));
+        go(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
+    }
+
+    /** A Settings screen; false when this ROM has none (it must not crash the setup page). */
+    private boolean go(Intent i) {
+        try {
+            startActivity(i);
+            return true;
+        } catch (RuntimeException e) {   // ActivityNotFoundException, a SecurityException on some ROMs
+            Log.w("Nayive", "no screen for " + i.getAction(), e);
+            return false;
+        }
     }
 
     @Override

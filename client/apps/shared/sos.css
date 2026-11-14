@@ -10,8 +10,7 @@
     text-indent: 1px;   /* balances the space letter-spacing leaves after the last S */
 }
 #lsBox > .sos-btn:hover, #lsBox > .sos-btn:focus-visible { background: #7a1c05; color: #fff; }
-#lsBox > .sos-btn[hidden] { display: none; }
-#lsBox > .sos-btn::after { background: #962306; }   /* the hold dot: same red as the button */
+#lsBox > .sos-btn[hidden] { display: none; }#lsBox > .sos-btn::after { background: #962306; }   /* the hold dot: same red as the button */
 #lsBox > .sos-btn:is(:hover, :focus-visible)::after { background: #7a1c05; }
 #lsBox > .sos-help { order: 99; align-self: center; margin-left: 6px; width: 20px; height: 20px; }
 #lsBox > .sos-help .icon { --icon: 20px; }   /* last in the row, far from SOS */
@@ -52,3 +51,10 @@ html.ls-top #lsBox > .btn.sos-btn { width: auto; }   /* beats the 42px square of
 .sos-hours { width: 5em; }
 .sos-quiet { display: inline-flex; align-items: center; gap: 6px; }
 .sos-quiet .input-group { width: 7.5em; }
+
+/* the danger PIN (2026-11-14): on the watch screen, and in the settings */
+.sos-pin .input { width: 9em; min-height: 64px; font-size: 1.6rem; text-align: center; border-radius: 14px; }
+.sos-pin-set { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 8px; }
+.sos-pin-set .sos-pin-in { width: 11em; }
+/* PIN digits hidden without type=password: no password manager keeps them */
+.sos-mask { -webkit-text-security: disc; }

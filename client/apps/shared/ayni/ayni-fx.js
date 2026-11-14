@@ -67,7 +67,7 @@
 
     // The currencies offered: every one Trips can detect from a place, plus the
     // Americas' that a traveller from Spain meets most.
-    const CODES = [ 'EUR', 'USD', 'GBP', 'CHF', 'JPY', 'CNY', 'CAD', 'MXN', 'ARS', 'BRL', 'CLP', 'COP', 'PEN',
+    const CODES = [ 'EUR', 'USD', 'GBP', 'CHF', 'JPY', 'CNY', 'CAD', 'MXN', 'ARS', 'BRL', 'CLP', 'COP', 'PEN', 'DOP',
                     'NOK', 'SEK', 'DKK', 'ISK', 'PLN', 'CZK', 'HUF', 'RON', 'TRY', 'RUB',
                     'THB', 'VND', 'IDR', 'MYR', 'SGD', 'PHP', 'INR', 'KRW', 'TWD', 'HKD', 'AUD', 'NZD',
                     'ILS', 'AED', 'QAR', 'SAR', 'EGP', 'MAD', 'ZAR', 'KES' ];
@@ -183,18 +183,21 @@
             if( CODES.every( function( c ) { return c in now; } ) ) break;
         }
 
-        const answered = sources.filter( function( s ) { return s.ok; } ).length;
+        const okCount  = function( list ) { return list.filter( function( s ) { return s.ok; } ).length; };
+        const answered = okCount( sources );
 
         // Fewer than two answers can verify nothing: keep what this device had.
-        if( answered < 2 && kept )
+        if( answered < 2 && kept && okCount( kept.sources || [] ) >= 2 )
         {
             setOffline( true );
             return;
         }
 
-        kept     = { fetched: Date.now(), sources: sources };
+        // Nothing kept yet: the failed answers are shown (the sheet says why),
+        // but not stamped nor saved, so the next refresh tries again.
+        kept     = { fetched: answered < 2 ? 0 : Date.now(), sources: sources };
         verified = verifyAll( sources );
-        try { localStorage.setItem( KEY, JSON.stringify( kept ) ); } catch( e ) {}
+        if( answered >= 2 ) try { localStorage.setItem( KEY, JSON.stringify( kept ) ); } catch( e ) {}
         isOffline = answered < 2;
         fire();
     }

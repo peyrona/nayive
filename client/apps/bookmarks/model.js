@@ -596,7 +596,8 @@ function makeMatcher( q )
     return function( n )
     {
         const tags = isFolder( n ) ? [] : n.tags.map( Ayni.fold );
-        const ok   = tagWords.every( function( t ) { return !! t && tags.some( function( x ) { return x.indexOf( t ) === 0; } ); } );
+        // A bare "#" (a tag search being typed) matches every tagged bookmark.
+        const ok   = tagWords.every( function( t ) { return tags.some( function( x ) { return x.indexOf( t ) === 0; } ); } );
         return ok && ( ! text || text( isFolder( n ) ? n.title
                                      : ( n.title || '' ) + '\n' + ( n.url || '' ) + '\n' + tags.join( '\n' ) + '\n' + ( n.notes || '' ) ) );
     };
@@ -659,9 +660,12 @@ function mergeGroup( items, keepId, rec )
     if( ! keep ) return 0;
     rec.kept.push( { id: keep.id, tags: keep.tags.slice(), notes: keep.notes, favorite: keep.favorite, title: keep.title } );
     const drop = [];
-    for( const b of items )
+    for( const item of items )
     {
-        if( b.id === keepId || ! node( b.id ) ) continue;
+        // By id, not the sheet's object: a merge (onFileMerged) since the scan
+        // put new objects, maybe with another device's tags or notes, in `data`.
+        const b = node( item.id );
+        if( item.id === keepId || ! b ) continue;
         keep.tags = cleanTags( keep.tags.concat( b.tags ) );
         const note = ( b.notes || '' ).trim();
         if( note && ( keep.notes || '' ).indexOf( note ) < 0 ) keep.notes = keep.notes ? keep.notes + '\n' + note : note;

@@ -221,11 +221,23 @@ func TestChatCallRules(t *testing.T) {
 	if last := msgs[len(msgs)-1]; last.Call == nil || last.Call.End != "declined" {
 		t.Fatalf("declined bubble = %+v", last)
 	}
-	f.call(t, f.owner, "POST", "/api/chat/conv/"+dj+"/call", `{"dev":"owner-page-1"}`, 201, nil)
+	var jc struct{ ID string }
+	f.call(t, f.owner, "POST", "/api/chat/conv/"+dj+"/call", `{"dev":"owner-page-1"}`, 201, &jc)
 
 	// A call bubble cannot be forwarded.
 	f.call(t, f.owner, "POST", "/api/chat/conv/"+dc+"/messages",
 		`{"fwdConv":"`+dc+`","fwdId":`+itoa(int(msgs[len(msgs)-1].ID))+`}`, 400, nil)
+
+	// Javi's page is already in a call (one in another home): it answers
+	// "busy" for him - the owner hears busy, the bubble says so.
+	f.call(t, javi, "POST", jp+"/call/"+jc.ID+"/end", `{"reason":"busy"}`, 200, &end)
+	if end.Reason != "busy" {
+		t.Fatalf("busy from the page: reason = %q", end.Reason)
+	}
+	msgs = f.convMsgs(t, javi, jp+"/conv/"+dj+"/messages")
+	if last := msgs[len(msgs)-1]; last.Call == nil || last.Call.End != "busy" {
+		t.Fatalf("busy-from-page bubble = %+v", last)
+	}
 }
 
 // TestChatCallsOff: no coturn configured -> no calls, and the pages know.

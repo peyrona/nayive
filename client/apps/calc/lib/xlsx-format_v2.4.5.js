@@ -2114,6 +2114,10 @@ function normalizeCellStyle(cell, opts) {
 		out.border = normalizeBorder(style.border, opts);
 		out.alignment = normalizeAlignment(style.alignment, opts);
 		if (style.numFmt != null) out.numFmt = style.numFmt;
+		// NAYIVE: a locked cell (Calc's lock button), or one unlocked on
+		// purpose - a format of its own, so a row can say it - see writeCellXf.
+		if (style.protection && style.protection.locked) out.locked = true;
+		else if (style.protection && style.protection.locked === false) out.unlocked = true;
 	}
 	if (out.numFmt == null && cell.z != null) out.numFmt = cell.z;
 	if (out.numFmt == null && cell.XF?.numFmt != null) out.numFmt = cell.XF.numFmt;
@@ -2165,6 +2169,7 @@ function buildStyleRegistry(wb, opts) {
 		fonts: [DEFAULT_FONT],
 		fills: [DEFAULT_FILL, GRAY125_FILL],
 		borders: [DEFAULT_BORDER],
+		hasLocks: false,
 		cellXfs: [{
 			numFmtId: 0,
 			fontId: 0,
@@ -2202,11 +2207,21 @@ function buildStyleRegistry(wb, opts) {
 				xf.alignment = normalized.alignment;
 				xf.applyAlignment = true;
 			}
+			if (normalized.locked) {
+				xf.locked = true;
+				registry.hasLocks = true;
+			}
+			if (normalized.unlocked) xf.unlocked = true;
 			const styleId = getOrAdd(registry.cellXfs, xfIds, xf);
 			registry.cellStyleIds.set(cell, styleId);
 			if (styleId !== 0) registry.hasStyles = true;
 		};
 		eachWorksheetCell(ws, register);
+		// NAYIVE: a sheet written protected (Calc's codec puts !protect on one
+		// with a lock, or one that came protected with nothing locked) locks
+		// only what says so: every other format, format 0 too, gets
+		// locked="0" (writeCellXf) - even with no locked cell in the book.
+		if (ws["!protect"]) registry.hasLocks = true;
 		// NAYIVE: a whole column's or row's look (`s` on a !cols / !rows entry)
 		// takes a cell format like a cell's does; the writer puts it out as
 		// <col style=> / <row s= customFormat="1">.
@@ -2444,7 +2459,8 @@ function writeStylesXml(_wb, _opts) {
 		fillId: 0,
 		borderId: 0
 	}];
-	lines.push("<cellXfs count=\"" + cellXfs.length + "\">" + cellXfs.map(writeCellXf).join("") + "</cellXfs>");
+	const unlockRest = !!registry?.hasLocks;
+	lines.push("<cellXfs count=\"" + cellXfs.length + "\">" + cellXfs.map((xf) => writeCellXf(xf, unlockRest)).join("") + "</cellXfs>");
 	lines.push("<cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles>");
 	lines.push("</styleSheet>");
 	lines[1] = lines[1].replace("/>", ">");
@@ -2480,7 +2496,13 @@ function writeBorderSide(side, border) {
 	const color = border.color?.rgb ? "<color rgb=\"" + border.color.rgb + "\"/>" : "";
 	return "<" + side + " style=\"" + border.style + "\">" + color + "</" + side + ">";
 }
-function writeCellXf(xf) {
+// NAYIVE: `unlockRest` - some cell is locked (Calc's lock button). In Excel
+// every cell is locked unless its format says not, and the lock counts once
+// the sheet is protected (<sheetProtection>, written for a sheet that has a
+// locked cell). Calc locks only what was asked: every format that is not
+// locked - format 0 too, the one of a cell with no s= - says locked="0".
+// With no locked cell anywhere nothing changes: no <protection> at all.
+function writeCellXf(xf, unlockRest) {
 	const attrs = {
 		numFmtId: String(xf.numFmtId),
 		fontId: String(xf.fontId),
@@ -2493,12 +2515,15 @@ function writeCellXf(xf) {
 	if (xf.applyFill) attrs.applyFill = "1";
 	if (xf.applyBorder) attrs.applyBorder = "1";
 	if (xf.applyAlignment) attrs.applyAlignment = "1";
-	if (!xf.alignment) return writeXmlElement("xf", null, attrs);
+	const unlocked = unlockRest && !xf.locked;
+	if (unlocked) attrs.applyProtection = "1";
+	const protection = unlocked ? writeXmlElement("protection", null, { locked: "0" }) : "";
+	if (!xf.alignment) return writeXmlElement("xf", protection || null, attrs);
 	const alignmentAttrs = {};
 	if (xf.alignment.horizontal) alignmentAttrs.horizontal = xf.alignment.horizontal;
 	if (xf.alignment.vertical) alignmentAttrs.vertical = xf.alignment.vertical === "middle" ? "center" : xf.alignment.vertical;
 	if (xf.alignment.wrapText) alignmentAttrs.wrapText = "1";
-	return writeXmlElement("xf", writeXmlElement("alignment", null, alignmentAttrs), attrs);
+	return writeXmlElement("xf", writeXmlElement("alignment", null, alignmentAttrs) + protection, attrs);
 }
 
 //#endregion
@@ -5543,6 +5568,11 @@ function writeWorksheetXml(ws, opts, _idx, _rels, _wb) {
 			const i = columnIndexes[n];
 			const col = cols[i];
 			const sid = colStyle(col);
+			// NAYIVE: a column whose look is the default format (xf 0) and that
+			// has no width and is not hidden has nothing to say: written, it
+			// came out as one fixed-width <col> per column - 16,384 of them for
+			// a whole sheet.
+			if (sid === 0 && !col.width && !col.hidden) continue;
 			let last = i;
 			if (sid > 0) while (n + 1 < columnIndexes.length && columnIndexes[n + 1] === last + 1 && colStyle(cols[last + 1]) === sid && cols[last + 1].width === col.width && !!cols[last + 1].hidden === !!col.hidden) { last++; n++; }
 			const attrs = {
@@ -5665,6 +5695,9 @@ function writeWorksheetXml(ws, opts, _idx, _rels, _wb) {
 	}
 	for (const rowIdx of extraRows) if (range && rowIdx > range.e.r) appendRow(rowIdx, []);
 	lines.push("</sheetData>");
+	// NAYIVE: <sheetProtection> (a sheet with locked cells) is a ready-made
+	// tag from Calc's codec; its place is right after <sheetData>.
+	if (ws["!protect"]) lines.push(ws["!protect"]);
 	// NAYIVE: CT_Worksheet is a *sequence* — a reader is entitled to reject a file
 	// whose elements are out of order, and Excel answers such a file with the
 	// "we found a problem, do you want us to repair it" dialog. The order below is

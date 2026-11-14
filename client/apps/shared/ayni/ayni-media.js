@@ -109,6 +109,12 @@
         var seekRange = document.getElementById( "seekRange" ), seeking = false;
         seekRange.addEventListener( "input", function () { seeking = true; document.getElementById( "elapsedLabel" ).textContent = Ayni.fmtClock( Number( seekRange.value ) ); } );
         seekRange.addEventListener( "change", function () { if( ! hooks.finiteSeek || isFinite( el.duration ) ) el.currentTime = Number( seekRange.value ); seeking = false; } );
+        // A drag let go where it started fires no "change": the slider would
+        // stay frozen. A moment after the release (after any "change"), it
+        // follows the time again.
+        function letGo() { setTimeout( function () { seeking = false; }, 250 ); }
+        seekRange.addEventListener( "pointerup", letGo );
+        seekRange.addEventListener( "pointercancel", letGo );
 
         var volumeRange = document.getElementById( "volumeRange" );
         el.volume = Number( volumeRange.value ) / 100;
@@ -116,9 +122,18 @@
 
         el.addEventListener( "loadedmetadata", function ()
         {
-            seekRange.max = Math.floor( el.duration ) || 1;
-            document.getElementById( "totalLabel" ).textContent = Ayni.fmtClock( el.duration );
+            // A stream (or a WebM with no length) says Infinity: not a slider max.
+            seekRange.max = isFinite( el.duration ) && el.duration >= 1 ? Math.floor( el.duration ) : 1;
+            document.getElementById( "totalLabel" ).textContent = isFinite( el.duration ) ? Ayni.fmtClock( el.duration ) : "–:––";
             if( hooks.loaded ) hooks.loaded();
+        } );
+        // The player let its file go (a cleared queue): no old times left on the bar.
+        el.addEventListener( "emptied", function ()
+        {
+            seekRange.value = 0;
+            seekRange.max = 1;
+            document.getElementById( "elapsedLabel" ).textContent = Ayni.fmtClock( 0 );
+            document.getElementById( "totalLabel" ).textContent = Ayni.fmtClock( 0 );
         } );
         el.addEventListener( "timeupdate", function ()
         {

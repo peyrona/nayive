@@ -602,6 +602,21 @@
         return remapComments( pairs, true );
     }
 
+    // A Photos thumbnail is <size>_<mtime>.jpg: a move or a rename keeps it.
+    // Two photos of one folder with the same size and the same mtime second
+    // would share one, so those two are <size>_<mtime>_<hash of path>.jpg
+    // (Photos' thumbKey). Both names of a picture, the plain one first.
+    function pathHash( path )
+    {
+        var h = 0x811c9dc5;                         // FNV-1a, 32 bit: short, and the same on every device
+        for( var i = 0; i < path.length; i++ ) { h ^= path.charCodeAt( i ); h = Math.imul( h, 0x01000193 ); }
+        return ( h >>> 0 ).toString( 36 );
+    }
+    function thumbNames( size, mtime, path )
+    {
+        return [ size + "_" + mtime + ".jpg", size + "_" + mtime + "_" + pathHash( path ) + ".jpg" ];
+    }
+
     // One sidecar's share of purgePaths(): drop every entry at (or under) one of
     // `paths`, collecting the Photos thumbnails that go with them.
     function purgeFrom( sc, paths, thumbs )
@@ -616,8 +631,10 @@
                 {
                     if( key !== del && key.indexOf( pre ) !== 0 ) return;
                     var e = map[ key ];
+                    // Both names: a photo with a twin of the same size + mtime
+                    // has its path's hash in its thumbnail's (thumbNames).
                     if( sc === PHOTOS_SCAN && e && e.size && e.mtime )
-                        thumbs.push( "data/photos/thumbs/" + e.size + "_" + e.mtime + ".jpg" );
+                        thumbNames( e.size, e.mtime, key ).forEach( function ( n ) { thumbs.push( "data/photos/thumbs/" + n ); } );
                     delete map[ key ];
                     changed = true;
                 } );
@@ -799,7 +816,7 @@
         readComments: readComments, updateComments: updateComments, NOTES_ASIDE: ASIDE,
         parkNotes:   function ( map, path ) { return park( map, path, null ); },
         unparkNotes: function ( map, path ) { return unpark( map, path, true ); },
-        remapPaths: remapPaths, copyPaths: copyPaths, purgePaths: purgePaths,
+        remapPaths: remapPaths, copyPaths: copyPaths, purgePaths: purgePaths, thumbNames: thumbNames,
         binInBatches: binInBatches, restoreInBatches: restoreInBatches, postPaths: postPaths,
         settleNoteMoves: settleNoteMoves, noteMoveWaits: noteMoveWaits,
         openLibrary: openLibrary, folderNodes: folderNodes, libraryTree: libraryTree, showInDrive: showInDrive

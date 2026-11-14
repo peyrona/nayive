@@ -625,6 +625,7 @@
         const SEARCH_PLACEHOLDER = () => T( 'contact.searchPh' );   // shown after a "[<count>] " prefix
 
         let contacts   = [];      // source of truth: array of contact objects (see makeContact)
+        let redrawLater   = false; // a merge came in under an open sheet: draw the list when it closes
         let unparsedCards = [];   // [{ pos, text }] cards of the file the parser could not read: written back untouched
         let nextPos    = 0;       // the place in the file of the next card added (see contactsToVcf)
         let bdayField  = null;    // Ayni's date field for the birthday: YYYY-MM-DD, or --MM-DD without a year
@@ -777,8 +778,10 @@
         // compared as the text it is in the file - a card nobody touched is
         // written back line for line, so only real edits differ - and one
         // changed on both is merged field by field against its base copy
-        // (mergeCard); with no base copy of it, the later REV wins (mine when
-        // there is none). Cards with no UID (a card the parser could not read)
+        // (mergeCard); with no base copy of it, the later REV wins (theirs when
+        // either has none, or both say the same; REVs compared by revKey, so
+        // "2026-10-01T10:00:00Z" and "20261001T100000Z" read alike). Cards
+        // with no UID (a card the parser could not read)
         // are told apart by their text. The "not duplicates" pairs merge as a
         // set. null = a side that is not an address book: nothing is merged over it.
         function mergeBook( path, base, mine, theirs )
@@ -797,7 +800,7 @@
 
             const m = vcfCards( mine ), t = vcfCards( theirs );
             if( ! m || ! t ) return null;
-            const newer = ( x, y, tie ) => x.rev && y.rev && x.rev !== y.rev ? ( y.rev > x.rev ? y : x ) : tie;
+            const newer = ( x, y, tie ) => x.rev && y.rev && revKey( x.rev ) !== revKey( y.rev ) ? ( revKey( y.rev ) > revKey( x.rev ) ? y : x ) : tie;
             const merged = S.mergeLists( base == null ? null : vcfCards( base ), m, t,
                                          { id: c => c.uid,
                                            both: ( b, x, y ) => b === undefined ? newer( x, y, y ) : mergeCard( b, x, y ) } );
@@ -926,7 +929,8 @@
             unparsedCards = unparsed;
             nextPos       = contacts.length + unparsed.length;
             bookRead      = true;
-            if( ! document.querySelector( 'dialog.panel[open]' ) ) render();
+            if( document.querySelector( 'dialog.panel[open]' ) ) redrawLater = true;
+            else                                                  render();
         }
 
         function saveContacts()
@@ -1152,8 +1156,8 @@
                         break;
                     }
 
-                    case 'URL':
-                        entry( 'urls', { value: value.trim() } );
+                    case 'URL':     // Mac exports escape its ":" ("http\://..."): unescaped here, the line stays as read
+                        entry( 'urls', { value: unescapeText( value.trim() ) } );
                         break;
 
                     case 'BDAY':
@@ -1553,8 +1557,14 @@
             return 'hsl(' + Ayni.hash( sName, 360 ) + ', 42%, 42%)';
         }
 
+        // Names under "#" (a digit, a symbol, another script) all go after Z, as
+        // on phones: one "#" head, not one at the top and one at the end.
         function byDisplayName( a, b )
         {
+            const ha = firstLetter( displayName( a ) ) === '#';
+            const hb = firstLetter( displayName( b ) ) === '#';
+            if( ha !== hb ) return ha ? 1 : -1;
+
             return displayName( a ).localeCompare( displayName( b ), Ayni.i18n.lang(), { sensitivity: 'base' } );
         }
 
@@ -2910,14 +2920,18 @@
                 return;
             }
 
-            const c = editingUid ? findContact( editingUid ) : makeContact();
-            if( ! editingUid ) { c.pos = nextPos++; contacts.push( c ); }
+            // A card another device deleted while it was open here (a merge from
+            // the store removed it) is saved as a new card: an edit beats a delete.
+            const old   = editingUid ? findContact( editingUid ) : null;
+            const fresh = ! old;
+            const c     = old || makeContact();
+            if( fresh ) { c.pos = nextPos++; contacts.push( c ); }
 
             // Only the fields the user changed are written into the card: a field
             // left alone keeps its value as read, so the save does not "tidy" it
             // (trim a NOTE that ends in a newline) into a rewritten line.
             const now     = formState();
-            const touched = f => ! editingUid || now[ f ] !== formWas[ f ];
+            const touched = f => fresh || now[ f ] !== formWas[ f ];
 
             // FN is the card's own display name and may say more than the parts do
             // ("MAD Lola (Villaamil)"). Rebuild it only when the name really changed:
@@ -2928,8 +2942,9 @@
             if( touched( 'given' ) )  c.n.given  = given;
             if( touched( 'family' ) ) c.n.family = family;
 
+            // Both names cleared: the company (or, on writing, the e-mail) takes over, not the old FN.
             if( nameChanged || ! c.fn.trim() )
-                c.fn = [ c.n.given, c.n.family ].filter( Boolean ).join( ' ' ).trim() || c.fn || org;
+                c.fn = [ c.n.given, c.n.family ].filter( Boolean ).join( ' ' ).trim() || org;
 
             if( touched( 'org' ) )    c.org    = org;
             if( touched( 'title' ) )  c.title  = document.getElementById( 'fJobTitle' ).value.trim();
@@ -3216,7 +3231,9 @@
             const group = dupGroups[ gi ];
             if( ! group ) return;
 
-            const members = group.contacts.filter( c => findContact( c.uid ) );
+            // By uid: a merge from another device may have put new objects (with
+            // its edits) in `contacts` since the scan.
+            const members = group.contacts.map( c => findContact( c.uid ) ).filter( Boolean );
 
             if( members.length < 2 )
             {
@@ -3406,6 +3423,20 @@
             const m = mergeModel;
             if( ! m || ! canSave() ) return;
 
+            // A merge from another device came in while the preview was open: its
+            // cards are new objects (maybe with that device's edits). The preview
+            // is built again from them and the user looks once more.
+            const live = m.members.map( c => findContact( c.uid ) );
+            if( live.some( ( c, i ) => c !== m.members[ i ] ) )
+            {
+                closeBackdrop( 'mergeBackdrop' );
+                const still = live.filter( Boolean );
+                if( still.length < 2 ) { Ayni.toast( 'info', T( 'contact.groupClean' ) ); refreshDedupIfOpen(); return; }
+                openMergeFor( still );
+                Ayni.toast( 'info', T( 'contact.mergeRefreshed' ) );
+                return;
+            }
+
             const groupUids  = new Set( m.members.map( c => c.uid ) );
             const chosenName = ( mergeVal( 'mergeName' ) || '' ).trim();
             const nameSrc    = m.members.find( c => displayName( c ) === chosenName ) || m.nameSrc;
@@ -3564,11 +3595,15 @@
             try   { text = await file.text(); }
             catch { Ayni.toast( 'err', T( 'contact.readFailed' ) ); return; }
 
-            const incoming = vcfToContacts( text );
+            const skipped  = [];          // cards the parser could not read: said, not imported
+            const incoming = vcfToContacts( text, skipped );
+
+            if( skipped.length )
+                Ayni.toast( 'warn', TF( 'contact.importSkipped', { n: skipped.length } ) );
 
             if( ! incoming.length )
             {
-                Ayni.toast( 'warn', T( 'contact.noVcards' ) );
+                if( ! skipped.length ) Ayni.toast( 'warn', T( 'contact.noVcards' ) );
                 return;
             }
 
@@ -3692,23 +3727,17 @@
                 btn.addEventListener( 'click', () => addMultiRow( btn.dataset.add, {} ) );
             });
 
-            document.addEventListener( 'keydown', function( e )
+            // Escape: the browser closes the top dialog; with none open, Ayni.list
+            // clears the pick. A merge that came in under an open sheet is drawn
+            // when the last sheet closes (see onBookMerged). "close" does not
+            // bubble: caught on the way down.
+            document.addEventListener( 'close', function( e )
             {
-                if( e.key !== 'Escape' ) return;
-
-                // Close the top-most open sheet only. Detail floats above the rest (z-index).
-                const order = [ 'detailBackdrop', 'mergeBackdrop', 'editBackdrop', 'dedupBackdrop' ];
-
-                for( const id of order )
-                {
-                    if( document.getElementById( id ).classList.contains( 'open' ) )
-                    {
-                        closeBackdrop( id );
-                        return;
-                    }
-                }
-                // No sheet open: Escape clears the pick (Ayni.list).
-            });
+                if( ! redrawLater || ! e.target.matches( 'dialog.panel' ) ) return;
+                if( document.querySelector( 'dialog.panel[open]' ) ) return;
+                redrawLater = false;
+                render();
+            }, true );
         }
 
         function openBackdrop( id )  { document.getElementById( id ).showModal(); }     // impl in shared/ui.js

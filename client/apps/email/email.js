@@ -59,7 +59,7 @@
             await E.loadTrays();
             var main = E.$( "listView" ).parentNode;
             var tray = S.trays.filter( function ( t ) { return t.role === S.tray; } )[ 0 ];
-            if( E.listShown() && ! S.label && ( force || main.scrollTop < 40 ) ) await E.loadList( false, ! force && tray && tray.stamp );
+            if( E.listShown() && ! S.label && ( force || main.scrollTop < 40 ) ) await E.loadList( false, ! force && tray && tray.stamp && tray.stamp + "/" + ( S.labelsVer || "" ) );
             else E.plug( "synced" );
         }
         catch( err ) { E.plug( "offline" ); }

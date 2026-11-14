@@ -132,6 +132,8 @@ function wireStaticUI()
     document.getElementById( 'newFolderCancelBtn'  ).addEventListener( 'click', function() { setBackdrop( 'newFolderBackdrop', false ); } );
     document.getElementById( 'newFolderConfirmBtn' ).addEventListener( 'click', confirmNewFolder );
     document.getElementById( 'newFolderName'       ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) { e.preventDefault(); confirmNewFolder(); } } );
+    document.getElementById( 'newFolderName'       ).addEventListener( 'input', noSlash );
+    document.getElementById( 'newFolderName'       ).addEventListener( 'paste', pasteName );
 
     document.getElementById( 'propsCloseBtn' ).addEventListener( 'click', function() { setBackdrop( 'propsBackdrop', false ); } );
 
@@ -148,6 +150,10 @@ function wireStaticUI()
         settleReplace( document.getElementById( 'replaceOverwrite' ).checked ? 'overwrite' : 'skip' );
     });
 
+    // Shut any other way (Esc, a close() from outside): it is a cancel, so a
+    // queued upload never waits for ever (D11). Settled first = nothing left to do.
+    document.getElementById( 'replaceBackdrop' ).addEventListener( 'close', function() { if( replaceResolver ) settleReplace( 'cancel' ); } );
+    document.getElementById( 'convertBackdrop' ).addEventListener( 'close', function() { if( convertResolver ) settleConvert( 'cancel' ); } );
     document.getElementById( 'convertCancelBtn' ).addEventListener( 'click', function() { settleConvert( 'cancel' ); } );
     document.getElementById( 'convertYesBtn'    ).addEventListener( 'click', function() { settleConvert( 'convert' ); } );
     document.getElementById( 'convertNoBtn'     ).addEventListener( 'click', function() { settleConvert( 'plain' ); } );
@@ -201,7 +207,13 @@ function wireStaticUI()
 
 
     const listPane = document.getElementById( 'listPane' );
-    listPane.addEventListener( 'dragover', function( e ) { if( Ayni.dragIds() ) return; e.preventDefault(); listPane.classList.add( 'drag-over' ); } );
+    listPane.addEventListener( 'dragover', function( e )
+    {
+        if( Ayni.dragIds() ) return;
+        e.preventDefault();                      // even when refused: the browser must not open the file
+        if( ! canDropFiles() ) { e.dataTransfer.dropEffect = 'none'; return; }    // no cover (D3)
+        listPane.classList.add( 'drag-over' );
+    } );
     listPane.addEventListener( 'dragleave', function( e )
     {
         // Crossing into a child row fires dragleave on the pane too; only a

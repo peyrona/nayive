@@ -29,6 +29,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * The one connection to the server - what a web page cannot be: awake with the
@@ -43,6 +44,8 @@ import java.util.concurrent.Executors;
  * No Google, no FCM, no second app. What the answer says is applied as it is:
  * track -> positions on/off, badge -> the unread notification, call -> ring,
  * find -> the alarm + one fresh position, media -> the daily photo upload (MediaJob),
+ * sos -> an SOS danger watch is open: one position every that many seconds,
+ * GPS-accurate, with the usual notification (it must not show it to a thief),
  * ear -> a voice call is on in this phone's browser: the screen goes off near
  * the ear, as in a phone call (server/go/devices_ear.go). The wait says ear=1
  * when the phone has the sensor; without it the page puts up its own padlock.
@@ -75,7 +78,7 @@ public class LinkService extends Service {
         }
     }
 
-    private static LinkService running;
+    private static volatile LinkService running;
 
     /** Wakes the poll loop now (network back, the app opened, an ack sent). */
     static void kick() {
@@ -111,6 +114,8 @@ public class LinkService extends Service {
     private int holdSeconds = 180;
     private Notes.Link shown;
     private boolean trackWanted;
+    /** Seconds between positions while an SOS danger watch is open; 0 = none. */
+    private int sosEvery;
 
     @Override
     public void onCreate() {
@@ -256,7 +261,7 @@ public class LinkService extends Service {
         int failures = 0;
         while (alive) {
             if (!online()) {
-                main.post(() -> show(Notes.Link.OFFLINE));
+                onMain(() -> show(Notes.Link.OFFLINE));
                 pause(5 * 60_000L);
                 continue;
             }
@@ -271,28 +276,34 @@ public class LinkService extends Service {
             } catch (IOException e) {
                 failures++;
                 Log.i(TAG, "wait failed (" + failures + "): " + e);
-                if (failures >= 3) main.post(() -> show(Notes.Link.OFFLINE));
+                if (failures >= 3) onMain(() -> show(Notes.Link.OFFLINE));
                 pause(backoff(failures));
                 continue;
             }
+            if (!alive) break;   // stopped while the wait was out: act on nothing
             // The answer may have woken the CPU from deep sleep: keep it up long
             // enough to act on it and ask again.
             wake.acquire(15_000);
             if (r.status == 200) {
                 failures = 0;
                 refused = 0;
-                if (!Prefs.enrolled(this)) Prefs.setEnrolled(this, true);
+                if (!Prefs.enrolled(this)) {
+                    // Refused before, and device.html was opened since: maybe another
+                    // account now - the old one's positions must not go to it.
+                    if (Prefs.revoked(this) && Prefs.enrolPage(this)) PositionQueue.clear(this);
+                    Prefs.setEnrolled(this, true);
+                }
                 version = r.body.optString("v", "");
                 holdSeconds = Math.max(20, Math.min(600, r.body.optInt("hold", 180)));
                 JSONObject state = r.body;
-                main.post(() -> apply(state));
+                onMain(() -> apply(state));
                 flushPositions();
             } else if (r.status == 401) {
-                // Not enrolled yet - or revoked in "Mis dispositivos". A revoked
-                // token is dead for good: the next one is enrolled anew.
-                if (Prefs.enrolled(this)) Prefs.newToken(this);
+                // Not enrolled yet - or revoked in "Mis dispositivos", or the server
+                // lost its phone list for a while. The token stays (Prefs.refused).
+                if (Prefs.enrolled(this)) Prefs.refused(this);
                 version = "";
-                main.post(() -> {
+                onMain(() -> {
                     apply(new JSONObject());
                     show(Notes.Link.ENROL);
                 });
@@ -325,17 +336,27 @@ public class LinkService extends Service {
     // what the server said (main thread)
     // ------------------------------------------------------------------
 
+    private JSONObject lastState;   // main thread
+
     private void apply(JSONObject s) {
-        // Positions: on while a trip covers today.
+        lastState = s;
+        // Positions: on while a trip covers today, or an SOS danger watch is open.
         trackWanted = s.optBoolean("track", false);
-        if (trackWanted && !tracker.running()) {
-            tracker.start();
-            foreground(Tracker.allowedAlways(this) ? Notes.Link.TRACKING : Notes.Link.FIX);
-        } else if (!trackWanted && tracker.running()) {
+        int sos = Math.max(0, s.optInt("sos", 0));
+        if (sos > 0 && sosEvery == 0) Tracker.fresh(this, 45_000, l -> { if (l != null) onPosition(l); });   // one now
+        sosEvery = sos;
+        long every = sos > 0 ? Math.max(60, sos) * 1000L : Tracker.EVERY_MS;
+        boolean want = trackWanted || sos > 0;
+        // Without the permission start() fails: not again at every answer.
+        if (want && Tracker.allowed(this) && (!tracker.running() || tracker.every() != every)) {
+            tracker.stop();
+            tracker.start(every, sos > 0);
+            foreground(linkState());
+        } else if (!want && tracker.running()) {
             tracker.stop();
             foreground(Notes.Link.ON);
         } else if (Prefs.enrolled(this)) {
-            show(trackWanted ? (Tracker.allowedAlways(this) ? Notes.Link.TRACKING : Notes.Link.FIX) : Notes.Link.ON);
+            show(linkState());
         }
 
         int badge = s.optInt("badge", 0);
@@ -353,7 +374,9 @@ public class LinkService extends Service {
             String id = call.optString("id");
             if (!(Ringer.kind() == Ringer.CALL && Ringer.id().equals(id))) {
                 Ringer.startCall(this, id);
-                Notes.call(this, id, call.optString("from", "Nayive"), call.optBoolean("video"),
+                String from = call.optString("from", "").trim();
+                if (from.isEmpty()) from = "Nayive";   // CallStyle throws on a person with no name
+                Notes.call(this, id, from, call.optBoolean("video"),
                         BuildConfig.ORIGIN + call.optString("url", "/nayive/chat/"));
             }
         } else if (Ringer.kind() == Ringer.CALL) {
@@ -366,7 +389,8 @@ public class LinkService extends Service {
         JSONObject find = s.optJSONObject("find");
         if (find != null && !handled.contains(find.optString("id"))) {
             String id = find.optString("id");
-            if (!(Ringer.kind() == Ringer.FIND && Ringer.id().equals(id))) {
+            // A ringing SOS alarm goes first: the find rings once it stops (reapply).
+            if (Ringer.kind() != Ringer.SOS && !(Ringer.kind() == Ringer.FIND && Ringer.id().equals(id))) {
                 Ringer.startFind(this, id);
                 Notes.find(this, id);
                 Tracker.fresh(this, 45_000, l -> reportFound(id, l));
@@ -375,6 +399,12 @@ public class LinkService extends Service {
             Ringer.stop(this);
             Notes.cancel(this, Notes.FIND);
         }
+    }
+
+    /** The permanent notification while positions may go: an SOS looks like nothing. */
+    private Notes.Link linkState() {
+        if (sosEvery > 0 || !trackWanted) return Notes.Link.ON;
+        return Tracker.allowedAlways(this) ? Notes.Link.TRACKING : Notes.Link.FIX;
     }
 
     /**
@@ -397,7 +427,7 @@ public class LinkService extends Service {
         if (newest > last) Prefs.setLastNote(this, newest);
         if (newest > 0) {
             long upTo = newest;
-            sender.execute(() -> {
+            send(() -> {
                 try {
                     ack(this, new JSONObject().put("notes", upTo));
                 } catch (JSONException ignored) {
@@ -431,13 +461,13 @@ public class LinkService extends Service {
 
     /** Sends what is queued, a batch at a time, while the server takes it. */
     private void flushPositions() {
-        sender.execute(() -> {
+        send(() -> {
             for (int round = 0; round < 20 && !PositionQueue.isEmpty(this); round++) {
                 JSONArray batch = PositionQueue.peek(this);
                 try {
                     Api.Reply r = Api.post(this, "/api/device/report", new JSONObject().put("positions", batch));
                     if (!r.ok()) return;
-                    PositionQueue.drop(this, batch.length());
+                    PositionQueue.drop(this, batch);
                 } catch (IOException | JSONException e) {
                     return;   // the next position, or the next wait, tries again
                 }
@@ -445,17 +475,54 @@ public class LinkService extends Service {
         });
     }
 
-    /** "Buscar mi móvil": where the phone is right now. */
+    /**
+     * "Buscar mi móvil": where the phone is right now. Without data at that
+     * moment it tries again every 30 s, 10 times at most (never waiting on
+     * `sender`: the positions and acks go through it too).
+     */
     private void reportFound(String findId, Location l) {
-        sender.execute(() -> {
+        reportFound(findId, l, 0);
+    }
+
+    private void reportFound(String findId, Location l, int tries) {
+        send(() -> {
             try {
                 JSONObject body = new JSONObject().put("find", findId);
                 if (l != null) body.put("positions", new JSONArray().put(PositionQueue.point(l)));
-                Api.post(this, "/api/device/report", body);
-            } catch (IOException | JSONException e) {
+                Api.Reply r = Api.post(this, "/api/device/report", body);
+                if (r.ok() || r.status == 401 || r.status == 400) return;
+                Log.i(TAG, "find report answered " + r.status);
+            } catch (IOException e) {
                 Log.i(TAG, "find report failed: " + e);
+            } catch (JSONException e) {
+                return;
             }
+            if (tries < 9) onMainLater(() -> reportFound(findId, l, tries + 1), 30_000);
         });
+    }
+
+    /** On the main thread, unless the service has stopped meanwhile. */
+    private void onMain(Runnable r) {
+        main.post(() -> { if (alive) r.run(); });
+    }
+
+    private void onMainLater(Runnable r, long ms) {
+        main.postDelayed(() -> { if (alive) r.run(); }, ms);
+    }
+
+    /** On the sender thread; after onDestroy it is shut down, and this sends nothing. */
+    private void send(Runnable r) {
+        try {
+            sender.execute(r);
+        } catch (RejectedExecutionException e) {
+            Log.i(TAG, "service stopped: not sent");
+        }
+    }
+
+    /** The last answer applied again (an SOS alarm stopped: a find under it rings now). */
+    static void reapply() {
+        LinkService s = running;
+        if (s != null && s.lastState != null) s.onMain(() -> s.apply(s.lastState));
     }
 
     /** Tells the server what the user did here (decline a call, stop the alarm). */

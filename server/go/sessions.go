@@ -189,17 +189,19 @@ func (s *SessionStore) Remembered(token string) (time.Duration, bool) {
 	return e.ttl, true
 }
 
-// Drop forgets one token (sign-out).
+// Drop forgets one token (sign-out). false: forgotten now, but not yet on
+// disk - the store stays dirty and every Sweep tries again (G7).
 //
 // java: deleting a key that is not there is a no-op, not an exception.
-func (s *SessionStore) Drop(token string) {
+func (s *SessionStore) Drop(token string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	h := tokenHash(token)
 	if _, found := s.byHash[h]; found {
 		delete(s.byHash, h)
-		s.save()
+		return s.save()
 	}
+	return true
 }
 
 // DropUser kills every session belonging to `user` (used when an account is
@@ -207,7 +209,13 @@ func (s *SessionStore) Drop(token string) {
 //
 // java: unlike Java's iterator, deleting from a Go map WHILE ranging over it is
 // explicitly legal - no ConcurrentModificationException; the loop is enough.
-func (s *SessionStore) DropUser(user string) {
+//
+// false: the sessions are gone NOW, but sessions.json could not be written,
+// so a restart before a later save works would bring them back (G7). The drop
+// is kept in memory - an intruder's session must not live on because the disk
+// is full - the store stays dirty (every Sweep tries again), and a caller a
+// person waits on says so.
+func (s *SessionStore) DropUser(user string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	removed := false
@@ -218,8 +226,9 @@ func (s *SessionStore) DropUser(user string) {
 		}
 	}
 	if removed {
-		s.save()
+		return s.save()
 	}
+	return true
 }
 
 // Sweep drops expired sessions. The background worker calls this so closed
@@ -285,10 +294,10 @@ func (s *SessionStore) load() {
 
 // save writes the table. Caller holds mu. It never writes over a file that
 // could not be read: that one is moved aside first (saveTable).
-func (s *SessionStore) save() {
+func (s *SessionStore) save() bool {
 	if s.path == "" {
 		s.dirty = false
-		return
+		return true
 	}
 	rows := make([]sessionRow, 0, len(s.byHash))
 	for h, e := range s.byHash {
@@ -301,12 +310,14 @@ func (s *SessionStore) save() {
 	// changes where a session did.
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Hash < rows[j].Hash })
 	if !saveTable(s.path, &s.broken, sessionsFile{Sessions: rows}, s.log) {
-		return
+		s.dirty = true // the next Sweep writes it again
+		return false
 	}
 	// Best effort, as for vapid.json: hashes only, but nobody else's business.
 	_ = os.Chmod(s.path, 0o600)
 	s.dirty = false
 	s.saved = time.Now()
+	return true
 }
 
 // newToken returns ~43 URL-safe random characters, like secrets.token_urlsafe(32).

@@ -229,6 +229,23 @@ func (s *Server) mediaFolderFor(dev *deviceRow, p mediaPart) string {
 	taken := time.UnixMilli(p.Taken)
 	var trips []publicTripFile
 	for _, lt := range s.ownTrips(dev.Owner) {
+		// A photo folder that is not there any more - renamed or moved in
+		// Drive, or deleted - is never made again here: that split the trip's
+		// photos over two folders (T13). Trips always makes the folder when
+		// it is picked, so a missing one was moved away; the phone's own
+		// folder takes the picture instead.
+		if parts := publicPhotoDir(lt.trip.PhotosDir); parts != nil {
+			if dir := s.ownerFile(dev.Owner, parts); dir == "" || !isDirPath(dir) {
+				holdLoc := ownerLoc
+				if holdLoc == nil {
+					holdLoc = time.Local
+				}
+				if tripHolds(lt.trip, taken, holdLoc) { // only the trip the picture belongs to says so
+					s.log.Warn("a trip's photo folder is gone - the phone's own folder is used", "owner", dev.Owner, "folder", lt.trip.PhotosDir)
+				}
+				lt.trip.PhotosDir = ""
+			}
+		}
 		trips = append(trips, lt.trip)
 	}
 	if dir := mediaFolder(trips, taken, p.Lat, p.Lon, ownerLoc); dir != "" {
@@ -715,4 +732,10 @@ func fileMediaPart(root *os.Root, partRel, folder, name string) (string, error) 
 		return "", err
 	}
 	return folder + "/" + cand, nil
+}
+
+// isDirPath: p is there and is a folder.
+func isDirPath(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && info.IsDir()
 }

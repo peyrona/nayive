@@ -31,6 +31,7 @@
 
     E.openMessage = async function ( m )
     {
+        if( ! m._id ) m._id = E.rowId();     // the launcher's search: no row behind it
         S.open = m;
         S.openScroll = E.$( "listView" ).parentNode.scrollTop;
         S.showImages = false;

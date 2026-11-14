@@ -83,7 +83,10 @@ export const DRAFT_B64 = name => `new Promise( function ( res ) {
 const NS = "http://schemas.openxmlformats.org";
 
 // One sheet, A1 = a1. landscape / protect: parts Calc cannot write back
-// (codec.js detectLossy: calc.lossyPage, calc.lossyProtection).
+// (codec.js detectLossy: calc.lossyPage, calc.lossyProtection). Calc keeps
+// a sheet's protection itself (locked cells); what it drops is the ranges
+// a protected sheet leaves open to editing, so `protect` carries only those
+// (no <sheetProtection>: nothing on screen is locked).
 export function xlsx( { a1 = "X", landscape = false, protect = false } = {} )
 {
     return zip( {
@@ -92,7 +95,7 @@ export function xlsx( { a1 = "X", landscape = false, protect = false } = {} )
         "xl/workbook.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="${NS}/spreadsheetml/2006/main" xmlns:r="${NS}/officeDocument/2006/relationships"><sheets><sheet name="Hoja1" sheetId="1" r:id="rId1"/></sheets></workbook>`,
         "xl/_rels/workbook.xml.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="${NS}/package/2006/relationships"><Relationship Id="rId1" Type="${NS}/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
         "xl/worksheets/sheet1.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="${NS}/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>${a1}</t></is></c></row></sheetData>` +
-            ( protect ? `<sheetProtection sheet="1"/>` : "" ) + ( landscape ? `<pageSetup orientation="landscape"/>` : "" ) + `</worksheet>`
+            ( protect ? `<protectedRanges><protectedRange name="Open" sqref="A1"/></protectedRanges>` : "" ) + ( landscape ? `<pageSetup orientation="landscape"/>` : "" ) + `</worksheet>`
     } );
 }
 

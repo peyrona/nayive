@@ -64,6 +64,10 @@ Ayni.icons.add( {
     bolt: '<polygon points="13 2 4 14 11 14 10 22 20 10 13 10 13 2"/>',
     lock: '<rect x="4.5" y="10.5" width="15" height="10.5" rx="2.2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>',
     key: '<circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2"/><path d="m15.5 7.5 3 3"/><path d="m18 5 2.5 2.5"/>',
+    // Locked / unlocked cells (Calc): a corner of a sheet with a padlock,
+    // closed or open - not "lock" or "key", which lock a whole document.
+    "cell-lock": '<path d="M11 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="21"/><rect x="13.5" y="16" width="9" height="6.5" rx="1.3"/><path d="M15.5 16v-2a2.5 2.5 0 0 1 5 0v2"/>',
+    "cell-unlock": '<path d="M11 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="21"/><rect x="13.5" y="16" width="9" height="6.5" rx="1.3"/><path d="M15.5 16v-2.5a2.5 2.5 0 0 1 5 0"/>',
     pause: '<g stroke-width="2.2"><line x1="9" y1="5" x2="9" y2="19"/><line x1="15" y1="5" x2="15" y2="19"/></g>',
     stop: '<g stroke-width="2.2"><rect x="6" y="6" width="12" height="12" rx="1.5"/></g>',
     // Item list and tree actions (were browser.js glyphs, 2026-11-01).

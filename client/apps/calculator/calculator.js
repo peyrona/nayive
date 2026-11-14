@@ -59,7 +59,9 @@ function plain( x ) { return String( x ).includes( 'e' ) ? x.toLocaleString( 'en
 function apply( a, op, b )
 {
     if( op === '/' && b === 0 ) throw new Error( 'div0' );
-    return tidy( op === '+' ? a + b : op === '-' ? a - b : op === '*' ? a * b : a / b );
+    const r = op === '+' ? a + b : op === '-' ? a - b : op === '*' ? a * b : a / b;
+    if( ! isFinite( r ) ) throw new Error( 'overflow' );      // past 1e308: an error, not Infinity
+    return tidy( r );
 }
 
 // [ n, op, n, op, n… ] with × and ÷ first.
@@ -175,6 +177,7 @@ function percent()
         try { r = evaluate( tokens.slice( 0, -1 ) ) * x / 100; }   // of what comes before the + or −
         catch( e ) { fail(); return; }
     }
+    if( ! isFinite( r ) ) { fail(); return; }
     if( done ) { done = false; exprText = ''; }
     entry = plain( tidy( r ) );
 }
@@ -543,7 +546,8 @@ Ayni.i18n.ready.then( function()
     document.addEventListener( 'keydown', function( e )
     {
         if( e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey ) return;
-        if( e.target.closest && e.target.closest( 'input, .picker, textarea, dialog' ) ) return;
+        // The mode switch's radios take no typing: digits still go to the calculator.
+        if( e.target.closest && e.target.closest( 'input, .picker, textarea, dialog' ) && ! e.target.closest( '#modeSwitch' ) ) return;
         if( document.querySelector( 'dialog.panel[open]' ) ) return;
         const k = /^\d$/.test( e.key ) ? e.key : KEYMAP[ e.key ];
         if( ! k ) return;

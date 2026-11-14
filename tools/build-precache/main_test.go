@@ -22,7 +22,7 @@ func TestSharedListIsInPrecache(t *testing.T) {
 			t.Errorf("%s is on the shared list but not in the precache", name)
 		}
 	}
-	if !slices.Contains(shared, "shared/desk-rule.js") {
-		t.Error("shared/desk-rule.js left the shared list")
+	if !slices.Contains(shared, "shared/ayni/ayni-desk-rule.js") {
+		t.Error("shared/ayni/ayni-desk-rule.js left the shared list")
 	}
 }

@@ -133,24 +133,32 @@ function fromTranslationTable( nodes, wiki, target )
     return senses;
 }
 
+// Page names are case-sensitive: "bahnhof" is missing, "Bahnhof" is there.
+// The word as typed first, then lower case, then with a capital.
+function spellings( word )
+{
+    const lower = word.toLowerCase();
+    return [ ...new Set( [ word, lower, lower.charAt( 0 ).toUpperCase() + lower.slice( 1 ) ] ) ];
+}
+
 export const wiktionary = {
     async lookup( word, { source, target, signal } )
     {
+        const forms = spellings( word );
         // 1. The target's Wiktionary, the source language's section.
-        const page = await parsePage( target, word, signal );
-        if( page )
+        for( const w of forms )
         {
-            const nodes = section( page.doc, target, source );
-            if( nodes )
-            {
-                const r = definitions( nodes, target );
-                if( r.senses.length ) return { word: page.title, category: r.category, senses: r.senses, examples: [] };
-            }
+            const page = await parsePage( target, w, signal );
+            const nodes = page && section( page.doc, target, source );
+            if( ! nodes ) continue;
+            const r = definitions( nodes, target );
+            if( r.senses.length ) return { word: page.title, category: r.category, senses: r.senses, examples: [] };
         }
         // 2. The source's Wiktionary, its translation table.
-        const own = await parsePage( source, word, signal );
-        if( own )
+        for( const w of forms )
         {
+            const own = await parsePage( source, w, signal );
+            if( ! own ) continue;
             const nodes = section( own.doc, source, source ) || Array.from( own.doc.body.children );
             const senses = fromTranslationTable( nodes, source, target );
             if( senses.length ) return { word: own.title, category: definitions( nodes, source ).category, senses, examples: [] };
@@ -163,7 +171,7 @@ export const tatoeba = {
     async lookup( word, { source, target, signal } )
     {
         const from = ISO639_3[ source ], to = ISO639_3[ target ];
-        const q = new URLSearchParams( { lang: from, q: '=' + word, 'trans:lang': to, sort: 'relevance', limit: '5' } );
+        const q = new URLSearchParams( { lang: from, q: '=' + word.toLowerCase(), 'trans:lang': to, sort: 'relevance', limit: '5' } );
         let j;
         try { j = await fetchJson( 'https://api.tatoeba.org/v1/sentences?' + q, { signal } ); }
         catch( e ) { if( e instanceof TranslationError && e.category === 'unsupported' ) return null; throw e; }

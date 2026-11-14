@@ -121,18 +121,12 @@
 </head>
 <body>
     <div class="desktop" id="desktop" data-edge="bottom" data-mode="app">
-        <main class="area desk" id="desk"><div class="desk-empty"></div><!-- NOTES (shared/notes.js): sticky notes on the wallpaper, under the windows. --><div class="notes-layer" id="notesLayer"></div><div class="snap-ghost" id="snapGhost" hidden></div></main>
+        <main class="area desk" id="desk"><div class="desk-empty"></div><!-- NOTES (shared/notes.js) put their panel here. --><div class="snap-ghost" id="snapGhost" hidden></div></main>
 
         <nav class="taskbar" id="bar" data-i18n-attr="aria-label:ayni.desk.taskbar">
             <button class="btn" id="menuBtn" data-i18n-attr="data-tip:ui.toApps" data-tip="Apps"><img src="../icons/icon-192.png" alt=""></button>
             <div class="chips" id="tasks" role="group" data-i18n-attr="aria-label:desktop.switchWin"></div>
             <div class="widgets">
-            <!-- NOTES (2026-11-12) - two plain icon buttons, like the row's others: show the desk (every
-                 window out of the way, a second press brings them back; ayni-deskpage.js SHOW THE DESK), a new note. -->
-            <div class="notes-pair" id="notesPair" role="group" data-i18n-attr="aria-label:notes.title">
-                <button class="btn" id="deskBtn" type="button" aria-pressed="false" data-i18n-attr="data-tip:desktop.showDesk, aria-label:desktop.showDesk"><span class="icon" data-icon="show-desk"></span></button>
-                <button class="btn" id="noteNewBtn" type="button" data-i18n-attr="data-tip:notes.new, aria-label:notes.new"><span class="icon" data-icon="sticky-plus"></span></button>
-            </div>
             <!-- COUNTDOWNS - one chip each (see THE COUNTDOWNS), cloned from cdTpl. -->
             <span id="cds"></span>
             <template id="cdTpl"><div class="widget cd-chip" role="group"><button class="cd-main" type="button"><b></b><span class="cd-text"></span></button><button class="btn cd-pp" type="button" data-cd="pp"></button><button class="btn cd-stop" type="button" data-cd="stop"></button><button class="btn cd-x" type="button" data-cd="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button></div></template>
@@ -395,15 +389,6 @@
 
     var menuFrame = null, menuAuto = false;
 
-    // The notes buttons (show the desk, a new note) live in the menu's top row
-    // (2026-11-12). They move into each loaded launcher, whose top bar puts them
-    // where My account › Top bar says (shared/launcher-bar.js), so their own
-    // handlers (here and in ayni-deskpage.js) and their pressed look go with them.
-    // A press shuts the menu: the desk, or the new note, is what comes next.
-    var notesPair = document.getElementById( 'notesPair' );
-    var notesBtns = [ 'deskBtn', 'noteNewBtn' ].map( function ( id ) { return document.getElementById( id ); } ).filter( Boolean );
-    notesBtns.forEach( function ( b ) { b.addEventListener( 'click', function () { closeMenu(); } ); } );
-
     function ensureMenuFrame()
     {
         if( menuFrame ) return;
@@ -446,16 +431,6 @@
                          // full screen for a dialog: the desk shows behind it, not the launcher's tiles
                          'html.desk-full,html.desk-full body{background:transparent}html.desk-full .launcher{visibility:hidden}';
         doc.head.appendChild( st );
-        var lsBox = doc.getElementById( 'lsBox' ), lsTools = doc.getElementById( 'tools' );
-        // (after this page's words and icons are in: the pair leaves this document)
-        if( notesPair && lsBox ) ( window.Ayni ? Ayni.i18n.ready : Promise.resolve() ).then( function ()
-        {
-            // its two buttons: the launcher's top bar places them (shared/launcher-bar.js)
-            notesBtns.forEach( function ( b ) { notesPair.appendChild( b ); } );   // back from a launcher loaded before
-            lsBox.insertBefore( notesPair, lsTools && lsTools.parentNode === lsBox ? lsTools : null );
-            notesPair.hidden = true;
-            if( cw.NayiveBar ) cw.NayiveBar.render();
-        } );
         // The menu is exactly the launcher's panel, once that has laid out (not while hidden).
         var panel = doc.querySelector( '.apps-panel' );
         if( panel ) new cw.ResizeObserver( function ()
@@ -718,18 +693,12 @@
     var syncDot = document.getElementById( 'syncIndicator' );
 
     //------------------------------------------------------------------------//
-    // NOTES - sticky notes on the wallpaper (shared/notes.js). "+" shows the
-    // desk first, then puts a new note on it. Their saving counts in the plug below.
+    // NOTES - a panel on the right of the desk (shared/notes.js); Office › Notes
+    // opens it, its × or Esc shuts it; the panel's own "+" makes a note. Their saving counts in the plug below.
     document.addEventListener( 'DOMContentLoaded', function () { if( window.Ayni && window.NayiveNotes ) Ayni.i18n.ready.then( function ()
     {
-        NayiveNotes.desk( document.getElementById( 'notesLayer' ) );
+        NayiveNotes.desk( document.getElementById( 'desk' ) );
     } ); } );
-    document.getElementById( 'noteNewBtn' ).addEventListener( 'click', function ()
-    {
-        if( ! window.NayiveNotes ) return;
-        D.showDesk( true );
-        NayiveNotes.add();
-    } );
 
     function winDot( w )
     {
@@ -792,9 +761,8 @@
             lead:  t( 'desktop.helpLead' ),
             rows: [
                 { sel: '#menuBtn',       icon: 'grid', text: t( 'desktop.helpMenu' ) },
-                // the notes pair sits in the menu's top row (another document): no sel, the rows always show
-                { icon: 'show-desk', name: t( 'desktop.showDesk' ), text: t( 'desktop.helpShowDesk' ) },
-                { icon: 'sticky-plus', name: t( 'notes.new' ), text: t( 'desktop.helpNewNote' ) },
+                // the notes: Office › Notes in the menu (another document): no sel, the row always shows
+                { icon: 'sticky', name: t( 'notes.title' ), text: t( 'desktop.helpNotes' ) },
                 // tour: ("Ver el tour" in the card) a window, its bar button, the
                 // ⋮'s Tile switch, the bar's weather and battery - or, with no
                 // window open / the item off, the desk or the bar as a ghost.

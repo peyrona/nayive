@@ -118,7 +118,7 @@ async function geocodeLocation( sQuery, sDate )
 
         let tzData = null;
 
-        if( sDate )
+        if( sDate && weatherInReach( sDate ) )
         {
             try
             {
@@ -220,6 +220,13 @@ async function loadStageWeather( key, lat, lon, sDate )
     if( weatherPending.has( key ) )
         return;
 
+    // Past the forecast's reach: open-meteo answers 400, so it is never asked (T16).
+    if( ! weatherInReach( sDate ) )
+    {
+        weatherCache.set( key, null );
+        return;
+    }
+
     weatherPending.add( key );
 
     let w = null;
@@ -247,6 +254,10 @@ async function fetchWeather( lat, lon, sDate )
 
     return parseWeather( await res.json() );
 }
+
+// The forecast reaches about 16 days ahead (today + 15); past that open-meteo
+// answers 400, and each such call is a request of the free-tier budget for nothing.
+function weatherInReach( sDate ) { return !! sDate && sDate <= addDaysIso( Ayni.dates.today(), 15 ); }
 
 // The one day's weather of a place; with timezone=auto the answer also names
 // the place's time zone, which is what lets geocodeLocation() ask for both at once.

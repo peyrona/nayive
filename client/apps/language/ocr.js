@@ -13,6 +13,7 @@ import { OCR_LIB } from './config.js';
 
 let libP = null;
 const workers = new Map();                         // "spa" -> Promise<worker>
+const loggers = new Map();                         // "spa" -> the progress of the reading that uses it now
 
 function loadLib()
 {
@@ -57,28 +58,49 @@ export const ocr = {
         if( signal && signal.aborted ) throw abortError( signal );
         const canvas = await prepareImage( image, maxSide );
 
-        let current = null;
         if( ! workers.has( lang ) )
         {
             const p = T.createWorker( lang, 1, {
                 workerPath: new URL( OCR_LIB.worker, import.meta.url ).href,
                 corePath:   new URL( OCR_LIB.core, import.meta.url ).href,
                 workerBlobURL: false,
-                logger: ( m ) => { if( current ) current( m ); }
+                logger: ( m ) => { const f = loggers.get( lang ); if( f ) f( m ); }
             } );
             p.catch( () => workers.delete( lang ) );
             workers.set( lang, p );
         }
         // Loading the data is the first half of the bar, reading the second.
-        current = ( m ) =>
+        const current = ( m ) =>
         {
             if( m.status === 'recognizing text' ) progress( 0.5 + 0.5 * m.progress );
             else if( typeof m.progress === 'number' ) progress( 0.5 * m.progress );
         };
+        loggers.set( lang, current );
+        const unlog = () => { if( loggers.get( lang ) === current ) loggers.delete( lang ); };
 
-        let worker;
-        try { worker = await workers.get( lang ); }
-        catch( e ) { throw new TranslationError( 'network', 'OCR data not loaded', { cause: e } ); }
+        // A Cancel while the language data downloads is heard at once; the
+        // download goes on in the background and the worker is kept for next time.
+        let worker, onWait = null;
+        try
+        {
+            worker = await new Promise( ( resolve, reject ) =>
+            {
+                if( signal )
+                {
+                    if( signal.aborted ) return reject( abortError( signal ) );
+                    onWait = () => reject( abortError( signal ) );
+                    signal.addEventListener( 'abort', onWait, { once: true } );
+                }
+                workers.get( lang ).then( resolve, reject );
+            } );
+        }
+        catch( e )
+        {
+            unlog();
+            if( signal && signal.aborted ) throw abortError( signal );
+            throw new TranslationError( 'network', 'OCR data not loaded', { cause: e } );
+        }
+        finally { if( onWait ) signal.removeEventListener( 'abort', onWait ); }
 
         const onAbort = () => { workers.delete( lang ); worker.terminate(); };
         if( signal ) signal.addEventListener( 'abort', onAbort, { once: true } );
@@ -97,7 +119,7 @@ export const ocr = {
             if( signal && signal.aborted ) throw abortError( signal );
             throw e instanceof TranslationError ? e : new TranslationError( 'internal', String( e && e.message || e ) );
         }
-        finally { current = null; if( signal ) signal.removeEventListener( 'abort', onAbort ); }
+        finally { unlog(); if( signal ) signal.removeEventListener( 'abort', onAbort ); }
     },
 
     dispose() { for( const p of workers.values() ) p.then( ( w ) => w.terminate(), () => {} ); workers.clear(); }

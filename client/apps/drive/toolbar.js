@@ -81,7 +81,7 @@ function offerEmptyTrash( on, held )
         let items;
         try { items = await withBusy( AyniNet.trashList() ); }
         catch( _ ) { Ayni.toast( 'err', T( 'drive.emptyTrashFailed' ) ); return; }
-        if( ! items.length ) { reload(); return; }
+        if( ! items.length ) { refreshView(); if( trashMode ) refreshDiskGauge(); return; }
         const ids  = items.map( function( it ) { return it.id; } );
         const size = binHeld( items );
         if( ! await Ayni.confirm( {
@@ -91,7 +91,8 @@ function offerEmptyTrash( on, held )
         try { await purgeBinIds( ids ); }
         catch( _ ) { Ayni.toast( 'err', T( 'drive.emptyTrashFailed' ) ); return; }
         Ayni.toast( 'ok', T( 'drive.trashEmptied' ) );
-        reload();
+        refreshView();             // the bin itself when it is open (D7); reload() does the gauge
+        if( trashMode ) refreshDiskGauge();
     };
 }
 
@@ -170,7 +171,7 @@ function onFilesNews( msg )
     const seen   = ( msg.paths || [] ).filter( function( p )
     {
         if( typeof p !== 'string' ) return false;
-        if( FS_ROOT && p !== FS_ROOT && p.indexOf( FS_ROOT + '/' ) !== 0 ) return false;
+        if( FS_ROOT && p !== FS_ROOT && p.indexOf( FS_ROOT + '/' ) !== 0 && ! NayiveUI.isShared( p ) ) return false;   // "Shared with me" too (N7)
         return ! p.split( '/' ).some( function( s ) { return s.charAt( 0 ) === '.'; } );
     } );
 
@@ -206,12 +207,16 @@ async function applyNews()
         const r    = await AyniNet.listDir( path, true );      // shortcuts too, as navigate.js
         if( seq !== listingSeq || path !== currentFolder || trashMode ) return;
 
-        curListing = { path: path, nodes: pruneNodes( r.nodes || [] ) };
+        curListing     = { path: path, nodes: pruneNodes( r.nodes || [] ) };
+        listingLoading = false;    // it took over a folder load still on its way (D2)
         render();                  // picks that are gone drop out on their own (the browser)
         await reloadOpenDirs();
         if( isSearching() ) runSearch();
     }
-    catch( _ ) {}     // offline or a hiccup: the next news or a manual reload catches up
+    catch( _ )        // offline or a hiccup: the next news or a manual reload catches up
+    {
+        if( listingLoading ) loadListing( currentFolder );     // it took over a folder load: never a "Loading…" for ever (D2)
+    }
 }
 
 // Write, Calc and Text save through shared/ayni/ayni-store.js, which tells the other

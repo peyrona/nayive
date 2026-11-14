@@ -31,7 +31,10 @@ final class Actions {
 
     /** Stop on an SOS note; on "Are you OK?" it is the answer too (server/go/sos.go). */
     static void stopSos(Context c, String tag) {
-        if (Ringer.kind() == Ringer.SOS) Ringer.stop(c);
+        if (Ringer.kind() == Ringer.SOS) {
+            Ringer.stop(c);
+            LinkService.reapply();   // a find that was waiting under the SOS rings now
+        }
         c.getSystemService(android.app.NotificationManager.class).cancel(tag, Notes.NOTE);
         if (Notes.ASK.equals(tag)) send(c, "sos", "ok", "ok");
     }

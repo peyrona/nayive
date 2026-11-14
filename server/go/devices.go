@@ -11,7 +11,7 @@ package main
 // uses. Through it the phone learns, with the screen off, what a web page
 // cannot wait for:
 //
-//	GET /api/device/wait?v=V&tz=&lang=   (the app) -> {"v","hold","track","badge","call","find","media","ear","notes"}
+//	GET /api/device/wait?v=V&tz=&lang=   (the app) -> {"v","hold","track","badge","call","find","media","ear","notes","sos"}
 //
 //	track  a trip of the owner covers today, on the owner's clock (the rule
 //	       positions.go keeps positions by): send positions
@@ -178,9 +178,12 @@ type Devices struct {
 	ear     earTable                // a voice call at the ear (devices_ear.go)
 	notes   map[string][]deviceNote // phone id -> notifications not yet acked (push_app.go)
 	noteSeq int64
-	locales map[string]phoneLocale // phone id -> its zone and language, from its wait
-	closing chan struct{}
-	once    sync.Once
+	// notesBroken: device-notes.json was there but unreadable; its next save
+	// moves it aside first (saveTable).
+	notesBroken bool
+	locales     map[string]phoneLocale // phone id -> its zone and language, from its wait
+	closing     chan struct{}
+	once        sync.Once
 
 	lastMu sync.Mutex // one last.json write at a time
 }
@@ -248,11 +251,16 @@ func (d *Devices) ensureLoaded() {
 			d.rows = append(d.rows, r)
 		}
 	}
+	d.loadNotes() // after the rows: only notes of phones still enrolled (D4)
 }
 
 // save writes the table back. Caller holds mu. It never writes over a file
 // that could not be read: that one is moved aside first (saveTable).
-func (d *Devices) save() {
+//
+// false: not written. What a person waits on (Enrol, SetEndpoint, SetMedia,
+// Revoke) is then taken back and answered 500 (G8): a revoked phone must not
+// work again after the next restart.
+func (d *Devices) save() bool {
 	rows := make([]deviceRow, len(d.rows))
 	for i, r := range d.rows {
 		if s := d.seen[r.ID]; s > r.Seen {
@@ -261,8 +269,11 @@ func (d *Devices) save() {
 		}
 		rows[i] = r
 	}
-	saveTable(d.path, &d.broken, devicesFile{Devices: rows}, d.log)
+	return saveTable(d.path, &d.broken, devicesFile{Devices: rows}, d.log)
 }
+
+// errDevicesNotSaved: devices.json could not be written; nothing changed.
+var errDevicesNotSaved = errors.New("devices.json could not be written")
 
 func tokenHash(token string) string {
 	sum := sha256.Sum256([]byte(token))
@@ -361,6 +372,7 @@ func (d *Devices) Enrol(owner, token, name, endpoint string, app int) (string, e
 			continue
 		}
 		r := &d.rows[i]
+		before := *r
 		r.Owner, r.Name, r.Seen = owner, name, now
 		if endpoint != "" {
 			r.Endpoint = endpoint
@@ -368,7 +380,10 @@ func (d *Devices) Enrol(owner, token, name, endpoint string, app int) (string, e
 		if app > 0 {
 			r.App = app
 		}
-		d.save()
+		if !d.save() {
+			*r = before
+			return "", errDevicesNotSaved
+		}
 		d.kickLocked()
 		return r.ID, nil
 	}
@@ -384,7 +399,10 @@ func (d *Devices) Enrol(owner, token, name, endpoint string, app int) (string, e
 	id := newChatID()
 	d.rows = append(d.rows, deviceRow{ID: id, Owner: owner, Hash: h, Name: name,
 		Created: now, Seen: now, App: app, Endpoint: endpoint})
-	d.save()
+	if !d.save() {
+		d.rows = d.rows[:len(d.rows)-1]
+		return "", errDevicesNotSaved
+	}
 	d.kickLocked()
 	d.log.Info("phone enrolled", "owner", owner, "id", id)
 	return id, nil
@@ -410,32 +428,40 @@ func (d *Devices) List(owner string) []deviceRow {
 
 // SetEndpoint changes the web-push endpoint of `owner`'s phone `id`. Only ever
 // their own phone: unlike Enrol, it never moves one to another account.
-func (d *Devices) SetEndpoint(owner, id, endpoint string) bool {
+// errNoDevice: no such phone of that owner.
+var errNoDevice = errors.New("no such phone")
+
+func (d *Devices) SetEndpoint(owner, id, endpoint string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.ensureLoaded()
 	r := d.rowLocked(id)
 	if r == nil || r.Owner != owner {
-		return false
+		return errNoDevice
 	}
 	if r.Endpoint != endpoint {
+		was := r.Endpoint
 		r.Endpoint = endpoint
-		d.save()
+		if !d.save() {
+			r.Endpoint = was
+			return errDevicesNotSaved
+		}
 	}
-	return true
+	return nil
 }
 
 // SetMedia switches `owner`'s phone `id`'s photo upload on or off, and/or sets
 // its folder ("" = the default). Switching on stamps the moment: only what the
 // phone takes from then on goes up. Already on stays as it was.
-func (d *Devices) SetMedia(owner, id string, on *bool, dir *string) bool {
+func (d *Devices) SetMedia(owner, id string, on *bool, dir *string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.ensureLoaded()
 	r := d.rowLocked(id)
 	if r == nil || r.Owner != owner {
-		return false
+		return errNoDevice
 	}
+	before := *r
 	if on != nil {
 		switch {
 		case *on && r.Media == 0:
@@ -447,9 +473,12 @@ func (d *Devices) SetMedia(owner, id string, on *bool, dir *string) bool {
 	if dir != nil {
 		r.MediaDir = strings.Join(publicPhotoDir(*dir), "/")
 	}
-	d.save()
+	if !d.save() {
+		*r = before
+		return errDevicesNotSaved
+	}
 	d.kickLocked()
-	return true
+	return nil
 }
 
 // mediaFiled: phone `id` already sent the file it calls `phoneID`.
@@ -505,7 +534,7 @@ func (d *Devices) FollowEndpoint(owner, old, endpoint string) bool {
 }
 
 // Revoke forgets one phone of `owner`; its token dies with it.
-func (d *Devices) Revoke(owner, id string) bool {
+func (d *Devices) Revoke(owner, id string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.ensureLoaded()
@@ -514,18 +543,24 @@ func (d *Devices) Revoke(owner, id string) bool {
 	for _, r := range d.rows {
 		if r.Owner == owner && r.ID == id {
 			found = true
-			delete(d.seen, id)
 			continue
 		}
 		kept = append(kept, r)
 	}
-	if found {
-		d.rows = kept
-		d.save()
-		d.kickLocked()
-		d.log.Info("phone revoked", "owner", owner, "id", id)
+	if !found {
+		return errNoDevice
 	}
-	return found
+	before := d.rows
+	d.rows = kept
+	if !d.save() {
+		d.rows = before // still enrolled - in memory as on disk
+		return errDevicesNotSaved
+	}
+	delete(d.seen, id)
+	d.dropNotesLocked(id)
+	d.kickLocked()
+	d.log.Info("phone revoked", "owner", owner, "id", id)
+	return nil
 }
 
 // DropUser forgets a deleted user's phones.
@@ -541,6 +576,13 @@ func (d *Devices) rename(owner, to string) {
 	if kept, found := moveOwner(d.rows, owner, to, func(r *deviceRow) *string { return &r.Owner }); found {
 		d.rows = kept
 		d.save()
+		var gone []string // a deleted user's phones: their queued notes go too
+		for id := range d.notes {
+			if d.rowLocked(id) == nil {
+				gone = append(gone, id)
+			}
+		}
+		d.dropNotesLocked(gone...)
 		d.kickLocked()
 	}
 	delete(d.rings, owner)
@@ -814,6 +856,7 @@ type deviceState struct {
 	Media int64          `json:"media"`
 	Ear   bool           `json:"ear"`
 	Notes []deviceNote   `json:"notes"`
+	Sos   int            `json:"sos"` // seconds between positions for an open danger watch; 0 = none (sos.go)
 }
 
 // version is what the phone echoes back: equal means nothing to tell it.
@@ -823,8 +866,10 @@ func (st deviceState) version() string {
 	return hex.EncodeToString(sum[:8])
 }
 
-// tripToday: a trip of `owner` that keeps positions covers today, on the
-// owner's clock. Cached a minute - every chat change wakes every wait.
+// tripToday: a trip of `owner` that keeps positions covers this moment, on
+// any of its clocks - the owner's home zone or a stage's - the same rule that
+// decides which points the trip keeps (tripCoversAt, G21). Cached a minute -
+// every chat change wakes every wait.
 func (s *Server) tripToday(owner string) bool {
 	d := s.devices
 	d.mu.Lock()
@@ -834,15 +879,12 @@ func (s *Server) tripToday(owner string) bool {
 	}
 	d.mu.Unlock()
 
-	now := time.Now()
-	if loc := Location(s.users.UserTZ("user", owner)); loc != nil { // nil: the server's own clock
-		now = now.In(loc)
-	}
-	today := now.Format("2006-01-02")
+	now := time.Now().Unix()
+	home := Location(s.users.UserTZ("user", owner)) // nil: the server's own clock
 	on := false
 	for _, lt := range s.trackedTrips(owner) {
 		if lt.trip.StartDate != "" && lt.trip.EndDate != "" &&
-			lt.trip.StartDate <= today && today <= lt.trip.EndDate {
+			tripCoversAt(lt.trip, now, tripZones(lt.trip, home)) {
 			on = true
 			break
 		}
@@ -878,6 +920,7 @@ func (s *Server) deviceStateFor(r *deviceRow) (deviceState, time.Time) {
 		}
 	}
 	st.Notes = s.devices.notesFor(r.ID)
+	st.Sos = s.sosEveryFor(r.Owner)
 	return st, next
 }
 
@@ -955,6 +998,10 @@ func (s *Server) apiDevice(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		id, err := s.devices.Enrol(user, body.T, body.Name, body.Endpoint, 0)
+		if errors.Is(err, errDevicesNotSaved) {
+			sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+			return
+		}
 		if err != nil {
 			sendError(w, r, http.StatusConflict, err.Error())
 			return
@@ -1031,19 +1078,16 @@ func (s *Server) apiDevice(w http.ResponseWriter, r *http.Request) {
 			sendError(w, r, http.StatusBadRequest, "carpeta no válida")
 			return
 		}
-		if body.Endpoint != nil && !s.devices.SetEndpoint(user, parts[0], *body.Endpoint) {
-			sendError(w, r, http.StatusNotFound, "ese móvil no existe")
+		if body.Endpoint != nil && deviceSaveFailed(w, r, s.devices.SetEndpoint(user, parts[0], *body.Endpoint)) {
 			return
 		}
-		if (body.Media != nil || body.MediaDir != nil) && !s.devices.SetMedia(user, parts[0], body.Media, body.MediaDir) {
-			sendError(w, r, http.StatusNotFound, "ese móvil no existe")
+		if (body.Media != nil || body.MediaDir != nil) && deviceSaveFailed(w, r, s.devices.SetMedia(user, parts[0], body.Media, body.MediaDir)) {
 			return
 		}
 		sendJSON(w, r, http.StatusOK, map[string]any{"ok": true})
 
 	case len(parts) == 1 && r.Method == http.MethodDelete:
-		if !s.devices.Revoke(user, parts[0]) {
-			sendError(w, r, http.StatusNotFound, "ese móvil no existe")
+		if deviceSaveFailed(w, r, s.devices.Revoke(user, parts[0])) {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -1051,6 +1095,20 @@ func (s *Server) apiDevice(w http.ResponseWriter, r *http.Request) {
 	default:
 		sendError(w, r, http.StatusNotFound, "no such endpoint")
 	}
+}
+
+// deviceSaveFailed answers a phone change that did not happen: 404 for no
+// such phone, 500 for one that could not be written (G8). nil: nothing sent.
+func deviceSaveFailed(w http.ResponseWriter, r *http.Request, err error) bool {
+	switch {
+	case err == nil:
+		return false
+	case errors.Is(err, errNoDevice):
+		sendError(w, r, http.StatusNotFound, "ese móvil no existe")
+	default:
+		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+	}
+	return true
 }
 
 // roundedForFind is p as the find dialog shows it, and as last.json keeps it:
@@ -1164,7 +1222,7 @@ func (s *Server) deviceWait(w http.ResponseWriter, r *http.Request, dev *deviceR
 			sendJSON(w, r, http.StatusOK, map[string]any{
 				"v": v, "hold": int(deviceHold / time.Second),
 				"track": st.Track, "badge": st.Badge, "call": st.Call, "find": st.Find, "media": st.Media, "ear": st.Ear,
-				"notes": st.Notes,
+				"notes": st.Notes, "sos": st.Sos,
 			})
 			return
 		}
@@ -1222,11 +1280,21 @@ func (s *Server) deviceReport(w http.ResponseWriter, r *http.Request, dev *devic
 		}
 		ps = append(ps, tripPosition{Lat: *p.Lat, Lon: *p.Lon, Acc: accOrApp(p.Acc), At: stampOrNow(p.At), Source: "nayive"})
 	}
-	saved := s.recordPositions(dev.Owner, ps) // also keeps the newest as the last position
+	// Checked (G20): the app drops its queued points on 200 only, so a trip
+	// write that failed for a reason that may pass is a 503 - it sends again.
+	saved, written := s.recordPositionsChecked(dev.Owner, ps) // also keeps the newest as the last position
+	// Only a point that could be stored moves the open SOS alert (G17).
+	if newest, ok := newestValid(ps); ok {
+		s.sosFollow(dev.Owner, lastPos{Lat: newest.Lat, Lon: newest.Lon, Acc: newest.Acc, At: newest.At, Source: "nayive"})
+	}
 	if body.Find != "" && len(ps) > 0 {
 		newest := ps[len(ps)-1]
 		s.devices.FoundAt(dev.Owner, body.Find, roundedForFind(lastPos{
 			Lat: newest.Lat, Lon: newest.Lon, Acc: newest.Acc, At: newest.At, Source: "nayive"}))
+	}
+	if !written {
+		sendError(w, r, http.StatusServiceUnavailable, "positions not saved - try again")
+		return
 	}
 	sendJSON(w, r, http.StatusOK, map[string]any{"ok": true, "saved": saved})
 }

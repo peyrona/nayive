@@ -31,9 +31,13 @@ function offlineNote()
 // (classes sPrefix-legend, -legend-item, -legend-swatch).
 function mapPoints( trip )
 {
+    // `index` is the stage's number in the WHOLE list - the one the PDF's
+    // itinerary prints - so a switched-off or unlocated stage never shifts the
+    // numbers of the pins after it (T9).
     return ( trip.stages || [] )
-        .filter( function( st ) { return stageEnabled( st ) && typeof st.lat === 'number' && typeof st.lon === 'number'; } )
-        .map( function( st, i ) { return { id: st.id, lat: st.lat, lon: st.lon, label: st.location, index: i + 1, transport: st.transport || 'other' }; } );
+        .map( function( st, i ) { return { st: st, n: i + 1 }; } )
+        .filter( function( x ) { return stageEnabled( x.st ) && typeof x.st.lat === 'number' && typeof x.st.lon === 'number'; } )
+        .map( function( x ) { const st = x.st; return { id: st.id, lat: st.lat, lon: st.lon, label: st.location, index: x.n, transport: st.transport || 'other' }; } );
 }
 
 function legStyle( sMode )
@@ -227,12 +231,11 @@ function buildRouteMapBlock( trip, sWhich, parentEl )
     // actually uses to travel between stages. Each leg is coloured by the stage it
     // leaves from, so the last stage (nothing departs it) is skipped. Sits in the
     // bar ABOVE the map, before Plan / Journey.
+    // Only the stages drawn (with a pin): a leg is drawn only between those (N2).
     const usedModes = [];
-    const mapStages = trip.stages.filter( stageEnabled );
-    mapStages.slice( 0, -1 ).forEach( function( st )
+    mapPoints( trip ).slice( 0, -1 ).forEach( function( p )
     {
-        const m = st.transport || 'other';
-        if( usedModes.indexOf( m ) === -1 ) usedModes.push( m );
+        if( usedModes.indexOf( p.transport ) === -1 ) usedModes.push( p.transport );
     });
 
     if( usedModes.length )

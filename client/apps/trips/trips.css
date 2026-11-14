@@ -358,6 +358,7 @@ input:disabled { opacity: 0.5; cursor: not-allowed; }
 #printRoot .pr-num { font-weight: 700; background: #111; color: #fff; border-radius: 50%; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; flex: none; }
 #printRoot .pr-loc { font-weight: 700; font-size: 14px; }
 #printRoot .pr-transport { color: #555; font-size: 11px; margin-left: auto; }
+#printRoot .pr-off { color: #a33; font-size: 11px; }
 #printRoot table.pr-kv { border-collapse: collapse; width: 100%; }
 #printRoot table.pr-kv th { text-align: left; width: 108px; vertical-align: top; color: #555; font-weight: 600; padding: 1px 8px 1px 0; white-space: nowrap; }
 #printRoot table.pr-kv td { vertical-align: top; padding: 1px 0; white-space: pre-line; }

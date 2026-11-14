@@ -24,6 +24,7 @@ public class NayiveApp extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        Ringer.restoreVolume(this);   // the app died while a find or SOS rang
         NotificationManager nm = getSystemService(NotificationManager.class);
 
         NotificationChannel link = new NotificationChannel(CH_LINK, getString(R.string.chan_link),

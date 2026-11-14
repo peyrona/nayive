@@ -1608,6 +1608,23 @@
 
             subs.forEach( function( s ) { es[ s.id ] = 1; ef[ s.id ] = s.days; } );
 
+            // The predecessors that take days. One with no duration is a zero-length
+            // step: the chain goes on through it to its own predecessors (T1) -
+            // A (3 days) <- B (no days) <- C waits for A. `seen` stops a loop.
+            function timedPreds( sub, seen )
+            {
+                if( ! seen ) { seen = {}; seen[ sub.id ] = true; }   // never itself, round a loop
+                const out = [];
+                preds( task, sub ).forEach( function( p )
+                {
+                    if( seen[ p.id ] ) return;
+                    seen[ p.id ] = true;
+                    if( p.days > 0 ) out.push( p );
+                    else out.push.apply( out, timedPreds( p, seen ) );
+                });
+                return out;
+            }
+
             for( let pass = 0; pass < subs.length; pass++ )
             {
                 let moved = false;
@@ -1616,11 +1633,9 @@
                 {
                     let start = 1;
 
-                    preds( task, s ).forEach( function( p )
+                    timedPreds( s ).forEach( function( p )
                     {
-                        // A predecessor with no duration of its own schedules nothing.
-                        if( ef[ p.id ] )
-                            start = Math.max( start, ef[ p.id ] + 1 );
+                        start = Math.max( start, ef[ p.id ] + 1 );
                     });
 
                     if( start !== es[ s.id ] )
@@ -1641,7 +1656,7 @@
             {
                 const next = subs.filter( function( o )
                 {
-                    return preds( task, o ).some( function( p ) { return p.id === s.id; } );
+                    return timedPreds( o ).some( function( p ) { return p.id === s.id; } );
                 });
 
                 const late = next.length
@@ -2051,12 +2066,16 @@
                 input.value = t.text;
                 input.autofocus = true;
 
+                // Escape: removing the box fires blur in Chromium; the flag keeps
+                // that blur from saving what Escape just threw away (E1).
+                let cancelled = false;
+
                 input.addEventListener( 'keydown', function( e )
                 {
                     if( e.key === 'Enter' )  commitEdit( t.id, input.value );
-                    if( e.key === 'Escape' ) cancelEdit();
+                    if( e.key === 'Escape' ) { cancelled = true; cancelEdit(); }
                 });
-                input.addEventListener( 'blur', function() { commitEdit( t.id, input.value ); } );
+                input.addEventListener( 'blur', function() { if( ! cancelled ) commitEdit( t.id, input.value ); } );
 
                 row.appendChild( input );
 
@@ -2178,12 +2197,14 @@
                 input.value = s.text;
                 input.placeholder = T( 'tasks.describeTask' );
 
+                let cancelled = false;   // see the task box: no save on the blur after Escape (E1)
+
                 input.addEventListener( 'keydown', function( e )
                 {
                     if( e.key === 'Enter' )  commitEditSubtask( task.id, s.id, input.value );
-                    if( e.key === 'Escape' ) cancelEditSubtask();
+                    if( e.key === 'Escape' ) { cancelled = true; cancelEditSubtask(); }
                 });
-                input.addEventListener( 'blur', function() { commitEditSubtask( task.id, s.id, input.value ); } );
+                input.addEventListener( 'blur', function() { if( ! cancelled ) commitEditSubtask( task.id, s.id, input.value ); } );
 
                 row.appendChild( input );
 

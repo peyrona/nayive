@@ -9,20 +9,24 @@
 let filePickerOnPick   = null;
 let filePickerFilesNode = null;   // null = loading, undefined = load failed, else the 'files' tree node
 let filePickerExpanded = null;
+let filePickerLoaded   = null;   // folder paths whose own list is in (each opened folder is listed on its own, T17)
 
 async function openFilePicker( onPick )
 {
     filePickerOnPick      = onPick;
     filePickerFilesNode   = null;
     filePickerExpanded    = new Set();
+    filePickerLoaded      = new Set();
 
     renderFilePickerSheet();
     openSheet( 'filePickerSheetBackdrop' );
 
     try
     {
-        // The files/ subtree only (same node shape the old full tree gave).
-        filePickerFilesNode = await AyniNet.listDirRecursive( 'files' );
+        // files/ itself only - never its whole tree, every photo included
+        // (T17): a folder is listed when it is opened (toggle below).
+        filePickerFilesNode = await AyniNet.listDir( 'files' );
+        filePickerLoaded.add( 'files' );
     }
     catch( err )
     {
@@ -115,11 +119,19 @@ function appendFileNode( host, node, depth )
         if( cb ) cb( node.path );
     };
 
-    const toggle = function()
+    const toggle = async function()
     {
-        if( filePickerExpanded.has( node.path ) ) filePickerExpanded.delete( node.path );
-        else filePickerExpanded.add( node.path );
+        if( filePickerExpanded.has( node.path ) ) { filePickerExpanded.delete( node.path ); renderFilePickerSheet(); return; }
+        filePickerExpanded.add( node.path );
+        if( filePickerLoaded.has( node.path ) || node._loading ) { renderFilePickerSheet(); return; }
+
+        const loaded = filePickerLoaded;
+        node._loading = true;
         renderFilePickerSheet();
+        try   { node.nodes = ( await AyniNet.listDir( node.path ) ).nodes || []; loaded.add( node.path ); node._failed = false; }
+        catch ( err ) { node._failed = ! ( err && err.status === 404 ); node.nodes = []; if( ! node._failed ) loaded.add( node.path ); }
+        node._loading = false;
+        if( loaded === filePickerLoaded ) renderFilePickerSheet();   // still the same picker
     };
 
     host.appendChild( row );
@@ -129,7 +141,17 @@ function appendFileNode( host, node, depth )
         row.addEventListener( 'click', toggle );
 
         if( filePickerExpanded.has( node.path ) )
-            sortTreeNodes( node.nodes || [] ).forEach( function( c ) { appendFileNode( host, c, depth + 1 ); } );
+        {
+            if( node._loading || node._failed )
+            {
+                const note = document.createElement( 'div' );
+                note.className = node._failed ? 'ft-empty warn' : 'ft-empty';
+                note.style.paddingLeft = ( 8 + ( depth + 1 ) * 16 ) + 'px';
+                note.textContent = T( node._failed ? 'trips.loadFilesFailed' : 'trips.loadingFiles' );
+                host.appendChild( note );
+            }
+            else sortTreeNodes( node.nodes || [] ).forEach( function( c ) { appendFileNode( host, c, depth + 1 ); } );
+        }
     }
     else
     {

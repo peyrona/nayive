@@ -51,13 +51,34 @@ func chatMsgText(m *ChatMsg) string {
 // Search is `user`'s own messages that `keep` takes (text, sender's name, unix
 // ms), newest first, at most `limit`; more is true when there were others.
 // `snip` cuts a found text down to what the row shows.
+//
+// Under the hub's lock only the texts are COPIED; `keep` folds and matches
+// them after it is let go (G24): a chat of 50 000 messages held every chat,
+// call signal and phone wait of the server for over a second per keystroke.
 func (h *ChatHub) Search(user string, keep func(text, from string, at int64) bool, snip func(string) string, limit int) (hits []ChatHit, more bool) {
+	hits = []ChatHit{}
+	all := h.searchCopy(user)
+	for _, x := range all {
+		if keep(x.Text, x.From, x.At) {
+			x.Text = snip(x.Text)
+			hits = append(hits, x)
+		}
+	}
+	sort.SliceStable(hits, func(i, j int) bool { return hits[i].At > hits[j].At })
+	if len(hits) > limit {
+		return hits[:limit], true
+	}
+	return hits, false
+}
+
+// searchCopy is every message `user`'s Chat shows them, as a hit with its
+// whole text - copied under the lock, nothing matched yet.
+func (h *ChatHub) searchCopy(user string) []ChatHit {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	hits = []ChatHit{}
 	o := h.owner(user)
 	if o == nil {
-		return hits, false
+		return nil
 	}
 	meName := o.data.Me.Name
 	sender := func(pid string) string {
@@ -69,6 +90,7 @@ func (h *ChatHub) Search(user string, keep func(text, from string, at int64) boo
 		}
 		return ""
 	}
+	var out []ChatHit
 	for _, id := range o.visible("o") {
 		c := h.conv(o, id)
 		floor := c.floor("o")
@@ -85,15 +107,8 @@ func (h *ChatHub) Search(user string, keep func(text, from string, at int64) boo
 			if text == "" {
 				continue
 			}
-			from := sender(m.From)
-			if keep(text, from, m.At) {
-				hits = append(hits, ChatHit{Conv: id, Name: name, ID: m.ID, At: m.At, From: from, Text: snip(text)})
-			}
+			out = append(out, ChatHit{Conv: id, Name: name, ID: m.ID, At: m.At, From: sender(m.From), Text: text})
 		}
 	}
-	sort.SliceStable(hits, func(i, j int) bool { return hits[i].At > hits[j].At })
-	if len(hits) > limit {
-		return hits[:limit], true
-	}
-	return hits, false
+	return out
 }

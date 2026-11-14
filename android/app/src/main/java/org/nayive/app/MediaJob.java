@@ -38,7 +38,12 @@ public class MediaJob extends JobService {
             Notes.mediaFix(this);   // at most once a day: the daily job's own pace
             return false;
         }
-        if (!busy.compareAndSet(false, true)) return false;
+        if (!busy.compareAndSet(false, true)) {
+            // The last run's thread is still out (a PUT that hangs): this one is
+            // not used up for nothing - the next go is booked again.
+            if (params.getJobId() == MORE) more(this);
+            return false;
+        }
         stopped = false;
         new Thread(() -> {
             try {

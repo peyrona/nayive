@@ -210,13 +210,14 @@ function readProofLangs()
 }
 
 // No stored choice yet: start from the user's own locale (the same source the
-// shared date/time pickers use). Only Spanish and English dictionaries ship, so
-// anything else falls back to Spanish.
+// shared date/time pickers use), when a dictionary for it ships (proofing.js
+// PROOF_LANGS); anything else falls back to Spanish.
 function defaultProofLangs()
 {
     let loc = 'es';
     try { loc = ( navigator.language || 'es' ).toLowerCase(); } catch( _ ) {}
-    return loc.indexOf( 'en' ) === 0 ? [ 'en' ] : [ 'es' ];
+    const code = loc.slice( 0, 2 );
+    return PROOF_LANGS.indexOf( code ) >= 0 ? [ code ] : [ 'es' ];
 }
 
 //----------------------------------------------------------------------------//
@@ -525,9 +526,16 @@ async function loadIntoEditor( bytes )
     // from: the session keeps the old path when an open fails, so whatever
     // goes back on screen is what the next keystroke saves there. If it
     // cannot be taken, nothing is loaded over it (the caller says so).
-    if( ready && lastGood ) lastGood = new Uint8Array( await editor.save() );
-
+    // Not ready from here on: a key typed now is not an edit that arms an
+    // autosave of the document that is leaving (exportBytes refuses meanwhile).
+    const wasReady = ready;
     ready = false;
+    if( wasReady && lastGood )
+    {
+        try { lastGood = new Uint8Array( await editor.save() ); }
+        catch( e ) { ready = true; throw e; }
+    }
+
     bytes = withHeadings( bytes );
 
     try
@@ -978,17 +986,21 @@ async function openTemplates()
     renderTemplates( dir );
 }
 
+let tplAsk = 0;      // the newest renderTemplates: an older listing's answer is dropped
+
 async function renderTemplates( dir )
 {
     const list = document.getElementById( 'tplList' );
     const crumb = document.getElementById( 'tplCrumb' );
+    const mine  = ++tplAsk;
 
     crumb.textContent = AyniDoc.dirLabel ? AyniDoc.dirLabel( dir ) : dir;
     list.innerHTML = '<li class="is-loading"></li>';
 
     let nodes = [];
     try { nodes = ( ( await AyniNet.listDir( dir ) ) || {} ).nodes || []; }
-    catch( _ ) { list.innerHTML = ''; Ayni.toast( 'err', Ayni.t( 'ui.openFailed' ) ); return; }
+    catch( _ ) { if( mine === tplAsk ) { list.innerHTML = ''; Ayni.toast( 'err', Ayni.t( 'ui.openFailed' ) ); } return; }
+    if( mine !== tplAsk ) return;
 
     const docs = nodes.filter( function( n ) { return n.nodes === null && /\.docx$/i.test( n.path || '' ); } )
                       .sort( AyniDoc.byBaseName );
@@ -1121,7 +1133,7 @@ const symPopup = anchoredPopup( 'symPopup', '#symbolsBtn' );
 // PARRAFO  (spacing, indents, keep-together, tab stops, list number format)
 //
 // Filled from the caret's paragraph (snapshot().formatting reads it back) and
-// applied with ONE setParagraphFormat - one undo step. Still, only the GROUPS
+// applied with ONE setParagraphFormat - one undo step. Still, only the FIELDS
 // the user touched are sent: over several paragraphs that disagree a field
 // shows blank, and applying the whole form would flatten what nobody looked
 // at. Borders and shading are gone with the old engine (his call, 2026-09-18).
@@ -1177,7 +1189,7 @@ function openParagraph()
     document.getElementById( 'paKeepNext'  ).checked = flags.keepNext  === true;
     document.getElementById( 'paKeepLines' ).checked = flags.keepLines === true;
 
-    val( 'paTabPos', '0' );
+    val( 'paTabPos', '' );       // empty: no stop is added or cleared unless one is typed
     val( 'paTabAlign', 'left' );
 
     paraTouched = new Set();
@@ -1264,53 +1276,52 @@ function syncParagraphRows()
     document.getElementById( 'paSpecialByField' ).hidden = sp === 'none';
 }
 
-function markParagraphTouched( id )
-{
-    for( const g in PARA_GROUPS ) if( PARA_GROUPS[ g ].indexOf( id ) >= 0 ) paraTouched.add( g );
-}
+function markParagraphTouched( id ) { paraTouched.add( id ); }
 
-// The command for the touched groups. A blank field (the selection disagreed
-// and the user left it so) is left out, not zeroed.
+// The command for the FIELDS the user changed - not their whole group: over
+// several paragraphs that disagree, a field nobody touched (a first-line indent
+// shown as "None", a keep box shown clear) must not be written over all of them,
+// and an untouched number must not come back through the dialog's 2-decimal
+// rounding. A blank field (the selection disagreed and the user left it so) is
+// left out, not zeroed.
 function paragraphCommand()
 {
     const val = function( id ) { const el = document.getElementById( id ); return el.classList.contains( 'picker' ) ? pk( id ).value : el.value; };
+    const has = function( id ) { return paraTouched.has( id ); };
     const cmd = { type: 'setParagraphFormat' };
 
-    if( paraTouched.has( 'paSpacing' ) )
-    {
-        const b = parseNum( val( 'paBefore' ) ), a = parseNum( val( 'paAfter' ) );
-        if( b !== null ) cmd.spaceBeforePt = Math.max( 0, b );
-        if( a !== null ) cmd.spaceAfterPt  = Math.max( 0, a );
+    if( has( 'paBefore' ) ) { const b = parseNum( val( 'paBefore' ) ); if( b !== null ) cmd.spaceBeforePt = Math.max( 0, b ); }
+    if( has( 'paAfter'  ) ) { const a = parseNum( val( 'paAfter'  ) ); if( a !== null ) cmd.spaceAfterPt  = Math.max( 0, a ); }
 
+    if( has( 'paLine' ) )
+    {
         const line = val( 'paLine' );
         const m    = /^(exact|atLeast):(.+)$/.exec( line );
         if( m ) cmd.lineSpacing = { rule: m[1], value: parseFloat( m[2] ) };
         else if( parseNum( line ) ) cmd.lineSpacing = { rule: 'multiple', value: parseNum( line ) };
     }
 
-    if( paraTouched.has( 'paIndent' ) )
-    {
-        const l = parseCm( val( 'paLeft' ), 20 ), r = parseCm( val( 'paRight' ), 20 );
-        if( l !== null ) cmd.indentLeftTwips  = cmToTw( l );
-        if( r !== null ) cmd.indentRightTwips = cmToTw( r );
+    if( has( 'paLeft'  ) ) { const l = parseCm( val( 'paLeft'  ), 20 ); if( l !== null ) cmd.indentLeftTwips  = cmToTw( l ); }
+    if( has( 'paRight' ) ) { const r = parseCm( val( 'paRight' ), 20 ); if( r !== null ) cmd.indentRightTwips = cmToTw( r ); }
 
+    if( has( 'paSpecial' ) || has( 'paSpecialBy' ) )
+    {
         const special = val( 'paSpecial' );
         const by      = cmToTw( parseCm( val( 'paSpecialBy' ), 20 ) ?? 0 );
         cmd.indentFirstLineTwips = special === 'first' ? by : special === 'hanging' ? -by : 0;
     }
 
-    if( paraTouched.has( 'paKeep' ) )
-    {
-        cmd.keepNext  = document.getElementById( 'paKeepNext'  ).checked;
-        cmd.keepLines = document.getElementById( 'paKeepLines' ).checked;
-    }
+    if( has( 'paKeepNext'  ) ) cmd.keepNext  = document.getElementById( 'paKeepNext'  ).checked;
+    if( has( 'paKeepLines' ) ) cmd.keepLines = document.getElementById( 'paKeepLines' ).checked;
 
-    // One stop per apply, as before: 0 clears them all, anything else is added
-    // to (or replaces, at the same place) the ones the paragraph has.
-    if( paraTouched.has( 'paTabs' ) )
+    // One stop per apply, as before, and only when a position was typed (the
+    // field opens empty): 0 clears them all, anything else is added to (or
+    // replaces, at the same place) the ones the paragraph has. The alignment
+    // alone changes nothing - it is the new stop's.
+    if( has( 'paTabPos' ) )
     {
         const pos = parseCm( val( 'paTabPos' ), 50 );
-        cmd.tabStops = pos === null || pos <= 0 ? [] : tabStopsWith( cmToTw( pos ), val( 'paTabAlign' ) );
+        if( pos !== null ) cmd.tabStops = pos <= 0 ? [] : tabStopsWith( cmToTw( pos ), val( 'paTabAlign' ) );
     }
 
     return Object.keys( cmd ).length > 1 ? cmd : null;
@@ -1343,7 +1354,7 @@ async function confirmParagraph()
     const cmd = paragraphCommand();
     if( cmd ) runExec( cmd );
 
-    if( paraTouched.has( 'paList' ) ) await applyListFormat();
+    if( paraTouched.has( 'paListLevel' ) || paraTouched.has( 'paListFormat' ) ) await applyListFormat();
 }
 
 // Level n of the caret's list numbered the chosen way (docx-patch.js).
@@ -1415,10 +1426,14 @@ let stShown   = 'Normal';
 // at most (offline: a plain blank).
 let styleDefaults = null;
 
-async function withDefaultStyles( bytes )
+function defaultStyles()
 {
     if( ! styleDefaults ) styleDefaults = writeCfg.read().then( function( c ) { return c.styles || null; } ).catch( function() { styleDefaults = null; return null; } );
-    const s = await Promise.race( [ styleDefaults, new Promise( function( r ) { setTimeout( r, 1500, null ); } ) ] );
+    return Promise.race( [ styleDefaults, new Promise( function( r ) { setTimeout( r, 1500, null ); } ) ] );
+}
+
+function withDefaultStyles( bytes, s )
+{
     if( ! s ) return bytes;
     try { return patcher.withStyles( bytes, s ) || bytes; }
     catch( e ) { console.error( 'Write: default styles -', e ); return bytes; }
@@ -1577,7 +1592,7 @@ async function openStats()
 
     for( const p of paras )
     {
-        const t = ( p && p.text ) || '';
+        const t = ( ( p && p.text ) || '' ).replace( /\f/g, '' );     // a page break is not a character
 
         chars    += t.length;
         noSpaces += t.replace( /\s/g, '' ).length;
@@ -1961,6 +1976,35 @@ function printDocument( pdfHint )
     // A tick, so the toast paints before the modal print dialog freezes the page.
     setTimeout( function() { window.print(); }, pdfHint ? 350 : 0 );
 }
+
+// The engine paints each page at the zoom on screen (its size in px is the
+// page's x the zoom), so paper would get a page of that size too: at a PC's
+// fit (160-200 %) one page took two sheets, at a phone's 50 % a quarter of
+// one. For the print the zoom is 100 %, and after it the one the user had.
+// beforeprint also covers the browser's own menu.
+let printZoom = null;     // the zoom mode to go back to, while a print is on
+
+window.addEventListener( 'beforeprint', function()
+{
+    if( ! editor || printZoom ) return;
+    try
+    {
+        const mode = editor.getZoomMode();
+        printZoom = mode && mode.type === 'fixed' ? { fixed: editor.getZoom() } : { fit: true };
+        applyPrintPageSize();
+        editor.setZoom( 1 );
+    }
+    catch( e ) { console.error( 'Write: print zoom -', e ); }
+} );
+
+window.addEventListener( 'afterprint', function()
+{
+    if( ! editor || ! printZoom ) return;
+    const was = printZoom;
+    printZoom = null;
+    try { if( was.fixed ) editor.setZoom( was.fixed ); else editor.setZoomMode( fitMode() ); }
+    catch( e ) { console.error( 'Write: print zoom -', e ); }
+} );
 
 //----------------------------------------------------------------------------//
 // PULL-DOWN MENUS  -  Write's other menu chrome
@@ -2688,9 +2732,11 @@ function confirmLink()
     focusEditor();
 }
 
-// "nayive.org" is a web address, not a file beside the document.
+// "nayive.org" is a web address, not a file beside the document. So is
+// "localhost:8080/x": a host and a port, not a scheme called "localhost".
 function withScheme( url )
 {
+    if( /^[a-z0-9.-]+:\d+(?:[/?#]|$)/i.test( url ) && ! /^(?:tel|mailto|sms):/i.test( url ) ) return 'https://' + url;
     return /^[a-z][a-z0-9+.-]*:/i.test( url ) || url.charAt( 0 ) === '#' ? url
          : /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test( url ) ? 'mailto:' + url
          : 'https://' + url;
@@ -2749,6 +2795,11 @@ async function insertPickedImage( file )
     {
         let   blob = await shrinkImage( file );
         let   mime = blob.type === 'image/jpg' ? 'image/jpeg' : blob.type;
+        // A JPEG turned by its Exif tag (a small phone photo that needed no
+        // shrinking) is drawn upright here, but Word and LibreOffice do not read
+        // Exif inside a .docx: they would show it on its side and squashed into
+        // the upright box. So it goes in re-drawn, upright for real.
+        if( mime === 'image/jpeg' && await exifTurned( blob ) ) mime = 'turned';
         if( IMAGE_MIMES.indexOf( mime ) < 0 )
         {
             try { blob = await AyniPhoto.shrinkToJpeg( blob, { maxW: IMAGE_MAX_EDGE, maxH: IMAGE_MAX_EDGE } ); mime = 'image/jpeg'; }
@@ -2766,6 +2817,21 @@ async function insertPickedImage( file )
         console.error( 'Write: image -', e );
         Ayni.toast( 'err', Ayni.t( 'write.actionFailed' ) );
     }
+}
+
+// True when the picture's Exif turns it a quarter (width and height swap).
+// A browser that cannot say gets false: the picture goes in as before.
+async function exifTurned( blob )
+{
+    let a = null, b = null;
+    try
+    {
+        a = await createImageBitmap( blob, { imageOrientation: 'from-image' } );
+        b = await createImageBitmap( blob, { imageOrientation: 'none' } );
+        return a.width !== b.width || a.height !== b.height;
+    }
+    catch( _ ) { return false; }
+    finally { if( a && a.close ) a.close(); if( b && b.close ) b.close(); }
 }
 
 // The picture's size in points (96 px to the inch, 72 points), scaled down to
@@ -2837,16 +2903,17 @@ async function openTableBorders()
 // Popup preset -> the engine's border target.
 const TB_TARGETS = { all: 'all', box: 'outside', inside: 'inside', top: 'top', bottom: 'bottom', left: 'left', right: 'right' };
 
+// True when the engine drew them; only then are the weight / style / colour kept.
 function applyTableBorderPreset( which )
 {
-    if( ! ready || ! editor ) return;
+    if( ! ready || ! editor ) return false;
 
     let snap = null;
     try { snap = editor.snapshot(); } catch( _ ) {}
-    if( ! snap || ! snap.table ) { Ayni.toast( 'warn', Ayni.t( 'write.cursorInTable' ) ); return; }
+    if( ! snap || ! snap.table ) { Ayni.toast( 'warn', Ayni.t( 'write.cursorInTable' ) ); return false; }
 
     const one = ! snap.selection || snap.selection.from.paraId === snap.selection.to.paraId;
-    if( which === 'inside' && one ) { Ayni.toast( 'warn', Ayni.t( 'write.selectCells' ) ); return; }
+    if( which === 'inside' && one ) { Ayni.toast( 'warn', Ayni.t( 'write.selectCells' ) ); return false; }
 
     const b   = tbSpec();
     const cmd = which === 'none'
@@ -2854,10 +2921,12 @@ function applyTableBorderPreset( which )
         : { type: 'setTableBorders', scope: TB_TARGETS[ which ],
             spec: { style: b.lineStyle, size: Math.round( b.lineWeightPt * 8 ), color: { kind: 'hex', value: b.color.toUpperCase() } } };
 
-    if( ! cmd.scope ) return;
+    if( ! cmd.scope ) return false;
 
-    runExec( cmd );
+    if( ! engineRun( cmd.type, function() { return editor.exec( cmd ); } ) ) return false;
     persistTbState();
+    focusEditor();
+    return true;
 }
 
 function persistTbState()
@@ -2961,11 +3030,13 @@ function wireTableBorders()
         const which = tbDraft.preset;
         if( ! which ) { Ayni.toast( 'warn', Ayni.t( 'write.pickBorder' ) ); return; }
 
+        const was = Object.assign( {}, tbState );
         tbState.lineStyle    = tbDraft.lineStyle;
         tbState.lineWeightPt = tbDraft.lineWeightPt;
         tbState.color        = tbDraft.color;
 
-        applyTableBorderPreset( which );   // persists tbState on success
+        // Persists tbState on success; a refused one leaves the last good pick.
+        if( ! applyTableBorderPreset( which ) ) Object.assign( tbState, was );
         tbPopup.close();
     } );
 }
@@ -3016,8 +3087,8 @@ function openPageSetup()
 
     // Fill from the DOCUMENT, not from Nayive's defaults. If the read fails,
     // fall back to the defaults rather than showing nothing.
-    let cur = null;
-    try { cur = readPageSetup(); } catch( _ ) {}
+    let cur = null, raw = null;
+    try { raw = editor.getPageSetup(); cur = readPageSetup(); } catch( _ ) {}
 
     const v = cur || pageSetup;
 
@@ -3030,9 +3101,17 @@ function openPageSetup()
     document.getElementById( 'psWidth'  ).value = fmtNum( ( v.width  || 0 ) * CM_PER_IN );
     document.getElementById( 'psHeight' ).value = fmtNum( ( v.height || 0 ) * CM_PER_IN );
 
+    // What the fields showed, and the document's exact twips behind them: a
+    // field left as it was gives back the twips, not its 2-decimal centimetres.
+    psOpened = { raw: raw && raw.pageWidthTwips ? raw : null, size: pk( 'psSize' ).value, orient: pk( 'psOrient' ).value, text: {} };
+    for( const id of PS_FIELDS ) psOpened.text[ id ] = document.getElementById( id ).value;
+
     syncPageSizeRows();
     setBackdrop( 'pageSetupBackdrop', true );
 }
+
+const PS_FIELDS = [ 'psTop', 'psBottom', 'psLeft', 'psRight', 'psWidth', 'psHeight' ];
+let   psOpened  = null;     // openPageSetup's fields and the document's own setup
 
 // The two custom width/height fields only make sense for "custom".
 function syncPageSizeRows()
@@ -3104,14 +3183,36 @@ function confirmPageSetup()
     };
 
     setBackdrop( 'pageSetupBackdrop', false );
+    if( ! ready || ! editor ) return;
 
-    const r = editor.exec( pageSetupCommand( next ) );
-    if( r && r.ok === false )
+    const cmd = pageSetupCommand( next );
+
+    // A field left as it opened keeps the document's own value, exactly; so
+    // does a margin left empty or unreadable (not Nayive's new-document one).
+    const o = psOpened, raw = o && o.raw, m = ( raw && raw.marginsTwips ) || null;
+    const same = function( id ) { return !! o && document.getElementById( id ).value === o.text[ id ]; };
+    const MARGINS = { psTop: [ 'marginTop', 'top' ], psBottom: [ 'marginBottom', 'bottom' ],
+                      psLeft: [ 'marginLeft', 'left' ], psRight: [ 'marginRight', 'right' ] };
+    for( const id in MARGINS )
     {
-        console.error( 'Write: page setup -', r.reason );
-        Ayni.toast( 'err', Ayni.t( 'write.pageSetupFailed' ) );
-        return;
+        const [ key, side ] = MARGINS[ id ];
+        const typed = parseCm( document.getElementById( id ).value );
+        if( m && Number.isInteger( m[ side ] ) && ( same( id ) || typed === null ) ) cmd[ key ] = m[ side ];
     }
+    if( raw && next.size === o.size && next.orientation === o.orient &&
+        ( next.size !== 'custom' || ( same( 'psWidth' ) && same( 'psHeight' ) ) ) )
+    {
+        cmd.pageWidth  = raw.pageWidthTwips;
+        cmd.pageHeight = raw.pageHeightTwips;
+    }
+
+    // Nothing changed: nothing is written (no edit, no save, no undo step).
+    if( raw && m && cmd.pageWidth === raw.pageWidthTwips && cmd.pageHeight === raw.pageHeightTwips &&
+        cmd.orientation === ( raw.orientation === 'landscape' ? 'landscape' : 'portrait' ) &&
+        cmd.marginTop === m.top && cmd.marginBottom === m.bottom && cmd.marginLeft === m.left && cmd.marginRight === m.right )
+    { focusEditor(); return; }
+
+    if( ! engineRun( 'page setup', function() { return editor.exec( cmd ); }, 'write.pageSetupFailed' ) ) return;
     focusEditor();          // the change event marks it dirty
 }
 
@@ -3121,8 +3222,14 @@ function confirmPageSetup()
 // A .docx is a zip, so it starts "PK". Anything else - an empty buffer, above
 // all - is never handed to the saver: it would empty the file. The throw makes
 // the save fail out loud ("could not be saved"), and the next edit tries again.
+//
+// Nor while another document is being put on screen (ready false): an
+// autosave armed before the load and firing during it would take the NEW
+// document's bytes - the engine's save flushes the load first - and write them
+// under the OLD path, which the session still holds until the load is over.
 async function exportBytes()
 {
+    if( ! ready ) throw new Error( 'Write: a document is loading - not saved now' );
     const bytes = new Uint8Array( await editor.save() );
     if( bytes.length < 4 || bytes[ 0 ] !== 0x50 || bytes[ 1 ] !== 0x4B ) throw new Error( 'Write: the engine gave no .docx to save (' + bytes.length + ' bytes)' );
     return bytes;
@@ -3153,19 +3260,44 @@ let blankBytes = null;
 
 async function loadBlank()
 {
+    // The waits first, while the document on screen is still the live one;
+    // then the keys typed into it meanwhile (and during the session's own
+    // flush / upload before New) are saved to IT - the blank replaces it, and
+    // the session drops a waiting autosave with the new document. An untitled
+    // one New is throwing away is not written back into its dropped draft.
+    const styles = await defaultStyles();
+    if( session.path() ) await session.catchUp();
+
     if( ! blankBytes )
     {
-        if( ready && lastGood ) lastGood = new Uint8Array( await editor.save() );   // the edits on screen (loadIntoEditor)
-        ready = false;
-        editor.load( 'blank' );
+        const wasReady = ready;
+        ready = false;                    // as in loadIntoEditor: no autosave arms meanwhile
+        if( wasReady && lastGood )
+        {
+            try { lastGood = new Uint8Array( await editor.save() ); }   // the edits on screen (loadIntoEditor)
+            catch( e ) { ready = true; throw e; }
+        }
+        try
+        {
+            editor.load( 'blank' );
 
-        const r = editor.exec( pageSetupCommand( pageSetup, 'document' ) );
-        if( r && r.ok === false ) console.error( 'Write: default page setup -', r.reason );
+            const r = editor.exec( pageSetupCommand( pageSetup, 'document' ) );
+            if( r && r.ok === false ) console.error( 'Write: default page setup -', r.reason );
 
-        blankBytes = new Uint8Array( await editor.save() );
+            blankBytes = new Uint8Array( await editor.save() );
+        }
+        catch( e )
+        {
+            // The document that was there goes back on screen (as a refused open does).
+            blankBytes = null;
+            if( lastGood ) { editor.load( lastGood ); await whenOpen().catch( function() {} ); }
+            try { loadedRevision = editor.getDocumentHandle().revision; } catch( _ ) {}
+            ready = true;
+            throw e;
+        }
     }
 
-    await loadIntoEditor( await withDefaultStyles( blankBytes ) );
+    await loadIntoEditor( withDefaultStyles( blankBytes, styles ) );
 }
 
 async function toBytes( body )

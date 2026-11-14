@@ -15,6 +15,46 @@ function renderAll() { renderHeader(); renderContent(); renderRoutePanel(); }
 function openSheet( sId )  { const d = document.getElementById( sId ); if( ! d.open ) d.showModal(); }
 function closeSheet( sId ) { document.getElementById( sId ).close(); }
 
+// A merge landed while a sheet was open (onTripMerged): the screen behind it
+// still shows the old trip, so it is drawn when the last sheet closes (N5).
+let redrawAfterSheet = false;
+
+// Every sheet's 'close' event, however it closed. Android's Back closes a
+// dialog by itself (the browser's close watcher), without the sheet's own
+// close code: that is run here then (N6).
+function onSheetClosed( sId )
+{
+    // The event comes after the close: a sheet opened again meanwhile (closed
+    // and re-opened by code) is not this close's to undo.
+    if( document.getElementById( sId ).open ) return;
+
+    // A save still out keeps its sheet, as the busy × and Escape do.
+    if( ( sId === 'tripSheetBackdrop' && tripDraft && tripSheetBusy ) || ( sId === 'stageSheetBackdrop' && stageDraft && stageSheetBusy ) )
+    {
+        openSheet( sId );
+        return;
+    }
+
+    if( sId === 'tripSheetBackdrop'  && tripDraft )  closeTripSheet();
+    if( sId === 'stageSheetBackdrop' && stageDraft ) closeStageSheet();
+    if( sId === 'filePickerSheetBackdrop' )          filePickerOnPick = null;
+    if( sId === 'mapSheetBackdrop' && history.state && history.state.tripsMap ) history.back();   // its history entry goes too
+
+    if( redrawAfterSheet && ! anySheetOpen() )
+    {
+        redrawAfterSheet = false;
+        renderAll();
+    }
+}
+
+// The first empty text or date box of the open sheet gets the focus (T14).
+function focusFirstEmpty()
+{
+    const dlg = document.querySelector( 'dialog.panel[open]' );
+    const box = dlg && Array.from( dlg.querySelectorAll( 'input.input' ) ).find( function( i ) { return ! i.disabled && i.type !== 'hidden' && ! i.value.trim(); } );
+    if( box ) box.focus();
+}
+
 //------------------------------------------------------------------------//
 // TRIP ACTIONS
 
@@ -89,8 +129,14 @@ async function saveTrip()
 {
     // A typed date that is not one is not saved: its field shows why
     if( Ayni.focusFirstError( document.querySelector( 'dialog.panel[open]' ) || document ) ) return;
+    // An empty required field says so, never a silent ✓ (T14)
     if( ! tripDraft.destination.trim() || ! tripDraft.startDate || ! tripDraft.endDate )
+    {
+        tripSaveError = T( 'trips.needTripFields' );
+        renderTripSheet();
+        focusFirstEmpty();
         return;
+    }
 
     if( tripDraft.endDate < tripDraft.startDate )
     {
@@ -111,9 +157,21 @@ async function saveTrip()
         // yet" fallback pin, geocoded from this destination text (see
         // ensureRouteCoords()) - if the text just changed, drop the old coordinates
         // rather than show a stale pin.
+        // The stages and the trip's pin are not edited in this sheet: they are
+        // taken as they are NOW, so a map lookup that landed while the sheet was
+        // open is kept, not undone (N3).
+        // The trip read at each build: a merge during the upload below swaps
+        // in a new trip object (onTripMerged), and its stages must be kept.
         const build = function( docs )
         {
-            const u = { ...tripDraft, documents: docs };
+            const u    = { ...tripDraft, documents: docs };
+            const live = findTrip( tripDraft.id ) || original;
+            if( live )
+            {
+                u.stages = live.stages;
+                u.lat    = live.lat;
+                u.lon    = live.lon;
+            }
             if( original && original.destination !== u.destination )
             {
                 delete u.lat;
@@ -309,6 +367,8 @@ function openAddStage()
     // without a pin forever. JSON.stringify drops undefined keys, so it persists as absent.
     stageDraft = { id: null, location: '', startDate: '', startTime: '', endDate: '', endTime: '', transport: 'other', tz: null, tzLabel: '', tzStatus: 'idle', lat: undefined, lon: undefined, accommodation: '', notes: '', enabled: true, documents: [] };
     stageOpen  = null;
+    stopStageTzLookup();
+    stageGeoFor = '';
     editingStageId = null;
     stageSaveError = '';
     stageDocsCollapsed = true;
@@ -334,6 +394,8 @@ function openEditStage( stageId )
         documents: ( st.documents || [] ).map( function( d ) { return { ...d }; } )
     };
     stageOpen = JSON.parse( JSON.stringify( st ) );
+    stopStageTzLookup();
+    stageGeoFor = ( st.location || '' ).trim();   // its saved pin and zone are this text's
     editingStageId = stageId;
     stageSaveError = '';
     stageDocsCollapsed = true;
@@ -341,7 +403,7 @@ function openEditStage( stageId )
     openSheet( 'stageSheetBackdrop' );
 }
 
-function closeStageSheet() { closeSheet( 'stageSheetBackdrop' ); stageDraft = null; stageOpen = null; editingStageId = null; stageSaveError = ''; stageSheetBusy = false; }
+function closeStageSheet() { stopStageTzLookup(); closeSheet( 'stageSheetBackdrop' ); stageDraft = null; stageOpen = null; editingStageId = null; stageSaveError = ''; stageSheetBusy = false; }
 
 function addStageDoc()      { stageDraft.documents.push( { id: newId(), name: '', type: 'ticket' } ); stageDocsCollapsed = false; renderStageSheet(); }
 function removeStageDoc(id) { stageDraft.documents = stageDraft.documents.filter( function( d ) { return d.id !== id; } ); renderStageSheet(); }
@@ -355,7 +417,12 @@ async function saveStage()
     if( Ayni.focusFirstError( document.querySelector( 'dialog.panel[open]' ) || document ) ) return;
 
     if( ! stageDraft.location.trim() || ! stageDraft.startDate || ! stageDraft.endDate )
+    {
+        stageSaveError = T( 'trips.needStageFields' );
+        renderStageSheet();
+        focusFirstEmpty();
         return;
+    }
 
     if( stageDateTimeKey( stageDraft.endDate, stageDraft.endTime ) < stageDateTimeKey( stageDraft.startDate, stageDraft.startTime ) )
     {
@@ -408,6 +475,18 @@ async function saveStage()
         }
 
         stageSheetBusy = false;
+    }
+
+    // Its place lookup has not answered for this text yet (still out, or
+    // offline): the pin and zone still held are the OLD place's. Dropped, so
+    // the map lookup does them again for this place (T1).
+    if( stageDraft.location.trim() !== stageGeoFor )
+    {
+        stageDraft.lat = undefined;
+        stageDraft.lon = undefined;
+        stageDraft.tz = null;
+        stageDraft.tzLabel = '';
+        stageDraft.tzStatus = 'idle';
     }
 
     mutateTrip( selectedTripId, function( t )

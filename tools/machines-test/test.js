@@ -1,9 +1,10 @@
 /* test.js - headless proof of the physics. Run: node test.js [fuzzRuns]
-   It loads the same sim.js the page runs. */
+   It loads the same machines-sim.js and machines-levels.js the game runs. */
 'use strict';
 const fs = require( 'fs' ), vm = require( 'vm' ), path = require( 'path' );
-for( const f of [ 'vendor/nape.min.js', 'sim.js', 'scenes.js' ] )
-    vm.runInThisContext( fs.readFileSync( path.join( __dirname, f ), 'utf8' ) + ( f.includes( 'nape' ) ? ';globalThis.Nape=Nape' : '' ) );
+const GAMES = path.join( __dirname, '../../client/apps/games' );
+for( const f of [ 'lib/nape_v3.43.5.min.js', 'machines-sim.js', 'machines-levels.js' ] )
+    vm.runInThisContext( fs.readFileSync( path.join( GAMES, f ), 'utf8' ) + ( f.includes( 'nape' ) ? ';globalThis.Nape=Nape' : '' ) );
 const M = globalThis.Machines;
 
 let fails = 0;
@@ -14,7 +15,7 @@ const steps = ( s, secs ) => { for( let i = 0; i < secs * 120 && s.state !== 'br
 const use = b => { const n = {}; b.forEach( p => n[ p.type ] = ( n[ p.type ] || 0 ) + 1 ); return n; };
 
 console.log( 'Scenes: stored solutions' );
-for( const sc of M.scenes )
+for( const sc of globalThis.MachinesLevels )
 {
     if( ! sc.solution.length ) continue;
     const prints = [];
@@ -77,7 +78,7 @@ const beamY = s => s.bodies[ s.bodies.length - 2 ].position.y / 40;
 
 console.log( 'Reset and pieces' );
 {
-    const sc = M.scenes[ 0 ], s = new M.Sim( sc, sc.solution );
+    const sc = globalThis.MachinesLevels[ 0 ], s = new M.Sim( sc, sc.solution );
     for( let i = 0; i < 300; i++ ) s.step();
     const a = s.hash();
     const t = new M.Sim( sc, sc.solution );

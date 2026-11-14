@@ -17,6 +17,13 @@ package main
 //	             not stopped by then -> the contacts are told. A phone taken or
 //	             switched off cannot stop it. Stopped after it went out -> the
 //	             contacts are told "safe now".
+//	Danger PIN   (2026-11-14) with a PIN set, only the right PIN stops a watch.
+//	             A wrong one (or none) LOOKS stopped - the same answer - but the
+//	             contacts get "may be forced" at once and the positions go on.
+//	             The Android app sends one every sosEvery while a watch counts
+//	             or its alert is open (deviceState.Sos), sosAlertTTL at most.
+//	             It ends with the right PIN (hold SOS again), a contact's "End
+//	             alert", or after sosAlertTTL.
 //
 // Contacts are other Nayive users. They get a push (the app rings it) whose
 // tap opens the launcher on the alert: who, when, the last position.
@@ -31,12 +38,16 @@ package main
 //	POST /api/sos/watch      (session) {lat?, lon?, acc?} starts (or restarts) a watch -> {left}
 //	POST /api/sos/watch/pos  (session) {lat, lon, acc} a better position while it runs (or went out)
 //	POST /api/sos/watch/send (session) {lat?, lon?, acc?} sends it now -> {id, to}
-//	POST /api/sos/watch/stop (session) "I'm safe" -> {safe: {id, to}?}
+//	POST /api/sos/watch/stop (session) {pin?} "I'm safe" -> {safe: {id, to}?}; a wrong PIN answers the same
+//	PUT  /api/sos/pin        (session) {old?, pin} sets ("" = removes) the danger PIN; `old` must open a set one
+//	POST /api/sos/alert/<id>/end (session) a contact ends the open alert -> the contacts are told
 //
 // The phone tells its unlocks in its wait: /api/device/wait?unlock=<unix s>.
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"path/filepath"
 	"slices"
@@ -51,6 +62,7 @@ var (
 	sosGrace    = 15 * time.Minute // after a start, phones get this long to reconnect
 	sosTick     = time.Minute
 	sosWatchFor = 90 * time.Second // a danger watch goes out after this
+	sosEvery    = 3 * time.Minute  // the app's positions while a watch is open
 )
 
 const (
@@ -81,6 +93,7 @@ type sosUser struct {
 
 	Watch      int64  `json:"watch,omitempty"`      // a danger watch goes out at (unix s); 0 = none
 	WatchAlert string `json:"watchAlert,omitempty"` // the alert a watch sent, until "I'm safe"
+	Pin        string `json:"pin,omitempty"`        // the danger PIN, hashed (hashPassword); "" = none
 }
 
 type sosSent struct {
@@ -92,11 +105,13 @@ type sosSent struct {
 type sosAlert struct {
 	ID    string    `json:"id"`
 	From  string    `json:"from"`
-	Kind  string    `json:"kind"`            // sos | silent | idle | test
+	Kind  string    `json:"kind"`            // sos | silent | idle | test | watch | forced | safe | ended
 	At    int64     `json:"at"`              // unix s
 	Since int64     `json:"since,omitempty"` // silent/idle: the last sign of life
 	Pos   *lastPos  `json:"pos,omitempty"`
 	To    []sosSent `json:"to"`
+	By    string    `json:"by,omitempty"`   // ended: the contact who ended it
+	Live  bool      `json:"live,omitempty"` // in a GET only: the sender's open watch alert
 }
 
 type sosFile struct {
@@ -175,11 +190,16 @@ func (o *Sos) Set(in sosUser) bool {
 	defer o.mu.Unlock()
 	o.ensureLoaded()
 	u := o.rowLocked(in.Owner, true)
+	before := *u
 	u.Contacts, u.Silent, u.Idle, u.QuietFrom, u.QuietTo = in.Contacts, in.Silent, in.Idle, in.QuietFrom, in.QuietTo
 	if u.Alive == 0 {
 		u.Alive = time.Now().Unix() // switching it on is a sign of life
 	}
-	return o.save()
+	if !o.save() {
+		*u = before // G8: "could not save" acts as not saved
+		return false
+	}
+	return true
 }
 
 // Alive notes a sign of life of `owner` at `at` (unix s). An open ask ends.
@@ -209,14 +229,37 @@ func (o *Sos) Alive(owner string, at int64) {
 	}
 }
 
-// addAlert keeps `a`, the newest sosAlertsKept only.
+// addAlert keeps `a`: the newest sosAlertsKept OF EACH SENDER (G5 - one
+// user's sends never push out somebody else's), and never an open watch
+// alert, whatever its age in the list.
 func (o *Sos) addAlert(a sosAlert) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.ensureLoaded()
 	o.data.Alerts = append(o.data.Alerts, a)
-	if n := len(o.data.Alerts); n > sosAlertsKept {
-		o.data.Alerts = o.data.Alerts[n-sosAlertsKept:]
+	open := map[string]bool{}
+	for _, u := range o.data.Users {
+		if u.WatchAlert != "" {
+			open[u.WatchAlert] = true
+		}
+	}
+	mine := 0
+	for _, x := range o.data.Alerts {
+		if x.From == a.From {
+			mine++
+		}
+	}
+	if mine > sosAlertsKept {
+		drop := mine - sosAlertsKept
+		kept := o.data.Alerts[:0]
+		for _, x := range o.data.Alerts {
+			if drop > 0 && x.From == a.From && !open[x.ID] {
+				drop--
+				continue // the oldest of this sender's first
+			}
+			kept = append(kept, x)
+		}
+		o.data.Alerts = kept
 	}
 	o.save()
 }
@@ -231,11 +274,43 @@ func (o *Sos) alertFor(id, user string) *sosAlert {
 		if a.ID != id {
 			continue
 		}
+		if a.From == user && a.Kind == "forced" {
+			return nil // never shown on the phone a captor may hold
+		}
 		if a.From == user || slices.ContainsFunc(a.To, func(t sosSent) bool { return t.User == user }) {
 			return &a
 		}
 	}
 	return nil
+}
+
+// alertByID is `owner`'s alert `id`, for the server's own use (nothing hidden).
+func (o *Sos) alertByID(owner, id string) *sosAlert {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.ensureLoaded()
+	for i := range o.data.Alerts {
+		if a := o.data.Alerts[i]; a.ID == id && a.From == owner {
+			a.To = slices.Clone(a.To)
+			return &a
+		}
+	}
+	return nil
+}
+
+// setPin stores `owner`'s danger PIN hash ("" = none); false = not saved.
+func (o *Sos) setPin(owner, hash string) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.ensureLoaded()
+	u := o.rowLocked(owner, true)
+	before := *u
+	u.Pin = hash
+	if !o.save() {
+		*u = before
+		return false
+	}
+	return true
 }
 
 // DropUser forgets a deleted user: their row, and them as anyone's contact.
@@ -271,6 +346,35 @@ func (o *Sos) RenameUser(oldName, newName string) {
 		kept = append(kept, u)
 	}
 	o.data.Users = kept
+	// G16: the alerts too - a renamed sender or contact keeps seeing them,
+	// a deleted one's alerts (positions included) go with them.
+	alerts := o.data.Alerts[:0]
+	for _, a := range o.data.Alerts {
+		if a.From == oldName {
+			changed = true
+			if newName == "" {
+				continue
+			}
+			a.From = newName
+		}
+		if a.By == oldName {
+			a.By, changed = newName, true
+		}
+		to := a.To[:0]
+		for _, t := range a.To {
+			if t.User == oldName {
+				changed = true
+				if newName == "" {
+					continue
+				}
+				t.User = newName
+			}
+			to = append(to, t)
+		}
+		a.To = to
+		alerts = append(alerts, a)
+	}
+	o.data.Alerts = alerts
 	if changed {
 		o.save()
 	}
@@ -404,6 +508,20 @@ func (s *Server) sosCheck(now time.Time) {
 		if u.Watch != 0 && now.Unix() >= u.Watch {
 			s.sosWatchFire(u.Owner, u.Watch, nil)
 		}
+		// An open watch alert ends by itself after sosAlertTTL: the positions stop.
+		if id := u.WatchAlert; id != "" && u.Watch == 0 {
+			if a := o.alertByID(u.Owner, id); a == nil || now.Unix()-a.At >= sosAlertTTL {
+				if s.sosMark(u.Owner, func(r *sosUser) bool {
+					if r.WatchAlert != id || r.Watch != 0 {
+						return false
+					}
+					r.WatchAlert = ""
+					return true
+				}) {
+					s.sosKick()
+				}
+			}
+		}
 		local := now
 		if loc := Location(s.users.UserTZ("user", u.Owner)); loc != nil {
 			local = now.In(loc)
@@ -470,6 +588,7 @@ func (s *Server) sosMark(owner string, fn func(*sosUser) bool) bool {
 	o := s.sos
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	o.ensureLoaded() // G19: right after a restart nothing may have read the file yet
 	u := o.rowLocked(owner, false)
 	if u == nil {
 		return false
@@ -508,8 +627,13 @@ func (s *Server) sosAlert(owner, kind string, since int64, pos *lastPos) sosAler
 
 // sosAlertAs is sosAlert under a given id.
 func (s *Server) sosAlertAs(id, owner, kind string, since int64, pos *lastPos) sosAlert {
+	return s.sosSend(sosAlert{ID: id, From: owner, Kind: kind, At: time.Now().Unix(), Since: since, Pos: pos})
+}
+
+// sosSend pushes `a` to its sender's contacts and keeps it.
+func (s *Server) sosSend(a sosAlert) sosAlert {
+	owner, kind := a.From, a.Kind
 	u := s.sos.Get(owner)
-	a := sosAlert{ID: id, From: owner, Kind: kind, At: time.Now().Unix(), Since: since, Pos: pos}
 	if a.Pos == nil {
 		a.Pos = s.devices.Last(owner)
 	}
@@ -546,10 +670,10 @@ func (s *Server) sosPush(a sosAlert, c string, ttl int) (sent int, retry bool) {
 		title, body := s.sosText(sub.Lang, a.Kind, a.From)
 		payload := map[string]any{
 			"title": title,
-			"body":  body,
+			"body":  strings.ReplaceAll(body, "{by}", a.By),
 			"url":   URLPrefix + "/?sos=" + a.ID,
 			"tag":   "sos-" + a.ID,
-			"sos":   a.Kind != "test" && a.Kind != "safe", // no alarm ring for these
+			"sos":   a.Kind != "test" && a.Kind != "safe" && a.Kind != "ended", // no alarm ring for these
 		}
 		status, _ := deliverPush(s.push, s.users, s.log, c, sub, payload, ttl)
 		switch {
@@ -666,9 +790,14 @@ func (s *Server) sosText(lang, kind, owner string) (string, string) {
 		body = s.chat.phrase(lang, "sos.bodyTest", "This is only a test of {name}'s SOS. Nothing to do.")
 	case "watch":
 		body = s.chat.phrase(lang, "sos.bodyWatch", "{name} felt in danger and did not stop the alarm. Tap to see where.")
+	case "forced":
+		body = s.chat.phrase(lang, "sos.bodyForced", "{name} may be forced: the alarm was stopped without the right PIN. The position keeps coming. Tap to see where.")
 	case "safe":
 		title = strings.ReplaceAll(s.chat.phrase(lang, "sos.safeTitle", "{name} is safe"), "{name}", owner)
 		body = s.chat.phrase(lang, "sos.bodySafe", "The earlier SOS alert from {name} is over.")
+	case "ended":
+		title = strings.ReplaceAll(s.chat.phrase(lang, "sos.endedTitle", "SOS over - {name}"), "{name}", owner)
+		body = s.chat.phrase(lang, "sos.bodyEnded", "{by} ended the SOS alert from {name}.")
 	default:
 		body = s.chat.phrase(lang, "sos.bodySos", "{name} pressed SOS. Tap to see where.")
 	}
@@ -680,15 +809,17 @@ func (s *Server) sosText(lang, kind, owner string) (string, string) {
 // -----------------------------------------------------------------------------
 
 // sosWatchStart opens (or starts again) `owner`'s danger watch; false = not saved.
-// The tick in sosCheck is the backup of the timer (a restart loses it).
+// The tick in sosCheck is the backup of the timer (a restart loses it). An
+// alert still open stays: the right PIN on this watch tells the contacts "safe".
 func (s *Server) sosWatchStart(owner string) (int64, bool) {
 	end := time.Now().Add(sosWatchFor).Unix()
 	if !s.sosMark(owner, func(r *sosUser) bool {
-		r.Watch, r.WatchAlert = end, ""
+		r.Watch = end
 		return true
 	}) {
 		return 0, false
 	}
+	s.sosKick()
 	time.AfterFunc(time.Until(time.Unix(end, 0)), func() {
 		defer func() {
 			if err := recover(); err != nil {
@@ -714,8 +845,104 @@ func (s *Server) sosWatchFire(owner string, end int64, pos *lastPos) *sosAlert {
 	}) {
 		return nil
 	}
+	s.sosKick()
 	a := s.sosAlertAs(id, owner, "watch", 0, pos)
 	return &a
+}
+
+// sosWatchForce: a stop without the right PIN. The contacts get "may be
+// forced" at once; it takes the place of the watch's count, or of its open
+// alert. nil when nothing was open.
+func (s *Server) sosWatchForce(owner string) *sosAlert {
+	id := newChatID()
+	if !s.sosMark(owner, func(r *sosUser) bool {
+		if r.Watch == 0 && r.WatchAlert == "" {
+			return false
+		}
+		r.Watch, r.WatchAlert = 0, id
+		return true
+	}) {
+		return nil
+	}
+	s.sosKick()
+	a := s.sosAlertAs(id, owner, "forced", 0, nil)
+	return &a
+}
+
+// sosKick wakes the phones' waits: whether they send positions changed.
+func (s *Server) sosKick() {
+	if s.devices != nil {
+		s.devices.Kick()
+	}
+}
+
+// sosEveryFor is how often `owner`'s app sends its position (seconds); 0 = no
+// need. On while a watch counts, or while its alert is open (sosAlertTTL at most).
+func (s *Server) sosEveryFor(owner string) int {
+	u := s.sos.Get(owner)
+	if u.Watch == 0 && u.WatchAlert == "" {
+		return 0
+	}
+	if u.Watch == 0 {
+		if a := s.sos.alertByID(owner, u.WatchAlert); a == nil || time.Now().Unix()-a.At >= sosAlertTTL {
+			return 0
+		}
+	}
+	return int(sosEvery / time.Second)
+}
+
+// sosFollow gives `owner`'s open watch alert the app's newest position.
+func (s *Server) sosFollow(owner string, p lastPos) {
+	if id := s.sos.Get(owner).WatchAlert; id != "" {
+		s.sos.setPos(id, roundedForFind(p))
+	}
+}
+
+// sosLive: alert `a` is a danger watch's (or its "may be forced") and it is
+// the sender's OPEN one - a contact may follow and end it. An older alert of
+// hers is never live (G2): whoever got it - even a contact she has removed
+// since - neither follows her now nor ends her current alarm. Who may ask at
+// all is alertFor's check: the alert's own recipients.
+func sosLive(a sosAlert, u sosUser) bool {
+	return (a.Kind == "watch" || a.Kind == "forced") && u.WatchAlert == a.ID &&
+		time.Now().Unix()-a.At < sosAlertTTL
+}
+
+// validPin: 4 to 8 digits.
+func validPin(p string) bool {
+	if len(p) < 4 || len(p) > 8 {
+		return false
+	}
+	for _, c := range p {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// pinTries: wrong old PINs per user. 5 in 15 minutes, then it waits.
+var pinTries = struct {
+	sync.Mutex
+	m map[string][]time.Time
+}{m: map[string][]time.Time{}}
+
+// pinBlocked notes a wrong try (when `wrong`) and tells whether `user` must wait.
+func pinBlocked(user string, wrong bool) bool {
+	pinTries.Lock()
+	defer pinTries.Unlock()
+	cut := time.Now().Add(-15 * time.Minute)
+	var kept []time.Time
+	for _, t := range pinTries.m[user] {
+		if t.After(cut) {
+			kept = append(kept, t)
+		}
+	}
+	if wrong {
+		kept = append(kept, time.Now())
+	}
+	pinTries.m[user] = kept
+	return len(kept) >= 5
 }
 
 // watchStop ends `owner`'s danger watch. `sent` is the alert it already sent
@@ -805,7 +1032,7 @@ func (s *Server) apiSos(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, r, http.StatusOK, map[string]any{
 			"contacts": u.Contacts, "silent": u.Silent, "idle": u.Idle,
 			"quietFrom": u.QuietFrom, "quietTo": u.QuietTo,
-			"users": others, "phone": s.devices.lastSeen(user) > 0,
+			"users": others, "phone": s.devices.lastSeen(user) > 0, "pin": u.Pin != "",
 			"watch": max(u.Watch-time.Now().Unix(), 0), // seconds a running danger watch has left
 		})
 
@@ -830,6 +1057,17 @@ func (s *Server) apiSos(w http.ResponseWriter, r *http.Request) {
 		if len(cs) > sosContactsMax {
 			sendError(w, r, http.StatusBadRequest, "too many contacts")
 			return
+		}
+		// G18: the danger PIN guards "stop"; emptying the contacts must not
+		// get round it. While a watch counts or its alert is open, contacts
+		// may be added, never removed.
+		if cur := s.sos.Get(user); cur.Watch != 0 || cur.WatchAlert != "" {
+			for _, c := range cur.Contacts {
+				if !slices.Contains(cs, c) && slices.Contains(exists, c) {
+					sendError(w, r, http.StatusConflict, "a contact cannot be removed during a danger watch")
+					return
+				}
+			}
 		}
 		if body.Silent < 0 || body.Silent > sosHoursMax || body.Idle < 0 || body.Idle > sosHoursMax {
 			sendError(w, r, http.StatusBadRequest, "hours out of range")
@@ -961,24 +1199,103 @@ func (s *Server) apiSos(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, r, http.StatusOK, map[string]any{"id": a.ID, "to": a.To})
 
 	case rest == "watch/stop" && r.Method == http.MethodPost:
+		var body struct {
+			Pin string `json:"pin"`
+		}
+		// G4: the build before the PIN posts no body at all; that is {pin: ""}.
+		if err := readJSON(w, r, &body); err != nil && !errors.Is(err, io.EOF) {
+			sendBodyError(w, r, err)
+			return
+		}
+		if before := s.sos.Get(user); before.Pin != "" {
+			if right, _ := checkPassword(body.Pin, before.Pin); !right {
+				// It looks stopped - the answer the right PIN gets - but is not.
+				out := map[string]any{"ok": true}
+				if a := s.sosWatchForce(user); a != nil && before.WatchAlert != "" {
+					out["safe"] = map[string]any{"id": newChatID(), "to": a.To}
+				}
+				s.log.Warn("sos: watch stopped without the right PIN", "user", user)
+				sendJSON(w, r, http.StatusOK, out)
+				return
+			}
+		}
 		sent, ok := s.sos.watchStop(user)
 		if !ok {
 			sendError(w, r, http.StatusInternalServerError, "could not stop")
 			return
 		}
+		s.sosKick()
 		out := map[string]any{"ok": true}
-		if a := s.sos.alertFor(sent, user); sent != "" && a != nil && time.Now().Unix()-a.At < sosAlertTTL {
+		if a := s.sos.alertByID(user, sent); sent != "" && a != nil && time.Now().Unix()-a.At < sosAlertTTL {
 			safe := s.sosAlert(user, "safe", 0, nil)
 			out["safe"] = map[string]any{"id": safe.ID, "to": safe.To}
 		}
 		s.log.Info("sos: watch stopped", "user", user, "wentOut", sent != "")
 		sendJSON(w, r, http.StatusOK, out)
 
+	case rest == "pin" && r.Method == http.MethodPut:
+		var body struct {
+			Old string `json:"old"`
+			Pin string `json:"pin"`
+		}
+		if !readJSONBody(w, r, &body) {
+			return
+		}
+		if body.Pin != "" && !validPin(body.Pin) {
+			sendError(w, r, http.StatusBadRequest, "the PIN is 4 to 8 digits")
+			return
+		}
+		if pinBlocked(user, false) {
+			sendError(w, r, http.StatusTooManyRequests, "too many tries - wait 15 minutes")
+			return
+		}
+		if hash := s.sos.Get(user).Pin; hash != "" {
+			if right, _ := checkPassword(body.Old, hash); !right {
+				pinBlocked(user, true)
+				sendError(w, r, http.StatusForbidden, "wrong PIN")
+				return
+			}
+		}
+		hash := hashPassword(body.Pin)
+		if !s.sos.setPin(user, hash) {
+			sendError(w, r, http.StatusInternalServerError, "could not save")
+			return
+		}
+		sendJSON(w, r, http.StatusOK, map[string]any{"ok": true, "pin": hash != ""})
+
+	case strings.HasPrefix(rest, "alert/") && strings.HasSuffix(rest, "/end") && r.Method == http.MethodPost:
+		id := strings.TrimSuffix(strings.TrimPrefix(rest, "alert/"), "/end")
+		a := s.sos.alertFor(id, user)
+		if a == nil || a.From == user {
+			sendError(w, r, http.StatusNotFound, "no such alert")
+			return
+		}
+		owner := a.From
+		if !sosLive(*a, s.sos.Get(owner)) || !s.sosMark(owner, func(r *sosUser) bool {
+			if r.WatchAlert != id {
+				return false // not (or no longer) this alert's watch
+			}
+			r.Watch, r.WatchAlert = 0, ""
+			return true
+		}) {
+			sendError(w, r, http.StatusConflict, "this alert is already over")
+			return
+		}
+		s.sosKick()
+		s.sosSend(sosAlert{ID: newChatID(), From: owner, Kind: "ended", At: time.Now().Unix(), By: user})
+		s.log.Info("sos: alert ended by a contact", "user", owner, "by", user)
+		sendJSON(w, r, http.StatusOK, map[string]any{"ok": true})
+
 	case strings.HasPrefix(rest, "alert/") && r.Method == http.MethodGet:
 		a := s.sos.alertFor(strings.TrimPrefix(rest, "alert/"), user)
 		if a == nil {
 			sendError(w, r, http.StatusNotFound, "no such alert")
 			return
+		}
+		a.Live = sosLive(*a, s.sos.Get(a.From))
+		if p := s.devices.Last(a.From); a.Live && p != nil && (a.Pos == nil || p.At > a.Pos.At) {
+			rp := roundedForFind(*p) // still open: where the phone is now
+			a.Pos = &rp
 		}
 		sendJSON(w, r, http.StatusOK, a)
 

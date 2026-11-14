@@ -889,6 +889,11 @@
 
         // The store's state machine drives the header plug for every read and write.
         store.onState( setSyncStatus );
+        // A save that waited on this device went up (the outbox, any page): green again.
+        store.onSaved( function( p, body, tag, mine )
+        {
+            if( mine && current && p === current._base + '/' + FILE && $( 'savedAt' ).dataset.state === 'here' ) showSaved();
+        } );
 
         // The plug's click and the focus / visibilitychange re-reads, all on ONE guarded
         // path (shared/ui.js). Every save PUTs the whole group file (last write wins), so
@@ -1039,11 +1044,26 @@
 
         // Writes ONE group back to its own folder. Cached at once, uploaded now
         // or on reconnect. A group shared with us is never written.
+        // The floppy follows the store's answer, as Write's does (ayni-doc.js):
+        // green once the server has it, green with a dot while it waits safe on
+        // this device (offline, signed out - onSaved below turns it green when it
+        // goes up), red on a refusal or a save kept nowhere safe.
+        let saveSeq = 0;
         function persist( g )
         {
             if( ! g || g._ro ) return;
             const body = JSON.stringify( g, ( k, v ) => k.charAt( 0 ) === '_' ? undefined : v, 2 );
-            store.write( g._base + '/' + FILE, body );
+            const seq  = ++saveSeq;
+            // By folder, not by object: a re-read swaps every group for a fresh copy.
+            const mine = () => seq === saveSeq && !! current && current._base === g._base;
+            if( mine() ) floppy( 'saving', T( 'write.savingTip' ) );
+            store.write( g._base + '/' + FILE, body ).then( function( r )
+            {
+                if( ! mine() ) return;                           // a later save, or another view, owns the floppy
+                if( r && r.ok ) showSaved();
+                else if( r && ( r.offline || r.needsAuth || r.otherAccount ) ) floppy( 'here', T( 'write.offlineSafe' ) );
+                else floppy( 'unsaved', T( 'write.unsavedTip' ) );
+            }, function() { if( mine() ) floppy( 'unsaved', T( 'write.unsavedTip' ) ); } );
         }
 
         //------------------------------------------------------------------------//
@@ -1502,7 +1522,7 @@
                 Object.keys( entry.split.parts ).forEach( id =>
                 {
                     const v = entry.split.parts[ id ];
-                    es.partText[ id ] = es.mode === 'exact' ? M.toDecimal( v, es.currency, DEC ) : String( v );
+                    es.partText[ id ] = es.mode === 'exact' ? M.toDecimal( v, es.currency, DEC ) : decText( v );
                 } );
             }
             if( es.currency !== g.currency && ! es.rateText && g.rates[ es.currency ] ) es.rateText = decText( g.rates[ es.currency ] );
@@ -1646,6 +1666,7 @@
         {
             const g = current;
             const amount = M.parseAmount( es.amountText, es.currency );
+            if( amount === null && String( es.amountText || '' ).trim() ) return { ok: false, hint: T( 'split.notAmount' ) };
             if( amount === null || amount <= 0 ) return { ok: false, hint: '' };
 
             let rate = 1;
@@ -1736,7 +1757,10 @@
             if( es.kind === 'payment' ) { e.from = es.from; e.to = es.to; }
             else { e.text = es.text.trim(); e.paidBy = es.paidBy; e.split = v.split; }
 
-            if( es.currency !== g.currency ) g.rates[ es.currency ] = e.rate;   // remembered for next time
+            // Remembered for next time - unless an entry dated later in that currency
+            // has a newer rate (editing an old expense must not bring its old rate back).
+            const newer = g.entries.some( x => x.id !== e.id && x.currency === e.currency && ( x.date || '' ) > e.date );
+            if( es.currency !== g.currency && ! newer ) g.rates[ es.currency ] = e.rate;
 
             const at = g.entries.findIndex( x => x.id === e.id );
             if( at >= 0 ) g.entries[ at ] = e; else g.entries.push( e );
@@ -1744,19 +1768,23 @@
             persist( g );
             closeSheet( 'entrySheetBackdrop' );
             renderGroup();
-            showSaved();
         }
 
         // The green floppy at the end of the header (the standard, like Write's
         // #savedAt), not a "Saved" toast. Its title says when.
         function showSaved()
         {
+            const d = new Date();
+            floppy( 'saved', TF( 'write.savedAt', { time: Ayni.dates.pad( d.getHours() ) + ':' + Ayni.dates.pad( d.getMinutes() ) } ) );
+        }
+
+        function floppy( state, title )
+        {
             const el = $( 'savedAt' );
-            const d  = new Date();
             if( ! el.firstChild ) el.innerHTML = Ayni.icon( 'save' );
-            el.dataset.state = 'saved';
-            el.title = TF( 'write.savedAt', { time: Ayni.dates.pad( d.getHours() ) + ':' + Ayni.dates.pad( d.getMinutes() ) } );
-            el.setAttribute( 'aria-label', el.title );
+            el.dataset.state = state;
+            el.title = title;
+            el.setAttribute( 'aria-label', title );
         }
 
         // Delete = out at once, with six seconds to change your mind.
@@ -1822,7 +1850,8 @@
             if( gs.g )
             {
                 gs.g.name = name;
-                if( ! gs.g.entries.length ) gs.g.currency = cur;
+                // A rate kept for the old currency means nothing for the new one.
+                if( ! gs.g.entries.length && gs.g.currency !== cur ) { gs.g.currency = cur; gs.g.rates = {}; }
                 persist( gs.g );
                 closeSheet( 'groupSheetBackdrop' );
                 render();
@@ -1950,13 +1979,23 @@
 
             // Someone removed who only shared expenses: out of those splits,
             // the rest share them now.
+            const lostPart = new Set();
             msGone.forEach( id => g.entries.forEach( e =>
             {
                 const sp = e.split;
                 if( ! sp ) return;
                 if( Array.isArray( sp.among ) ) sp.among = sp.among.filter( x => x !== id );
-                if( sp.parts && typeof sp.parts === 'object' ) delete sp.parts[ id ];
+                if( sp.parts && typeof sp.parts === 'object' && id in sp.parts ) { delete sp.parts[ id ]; lostPart.add( e ); }
             } ) );
+            // An "exact" expense that lost a part: the rest take it in proportion -
+            // the numbers the balances already used - so its parts add up again.
+            lostPart.forEach( e =>
+            {
+                const sp = e.split;
+                if( e.type === 'payment' || sp.mode !== 'exact' || ! M.participants( e ).ids.length ) return;
+                const sum = Object.keys( sp.parts ).reduce( ( a, id ) => a + Math.round( Number( sp.parts[ id ] ) || 0 ), 0 );
+                if( sum !== e.amount ) sp.parts = M.shares( e );
+            } );
 
             g.members = clean;
             persist( g );

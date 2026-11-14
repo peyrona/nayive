@@ -24,6 +24,8 @@ package main
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -165,13 +167,87 @@ func (s *Shares) ensureLoaded() {
 			s.grants = append(s.grants, g)
 		}
 	}
+	s.parkBinned()
+}
+
+// parkBinned parks, once at load, the grants of items binned BEFORE Park
+// existed (G11): a grant whose path the owner's bin lists goes into the bin
+// with it, under that entry's id - the newest, when the bin holds that path
+// twice - so a new item of the same name is never lent by the old grant or
+// its /s/ link. Only a MISSING item is parked. When something is at the path
+// again and the bin holds an entry of that path newer than the grant, it is
+// only logged: maybe a new trip of the same name (lent by mistake), maybe the
+// item put back by hand - a person decides. A missing item the bin does not
+// list is logged too. Caller holds mu.
+func (s *Shares) parkBinned() {
+	bins := map[string]map[string]TrashEntry{} // owner -> its bin rows by id
+	parked := 0
+	for i := range s.grants {
+		g := &s.grants[i]
+		parts := splitPath(g.Root)
+		if len(parts) == 0 || parts[0] == trashSeg || hasDotDot(parts) {
+			continue
+		}
+		home := filepath.Join(s.homesDir, g.Owner)
+		if _, err := os.Lstat(home); err != nil {
+			continue // a home that is not there: nothing to tell
+		}
+		_, err := os.Lstat(filepath.Join(append([]string{home}, parts...)...))
+		missing := errors.Is(err, fs.ErrNotExist)
+		if err != nil && !missing {
+			continue // cannot tell: it lends what it lends
+		}
+		rows, seen := bins[g.Owner]
+		if !seen {
+			index := newTrashIndex()
+			if _, err := readJSONStrict(filepath.Join(home, trashSeg, "index.json"), index); err == nil {
+				rows = index.rows
+			}
+			bins[g.Owner] = rows
+		}
+		id, at, rest := "", int64(0), []string(nil)
+		for eid, e := range rows {
+			o := splitPath(e.Orig)
+			if len(o) == 0 || len(o) > len(parts) || !slices.Equal(parts[:len(o)], o) {
+				continue
+			}
+			if !missing && (g.Created == 0 || e.Deleted < g.Created) {
+				continue // binned before this grant was made: not what it lends
+			}
+			if id == "" || e.Deleted > at {
+				id, at, rest = eid, e.Deleted, parts[len(o):]
+			}
+		}
+		switch {
+		case id == "" && missing:
+			s.log.Warn("shares: a grant lends an item that is not there - check it by hand",
+				"owner", g.Owner, "root", g.Root, "to", g.To, "link", g.Token != "")
+			continue
+		case id == "":
+			continue
+		case !missing:
+			s.log.Warn("shares: a grant lends a NEW item at a path whose shared item is in the bin - check it by hand",
+				"owner", g.Owner, "root", g.Root, "to", g.To, "link", g.Token != "", "bin", id)
+			continue
+		}
+		g.Root = strings.Join(append([]string{trashSeg, id}, rest...), "/")
+		parked++
+	}
+	if parked > 0 {
+		s.log.Info("shares: grants of items binned before parking existed, parked", "count", parked)
+		s.save()
+	}
 }
 
 // save writes the whole list back. Caller holds mu. One bad hand edit must
-// not cost every share: see saveTable.
-func (s *Shares) save() {
-	saveTable(s.path, &s.broken, sharesFile{Shares: s.grants}, s.log)
+// not cost every share: see saveTable. false: not written - the callers a
+// person waits on (Create, CreateLink, Revoke) take their change back (G7).
+func (s *Shares) save() bool {
+	return saveTable(s.path, &s.broken, sharesFile{Shares: s.grants}, s.log)
 }
+
+// errSharesNotSaved: shares.json could not be written; nothing changed.
+var errSharesNotSaved = errors.New("shares.json could not be written")
 
 // -----------------------------------------------------------------------------
 // slugs - the second path segment the recipient sees: shared/<slug>/...
@@ -230,8 +306,8 @@ func (s *Shares) RootPath(g *Grant) string {
 		return ""
 	}
 	parts := splitPath(g.Root)
-	if len(parts) == 0 || hasDotDot(parts) {
-		return ""
+	if len(parts) == 0 || hasDotDot(parts) || parts[0] == trashSeg {
+		return "" // a grant parked with its item in the bin (Park) lends nothing
 	}
 	return homeFile(s.homesDir, g.Owner, parts)
 }
@@ -334,6 +410,13 @@ func CanAdd(g *Grant) bool {
 // Sharing with Everyone takes the place of the owner's grants to single people
 // for the same item: they would only show it to them twice.
 func (s *Shares) Create(owner, to, root, app, title, mode string) *Grant {
+	g, _ := s.CreateChecked(owner, to, root, app, title, mode)
+	return g
+}
+
+// CreateChecked is Create that also tells a grant that could not be written
+// (errSharesNotSaved, nil grant): memory is as it was, the caller answers 500.
+func (s *Shares) CreateChecked(owner, to, root, app, title, mode string) (*Grant, error) {
 	if !contains(Apps, app) {
 		app = "folder"
 	}
@@ -352,9 +435,10 @@ func (s *Shares) Create(owner, to, root, app, title, mode string) *Grant {
 		g := &s.grants[i]
 		if g.Token == "" && g.Owner == owner && g.Root == root && (g.To == to || g.To == Everyone) {
 			s.mu.Unlock()
-			return nil // already shared
+			return nil, nil // already shared
 		}
 	}
+	before := s.grants
 	replaced := 0
 	if to == Everyone {
 		kept := s.grants[:0:0] // a fresh slice; never alias the one we are filtering
@@ -378,21 +462,32 @@ func (s *Shares) Create(owner, to, root, app, title, mode string) *Grant {
 		Title:   title,
 		Created: time.Now().Unix(),
 	}
-	s.grants = append(s.grants, grant)
-	s.save()
+	s.grants = append(slices.Clip(s.grants), grant)
+	if !s.save() {
+		s.grants = before
+		s.mu.Unlock()
+		return nil, errSharesNotSaved
+	}
 	s.mu.Unlock()
 
 	s.log.Info("share created", "owner", owner, "to", to, "root", root)
 	if replaced > 0 {
 		s.log.Info("shared with everybody - person grants dropped", "count", replaced, "root", root)
 	}
-	return &grant
+	return &grant, nil
 }
 
 // CreateLink makes the public link for one trip folder, or hands back the one
 // it already has - one link per trip. The caller has already checked `root`.
 // `created` is false when the link existed.
 func (s *Shares) CreateLink(owner, root, title string) (grant *Grant, created bool) {
+	grant, created, _ = s.CreateLinkChecked(owner, root, title)
+	return grant, created
+}
+
+// CreateLinkChecked is CreateLink that also tells a link that could not be
+// written (errSharesNotSaved, nil grant): memory is as it was.
+func (s *Shares) CreateLinkChecked(owner, root, title string) (grant *Grant, created bool, err error) {
 	if title == "" {
 		title = lastSegment(root)
 	}
@@ -403,9 +498,10 @@ func (s *Shares) CreateLink(owner, root, title string) (grant *Grant, created bo
 		if s.grants[i].Token != "" && s.grants[i].Owner == owner && s.grants[i].Root == root {
 			g := s.grants[i]
 			s.mu.Unlock()
-			return &g, false
+			return &g, false, nil
 		}
 	}
+	before := s.grants
 	id := newShareID()
 	g := Grant{
 		ID:      id,
@@ -418,18 +514,30 @@ func (s *Shares) CreateLink(owner, root, title string) (grant *Grant, created bo
 		Created: time.Now().Unix(),
 		Token:   newToken(),
 	}
-	s.grants = append(s.grants, g)
-	s.save()
+	s.grants = append(slices.Clip(s.grants), g)
+	if !s.save() {
+		s.grants = before
+		s.mu.Unlock()
+		return nil, false, errSharesNotSaved
+	}
 	s.mu.Unlock()
 
 	s.log.Info("public link created", "owner", owner, "root", root)
-	return &g, true
+	return &g, true, nil
 }
 
 // Revoke drops one grant. Only its owner may. True when something was removed.
 // Stopping a PUBLIC LINK keeps the trip's positions (positions.go): they are the
 // owner's, and their Journey map shows them with or without a link.
 func (s *Shares) Revoke(shareID, owner string) bool {
+	ok, _ := s.RevokeChecked(shareID, owner)
+	return ok
+}
+
+// RevokeChecked is Revoke that also tells a removal that could not be written
+// (errSharesNotSaved): the grant stays - in memory as on disk - so a "stopped
+// sharing" is never answered for a grant that comes back at the next restart.
+func (s *Shares) RevokeChecked(shareID, owner string) (bool, error) {
 	s.mu.Lock()
 	s.ensureLoaded()
 	kept := s.grants[:0:0] // a fresh slice; never alias the one we are filtering
@@ -443,14 +551,19 @@ func (s *Shares) Revoke(shareID, owner string) bool {
 	}
 	if len(gone) == 0 {
 		s.mu.Unlock()
-		return false
+		return false, nil
 	}
+	before := s.grants
 	s.grants = kept
-	s.save()
+	if !s.save() {
+		s.grants = before
+		s.mu.Unlock()
+		return false, errSharesNotSaved
+	}
 	s.mu.Unlock()
 
 	s.log.Info("share revoked", "id", shareID, "by", owner)
-	return true
+	return true, nil
 }
 
 // DropUser forgets every grant this user owns or received (the admin deleted
@@ -519,35 +632,81 @@ func (s *Shares) RenameUser(oldName, newName string) int {
 // app chose (a trip's destination, a Split group) stays. The slug stays too:
 // it is the recipient's path. Returns how many changed.
 func (s *Shares) MoveRoot(owner, oldRel, newRel string) int {
-	from, to := splitPath(oldRel), splitPath(newRel)
-	if len(from) == 0 || len(to) == 0 {
-		return 0
-	}
-	oldName, newName := from[len(from)-1], to[len(to)-1]
-	s.mu.Lock()
-	s.ensureLoaded()
-	moved := 0
-	for i := range s.grants {
-		g := &s.grants[i]
-		parts := splitPath(g.Root)
-		if g.Owner != owner || len(parts) < len(from) || !slices.Equal(parts[:len(from)], from) {
-			continue
-		}
-		g.Root = strings.Join(append(append([]string{}, to...), parts[len(from):]...), "/")
-		if len(parts) == len(from) && g.Title == oldName {
-			g.Title = newName
-		}
-		moved++
-	}
-	if moved > 0 {
-		s.save()
-	}
-	s.mu.Unlock()
-
+	moved := s.moveRoots(owner, oldRel, newRel, true)
 	if moved > 0 {
 		s.log.Info("shares follow a moved path", "count", moved, "owner", owner, "from", oldRel, "to", newRel)
 	}
 	return moved
+}
+
+// moveRoots re-roots the grants of `owner` ("" = anyone's) at or under oldRel
+// to newRel; newRel "" removes them. retitle: MoveRoot's title rule.
+func (s *Shares) moveRoots(owner, oldRel, newRel string, retitle bool) int {
+	from, to := splitPath(oldRel), splitPath(newRel)
+	if len(from) == 0 {
+		return 0
+	}
+	oldName, newName := from[len(from)-1], ""
+	if len(to) > 0 {
+		newName = to[len(to)-1]
+	}
+	s.mu.Lock()
+	s.ensureLoaded()
+	moved := 0
+	keep := s.grants[:0:0]
+	for i := range s.grants {
+		g := s.grants[i]
+		parts := splitPath(g.Root)
+		if (owner != "" && g.Owner != owner) || len(parts) < len(from) || !slices.Equal(parts[:len(from)], from) {
+			keep = append(keep, g)
+			continue
+		}
+		moved++
+		if len(to) == 0 {
+			continue // dropped
+		}
+		g.Root = strings.Join(append(append([]string{}, to...), parts[len(from):]...), "/")
+		if retitle && len(parts) == len(from) && g.Title == oldName {
+			g.Title = newName
+		}
+		keep = append(keep, g)
+	}
+	if moved > 0 {
+		s.grants = keep
+		s.save()
+	}
+	s.mu.Unlock()
+	return moved
+}
+
+// trashSeg is the bin's folder in a home. A grant whose root starts with it is
+// PARKED: its item is in the bin (Park), and it lends nothing (RootPath).
+const trashSeg = ".trash"
+
+// Park takes the grants of what the owner just binned (rel, or anything under
+// it) into the bin with it, under the bin entry's id. Before this a grant kept
+// pointing at the empty name, and the next folder made under it - a new trip
+// of the same name and year - was lent at once: to everyone the old one was
+// shared with, and to anyone with its old /s/ link, live position included
+// (T10). Returns how many.
+func (s *Shares) Park(owner, rel, entryID string) int {
+	n := s.moveRoots(owner, rel, trashSeg+"/"+entryID, false)
+	if n > 0 {
+		s.log.Info("shares parked with a binned item", "count", n, "owner", owner, "id", entryID)
+	}
+	return n
+}
+
+// Unpark follows a bin entry out again: restored to rel (home-relative, the
+// name it finally got), its parked grants lend that; rel "" = purged for good,
+// and its grants go too. Entry ids are unique across every can, so no owner is
+// needed.
+func (s *Shares) Unpark(entryID, rel string) int {
+	n := s.moveRoots("", trashSeg+"/"+entryID, rel, false)
+	if n > 0 {
+		s.log.Info("parked shares follow a bin entry", "count", n, "id", entryID, "to", rel)
+	}
+	return n
 }
 
 // -----------------------------------------------------------------------------

@@ -556,7 +556,8 @@ function deriveMovie( fileNode )
         color:  colorFor( ty.title ),
         poster: null,
         subtitle: null,                        // { path, kind:'vtt'|'srt' }
-        synopsis: null,
+        synopsis: null,                        // its text, once read (loadSynopses)
+        synopsisPath: null,                    // the sibling "<name>.txt" it comes from
         duration: null
     };
 }
@@ -637,11 +638,16 @@ function pickSubtitle( movie, byDir, alone )
     return best ? { path: best.path, kind: best.kind } : null;
 }
 
+// Every scan() takes a new number; the length and synopsis readers of an
+// older pass (a Rescan while they still run) see it and stop.
+var scanGen = 0;
+
 async function scan()
 {
+    var gen = ++scanGen;
     setLibMsg( Ayni.t( 'movies.scanning' ) );
     var tree = await NayiveMedia.loadFolderTree( DIR, setLibMsg, true );
-    if( ! tree ) return;
+    if( ! tree || gen !== scanGen ) return;
     st.folderTree = { path: DIR, nodes: tree.nodes };
 
     var files = NayiveMedia.flattenFiles( st.folderTree );
@@ -671,7 +677,7 @@ async function scan()
         mv.subtitle = pickSubtitle( mv, subByDir, vidsInDir[ mv.dir ] === 1 );
         var txts = txtByDir[ mv.dir ] || [];
         for( var i = 0; i < txts.length; i++ )
-            if( norm( stripExt( txts[ i ].name ) ) === norm( stripExt( mv.name ) ) ) mv.synopsis = txts[ i ].path;
+            if( norm( stripExt( txts[ i ].name ) ) === norm( stripExt( mv.name ) ) ) mv.synopsisPath = txts[ i ].path;
         return mv;
     } );
 
@@ -683,12 +689,13 @@ async function scan()
     } );
 
     await applyDurations();      // lengths probed on an earlier open
+    if( gen !== scanGen ) return;
 
-    loadSynopses();
+    loadSynopses( gen );
     renderCollectionSummary();
     renderLibrary();
     if( treeView ) treeView.build();      // the folders, scanned again
-    loadDurations();
+    loadDurations( gen );
 }
 
 async function applyDurations()
@@ -709,35 +716,39 @@ async function applyDurations()
 
 /* Real duration via a throwaway <video> + preload=metadata (cheap: the server
  * supports Range, so the browser only pulls the header). Small batches. */
-async function loadDurations()
+async function loadDurations( gen )
 {
     var pending = st.movies.filter( function ( mv ) { return mv.duration == null; } );
     await Ayni.pool( pending, 2, async function ( mv )
     {
+        if( gen !== scanGen ) return;               // a Rescan replaced this pass
         var d = await Ayni.media.probeDuration( "video", AyniNet.fileUrl( mv.path ) );
-        if( d == null ) return;
+        if( d == null || gen !== scanGen ) return;
         mv.duration = d;
         SCAN_CACHE.set( mv, { duration: d } );
         renderRuntime( mv );
     } );
+    if( gen !== scanGen ) return;
     SCAN_CACHE.flush();
     renderCollectionSummary();     // now the "N h en total" is known
 }
 
-async function loadSynopses()
+// The sibling .txt files, one at a time. A film's detail open meanwhile
+// shows its text the moment it comes in.
+async function loadSynopses( gen )
 {
-    for( var i = 0; i < st.movies.length; i++ )
+    var films = st.movies;
+    for( var i = 0; i < films.length; i++ )
     {
-        var mv = st.movies[ i ];
-        if( ! mv.synopsis || typeof mv.synopsis !== "string" ) continue;
-        try
-        {
-            var txt = await AyniNet.readFile( mv.synopsis );
-            mv.synopsis = ( txt || "" ).trim().slice( 0, 1200 ) || null;
-        }
-        catch( e ) { mv.synopsis = null; }
+        var mv = films[ i ];
+        if( ! mv.synopsisPath ) continue;
+        var txt = null;
+        try { txt = await AyniNet.readFile( mv.synopsisPath ); }
+        catch( e ) {}
+        if( gen !== scanGen ) return;               // a Rescan replaced this pass
+        mv.synopsis = ( txt || "" ).trim().slice( 0, 1200 ) || null;
+        if( mv.synopsis && st.selectedMovie === mv.path ) renderLibrary();
     }
-    if( st.selectedMovie ) renderLibrary();
 }
 
 /* ---------------------------------------------------------------------------
@@ -898,6 +909,9 @@ async function fetchPosters( only )
                                             title: hit.title || mv.title, year: mv.year || null };
                 st.postersMine[ key ] = true;
                 mv.poster = stored;
+                // A Rescan meanwhile made new film objects: the one on screen gets it too.
+                var now = findMovie( mv.path );
+                if( now && ! now.poster ) now.poster = stored;
                 ok++;
             }
         }
@@ -1092,10 +1106,11 @@ function toggleWatched( mv )
  * -------------------------------------------------------------------------*/
 function genreName( mv ) { return mv.genre || Ayni.t( 'movies.noGenre' ); }
 
-function computeGenres()
+// `list`: the films to group (default: all of them).
+function computeGenres( list )
 {
     var map = {};
-    st.movies.forEach( function ( mv )
+    ( list || st.movies ).forEach( function ( mv )
     {
         var g = genreName( mv );
         if( ! map[ g ] ) map[ g ] = { name: g, count: 0, color: colorFor( "g:" + g ) };
@@ -1105,8 +1120,9 @@ function computeGenres()
         .sort( function ( a, b ) { return a.name.localeCompare( b.name, Ayni.i18n.lang() ); } );
 }
 
-function moviesInGenre( g )  { return st.movies.filter( function ( mv ) { return genreName( mv ) === g; } ); }
-function moviesUnder( path ) { return st.movies.filter( function ( mv ) { return mv.path.slice( 0, path.length + 1 ) === path + "/"; } ); }
+// Both keep to the films the search matches, as the Movies view does.
+function moviesInGenre( g )  { return filteredMovies().filter( function ( mv ) { return genreName( mv ) === g; } ); }
+function moviesUnder( path ) { return filteredMovies().filter( function ( mv ) { return mv.path.slice( 0, path.length + 1 ) === path + "/"; } ); }
 
 function filteredMovies()
 {
@@ -1213,7 +1229,7 @@ function movieDetailHtml( mv )
             '<div class="movie-info">' +
                 '<h3>' + esc( mv.title ) + '</h3>' +
                 '<div class="movie-tags">' + tags.join( "" ) + '</div>' +
-                ( mv.synopsis && typeof mv.synopsis === "string" ? '<p class="movie-synopsis">' + esc( mv.synopsis ) + '</p>' : '' ) +
+                ( mv.synopsis ? '<p class="movie-synopsis">' + esc( mv.synopsis ) + '</p>' : '' ) +
                 '<div class="movie-actions">' +
                     '<button class="btn text primary" data-play="' + esc( mv.path ) + '">' + PLAY_ICON + ' ' + playLabel + '</button>' +
                     '<button class="btn text bordered" aria-pressed="' + isWatched( mv ) + '" data-watched="' + esc( mv.path ) + '">' +
@@ -1273,7 +1289,7 @@ function renderLibrary()
     }
     else if( st.filter === "genres" )
     {
-        var genres = computeGenres();
+        var genres = computeGenres( filteredMovies() );
         html += '<div class="genre-grid">' + genres.map( function ( g )
         {
             var active = st.selectedGenre === g.name;
@@ -1504,12 +1520,9 @@ async function loadSubtitle( mv )
         track.default = false;
         video.appendChild( track );
 
-        // The TextTrack is only reachable once the browser has parsed the cue
-        // list; give it a tick, then leave it hidden until the CC button asks.
-        setTimeout( function ()
-        {
-            if( video.textTracks && video.textTracks[ 0 ] ) video.textTracks[ 0 ].mode = "hidden";
-        }, 0 );
+        // Our own TextTrack (the <track>'s .track), never video.textTracks[0]:
+        // Safari lists a file's built-in tracks first. Hidden until CC asks.
+        if( track.track ) track.track.mode = "hidden";
     }
     catch( e ) { st.trackUrl = null; }
     updatePlayerBar();
@@ -1519,7 +1532,7 @@ function toggleSubs()
 {
     var mv = st.current;
     if( ! mv || ! mv.subtitle ) return;
-    var tt = video.textTracks && video.textTracks[ 0 ];
+    var el = video.querySelector( "track" ), tt = el && el.track;
     if( ! tt ) return;
     st.subsOn = tt.mode !== "showing";
     tt.mode = st.subsOn ? "showing" : "hidden";
@@ -1587,18 +1600,30 @@ function goNode( id )
 }
 
 // Watched / not watched on a pick: each film through toggleWatched, as its
-// detail's button does. Their repaints wait for the end, and the Undos the
-// films that lost a resume point ask for become ONE Undo that runs them all.
+// detail's button does. Their repaints and their own Undos are held back;
+// marking several gets ONE Undo for all of them.
 function setWatched( films )
 {
     var on = films.some( function ( m ) { return ! isWatched( m ); } );
     var change = films.filter( function ( m ) { return isWatched( m ) !== on; } );
+    var resumes = change.map( function ( m ) { return st.prog.resume[ m.path ] || null; } );   // what "Watched" throws away
     if( change.length === 1 ) { toggleWatched( change[ 0 ] ); return; }
-    var undos = quietly( function () { change.forEach( toggleWatched ); } );
-    if( undos.length )
+    if( ! change.length ) return;
+    quietly( function () { change.forEach( toggleWatched ); } );
+    // Marking several: ONE Undo puts every one of them back - not watched
+    // again, and back at its resume point (a newer point wins). Unmarking
+    // loses nothing, so it has none (as for one film).
+    if( on )
         Ayni.toast( 'ok', Ayni.t( 'movies.markedWatched' ), { undo: function ()
         {
-            quietly( function () { undos.forEach( function ( u ) { u(); } ); } );
+            change.forEach( function ( m, i )
+            {
+                delete st.prog.watched[ m.path ];
+                if( resumes[ i ] && ! st.prog.resume[ m.path ] ) st.prog.resume[ m.path ] = resumes[ i ];
+                st.progDirty[ m.path ] = progNow();
+            } );
+            saveProgressNow();
+            renderLibrary();
         } } );
 }
 
@@ -1750,7 +1775,11 @@ function wireStaticUI()
         {
             if( st._seekOnLoad ) { try { video.currentTime = st._seekOnLoad; } catch( e ) {} st._seekOnLoad = 0; }
             if( st.current && ! st.current.duration && isFinite( video.duration ) )
-            { st.current.duration = video.duration; renderRuntime( st.current ); }
+            {
+                st.current.duration = video.duration;
+                SCAN_CACHE.set( st.current, { duration: video.duration } );   // not probed again next open
+                renderRuntime( st.current );
+            }
             updatePositionState();
         },
         tick: function ()
@@ -1801,8 +1830,14 @@ function wireStaticUI()
             return;
         }
         var tag = ( e.target && e.target.tagName ) || "";
-        if( tag === "INPUT" || tag === "TEXTAREA" ) return;
+        if( tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" ) return;
         if( ! st.current ) return;
+        // Ctrl+F is the browser's Find, Ctrl+K another app's: not ours. Nor are
+        // the keys of an open dialog or menu.
+        if( e.ctrlKey || e.metaKey || e.altKey ) return;
+        if( document.querySelector( "dialog[open], .panel.menu:popover-open" ) ) return;
+        // Space on a focused button or link presses it - never play/pause instead.
+        if( e.key === " " && e.target && e.target.closest && e.target.closest( "button, a, [role=button]" ) ) return;
         // With the video put away the library is on screen: the arrows move
         // through the films (and Space picks one in the list) - the item
         // browser's keys. On the video they are the player's.

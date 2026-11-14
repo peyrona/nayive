@@ -67,8 +67,10 @@ ok( await disk( () => json( PROG ).watched[ UNO ] && json( PROG ).watched[ DOS ]
 ok( await c.until( "!! document.querySelector('#ayni-toasts .toast.undo .act')" ), "…one Undo for the lost resume point" );
 await c.evaluate( "document.querySelector('#ayni-toasts .toast.undo .act').click(); true" );
 ok( await disk( () => ! json( PROG ).watched[ UNO ] && json( PROG ).resume[ UNO ] && json( PROG ).resume[ UNO ].t === 600 ), "Undo: Uno not watched, back at its point", json( PROG ) );
-ok( json( PROG ).watched[ DOS ], "…Dos (no point lost) stays watched" );
+ok( await disk( () => ! json( PROG ).watched[ DOS ] ), "…and Dos too: the one Undo takes back the whole pick", json( PROG ) );
 await c.evaluate( "browse.set( [ " + JSON.stringify( DOS ) + " ] ); true" );
+await key( c, "w" );
+ok( await disk( () => json( PROG ).watched[ DOS ] ), "W on Dos alone marks it again", json( PROG ) );
 await mouse( c, CARD( DOS ) + " .poster-title", { button: "right" } );
 ok( ( await menuRows( c ) )?.some( r => r.act === "watched" && /not watched/.test( r.label ) ), "a watched film's menu says Mark as not watched" );
 await c.evaluate( "document.querySelector('#ayni-menu [data-act=watched]').click(); true" );

@@ -148,19 +148,32 @@ func (t *Trackers) For(owner string) *trackerKey {
 
 // Create makes the key of `owner`, or hands back the one they have (created=false).
 func (t *Trackers) Create(owner string) (key trackerKey, created bool) {
+	key, created, _ = t.CreateChecked(owner)
+	return key, created
+}
+
+// errTrackersNotSaved: location.json could not be written; nothing changed.
+var errTrackersNotSaved = errors.New("location.json could not be written")
+
+// CreateChecked is Create that also tells a new key that could not be written
+// (G8): it is not kept, so the page never shows a URL lost at the next restart.
+func (t *Trackers) CreateChecked(owner string) (key trackerKey, created bool, err error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.ensureLoaded()
 	for _, k := range t.keys {
 		if k.Owner == owner {
-			return k, false
+			return k, false, nil
 		}
 	}
 	k := trackerKey{Owner: owner, Key: newToken(), Created: time.Now().Unix()}
 	t.keys = append(t.keys, k)
-	t.save()
+	if !t.save() {
+		t.keys = t.keys[:len(t.keys)-1]
+		return trackerKey{}, false, errTrackersNotSaved
+	}
 	t.log.Info("location URL created", "owner", owner)
-	return k, true
+	return k, true, nil
 }
 
 // OwnerOf is whose key this is, or "".
@@ -179,8 +192,25 @@ func (t *Trackers) OwnerOf(key string) string {
 	return ""
 }
 
-// Remove turns off the key of `owner`. True when there was one.
-func (t *Trackers) Remove(owner string) bool { return t.change(owner, "") }
+// Remove turns off the key of `owner`. True when there was one. A removal
+// that could not be written is taken back (errTrackersNotSaved, G8): the URL
+// still works - in memory as after a restart - and the page is told.
+func (t *Trackers) Remove(owner string) (bool, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.ensureLoaded()
+	before := t.keys
+	kept, found := moveOwner(t.keys, owner, "", func(k *trackerKey) *string { return &k.Owner })
+	if !found {
+		return false, nil
+	}
+	t.keys = kept
+	if !t.save() {
+		t.keys = before
+		return false, errTrackersNotSaved
+	}
+	return true, nil
+}
 
 // DropUser forgets a deleted user's key.
 func (t *Trackers) DropUser(name string) { t.change(name, "") }
@@ -229,7 +259,11 @@ func (s *Server) apiLocationKey(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, r, http.StatusOK, map[string]any{})
 
 	case http.MethodPost:
-		k, created := s.trackers.Create(sess.User)
+		k, created, err := s.trackers.CreateChecked(sess.User)
+		if err != nil {
+			sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+			return
+		}
 		status := http.StatusOK
 		if created {
 			status = http.StatusCreated
@@ -237,7 +271,12 @@ func (s *Server) apiLocationKey(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, r, status, trackerOut(&k))
 
 	case http.MethodDelete:
-		if !s.trackers.Remove(sess.User) {
+		found, err := s.trackers.Remove(sess.User)
+		if err != nil {
+			sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+			return
+		}
+		if !found {
 			sendError(w, r, http.StatusNotFound, "el envío de ubicación no estaba activado")
 			return
 		}
@@ -295,9 +334,14 @@ func (s *Server) locationFromGpsLogger(w http.ResponseWriter, r *http.Request, o
 		// Refusing would only make the app retry the same message forever.
 		s.log.Warn("GPSLogger sent something unreadable", "owner", owner, "err", err)
 	} else if msg.Lat != nil && msg.Lon != nil {
-		s.recordPositions(owner, []tripPosition{{
+		if _, ok := s.recordPositionsChecked(owner, []tripPosition{{
 			Lat: *msg.Lat, Lon: *msg.Lon, Acc: accOrApp(msg.Acc), At: stampOrNow(msg.Tst), Source: "gpslogger",
-		}})
+		}}); !ok {
+			// Not written (positions.json unreadable, disk full): the app
+			// keeps the point and sends it again (T6).
+			sendError(w, r, http.StatusServiceUnavailable, "position not saved - try again")
+			return
+		}
 	}
 	sendJSON(w, r, http.StatusOK, map[string]any{"ok": true})
 }
@@ -394,7 +438,12 @@ func (s *Server) locationFromOverland(w http.ResponseWriter, r *http.Request, ow
 				Acc: accOrApp(loc.Properties.Acc), At: at, Source: "overland",
 			})
 		}
-		s.recordPositions(owner, points)
+		if _, ok := s.recordPositionsChecked(owner, points); !ok {
+			// Not written: anything but "ok" keeps the batch on the phone,
+			// to be sent again (T6).
+			sendError(w, r, http.StatusServiceUnavailable, "positions not saved - try again")
+			return
+		}
 	}
 
 	// Overland deletes its copy of the batch only for exactly this answer.

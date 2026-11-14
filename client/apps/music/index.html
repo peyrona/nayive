@@ -693,9 +693,23 @@ function decodeId3Text( bytes )
             else if( body.length >= 2 && body[ 0 ] === 0xfe && body[ 1 ] === 0xff ) { be = true;  start = 2; }
             out = new TextDecoder( be ? "utf-16be" : "utf-16le" ).decode( body.subarray( start ) );
         }
-        return out.replace( /\u0000+$/, "" ).trim();
+        // v2.4 keeps several values in one frame, NUL between them ("A\0B").
+        return out.replace( /\u0000+$/, "" ).split( "\u0000" ).map( function ( v ) { return v.trim(); } )
+                  .filter( Boolean ).join( " / " );
     }
     catch( e ) { return ""; }
+}
+
+// Undo ID3 unsynchronisation: every 0xFF 0x00 pair stands for a plain 0xFF.
+function unsync( b )
+{
+    var out = new Uint8Array( b.length ), n = 0;
+    for( var i = 0; i < b.length; i++ )
+    {
+        out[ n++ ] = b[ i ];
+        if( b[ i ] === 0xff && b[ i + 1 ] === 0x00 ) i++;
+    }
+    return out.subarray( 0, n );
 }
 
 // The song's tag, or null when it has none. Throws when the file cannot be read.
@@ -747,9 +761,20 @@ async function readId3( url )
 
         if( want.indexOf( id ) !== -1 && ! frames[ id ] )
         {
+            var fmt = verMajor >= 3 ? buf[ o + 9 ] : 0;    // the frame's format flags
             if( ! await have( pos + headerLen, size ) ) break;
-            frames[ id ] = buf.slice( pos + headerLen - base, pos + headerLen + size - base );
-            found++;
+            var data = buf.slice( pos + headerLen - base, pos + headerLen + size - base );
+            if( verMajor === 3 && ( fmt & 0xc0 ) ) data = null;     // compressed / encrypted: not ours to read
+            else if( verMajor === 4 )
+            {
+                if( fmt & 0x0c ) data = null;                        // compressed / encrypted
+                else
+                {
+                    if( fmt & 0x01 ) data = data.subarray( 4 );      // a 4-byte "data length" first
+                    if( fmt & 0x02 ) data = unsync( data );          // 0xFF 0x00 stands for 0xFF
+                }
+            }
+            if( data ) { frames[ id ] = data; found++; }
         }
         pos += headerLen + size;                        // any other frame (a cover) is only stepped over
     }
@@ -787,6 +812,7 @@ async function refineTags( gen )
         while( next < mp3s.length && gen === scanGen )
         {
             var song = mp3s[ next++ ];
+            var failed = false;
             try
             {
                 var tag = await readId3( AyniNet.fileUrl( song.path ) );
@@ -799,8 +825,12 @@ async function refineTags( gen )
                     song.color = colorFor( ( song.artist || "" ) + "‡" + ( song.album || song.folder || "" ) );
                 }
             }
-            catch( e ) { /* keep the filename guess */ }
+            catch( e ) { failed = true; /* keep the filename guess */ }
             if( gen !== scanGen ) return;               // a Rescan replaced this pass
+            // A file that could not be read (no connection, a busy server) is
+            // not "read": cached as such, its tags would never be asked again.
+            // It is tried on the next open.
+            if( failed ) continue;
             song.tagRead = true;
             SCAN_CACHE.set( song, {
                 tagRead: true, title: song.title, artist: song.artist,
@@ -1300,10 +1330,16 @@ function removeFromQueue( index )
 {
     var entry = st.queue[ index ];
     if( ! entry ) return;
-    var wasPlaying = index === st.playingIndex;
+    var wasPlaying = index === st.playingIndex, paused = audio.paused;
     st.queue.splice( index, 1 );
-    if( ! st.queue.length ) { st.playingIndex = -1; stopPlayback(); }
-    else if( wasPlaying ) playIndex( Math.min( index, st.queue.length - 1 ) );
+    // The song on now taken out: the one after it takes its place - paused
+    // when it was paused. Past the last row there is none: it stops (never
+    // steps back to the one before).
+    if( ! st.queue.length || wasPlaying && index >= st.queue.length ) { st.playingIndex = -1; stopPlayback(); }
+    else if( wasPlaying )
+    {
+        playIndex( index, paused );
+    }
     else if( index < st.playingIndex ) st.playingIndex--;
     renderQueueList();
     renderLibrary();
@@ -1371,14 +1407,15 @@ function restoreQueue( snap, drop )
  * tab is in the background too (MediaSession below gives it lock-screen /
  * notification controls, same as any native player).
  * -------------------------------------------------------------------------*/
-function playIndex( index )
+// `paused`: load it, but do not start it (it takes the place of a paused song).
+function playIndex( index, paused )
 {
     if( index < 0 || index >= st.queue.length ) return;
     st.playingIndex = index;
     st.seekOnLoad = 0;                      // an Undo's resume point was for the song before
     var song = st.queue[ index ].song;
     audio.src = AyniNet.fileUrl( song.path );
-    audio.play().catch( function () {} );   // autoplay may be blocked - controls still work
+    if( ! paused ) audio.play().catch( function () {} );   // autoplay may be blocked - controls still work
     renderQueueList();
     renderLibrary();
     updatePlayerBar();
@@ -1646,7 +1683,13 @@ async function deletePlaylist( id )
         refreshPlaylists();
     } } );
     try { await saving; }
-    catch( e ) { if( ! e || ! e.read ) Ayni.toast( 'err', Ayni.t( 'music.listUpdateFailed' ) ); return; }
+    catch( e )
+    {
+        if( ! e || ! e.read ) Ayni.toast( 'err', Ayni.t( 'music.listUpdateFailed' ) );
+        // Not deleted: the file still has it, so the tree shows it again.
+        if( ! playlistById( id ) ) { st.playlists.splice( Math.min( at, st.playlists.length ), 0, pl ); refreshPlaylists(); }
+        return;
+    }
     refreshPlaylists();                         // with the lists saved elsewhere
 }
 
@@ -2135,6 +2178,10 @@ function wireStaticUI()
     // The empty queue has no rows or list to drop on: the pane itself takes it.
     // (A drop on the list bubbles here too; the first handler used the payload.)
     $( "#queueList" ).addEventListener( "drop", function ( e ) { e.preventDefault(); handleQueueDrop( st.queue.length ); } );
+    // A drag that ended anywhere else (a playlist, Esc, outside the page) is
+    // forgotten: a later drop from outside must not bring its songs back.
+    // (dragend comes after the drop, so the queue has used it by then.)
+    document.addEventListener( "dragend", function () { st.dragPayload = null; } );
 
     // The seek / volume / time / play icon wiring (shared/media.js); the lock
     // screen's progress bar follows the element.

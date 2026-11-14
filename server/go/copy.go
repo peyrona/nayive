@@ -63,7 +63,7 @@ func (s *Server) filesCopy(w http.ResponseWriter, r *http.Request, role, user st
 		return
 	}
 	if s.isStructuralDir(role, user, src.Abs) || s.isStructuralDir(role, user, dst.Abs) ||
-		s.isProtectedFile(role, dst.Abs) {
+		s.isProtectedFile(role, dst.Abs) || s.inConfig(src.Abs) {
 		sendError(w, r, http.StatusForbidden, "no se puede copiar esa carpeta")
 		return
 	}

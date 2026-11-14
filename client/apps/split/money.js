@@ -100,7 +100,10 @@
      * A lone separator followed by exactly three digits is read as a thousands
      * separator ("1.234" = 1234) unless the currency really has 3 decimals.
      * With nothing but zeros before it ("0,125") it can be neither: no
-     * thousands start with 0, and the currency has no third decimal - refused. */
+     * thousands start with 0, and the currency has no third decimal - refused.
+     * The same mark more than once is thousands only: "1.234.567" (every group
+     * three digits). More decimals than the currency has ("12,5" yen) are
+     * refused, not rounded: this is money. */
     function parseAmount( text, code )
     {
         var d = digits( code );
@@ -120,18 +123,29 @@
             var sepChar = s.charAt( sep );
             var other   = sepChar === "," ? "." : ",";
             var head    = s.slice( 0, sep );
-            if( head.indexOf( sepChar ) !== -1 ) return null;     // "1,2,3"
-            intPart  = head.split( other ).join( "" );             // drop thousands separators
-            fracPart = s.slice( sep + 1 );
-
-            var onlyOne = s.indexOf( other ) === -1;
-            if( onlyOne && fracPart.length === 3 && d < 3 )        // "1.234" is a thousand
+            if( head.indexOf( sepChar ) !== -1 )
             {
-                if( ! /[1-9]/.test( intPart ) ) return null;       // "0,125": not 125
-                intPart  = intPart + fracPart;
-                fracPart = "";
+                var groups = s.split( sepChar );                   // "1.234.567"
+                if( s.indexOf( other ) !== -1 || ! /^[1-9]\d{0,2}$/.test( groups[ 0 ] ) ||
+                    ! groups.slice( 1 ).every( function ( x ) { return /^\d{3}$/.test( x ); } ) ) return null;   // "1,2,3"
+                intPart = groups.join( "" );
+            }
+            else
+            {
+                intPart  = head.split( other ).join( "" );         // drop thousands separators
+                fracPart = s.slice( sep + 1 );
+
+                var onlyOne = s.indexOf( other ) === -1;
+                if( onlyOne && fracPart.length === 3 && d < 3 )    // "1.234" is a thousand
+                {
+                    if( ! /[1-9]/.test( intPart ) ) return null;   // "0,125": not 125
+                    intPart  = intPart + fracPart;
+                    fracPart = "";
+                }
             }
         }
+
+        if( /[1-9]/.test( fracPart.slice( d ) ) ) return null;     // "12,5" yen, "12,3456" euros
 
         if( ! /^\d*$/.test( intPart ) || ! /^\d*$/.test( fracPart ) ) return null;
         if( ! intPart && ! fracPart ) return null;

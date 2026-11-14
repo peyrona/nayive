@@ -83,6 +83,19 @@ func TestChatWatch(t *testing.T) {
 	}
 	h.mu.Unlock()
 
+	// Playing, and its page gone quiet (closed with no "stop"): the sweep drops it.
+	f.call(t, carmen, "POST", cp+"/conv/"+conv+"/watch", play, 204, nil)
+	h.mu.Lock()
+	o.watch[conv].touched = time.Now().Add(-chatWatchBeat + 5*time.Second)
+	if o.watchTick(time.Now()) || len(o.watch) != 1 {
+		t.Fatal("a playing video with a recent word was dropped")
+	}
+	o.watch[conv].touched = time.Now().Add(-chatWatchBeat - time.Second)
+	if !o.watchTick(time.Now()) || len(o.watch) != 0 {
+		t.Fatal("a playing video outlived chatWatchBeat with no word from its page")
+	}
+	h.mu.Unlock()
+
 	// Stop: gone for everybody.
 	f.call(t, carmen, "POST", cp+"/conv/"+conv+"/watch", play, 204, nil)
 	f.call(t, carmen, "POST", cp+"/conv/"+conv+"/watch", `{"state":"stop"}`, 204, nil)

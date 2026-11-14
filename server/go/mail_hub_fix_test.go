@@ -427,3 +427,34 @@ func TestMailHubPartial(t *testing.T) {
 		t.Fatal("an all-or-nothing error is not partial")
 	}
 }
+
+// A deleted label's id is never given again (a device's closed eye of it
+// would hide the new one), and the labels' version moves with any change.
+func TestMailHubLabelIDsNotReused(t *testing.T) {
+	f := newMailFixture(t)
+	var a, b MailLabel
+	v0 := f.srv.mail.LabelsVer("ana")
+	f.call(t, f.owner, "POST", "/api/mail/labels", `{"name":"A"}`, 200, &a)
+	if f.srv.mail.LabelsVer("ana") == v0 {
+		t.Fatal("a new label did not move the version")
+	}
+	if ok, err := f.srv.mail.DeleteLabel("ana", a.ID); !ok || err != nil {
+		t.Fatalf("delete: %v %v", ok, err)
+	}
+	f.call(t, f.owner, "POST", "/api/mail/labels", `{"name":"B"}`, 200, &b)
+	if b.ID == a.ID {
+		t.Fatalf("the deleted label's id %q came back", a.ID)
+	}
+	// a labels.json from before "next": the delete itself keeps the number
+	f.srv.mail.mu.Lock()
+	f.srv.mail.userLocked("ana").labels.Next = 0
+	f.srv.mail.mu.Unlock()
+	if ok, err := f.srv.mail.DeleteLabel("ana", b.ID); !ok || err != nil {
+		t.Fatalf("delete: %v %v", ok, err)
+	}
+	var c MailLabel
+	f.call(t, f.owner, "POST", "/api/mail/labels", `{"name":"C"}`, 200, &c)
+	if c.ID == b.ID {
+		t.Fatalf("an old file's deleted id %q came back", b.ID)
+	}
+}

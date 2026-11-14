@@ -11,12 +11,17 @@
    know are kept as they are.
 
    Two faces, the same notes:
-     NayiveNotes.desk( layer )  the desktop (desktop/index.html): sticky notes on
-                                the wallpaper, under the windows. Where each one
+     NayiveNotes.desk( host, btn ) the desktop (desktop/index.html): a panel on the
+                                right of the desk (a board over all of it on its ←);
+                                pinned notes float over the windows, where each one
                                 sits is this device's (localStorage), the rest is shared.
+     NayiveNotes.open( on )     the desktop's panel: open, shut, or nothing = flip.
      NayiveNotes.wall( host )   the launcher (index.html), on a phone: cards,
                                 pinned first; a tap opens one full screen.
-     NayiveNotes.add()          a new empty note, its text field focused.
+     NayiveNotes.add( text )    a new note, its text field focused; empty, or
+                                with this text (shared from another app) - saved.
+     NayiveNotes.show( id )     that note, opened (launcher) or brought forward (desk).
+     NayiveNotes.ready          a Promise: the first good read is in (saving allowed).
      NayiveNotes.dot            a .sync-indicator the page may mirror (the desktop's plug).
 
    SAVING - the Habits / Tasks rules: AyniStore with a merge by id, note by note
@@ -49,6 +54,8 @@
     var lastBody = null;    // the body of the last read or save
     var lastRead = 0;
     var views    = [];
+    var readyNow = null;
+    var ready    = new Promise( function ( r ) { readyNow = r; } );
     var dot = document.createElement( 'span' );
     dot.className = 'sync-indicator';
 
@@ -201,6 +208,7 @@
         } );
         readOnce = true;
         corrupt  = false;
+        readyNow();
         views.forEach( function ( v ) { if( v.took ) v.took(); } );
         render();
         if( mine.some( function ( n ) { return dirty[ n.id ]; } ) ) later();
@@ -250,12 +258,13 @@
         return true;
     }
 
-    function add()
+    function add( text )
     {
         if( refuse() ) return null;
         var now = Date.now();
         var n = { id: newId( 'n' ), title: '', text: '', list: false, items: [], pinned: false, color: null, created: now, updated: now };
         notes.unshift( n );
+        if( typeof text === 'string' && text.trim() ) { n.text = text; changed( n ); }     // shared text: saved as typed text is
         return n;
     }
 
@@ -422,25 +431,47 @@
     }
 
     //------------------------------------------------------------------------//
-    // THE DESKTOP - sticky notes on the wallpaper. Moved by their top strip,
-    // sized by the corner; the last one touched comes on top. A pinned one
-    // floats above the windows too (a second layer, .notes-layer.top), so it
-    // stays in sight while an app is in use. Where they sit is this device's only.
+    // THE DESKTOP (2026-11-14: notes on the wallpaper were messy) - a panel on
+    // the right of the desk, over the windows but not in their way: they stay
+    // usable beside it. The notes are cards you type in, the newest first. Its
+    // ← spreads the same panel over the whole desk as a board: a grid of ALL
+    // the notes, pinned first, the floating ones hidden meanwhile; → brings it
+    // back to the side. Shut by its ×, by the bar's notes button, or by Esc.
+    // A PINNED note leaves the side panel: it floats over the windows as a
+    // sticky note, moved by its top strip, sized by its corner; the last one
+    // touched comes on top. Where it sits is this device's only. Only one
+    // editor of a note is in sight at a time.
 
     function posKey() { return 'nayive-notes-pos:' + ( ( window.AyniStore && AyniStore.me ) || '' ); }
     function readPos() { try { return JSON.parse( localStorage.getItem( posKey() ) ) || {}; } catch( e ) { return {}; } }
     function writePos( p ) { try { localStorage.setItem( posKey(), JSON.stringify( p ) ); } catch( e ) {} }
 
-    function desk( layer )
+    // host: the desk (#desk). btn: the bar's notes button (optional), pressed while the panel is open.
+    function desk( host, btn )
     {
-        var els = {}, pos = readPos(), zTop = 0, editId = null;
-        var topLayer = el( 'div', 'notes-layer top' );
-        layer.parentNode.append( topLayer );
+        var sticks = {}, sheets = {}, pos = readPos(), zTop = 0, editId = null;
+
+        // The panel: ← (board) · Notes · + · ×, then the cards.
+        var pane = el( 'aside', 'notes-pane' );
+        pane.hidden = true;
+        pane.setAttribute( 'aria-label', T( 'notes.title' ) );
+        var head = el( 'header', 'notes-phead' );
+        var wide = button( 'back', T( 'notes.wide' ) );
+        var h2 = el( 'h2' );
+        h2.textContent = T( 'notes.title' );
+        var plus = button( 'sticky-plus', T( 'notes.new' ) );
+        var shut = button( 'close', T( 'ui.close' ) );
+        head.append( wide, h2, plus, shut );
+        var list = el( 'div', 'notes-list' );
+        pane.append( head, list );
+        // pinned notes: a layer over the panel and the windows
+        var layer = el( 'div', 'notes-layer' );
+        host.append( pane, layer );
         Object.keys( pos ).forEach( function ( id ) { zTop = Math.max( zTop, pos[ id ].z || 0 ); } );
 
         var V = {
-            busy:    function () { return !! document.querySelector( '.note.sticky:focus-within, .note.sticky.moving' ); },     // either layer
-            editing: function () { var f = document.querySelector( '.note.sticky:focus-within' ); return f ? f.dataset.id : null; },
+            busy:    function () { return !! document.querySelector( '.note.sticky:focus-within, .note.sheet:focus-within, .note.sticky.moving' ); },
+            editing: function () { var f = document.querySelector( '.note.sticky:focus-within, .note.sheet:focus-within' ); return f ? f.dataset.id : null; },
             // A good read: positions of notes that are gone are dropped.
             took:    function ()
             {
@@ -452,12 +483,102 @@
             render:  render
         };
 
+        //--- the panel
+
+        function board( on )
+        {
+            if( on === pane.classList.contains( 'board' ) ) return;
+            pane.classList.toggle( 'board', on );
+            // Back to the side: the floating notes are made again, the board may have changed them.
+            if( ! on ) Object.keys( sticks ).forEach( function ( id ) { sticks[ id ].remove(); delete sticks[ id ]; } );
+            render();
+            wide.innerHTML = Ayni.icon( on ? 'forward' : 'back' );
+            var tip = T( on ? 'notes.narrow' : 'notes.wide' );
+            Ayni.setTip( wide, tip );
+            wide.setAttribute( 'aria-label', tip );
+        }
+
+        function paneOpen() { return ! pane.hidden; }
+
+        // Open: no note at all yet = a new one (the "+" does it). Shut: back to the side next time.
+        function open( on )
+        {
+            if( on == null ) on = pane.hidden;
+            if( on )
+            {
+                pane.hidden = false;
+                if( ! notes.length && readOnce ) { V.add(); return; }
+            }
+            else if( ! pane.hidden )
+            {
+                if( pane.contains( document.activeElement ) ) document.activeElement.blur();     // a blank note goes, what waits is saved
+                pane.hidden = true;
+                board( false );
+            }
+            if( btn ) btn.setAttribute( 'aria-pressed', paneOpen() ? 'true' : 'false' );
+        }
+
+        wide.addEventListener( 'click', function () { board( ! pane.classList.contains( 'board' ) ); } );
+        plus.addEventListener( 'click', function () { V.add(); } );
+        shut.addEventListener( 'click', function () { open( false ); } );
+        // Esc: not while a popup, a dialog or the desktop's menu is up - it is theirs (seen first: capture).
+        document.addEventListener( 'keydown', function ( e )
+        {
+            if( e.key !== 'Escape' || pane.hidden || e.defaultPrevented ) return;
+            var menu = document.getElementById( 'menu' );
+            if( document.querySelector( ':popover-open:not([popover=manual]), dialog[open]' ) || ( menu && ! menu.hidden ) ) return;     // not a tooltip or a toast
+            open( false );
+        }, true );
+        // A window comes forward (opened, or picked on the bar) while the board is up:
+        // the board goes back to the side, or it would hide that window.
+        new MutationObserver( function ( list )
+        {
+            if( ! pane.classList.contains( 'board' ) ) return;
+            var up = list.some( function ( m )
+            {
+                if( m.type === 'childList' ) return [].some.call( m.addedNodes, function ( x ) { return x.classList && x.classList.contains( 'win' ); } );
+                var w = m.target;
+                if( ! w.classList.contains( 'win' ) || w.hidden ) return false;
+                if( m.attributeName === 'hidden' ) return true;
+                var z0 = /z-index:\s*(\d+)/.exec( m.oldValue || '' );
+                return ( +w.style.zIndex || 0 ) > ( z0 ? +z0[ 1 ] : 0 );
+            } );
+            if( up ) board( false );
+        } ).observe( host, { childList: true, attributes: true, attributeFilter: [ 'style', 'hidden' ], attributeOldValue: true, subtree: true } );
+
+        // A card in the panel: the title and the note's buttons on top, the text below.
+        function sheet( n )
+        {
+            var e = el( 'article', 'note sheet' );
+            e.dataset.id = n.id;
+            var strip = el( 'div', 'note-strip' );
+            var box = editor( n );
+            strip.append( box.titleInput, tools( n, box, function () { paintColor( e, n ); render(); } ) );
+            e.append( strip, box );
+            paintColor( e, n );
+            leave( e, n );
+            e.note = n;
+            return e;
+        }
+
+        // The focus leaves a note never written in: it goes.
+        function leave( e, n )
+        {
+            e.addEventListener( 'focusout', function ( ev )
+            {
+                if( ev.relatedTarget && e.contains( ev.relatedTarget ) ) return;
+                setTimeout( function () { if( ! e.contains( document.activeElement ) && ! ( palPop && palPop.matches( ':popover-open' ) ) ) { dropIfBlank( n ); flush(); } }, 0 );
+            } );
+        }
+
+        //--- the pinned notes, floating
+
         function size() { return { w: layer.clientWidth || 800, h: layer.clientHeight || 600 }; }
 
         // The first free place from the top left, row by row; else a step down from the last note.
         function freeSpot()
         {
-            var L = size(), taken = notes.map( function ( n ) { return pos[ n.id ]; } ).filter( Boolean );
+            var L = size(), taken = notes.filter( function ( n ) { return n.pinned; } ).map( function ( n ) { return pos[ n.id ]; } ).filter( Boolean );
             for( var y = GAP; y + H0 <= L.h; y += H0 + GAP )
                 for( var x = GAP; x + W0 <= L.w; x += W0 + GAP )
                     if( ! taken.some( function ( p ) { return x < p.x + p.w && x + W0 > p.x && y < p.y + p.h && y + H0 > p.y; } ) )
@@ -476,8 +597,6 @@
             e.style.left   = Math.max( 0, Math.min( p.x, L.w - w ) ) + 'px';     // a smaller screen: kept in sight, not moved for good
             e.style.top    = Math.max( 0, Math.min( p.y, L.h - h ) ) + 'px';
             e.style.zIndex = p.z || 0;
-            var host = n.pinned ? topLayer : layer;
-            if( e.parentNode && e.parentNode !== host ) host.append( e );
         }
 
         function front( n, e )
@@ -495,7 +614,7 @@
             e.dataset.id = n.id;
             var strip = el( 'div', 'note-strip' );
             var box = editor( n );
-            strip.append( box.titleInput, tools( n, box, function () { paintColor( e, n ); place( e, n ); } ) );
+            strip.append( box.titleInput, tools( n, box, function () { paintColor( e, n ); render(); } ) );
             var grip = el( 'div', 'note-size' );
             e.append( strip, box, grip );
             paintColor( e, n );
@@ -511,12 +630,7 @@
                 drag( ev, n, e, false, t );
             } );
             grip.addEventListener( 'pointerdown', function ( ev ) { drag( ev, n, e, true ); } );
-            // The focus leaves a note never written in: it goes.
-            e.addEventListener( 'focusout', function ( ev )
-            {
-                if( ev.relatedTarget && e.contains( ev.relatedTarget ) ) return;
-                setTimeout( function () { if( ! e.contains( document.activeElement ) && ! ( palPop && palPop.matches( ':popover-open' ) ) ) { dropIfBlank( n ); flush(); } }, 0 );
-            } );
+            leave( e, n );
             e.note = n;
             return e;
         }
@@ -562,38 +676,66 @@
             e.addEventListener( 'pointercancel', up );
         }
 
+        //--- both
+
+        // A card is kept while it holds the same note (its fields are bound to
+        // it; the one being typed in keeps its caret), else made again. A card
+        // that must move in the list gets its focus back.
         function render()
         {
-            var seen = {};
-            notes.forEach( function ( n )
+            var act = document.activeElement, inPane = {}, pinned = {}, at = 0, all = pane.classList.contains( 'board' );
+            ordered().forEach( function ( n )
             {
-                seen[ n.id ] = true;
-                var e = els[ n.id ];
-                // The note being typed in keeps its fields (and the caret); only its look follows.
-                if( e && e.contains( document.activeElement ) && e.note === n ) { paintColor( e, n ); place( e, n ); return; }
-                var fresh = make( n );
-                if( e ) e.replaceWith( fresh ); else layer.append( fresh );
-                els[ n.id ] = fresh;
-                place( fresh, n );
+                if( n.pinned )
+                {
+                    pinned[ n.id ] = true;
+                    var s = sticks[ n.id ];
+                    if( ! s || s.note !== n ) { var fs = make( n ); if( s ) s.replaceWith( fs ); else layer.append( fs ); s = sticks[ n.id ] = fs; }
+                    else paintColor( s, n );
+                    place( s, n );
+                    if( ! all ) return;      // the board: in it too (the floating one is hidden)
+                }
+                inPane[ n.id ] = true;
+                var e = sheets[ n.id ];
+                if( ! e || e.note !== n ) { var fe = sheet( n ); if( e ) e.replaceWith( fe ); e = sheets[ n.id ] = fe; }
+                else paintColor( e, n );
+                if( list.children[ at ] !== e ) list.insertBefore( e, list.children[ at ] || null );
+                at++;
             } );
-            Object.keys( els ).forEach( function ( id ) { if( ! seen[ id ] ) { els[ id ].remove(); delete els[ id ]; } } );
-            if( editId && els[ editId ] )
+            Object.keys( sheets ).forEach( function ( id ) { if( ! inPane[ id ] ) { sheets[ id ].remove(); delete sheets[ id ]; } } );
+            Object.keys( sticks ).forEach( function ( id ) { if( ! pinned[ id ] ) { sticks[ id ].remove(); delete sticks[ id ]; } } );
+            if( act && act !== document.activeElement && act.isConnected ) act.focus( { preventScroll: true } );
+            if( editId && ( sheets[ editId ] || sticks[ editId ] ) )
             {
-                var f = els[ editId ].querySelector( '.note-text' );
+                var f = ( sheets[ editId ] || sticks[ editId ] ).querySelector( '.note-text' );
                 editId = null;
                 if( f ) f.focus();
             }
         }
 
-        new ResizeObserver( function () { notes.forEach( function ( n ) { if( els[ n.id ] ) place( els[ n.id ], n ); } ); } ).observe( layer );
+        new ResizeObserver( function () { notes.forEach( function ( n ) { if( sticks[ n.id ] ) place( sticks[ n.id ], n ); } ); } ).observe( layer );
 
-        V.add = function ()
+        // A new note: first in the panel, its text field focused.
+        V.add = function ( text )
         {
-            var n = add();
+            var n = add( text );
             if( ! n ) return;
+            open( true );
             editId = n.id;
             render();
         };
+        // A search result: that note, its text field focused - in the panel, or in front when pinned.
+        V.show = function ( id )
+        {
+            var n = find( id );
+            if( ! n ) return;
+            if( ! n.pinned ) open( true );
+            var e = sheets[ id ] || sticks[ id ];     // a pinned one: its board card while the board is up
+            if( ! e ) return;
+            if( e === sticks[ id ] ) front( n, e );
+            caretEnd( e.querySelector( '.note-text' ) );
+        };
+        V.open = open;
         views.push( V );
         start();
         render();
@@ -629,13 +771,15 @@
             render:  render
         };
 
-        plus.addEventListener( 'click', function ()
+        V.add = function ( text )
         {
-            var n = add();
+            var n = add( text );
             if( ! n ) return;
             render();
             open( n, 'text' );
-        } );
+        };
+        plus.addEventListener( 'click', function () { V.add(); } );
+        V.show = function ( id ) { var n = find( id ); if( n ) open( n ); };      // a search result
 
         function card( n )
         {
@@ -660,8 +804,8 @@
             var shown = expanded ? list : list.slice( 0, PAGE );
             cards.textContent = '';
             shown.forEach( function ( n ) { cards.append( card( n ) ); } );
-            // no notes and no "new note" button here (a phone: it lives in the top row): nothing to show
-            sec.hidden = ! list.length && ! head.contains( plus );
+            // a phone with no notes: nothing to show (Office › Notes makes the first)
+            sec.hidden = ! list.length && document.documentElement.classList.contains( 'ls-top' );
             more.hidden = shown.length >= list.length;
             more.textContent = TF( 'notes.more', { n: list.length - shown.length } );
             // The open note deleted (its own button, or another device): the full view
@@ -717,7 +861,10 @@
     window.NayiveNotes = {
         desk:  desk,
         wall:  wall,
-        add:   function () { views.forEach( function ( v ) { if( v.add ) v.add(); } ); },
+        add:   function ( text ) { views.forEach( function ( v ) { if( v.add ) v.add( text ); } ); },
+        show:  function ( id ) { views.forEach( function ( v ) { if( v.show ) v.show( id ); } ); },
+        open:  function ( on ) { views.forEach( function ( v ) { if( v.open ) v.open( on ); } ); },
+        ready: ready,
         dot:   dot,
         refresh: function () { if( store ) store.flush(); reread( true ); },
         FILE:  FILE

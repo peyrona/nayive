@@ -15,7 +15,7 @@ import
 from './lib/xlsx-format_v2.4.5.js';
 import
 {
-    table, newSheet, newDoc, doc, activeSheet, defaultSheetName, lineStyle
+    table, newSheet, newDoc, doc, activeSheet, defaultSheetName, lineStyle, sheetHasLock
 }
 from './grid.js';
 
@@ -69,7 +69,10 @@ function detectLossy( wb )
         if( n.indexOf( 'xl/worksheets/sheet' ) === 0 ) sheetXml += dec.decode( zip.files[ n ] );
     });
 
-    if( sheetXml.indexOf( '<sheetProtection' ) !== -1 ) lossy.push( 'calc.lossyProtection' );
+    // A protected sheet's locked cells and its <sheetProtection> (password
+    // included) are carried (see worksheetToSheet); the ranges it lets
+    // certain people edit are not.
+    if( /<(?:\w+:)?protectedRanges\b/.test( sheetXml ) ) lossy.push( 'calc.lossyProtection' );
 
     // The next four the library can neither read nor write (theme-coloured
     // fills, the sheet's default column width, the height of an empty row
@@ -371,13 +374,18 @@ function shiftFormula( f, dr, dc )
 function scanSheetXml( zip, partPath )
 {
     const out = { xf: {}, dates: {}, shared: {}, rows: [], hiddenRows: [], hiddenCols: [], colWidth: null, rowHeight: null,
-                  rowXf: [], colXf: [], plainWidth: [] };
+                  rowXf: [], colXf: [], plainWidth: [], protect: null };
     if( ! zip || ! zip.files || ! partPath || ! zip.files[ partPath ] ) return out;
 
     const xml = new TextDecoder().decode( zip.files[ partPath ] );
 
     // Whether the part holds any cell at all (see the unread check in decodeToDoc).
     out.cells = /<(?:\w+:)?c\b[^>]*\br=["'][A-Z]+\d+["']/.test( xml );
+
+    // A protected sheet: its locked cells count (worksheetToSheet). The tag
+    // is kept as it is, password and all, for the save (sheetToWorksheet).
+    const prot = /<(?:\w+:)?sheetProtection\b[^>]*>/.exec( xml );
+    if( prot && /\bsheet=["'](?:1|true)["']/.test( prot[ 0 ] ) ) out.protect = prot[ 0 ].replace( /^<\w+:/, '<' ).replace( /\s*\/?>$/, '/>' );
 
     // A column with no width of its own is drawn at the sheet's default,
     // which the writer does not carry: each such column gets it as its own
@@ -631,8 +639,10 @@ function readStyleParts( zip )
     const xfs = items( block( 'cellXfs' ), 'xf' ).map( function( x )
     {
         const id = function( n ) { const m = new RegExp( '\\b' + n + '="(\\d+)"' ).exec( x ); return m ? +m[ 1 ] : 0; };
+        // Locked unless it says not: Excel's default (see worksheetToSheet).
         return { fill: fills[ id( 'fillId' ) ] || null, border: borders[ id( 'borderId' ) ] || null,
-                 wrap: /\bwrapText="(?:1|true)"/.test( x ) };
+                 wrap: /\bwrapText="(?:1|true)"/.test( x ),
+                 locked: ! /<(?:\w+:)?protection\b[^>]*\blocked="(?:0|false)"/.test( x ) };
     });
 
     return { xfs: xfs };
@@ -691,6 +701,20 @@ function worksheetToSheet( ws, name, scan, parts, date1904 )
     // place, see format.js).
     // A line whose look is the file's own default one (xf 0) has no look:
     // LibreOffice puts such a style= on columns it only sized.
+    //
+    // LOCKED CELLS. Only a protected sheet's lock counts (Excel's too), and
+    // there every cell is locked unless its format says not - format 0, the
+    // one of a cell with no s=, included; a file with no styles part is all
+    // locked. Calc's model is the other way round: nothing is locked but
+    // what has { locked: true } in its look (THE LOOK OF A CELL in grid.js).
+    // So a sheet whose format 0 is locked gets one { locked } on every
+    // column, a cell that differs gets its own, and every line with a format
+    // of its own says locked or not. An unprotected sheet reads as before.
+    const lockOf    = function( n ) { const x = parts && parts.xfs[ n || 0 ]; return x ? x.locked : true; };
+    const protect   = !! ( scan && scan.protect );
+    const allLocked = protect && lockOf( 0 );
+    if( protect ) sh.protect = scan.protect;
+
     const lineLooks = {};
     const xfLook    = function( n ) { return ( parts && parts.libStyle ) ? xlsxStyleToObj( parts.libStyle( n ), parts.xfs[ n ] ) : null; };
     const plainLook = JSON.stringify( xfLook( 0 ) );
@@ -699,7 +723,9 @@ function worksheetToSheet( ws, name, scan, parts, date1904 )
         if( ! ( n in lineLooks ) )
         {
             const st = xfLook( n );
-            lineLooks[ n ] = ( st && JSON.stringify( st ) !== plainLook ) ? st : null;
+            let   ln = ( st && JSON.stringify( st ) !== plainLook ) ? st : null;
+            if( protect ) ln = Object.assign( {}, ln, { locked: lockOf( n ) } );
+            lineLooks[ n ] = ln;
         }
         return lineLooks[ n ];
     };
@@ -707,6 +733,11 @@ function worksheetToSheet( ws, name, scan, parts, date1904 )
     {
         scan.rowXf.forEach( function( n, r ) { const st = lineLook( n ); if( st ) sh.rowStyles[ r ] = st; } );
         scan.colXf.forEach( function( n, c ) { const st = lineLook( n ); if( st ) sh.colStyles[ c ] = st; } );
+    }
+    if( allLocked )
+    {
+        const locked = { locked: true };      // one object on every column, as a formatted sheet has
+        for( let c = 0; c < 16384; c++ ) if( ! sh.colStyles[ c ] ) sh.colStyles[ c ] = locked;
     }
 
     for( let r = 0; r <= endRow; r++ )
@@ -734,6 +765,9 @@ function worksheetToSheet( ws, name, scan, parts, date1904 )
                 style.numFmt = ( value % 1 ) ? 'yyyy-mm-dd hh:mm' : 'yyyy-mm-dd';
             }
 
+            // A cell's own lock (see LOCKED CELLS above).
+            if( style && protect && lockOf( xfN ) ) style.locked = true;
+
             // An empty cell (a stub, see decodeToDoc) keeps its look only when
             // there is something to see - a fill or a box. The rest (a font,
             // a number format waiting for a value) would only swell the file:
@@ -744,8 +778,18 @@ function worksheetToSheet( ws, name, scan, parts, date1904 )
             // wins over the line's - and is kept plain, {}.
             const bare = ! cell || cell.t === 'z';
             const line = lineStyle( sh, r, c );
-            if( style && ( ! bare || style.bg || style.border || line ) ) sh.cellStyles[ addr ] = style;
+            if( style && ( ! bare || style.bg || style.border || style.locked || line ) ) sh.cellStyles[ addr ] = style;
             else if( ! style && cell && line ) sh.cellStyles[ addr ] = {};
+
+            // A cell the file has, with no look of its own, is locked as its
+            // own format 0 says, whatever its row or column says.
+            if( protect && ( cell || xfN !== undefined ) )
+            {
+                const want = lockOf( xfN );
+                const own  = sh.cellStyles[ addr ];
+                if( own ) { if( want ) own.locked = true; else delete own.locked; }
+                else if( want !== !! ( line && line.locked ) ) sh.cellStyles[ addr ] = want ? { locked: true } : {};
+            }
 
             // A note and a link are cell facts the grid can show, so they
             // belong on the sheet entry like everything else.
@@ -839,6 +883,12 @@ function worksheetToSheet( ws, name, scan, parts, date1904 )
     // worksheet from scratch would otherwise drop them.
     sh.autofilter = ws[ '!autofilter' ] || null;
     sh.margins    = ws[ '!margins' ]    || null;
+
+    // A protected sheet with every cell unlocked (a form open to all): the
+    // save keeps it protected (sheetToWorksheet), or what its tag forbids -
+    // formatting, inserting rows - would be let go with no word. Unlocking
+    // everything in Calc lifts the protection only of a sheet that had a lock.
+    if( protect && ! sheetHasLock( sh ) ) sh.protectKeep = true;
 
     return sh;
 }
@@ -1167,6 +1217,11 @@ function sheetToWorksheet( sh, xlsx )
     const aoa = sh.data || [];
     const out = ( sh === activeSheet ? sh.values : engineValues( sh ) || sh.values ) || [];
 
+    // A sheet with a locked cell is written protected (see LOCKED CELLS in
+    // worksheetToSheet), and there a cell or line unlocked on purpose says so.
+    // So is one that came protected with nothing locked (sh.protectKeep).
+    const locks = xlsx && ( sheetHasLock( sh ) || !! ( sh.protect && sh.protectKeep ) );
+
     const ws = {};
 
     let maxRow = 0;
@@ -1184,7 +1239,7 @@ function sheetToWorksheet( sh, xlsx )
             // A cell with no look of its own goes out with its row's or
             // column's as its own s=, as Excel writes a value typed into a
             // formatted row: in the file an own s= - even none - wins.
-            const style = objToXlsxStyle( sh.cellStyles[ addr ] || lineStyle( sh, r, c ) );
+            const style = objToXlsxStyle( sh.cellStyles[ addr ] || lineStyle( sh, r, c ), locks );
 
             // A formula is written with its last result beside it. Excel
             // recalculates on open and never notices, but anything that
@@ -1217,7 +1272,7 @@ function sheetToWorksheet( sh, xlsx )
     {
         if( ws[ addr ] ) return;
 
-        const style = objToXlsxStyle( sh.cellStyles[ addr ] );
+        const style = objToXlsxStyle( sh.cellStyles[ addr ], locks );
         const rc    = decodeCell( addr );
 
         // An empty cell kept plain in a styled row or column ({}, see
@@ -1313,7 +1368,7 @@ function sheetToWorksheet( sh, xlsx )
         const looks = new Map();       // one written style per object: 16,384 columns may share one
         const look  = function( st )
         {
-            if( ! looks.has( st ) ) looks.set( st, objToXlsxStyle( st ) );
+            if( ! looks.has( st ) ) looks.set( st, objToXlsxStyle( st, locks ) );
             return looks.get( st );
         };
 
@@ -1347,7 +1402,11 @@ function sheetToWorksheet( sh, xlsx )
         rows.forEach( function( rw, r )
         {
             if( filled.has( r ) || ( rw.hpt == null && ! rw.hidden ) ) return;
-            ws[ encodeCell( { r: r, c: 0 } ) ] = { t: 'z', z: 'General' };
+
+            // In a locked row or column it is locked too: a <c> with no s=
+            // is format 0's, which is unlocked (see LOCKED CELLS).
+            const ln = lineStyle( sh, r, 0 );
+            ws[ encodeCell( { r: r, c: 0 } ) ] = ( ln && ln.locked ) ? { t: 'z', s: objToXlsxStyle( ln, locks ) } : { t: 'z', z: 'General' };
             if( r > maxRow ) maxRow = r;
         });
 
@@ -1357,6 +1416,14 @@ function sheetToWorksheet( sh, xlsx )
     const fr = sh.freeze.rows;
     const fc = sh.freeze.cols;
     if( fr || fc ) ws[ '!views' ] = [ { state: 'frozen', xSplit: fc, ySplit: fr } ];
+
+    // A sheet with a locked cell is a protected sheet, or Excel would not
+    // hold the lock (see LOCKED CELLS in worksheetToSheet): under the tag it
+    // came with, password and all, else under Calc's own - no password, and
+    // everything but typing into a locked cell allowed (0 = not protected).
+    // The writer then says locked="0" on every format a lock does not set
+    // (writeCellXf), format 0 too: a protected sheet locks only what Calc does.
+    if( locks ) ws[ '!protect' ] = sh.protect || PROTECT_TAG;
 
     if( sh.autofilter ) ws[ '!autofilter' ] = sh.autofilter;
     if( sh.margins )    ws[ '!margins' ]    = sh.margins;
@@ -1378,6 +1445,9 @@ function sheetToWorksheet( sh, xlsx )
     // handed a hard-coded 'Sheet1', so every file came back renamed.
     return ws;
 }
+
+const PROTECT_TAG = '<sheetProtection sheet="1" formatCells="0" formatColumns="0" formatRows="0" insertColumns="0" insertRows="0"'
+                  + ' insertHyperlinks="0" deleteColumns="0" deleteRows="0" sort="0" autoFilter="0" pivotTables="0"/>';
 
 async function encodeFromGrid( ext )
 {
@@ -1595,7 +1665,8 @@ function lineWeight( style )
     return /^(medium|thick|double|slantDashDot)/.test( style || '' ) ? 'medium' : 'thin';
 }
 
-function objToXlsxStyle( o )
+// `locks`: the sheet has a locked cell (sheetToWorksheet).
+function objToXlsxStyle( o, locks )
 {
     if( ! o ) return null;
 
@@ -1623,6 +1694,12 @@ function objToXlsxStyle( o )
     }
 
     if( o.numFmt ) style.numFmt = o.numFmt;
+
+    // Calc's lock button (see LOCKED CELLS in worksheetToSheet). Unlocked on
+    // purpose, in a sheet with locks, is a format of its own: a row let free
+    // across locked columns has no other way to say so.
+    if( o.locked )                            style.protection = { locked: true };
+    else if( locks && o.locked === false )    style.protection = { locked: false };
 
     // A side set in the border dialog is `true` and takes the flat weight
     // and colour; a side read from the file is its own { style, color }.

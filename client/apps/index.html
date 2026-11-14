@@ -121,9 +121,8 @@
                 { sel: '#chatBtn',           name: 'Chat', text: Ayni.t( 'launcher.introChat' ) },
                 { sel: '#mailBtn',           name: 'eMail', text: Ayni.t( 'launcher.introMail' ) },
                 { sel: '#findBtn',           name: Ayni.t( 'find.title' ), text: Ayni.t( 'launcher.introFind' ), tour: { open: '#moreBtn' } },
-                // Notes: under the apps (not in the desktop's menu, see #notesHost); built
-                // after this card, so the row names the button only for the tour.
-                window.top === window ? { icon: 'sticky', name: Ayni.t( 'notes.title' ), text: Ayni.t( 'launcher.introNotes' ), tour: { sel: '#notesNewBtn' } } : null,
+                // Notes: Office › Notes, and the cards under the apps (not in the desktop's menu, see #notesHost).
+                { sel: '#notesBtn',          name: Ayni.t( 'notes.title' ), text: Ayni.t( 'launcher.introNotes' ), tour: { open: '#officeBtn' } },
                 // The plug of every app, explained once here: it only shows when saving
                 // has trouble, so the app helps can't point at it. Drawn unplugged.
                 { svg: Ayni.icon( 'plug-off' ),
@@ -354,16 +353,15 @@
         .tool-extra svg { width: 20px; height: 20px; }
 
         /* ONE TOP ROW (html.ls-top: a phone, or the desktop's menu): the magnifier, the
-           new note (the desktop's notes pair), then the gear. The gear does not roll
+           picked apps, then the gear. The gear does not roll
            here: pressed, its four extras take the row's place beside it. */
         html.ls-top #lsBox { gap: 6px; margin-bottom: -12px; height: 42px; }   /* the small row sits closer to the tiles */
         html.ls-top #lsField.is-open { height: 42px; box-sizing: border-box; }  /* same height open or folded: no jump */
         html:root.ls-top .apps-panel { padding-top: 14px; }      /* ...and closer to the card's top edge */
         html.ls-top #lsBox > .btn, html.ls-top #quickBar > .btn { width: 42px; height: 42px; }
         html.ls-top #quickBar { display: contents; }   /* its buttons, the magnifier and the gear are ordered by shared/launcher-bar.js */
-        #quickBar[hidden], #quickPark { display: none !important; }
+        #quickBar[hidden] { display: none !important; }
         #quickBar .qb-app svg { width: 20px; height: 20px; }
-        html.ls-top #notesNewBtn .icon { --icon: 20px; }
         html.ls-top #lsBox #tools
         {
             flex: none; width: auto; min-height: 0; padding-left: 0; gap: 6px;
@@ -393,10 +391,10 @@
 
         /* Office's and Records' popups: an Ayni tool group (.panel.popup.tools), laid out as ONE
            row of tiles the size of the grid's (the ids outweigh the phone rule's
-           width: 100%). Tools has four: two by two. */
+           width: 100%). Office and Tools have four: two by two. */
         #officeMenu, #recordsMenu, #moreMenu  { flex-direction: row; gap: 4px; min-width: 0; }
         #officeMenu .btn.large, #recordsMenu .btn.large, #moreMenu .btn.large { width: clamp(88px, 27vw, 110px); }
-        #moreMenu { flex-wrap: wrap; justify-content: center; max-width: calc(2 * clamp(88px, 27vw, 110px) + 1 * 4px + 2 * 6px + 2px); }
+        #officeMenu, #moreMenu { flex-wrap: wrap; justify-content: center; max-width: calc(2 * clamp(88px, 27vw, 110px) + 1 * 4px + 2 * 6px + 2px); }
 
         /* Its dialog, and Mi cuenta's list of phones: rows like .acct-row, not buttons. */
         .find-row
@@ -491,17 +489,14 @@
                        role="combobox" aria-controls="lsQuick" aria-expanded="false"
                        data-i18n-attr="placeholder:search.ph, aria-label:search.ph, data-tip:search.tip">
             </div>
-            <!-- The top row's own buttons, picked in My account › Top bar (shared/launcher-bar.js);
-                 quickPark holds the pages' action buttons while they are not in it. -->
+            <!-- The top row's own buttons, picked in My account › Top bar (shared/launcher-bar.js). -->
             <div class="quick-bar" id="quickBar" hidden></div>
-            <div id="quickPark" hidden></div>
             <div class="lb ls-quick" id="lsQuick" role="listbox" hidden data-i18n-attr="aria-label:search.title"></div>
         </div>
         <script>
             // A phone, or the desktop's menu (this page framed by desktop/): the field
-            // folds to its magnifier and the row also takes the new-note button (the
-            // desktop puts its notes pair there) and the gear, whose extras unfold in
-            // this row too (html.ls-top, 2026-11-12).
+            // folds to its magnifier and the row also takes the gear, whose extras
+            // unfold in this row too (html.ls-top, 2026-11-12).
             ( function ()
             {
                 var inDesk = false;
@@ -539,7 +534,7 @@
                 <b class="chat-badge" hidden></b>
             </a>
 
-            <!-- Office (2026-09-23): Write, Calc and Text in a popup (#officeMenu, under the grid). -->
+            <!-- Office (2026-09-23): Write, Calc, Text and Notes in a popup (#officeMenu, under the grid). -->
             <button class="btn large" id="officeBtn" type="button" popovertarget="officeMenu" aria-haspopup="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
                 <span>Office</span>
@@ -601,6 +596,11 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline><line x1="14" y1="4" x2="10" y2="20"></line></svg>
                 <span>Text</span>
             </a>
+            <!-- Notes (2026-11-13): no page of their own - this goes where they are (script under #notesHost). -->
+            <button class="btn large" id="notesBtn" type="button">
+                <span class="icon" data-icon="sticky"></span>
+                <span data-i18n="notes.title"></span>
+            </button>
         </div>
         <div class="panel popup tools" popover id="recordsMenu" role="group" aria-labelledby="recordsBtn">
             <a class="btn large" href="contact/index.html">
@@ -662,7 +662,7 @@
       </div>
 
       <!-- NOTES (2026-11-12, shared/notes.js): the cards under the apps. Not in the
-           desktop's menu (a framed launcher): there the notes sit on the wallpaper. -->
+           desktop's menu (a framed launcher): there the notes have their own panel. -->
       <div id="notesHost"></div>
       <script>
           document.addEventListener( 'DOMContentLoaded', function ()
@@ -671,9 +671,40 @@
               Ayni.i18n.ready.then( function ()
               {
                   var wall = NayiveNotes.wall( document.getElementById( 'notesHost' ) );
-                  // the top row (html.ls-top): its "new note" goes where My account › Top bar puts it
-                  if( window.NayiveBar ) NayiveBar.render();
-                  wall.render();   // the button moved out: no notes = no notes area
+                  wall.render();
+                  // Shared from another app (share-target/ › Note): a new note with that
+                  // text, once the notes are read. Off the address first: a reload makes no second one.
+                  var shared = new URLSearchParams( location.search ).get( 'note' );
+                  if( shared ) NayiveNotes.ready.then( function ()
+                  {
+                      history.replaceState( null, '', location.pathname + location.hash );
+                      NayiveNotes.add( shared );
+                  } );
+              } );
+          } );
+          // Office › Notes (2026-11-13): to the notes, wherever they are. A phone: the cards
+          // under the apps. The desktop's menu: the menu shuts, the notes panel opens.
+          // No notes yet, either place: a new one.
+          document.addEventListener( 'DOMContentLoaded', function ()
+          {
+              document.getElementById( 'notesBtn' ).addEventListener( 'click', function ()
+              {
+                  var card = document.getElementById( 'officeMenu' );
+                  if( card.matches( ':popover-open' ) ) card.hidePopover();
+                  if( window.top !== window )
+                  {
+                      var up = window.parent;
+                      try
+                      {
+                          if( up.AyniDesk && up.AyniDesk.menu && ! up.document.getElementById( 'menu' ).hidden ) up.AyniDesk.menu();
+                          if( up.NayiveNotes ) up.NayiveNotes.open( true );
+                      }
+                      catch( e ) {}
+                      return;
+                  }
+                  var wall = document.querySelector( '#notesHost .notes-wall' );
+                  if( wall && wall.querySelector( '.note.card' ) ) wall.scrollIntoView( { block: 'start' } );
+                  else if( document.getElementById( 'notesNewBtn' ) ) document.getElementById( 'notesNewBtn' ).click();
               } );
           } );
       </script>
@@ -1946,7 +1977,8 @@
 
         fetch( '/api/whoami', { credentials: 'same-origin' } )
             .then( function ( r ) {
-                if( r.status === 401 ) { location.href = '/nayive/login.html'; return null; }
+                // ?return= keeps what login.html allows back (a "Where are you?" answer).
+                if( r.status === 401 ) { location.href = '/nayive/login.html?return=' + encodeURIComponent( location.pathname + location.search ); return null; }
                 return r.json().catch( function () { return null; } );
             } )
             .then( function ( me ) {
@@ -2164,21 +2196,32 @@
             }
 
             // ---- 2. "?here=<find>" -------------------------------------------
+            // `here` stays in the address until the answer is done: signed out,
+            // the sign-in brings it back here (login.html ?return=) and it is sent then.
             function answerHere()
             {
-                var q = new URLSearchParams( location.search );
-                var fid = q.get( 'here' );
+                var fid = new URLSearchParams( location.search ).get( 'here' );
                 if( ! fid ) return;
-                q.delete( 'here' );
-                var rest = q.toString();
-                history.replaceState( null, '', location.pathname + ( rest ? '?' + rest : '' ) + location.hash );
-                if( ! navigator.geolocation ) { Ayni.toast( 'warn', T( 'find.noGeo' ) ); return; }
+                var drop = function ()
+                {
+                    var q = new URLSearchParams( location.search );
+                    q.delete( 'here' );
+                    var rest = q.toString();
+                    history.replaceState( null, '', location.pathname + ( rest ? '?' + rest : '' ) + location.hash );
+                };
+                if( ! navigator.geolocation ) { drop(); Ayni.toast( 'warn', T( 'find.noGeo' ) ); return; }
                 navigator.geolocation.getCurrentPosition( function ( p )
                 {
                     api( 'POST', '/here', { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, find: fid } )
-                        .then( function ( j ) { Ayni.toast( ( j._status === 200 ? 'ok' : 'warn' ), j._status === 200 ? T( 'find.sent' ) : T( 'find.noGeo' ) ); } )
-                        .catch( function () { Ayni.toast( 'warn', T( 'find.noGeo' ) ); } );
-                }, function () { Ayni.toast( 'warn', T( 'find.noGeo' ) ); },
+                        .then( function ( j )
+                        {
+                            if( j._status === 401 ) { location.href = '/nayive/login.html?return=' + encodeURIComponent( location.pathname + location.search ); return; }
+                            drop();
+                            if( j._status === 200 ) Ayni.toast( 'ok', T( 'find.sent' ) );
+                            else Ayni.toast( 'warn', T( 'find.notSent' ) );
+                        } )
+                        .catch( function () { drop(); Ayni.toast( 'warn', T( 'find.notSent' ) ); } );
+                }, function () { drop(); Ayni.toast( 'warn', T( 'find.noGeo' ) ); },
                    { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 } );
             }
 
@@ -2231,13 +2274,15 @@
 
             function refreshButton()
             {
+                // true when it drew the new state
                 return api( 'GET', '' ).then( function ( j )
                 {
-                    if( j._status !== 200 ) return;          // the admin (403), or signed out
+                    if( j._status !== 200 ) return false;    // the admin (403), or signed out
                     state = j;
                     findBtn.setAttribute( 'aria-disabled', worthIt( j ) ? 'false' : 'true' );
                     if( isOpen() ) render();
-                } ).catch( function () {} );
+                    return true;
+                } ).catch( function () { return false; } );
             }
 
             function latestFind( device )
@@ -2303,8 +2348,8 @@
             function poll()
             {
                 clearTimeout( pollT );
-                if( ! isOpen() ) return;
-                refreshButton().then( function () { if( isOpen() && busy() ) pollT = setTimeout( poll, 3000 ); } );
+                if( ! isOpen() ) return Promise.resolve( false );
+                return refreshButton().then( function ( drew ) { if( isOpen() && busy() ) pollT = setTimeout( poll, 3000 ); return drew; } );
             }
 
             function openFind()
@@ -2339,7 +2384,8 @@
                 {
                     if( act === 'ask' && j._status === 200 && ! j.asked ) Ayni.toast( 'warn', T( 'find.askedNone' ) );
                     else if( j._status !== 200 ) Ayni.toast( 'err', T( 'ui.saveFailed' ) );
-                    poll();
+                    // No new drawing (network, signed out): the button must not stay busy.
+                    poll().then( function ( drew ) { if( ! drew ) Ayni.setBusy( b, false ); } );
                 } ).catch( function () { Ayni.toast( 'err', T( 'login.noServer' ) ); Ayni.setBusy( b, false ); } );
             } );
 

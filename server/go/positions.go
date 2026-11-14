@@ -50,6 +50,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -266,15 +267,26 @@ func (s *Server) ownTrips(user string) []trackedTrip {
 // counting a point once per trip that took it. Overland sends 200 positions in
 // ONE request, so the file is read and written once per trip, not once per point.
 func (s *Server) recordPositions(owner string, ps []tripPosition) int {
+	saved, _ := s.recordPositionsChecked(owner, ps)
+	return saved
+}
+
+// recordPositionsChecked is recordPositions that also tells whether every trip
+// that should take points could WRITE them (false: a positions.json that
+// could not be read or written). A location app is then told to send the
+// batch again, never "ok" - Overland deletes its copy on "ok" (T6).
+func (s *Server) recordPositionsChecked(owner string, ps []tripPosition) (int, bool) {
 	if len(ps) == 0 {
-		return 0
+		return 0, true
 	}
 	s.noteLast(owner, ps)
-	saved := 0
+	saved, ok := 0, true
 	for _, lt := range s.trackedTrips(owner) {
-		saved += s.storePositions(owner, lt, ps)
+		n, written := s.storeTripPositions(owner, lt, ps)
+		saved += n
+		ok = ok && written
 	}
-	return saved
+	return saved, ok
 }
 
 // noteLast hands the newest of ps, unrounded, to "Buscar mi móvil"'s own store
@@ -284,23 +296,55 @@ func (s *Server) noteLast(owner string, ps []tripPosition) {
 	if s.devices == nil {
 		return
 	}
-	newest := ps[0]
-	for _, p := range ps[1:] {
-		if p.At > newest.At {
-			newest = p
+	if newest, ok := newestValid(ps); ok {
+		s.devices.NoteLast(owner, lastPos{Lat: newest.Lat, Lon: newest.Lon, Acc: newest.Acc,
+			At: newest.At, Source: newest.Source})
+	}
+}
+
+// newestValid is the newest of ps that cleanPosition would store - never a
+// 0,0 fix or one stamped in the future (G17). Unrounded. false: none is.
+func newestValid(ps []tripPosition) (tripPosition, bool) {
+	var newest tripPosition
+	found := false
+	for _, p := range ps {
+		if _, ok := cleanPosition(p); ok && (!found || p.At > newest.At) {
+			newest, found = p, true
 		}
 	}
-	s.devices.NoteLast(owner, lastPos{Lat: newest.Lat, Lon: newest.Lon, Acc: newest.Acc,
-		At: newest.At, Source: newest.Source})
+	return newest, found
+}
+
+// mayPass: a failed positions write worth sending again later - the disk
+// full, an I/O error, too many open files. Any other (no permission, a folder
+// named positions.json) would fail the same way for ever, and a phone told
+// "try again" would hold that batch, and every point after it, for good (G22).
+func mayPass(err error) bool {
+	for _, e := range []syscall.Errno{syscall.ENOSPC, syscall.EDQUOT, syscall.EIO,
+		syscall.EMFILE, syscall.ENFILE, syscall.EAGAIN, syscall.EBUSY, syscall.EINTR} {
+		if errors.Is(err, e) {
+			return true
+		}
+	}
+	return false
 }
 
 // storePositions cleans ps and merges into one trip the points it can take -
-// those whose day the trip covers, on the owner's clock.
+// those whose day the trip covers (tripCoversAt).
 func (s *Server) storePositions(owner string, lt trackedTrip, ps []tripPosition) int {
+	n, _ := s.storeTripPositions(owner, lt, ps)
+	return n
+}
+
+// storeTripPositions is storePositions that also answers false when points
+// that fit could not be written (the file unreadable, or the write failed)
+// for a reason that may pass (mayPass). One that never will is logged and
+// answered true: sending the batch again cannot help.
+func (s *Server) storeTripPositions(owner string, lt trackedTrip, ps []tripPosition) (int, bool) {
 	if lt.trip.StartDate == "" || lt.trip.EndDate == "" {
-		return 0
+		return 0, true
 	}
-	loc := Location(s.users.UserTZ("user", owner))
+	zones := tripZones(lt.trip, Location(s.users.UserTZ("user", owner)))
 
 	fit := make([]tripPosition, 0, len(ps))
 	for _, p := range ps {
@@ -308,18 +352,13 @@ func (s *Server) storePositions(owner string, lt trackedTrip, ps []tripPosition)
 		if !ok {
 			continue
 		}
-		taken := time.Unix(p.At, 0)
-		if loc != nil {
-			taken = taken.In(loc)
-		}
-		day := taken.Format("2006-01-02")
-		if day < lt.trip.StartDate || day > lt.trip.EndDate {
+		if !tripCoversAt(lt.trip, p.At, zones) {
 			continue
 		}
 		fit = append(fit, p)
 	}
 	if len(fit) == 0 {
-		return 0
+		return 0, true
 	}
 
 	positionsMu.Lock()
@@ -335,18 +374,54 @@ func (s *Server) storePositions(owner string, lt trackedTrip, ps []tripPosition)
 	}
 	unlock := lockPath(key)
 	defer unlock()
-	doc, ok := s.positionsForWrite(lt.root)
-	if !ok {
-		return 0
+	doc, err := s.positionsForWrite(lt.root)
+	if err != nil {
+		return 0, !mayPass(err)
 	}
 	for _, p := range fit {
 		mergePosition(&doc, p)
 	}
 	if err := atomicWriteJSON(file, doc, 1); err != nil {
-		s.log.Error("cannot save a trip position", "err", err)
-		return 0
+		s.log.Error("cannot save a trip position", "err", err, "retry", mayPass(err))
+		return 0, !mayPass(err)
 	}
-	return len(fit)
+	return len(fit), true
+}
+
+// tripZones are the clocks a trip's days are read on: the owner's home zone
+// (nil = the server's) and every zone its stages are in.
+func tripZones(trip publicTripFile, home *time.Location) []*time.Location {
+	zones := []*time.Location{home}
+	seen := map[string]bool{}
+	for _, st := range trip.Stages {
+		if st.Tz == "" || seen[st.Tz] {
+			continue
+		}
+		seen[st.Tz] = true
+		tz := st.Tz
+		if loc := Location(&tz); loc != nil {
+			zones = append(zones, loc)
+		}
+	}
+	return zones
+}
+
+// tripCoversAt: the moment `at` falls on one of the trip's days on ANY of its
+// clocks. The owner's home zone alone dropped the evenings and mornings at
+// both ends of a trip far away: 20:00 in New York on its last day is already
+// the next day in Madrid (T8).
+func tripCoversAt(trip publicTripFile, at int64, zones []*time.Location) bool {
+	for _, loc := range zones {
+		taken := time.Unix(at, 0)
+		if loc != nil {
+			taken = taken.In(loc)
+		}
+		day := taken.Format("2006-01-02")
+		if day >= trip.StartDate && day <= trip.EndDate {
+			return true
+		}
+	}
+	return false
 }
 
 // positionsForWrite reads a trip's positions.json ONCE for a new point to be
@@ -359,32 +434,32 @@ func (s *Server) storePositions(owner string, lt trackedTrip, ps []tripPosition)
 //     that could fail on its own and come back empty;
 //   - it does not parse: moved aside, dated, as saveTable does - the old route
 //     stays on disk for the admin - and the route starts again from here;
-//   - it cannot be read (EIO, EACCES, EMFILE...): false, nothing is written
-//     this time and the file is left exactly as it is. A read that fails now
-//     may work later.
+//   - it cannot be read (EIO, EACCES, EMFILE...): that error, nothing is
+//     written this time and the file is left exactly as it is. A read that
+//     fails now may work later.
 //
 // Caller holds positionsMu.
-func (s *Server) positionsForWrite(tripDir string) (positionsDoc, bool) {
+func (s *Server) positionsForWrite(tripDir string) (positionsDoc, error) {
 	path := filepath.Join(tripDir, tripPositionsFile)
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return cleanPositionsDoc(positionsDoc{}), true
+		return cleanPositionsDoc(positionsDoc{}), nil
 	}
 	if err != nil {
 		s.log.Error("positions.json cannot be read - the new point is not stored", "file", path, "err", err)
-		return positionsDoc{}, false
+		return positionsDoc{}, err
 	}
 	var doc positionsDoc
 	if json.Unmarshal(raw, &doc) == nil {
-		return cleanPositionsDoc(doc), true
+		return cleanPositionsDoc(doc), nil
 	}
 	aside := path + ".broken-" + time.Now().Format("2006-01-02-150405")
 	if err := os.Rename(path, aside); err != nil {
 		s.log.Error("positions.json is damaged and cannot be moved aside - the new point is not stored", "file", path, "err", err)
-		return positionsDoc{}, false
+		return positionsDoc{}, err
 	}
 	s.log.Warn("damaged positions.json moved aside - the route starts again", "kept", aside)
-	return cleanPositionsDoc(positionsDoc{}), true
+	return cleanPositionsDoc(positionsDoc{}), nil
 }
 
 // cleanPosition rounds p and tells whether it can be stored at all.

@@ -55,7 +55,7 @@ var shared = []string{"shared/ayni/ayni-i18n.js", "shared/ayni/ayni-util.js", "s
 	"shared/ayni/ayni-net.js", "shared/i18n.js", "shared/ui.js", "shared/ayni/ayni-menutable.js",
 	"shared/ayni/formats/ical.js", "shared/media.js", "shared/ayni/ayni-playon.js", "shared/ayni/formats/vcard.js",
 	"shared/ayni/ayni-photo.js", "shared/ayni/ayni-image-editor.js", "shared/ayni/ayni-doc.js", "shared/ayni/ayni-crypt.js", "shared/ayni/ayni-passkey.js", "shared/ayni/ayni-vault.js", "shared/login-passkeys.js", "shared/ayni/ayni-map.js",
-	"shared/locker.js", "shared/lockers/clock.js", "shared/lockers/matrix.js", "shared/lockers/life.js", "shared/lockers/culture.js", "shared/lockers/culture-settings.js", "shared/lockers/science.js",
+	"shared/locker.js", "shared/ayni/lockers/clock.js", "shared/ayni/lockers/matrix.js", "shared/ayni/lockers/life.js", "shared/ayni/ayni-fx.js", "shared/lockers/culture.js", "shared/lockers/culture-settings.js", "shared/lockers/science.js",
 	"shared/lib/luxon_v3.7.2.min.js", "shared/lib/rrule_v2.8.1.min.js",
 	"shared/lib/fabric_v7.4.0.min.js",
 	"shared/i18n/es.json", "shared/i18n/en.json", "shared/i18n/pt.json",

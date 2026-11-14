@@ -1,9 +1,11 @@
 /* SOS (2026-11-12, server/go/sos.go) - for someone who lives alone.
 
-   - The red SOS button, first in the launcher's top row, shown once there is at
-     least one SOS contact. Pressed: a 5-second red screen (Cancel / Send now),
+   - The red SOS button, first in the launcher's top row. With no SOS contact it
+     looks the same, but a tap shows how to turn it on. Pressed: a 5-second red screen (Cancel / Send now),
      then the contacts are told, with this device's position if it gives one.
      Held down: a 90-second danger watch, counted by the SERVER (2026-11-13).
+     With a danger PIN set (2026-11-14), "I'm safe" asks for it. A wrong one
+     looks just the same here - the server tells the contacts "may be forced".
    - "SOS" in My account's header opens the settings: contacts (other Nayive
      users), "phone silent" and "not used" hours, quiet hours, a Test button.
      Close-only: every change saves itself.
@@ -52,32 +54,32 @@
         var box = $( 'lsBox' ), b = $( 'sosBtn' );
         if( ! box ) return;
         var on = !! ( settings && settings.contacts && settings.contacts.length );
-        if( ! b && on )
+        if( ! b )
         {
             b = el( 'button', 'btn sos-btn', 'SOS' );
             b.id = 'sosBtn';
             b.type = 'button';
-            b.setAttribute( 'aria-label', T( 'sos.press' ) );
-            b.setAttribute( 'data-tip', T( 'sos.press' ) );
             press( b );
             box.insertBefore( b, box.firstChild );
         }
-        if( b ) b.hidden = ! on;
+        // Not set (no contacts): same look, but a tap shows how to turn it on.
+        b.classList.toggle( 'off', ! on );
+        b.setAttribute( 'aria-label', on ? T( 'sos.press' ) : 'SOS' );
+        if( on ) { b.setAttribute( 'data-tip', T( 'sos.press' ) ); b.removeAttribute( 'data-help' ); }
+        else     { b.removeAttribute( 'data-tip' ); b.setAttribute( 'data-help', T( 'sos.helpOff' ) ); }
 
-        // (?) at the row's far right end, away from SOS: SOS first, then this row.
-        // Always there; without contacts its SOS part says how to turn it on.
-        var q = $( 'sosHelp' );
-        if( ! q )
+        // (?) at the row's far right end: the top bar's help (one top row only).
+        var q = $( 'sosHelp' ), top = document.documentElement.classList.contains( 'ls-top' );
+        if( ! q && top )
         {
             q = el( 'button', 'info-tip sos-help' );
             q.id = 'sosHelp';
             q.type = 'button';
             q.innerHTML = Ayni.icon( 'help' );   // (?) - not the "i" an info-tip draws
+            q.setAttribute( 'data-help', T( 'sos.helpBar' ) );
             box.appendChild( q );
             Ayni.init( q );
         }
-        var top = document.documentElement.classList.contains( 'ls-top' );
-        q.setAttribute( 'data-help', T( on ? 'sos.helpSos' : 'sos.helpOff' ) + ( top ? '\n\n' + T( 'sos.helpBar' ) : '' ) );
     }
 
     // A tap: the red screen. Held down: the danger watch.
@@ -89,7 +91,7 @@
         function off() { clearTimeout( t ); b.classList.remove( 'holding' ); }
         b.addEventListener( 'pointerdown', function ( e )
         {
-            if( e.button ) return;
+            if( e.button || b.classList.contains( 'off' ) ) return;
             held = false;
             off();
             b.classList.add( 'holding' );
@@ -103,7 +105,12 @@
         } );
         [ 'pointerup', 'pointerleave', 'pointercancel' ].forEach( function ( k ) { b.addEventListener( k, off ); } );
         b.addEventListener( 'contextmenu', function ( e ) { e.preventDefault(); } );
-        b.addEventListener( 'click', function () { if( held ) held = false; else countdown(); } );
+        b.addEventListener( 'click', function ()
+        {
+            if( b.classList.contains( 'off' ) ) Ayni.infoTip( b );   // not set: how to turn it on
+            else if( held ) held = false;
+            else countdown();
+        } );
     }
 
     // ---- the red screen ----------------------------------------------------
@@ -233,12 +240,41 @@
             o.remove();
         }
 
+        // The danger PIN: the same screen whatever is typed (the server decides).
+        var pinBox = null;
+        function askPin()
+        {
+            if( pinBox ) { pinBox.querySelector( 'input' ).focus(); return; }
+            pinBox = el( 'form', 'sos-acts sos-pin' );
+            var inp = el( 'input', 'input' );
+            inp.type = 'text';   // not "password": no password manager may keep it, nor fill it in
+            inp.className = 'input sos-mask';
+            inp.inputMode = 'numeric';
+            inp.autocomplete = 'off';
+            inp.maxLength = 8;
+            inp.placeholder = T( 'sos.pinAsk' );
+            inp.setAttribute( 'aria-label', T( 'sos.pinAsk' ) );
+            var go = el( 'button', 'btn sos-cancel', T( 'sos.safe' ) );
+            go.type = 'submit';
+            pinBox.append( inp, go );
+            pinBox.addEventListener( 'submit', function ( e )
+            {
+                e.preventDefault();
+                if( inp.value.length < 4 ) { inp.focus(); return; }   // a slip of the finger is not a "forced"
+                stop( inp.value );
+            } );
+            safe.style.display = 'none';
+            o.insertBefore( pinBox, acts );
+            inp.focus();
+        }
+
         // "I'm safe": the server must hear it, or the watch still goes out.
-        function stop()
+        function stop( pin )
         {
             if( stopping ) return;
+            if( typeof pin !== 'string' && running && settings && settings.pin ) { askPin(); return; }
             stopping = safe.disabled = true;
-            ( starting || Promise.resolve() ).then( function () { return api( 'POST', '/watch/stop' ); } ).then( function ( j )
+            ( starting || Promise.resolve() ).then( function () { return api( 'POST', '/watch/stop', { pin: typeof pin === 'string' ? pin : '' } ); } ).then( function ( j )
             {
                 if( j._status !== 200 ) throw j;
                 close();
@@ -274,7 +310,7 @@
             } );
         }
 
-        safe.addEventListener( 'click', stop );
+        safe.addEventListener( 'click', function () { stop(); } );
         now.addEventListener( 'click', send );
         o.addEventListener( 'keydown', function ( e ) { if( e.key === 'Escape' && ! done ) stop(); } );
         timer = setInterval( function ()
@@ -410,6 +446,50 @@
             } );
     }
 
+    // The danger PIN: only it stops a danger watch. Changing it needs the old one.
+    function pinRow()
+    {
+        var s = settings, box = el( 'div' );
+        var r = el( 'div', 'acct-check-row' );
+        r.appendChild( el( 'span', 'acct-check', T( 'sos.pin' ) ) );
+        var i = el( 'button', 'info-tip' );
+        i.type = 'button';
+        i.setAttribute( 'data-help', T( 'sos.pinInfo' ) );
+        r.appendChild( i );
+        box.appendChild( r );
+        var f = el( 'form', 'sos-pin-set' );
+        function field( key )
+        {
+            var t = el( 'input', 'input sos-pin-in sos-mask' );
+            t.type = 'text';   // see askPin
+            t.inputMode = 'numeric';
+            t.autocomplete = 'off';
+            t.maxLength = 8;
+            t.placeholder = T( key );
+            t.setAttribute( 'aria-label', T( key ) );
+            f.appendChild( t );
+            return t;
+        }
+        var old = s.pin ? field( 'sos.pinOld' ) : null, nu = field( 'sos.pinNew' );
+        var go = el( 'button', 'btn text bordered sm', T( 'sos.pinSave' ) );
+        go.type = 'submit';
+        f.appendChild( go );
+        f.addEventListener( 'submit', function ( e )
+        {
+            e.preventDefault();
+            if( nu.value && ! /^[0-9]{4,8}$/.test( nu.value ) ) { Ayni.toast( 'warn', T( 'sos.pinBad' ) ); nu.focus(); return; }
+            api( 'PUT', '/pin', { old: old ? old.value : '', pin: nu.value } ).then( function ( j )
+            {
+                if( j._status !== 200 ) { Ayni.toast( 'err', j.error || T( 'sos.failed' ) ); return; }
+                s.pin = j.pin;
+                Ayni.toast( 'ok', T( 'sos.pinSaved' ) );
+                box.replaceWith( pinRow() );
+            } );
+        } );
+        box.appendChild( f );
+        return box;
+    }
+
     function drawSettings( body )
     {
         var s = settings;
@@ -480,6 +560,8 @@
         q.appendChild( span );
         body.appendChild( q );
 
+        body.appendChild( pinRow() );
+
         // test
         var tr = el( 'div', 'acct-assign' );
         tr.appendChild( el( 'span' ) );
@@ -517,27 +599,58 @@
     function showAlert( a )
     {
         if( a._status !== 200 ) { Ayni.toast( 'warn', T( 'sos.gone' ) ); return; }
-        var calm = a.kind === 'test' || a.kind === 'safe';
+        var calm = a.kind === 'test' || a.kind === 'safe' || a.kind === 'ended';
         var o = el( 'div', 'sos-screen' + ( calm ? ' test' : '' ) );
         o.setAttribute( 'role', 'alertdialog' );
         o.setAttribute( 'aria-modal', 'true' );
         o.appendChild( el( 'h2', '', ( a.kind === 'test' ? 'TEST - ' : '' ) + 'SOS - ' + a.from ) );
-        var kinds = { sos: 'sos.kSos', silent: 'sos.kSilent', idle: 'sos.kIdle', test: 'sos.kTest', watch: 'sos.kWatch', safe: 'sos.kSafe' };
-        o.appendChild( el( 'p', 'sos-msg', T( kinds[ a.kind ] || 'sos.kSos' ) ) );
+        var kinds = { sos: 'sos.kSos', silent: 'sos.kSilent', idle: 'sos.kIdle', test: 'sos.kTest', watch: 'sos.kWatch', safe: 'sos.kSafe',
+                      forced: 'sos.kForced', ended: 'sos.kEnded' };
+        o.appendChild( el( 'p', 'sos-msg', TF( kinds[ a.kind ] || 'sos.kSos', { by: a.by || '' } ) ) );
         o.appendChild( el( 'p', 'sos-msg', TF( 'sos.at', { t: when( a.at ) } ) ) );
         if( a.since ) o.appendChild( el( 'p', 'sos-msg', TF( 'sos.since', { t: when( a.since ) } ) ) );
         var acts = el( 'div', 'sos-acts' );
-        if( a.pos )
+        var where = el( 'p', 'sos-msg' ), map = el( 'a', 'btn sos-now', T( 'sos.map' ) );
+        map.target = '_blank';
+        map.rel = 'noopener noreferrer';
+        o.appendChild( where );
+        acts.appendChild( map );
+        function place( p )
         {
-            var p = a.pos;
-            o.appendChild( el( 'p', 'sos-msg', TF( 'sos.pos', { t: when( p.at ), m: Math.round( p.acc || 0 ) } ) ) );
-            var map = el( 'a', 'btn sos-now', T( 'sos.map' ) );
-            map.href = 'https://www.openstreetmap.org/?mlat=' + p.lat + '&mlon=' + p.lon + '#map=17/' + p.lat + '/' + p.lon;
-            map.target = '_blank';
-            map.rel = 'noopener noreferrer';
-            acts.appendChild( map );
+            where.textContent = p ? TF( 'sos.pos', { t: when( p.at ), m: Math.round( p.acc || 0 ) } ) : T( 'sos.noPos' );
+            map.style.display = p ? '' : 'none';
+            if( p ) map.href = 'https://www.openstreetmap.org/?mlat=' + p.lat + '&mlon=' + p.lon + '#map=17/' + p.lat + '/' + p.lon;
         }
-        else o.appendChild( el( 'p', 'sos-msg', T( 'sos.noPos' ) ) );
+        place( a.pos );
+        // Still open: the phone sends where it is every 3 minutes - follow it.
+        if( a.live )
+        {
+            var follow = setInterval( function ()
+            {
+                if( ! o.isConnected ) { clearInterval( follow ); return; }
+                api( 'GET', '/alert/' + encodeURIComponent( a.id ) ).then( function ( n )
+                {
+                    if( n._status === 200 && n.pos ) place( n.pos );
+                    if( n._status === 200 && ! n.live ) clearInterval( follow );
+                } ).catch( function () {} );
+            }, 60000 );
+        }
+        if( a.live )   // a danger watch still open: a contact who knows it is over ends it
+        {
+            var end = el( 'button', 'btn sos-now', T( 'sos.end' ) );
+            end.type = 'button';
+            end.addEventListener( 'click', function ()
+            {
+                end.disabled = true;
+                api( 'POST', '/alert/' + encodeURIComponent( a.id ) + '/end', {} ).then( function ( j )
+                {
+                    if( j._status !== 200 ) { end.disabled = false; Ayni.toast( 'err', j.error || T( 'sos.failed' ) ); return; }
+                    Ayni.toast( 'ok', T( 'sos.endedOk' ) );
+                    o.remove();
+                } );
+            } );
+            acts.appendChild( end );
+        }
         var close = el( 'button', 'btn sos-cancel', T( 'sos.close' ) );
         close.type = 'button';
         close.addEventListener( 'click', function () { o.remove(); } );

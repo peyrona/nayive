@@ -17,6 +17,10 @@ package main
 //
 // The wait carries "watch" (conv -> state) and "now" (server ms), which lets a
 // page set its clock to the server's.
+//
+// While it plays, the driving page says "play" again every 20 s (watch.js
+// driveCheck). A page gone without its "stop" (closed, killed, offline) goes
+// quiet: the sweep drops its video after chatWatchBeat, not 4 h later.
 
 import (
 	"net/http"
@@ -27,6 +31,7 @@ import (
 
 const (
 	chatWatchIdle = 30 * time.Minute // paused this long: gone
+	chatWatchBeat = 90 * time.Second // playing with no word from its page this long: gone
 	chatWatchMax  = 4 * time.Hour    // whatever happens, gone after this
 )
 
@@ -123,12 +128,13 @@ func (o *chatOwner) watchFor(pid string) map[string]*chatWatch {
 	return out
 }
 
-// watchTick drops a video left paused, or on too long. True when one went.
-// Caller holds h.mu.
+// watchTick drops a video left paused, playing with its page gone quiet, or
+// on too long. True when one went. Caller holds h.mu.
 func (o *chatOwner) watchTick(now time.Time) bool {
 	moved := false
 	for conv, cw := range o.watch {
-		if now.Sub(cw.started) > chatWatchMax || (!cw.Playing && now.Sub(cw.touched) > chatWatchIdle) {
+		quiet := now.Sub(cw.touched)
+		if now.Sub(cw.started) > chatWatchMax || (!cw.Playing && quiet > chatWatchIdle) || (cw.Playing && quiet > chatWatchBeat) {
 			delete(o.watch, conv)
 			moved = true
 		}

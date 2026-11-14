@@ -1,7 +1,7 @@
 package org.nayive.app;
 
 import android.content.Context;
-import android.media.ExifInterface;
+import androidx.exifinterface.media.ExifInterface;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Build;
@@ -133,6 +133,7 @@ final class MediaUploader {
         if (offset > 0) Log.i(TAG, "media: " + it.name + " goes on from byte " + offset);
 
         byte[] buf = new byte[(int) Math.min(CHUNK, Math.max(1, it.size))];
+        int stuck = 0;   // 409s in a row that did not move the offset
         while (offset < it.size) {
             if (stop.now() || System.currentTimeMillis() > deadline) return LATER;
             check = recheck(c, it);
@@ -148,9 +149,12 @@ final class MediaUploader {
             if (n <= 0) return incomplete(c, it);   // shorter than MediaStore said: changed under us
             Api.Reply p = Api.put(c, "/api/device/media/" + upload + "?offset=" + offset, buf, n);
             if (p.status == 409) {
+                long had = offset;
                 offset = p.body.optLong("offset", offset);
+                if (offset == had && ++stuck >= 3) return LATER;   // the server will not move on: not in a loop
                 continue;
             }
+            stuck = 0;
             if (p.status == 507) return STOP_TODAY;
             if (p.status == 404) return LATER;    // swept; the next run starts it again
             if (!p.ok()) throw new IOException("PUT answered " + p.status);
@@ -188,8 +192,7 @@ final class MediaUploader {
     private static double[] photoPlace(Context c, Uri uri) {
         try (InputStream in = c.getContentResolver().openInputStream(uri)) {
             if (in == null) return null;
-            float[] ll = new float[2];
-            return new ExifInterface(in).getLatLong(ll) ? new double[]{ll[0], ll[1]} : null;
+            return new ExifInterface(in).getLatLong();   // null: no place in it
         } catch (IOException | RuntimeException e) {
             return null;
         }

@@ -2,19 +2,19 @@
  * launcher-search.js - the launcher's search: one field over every app.
  *
  * THE FIELD (quick): as you type, a list drops under it with up to four of
- * each - Apps (the launcher's own tiles), Contacts, Files (by name) and
- * Events. Arrow keys move, Enter opens, Esc clears. Mail and chats are not
+ * each - Apps (the launcher's own tiles), Contacts, Notes, Files (by name)
+ * and Events. Arrow keys move, Enter opens, Esc clears. Mail and chats are not
  * asked here: mail goes to the mail server, which is slow for every key.
  *
  * THE FUNNEL inside the field opens the dialog (full): the same words, plus
- * "Search in" (Files, Mail, Contacts, Events, Chats), "From" (a mail's or a
+ * "Search in" (Files, Mail, Contacts, Events, Chats, Notes), "From" (a mail's or a
  * chat's sender), "Date", "Type" (files) and mail's "Trays" and "With
  * attachment". Results come grouped, newest or nearest first, each group
  * with "Show more".
  *
  * WORDS, in both: words in any order, "a phrase", -word (Ayni.matcher), and
  * shortcuts that fill the dialog's choices:
- *   from:ana  in:mail (files, mail, contacts, events, chats)  type:pdf
+ *   from:ana  in:mail (files, mail, contacts, events, chats, notes)  type:pdf
  *   after:2026-01-31  before:2026-03-01  has:attachment
  * In the field, a shortcut makes Enter open the dialog.
  *
@@ -23,17 +23,18 @@
  *
  * Where each answer comes from - all read only:
  *   files     Drive's search (AyniNet.search -> /api/files?search=1)
- *   contacts, events, chats   /api/search (server/go/search_all.go)
+ *   contacts, events, chats, notes   /api/search (server/go/search_all.go)
  *   mail      eMail's tray search (/api/mail/<a>/list?tray=&q=), the same way
  *             eMail's own advanced search works: the words go to the server,
  *             From / dates / attachment / -word are checked here, row by row.
  * Every result is a real link (<a href>), so the desktop opens it as a window.
+ * But a note: it has no page; it opens where notes live (openNote).
  */
 ( function ()
 {
     "use strict";
 
-    var KINDS   = [ 'files', 'mail', 'contacts', 'events', 'chats' ];
+    var KINDS   = [ 'files', 'mail', 'contacts', 'events', 'chats', 'notes' ];
     var TRAYS   = [ 'inbox', 'sent', 'drafts', 'spam', 'trash' ];
     var WHEN    = [ 'any', 'today', 'd7', 'd30', 'year', 'range' ];
     var QUICK_N = 4;          // rows per group in the field's list
@@ -147,6 +148,7 @@
         p.contacts = on( 'contacts' ) && ! from && ! dated && ! q.types.length && ! q.attach && words;
         p.events   = on( 'events' )   && ! from && ! q.types.length && ! q.attach && ( words || dated );
         p.chats    = on( 'chats' )    && ! q.types.length && ! q.attach && ( words || from || dated );
+        p.notes    = on( 'notes' )    && ! from && ! dated && ! q.types.length && ! q.attach && words;
         return p;
     }
 
@@ -336,6 +338,12 @@
             return { href: 'chat/index.html?c=' + encodeURIComponent( c.conv ), icon: 'chat',
                      title: c.text, sub: [ c.from === c.name ? c.name : c.from + ' → ' + c.name, fmtDay( d ) + ' ' + fmtTime( d ) ].join( ' · ' ) };
         },
+        notes: function ( n )
+        {
+            // the server's text is a snippet on one line, around the word found
+            return { href: '#note', note: n.id, icon: 'sticky', title: n.title || n.text || T( 'search.noTitle' ),
+                     sub: n.title ? n.text : '' };
+        },
         mail: function ( m )
         {
             var who = ( m.from || [] ).map( function ( a ) { return a.name || a.addr; } ).join( ', ' );
@@ -352,6 +360,7 @@
     {
         var a = h( 'a', 'ls-row' );
         a.href = r.href;
+        if( r.note ) a.dataset.note = r.note;
         a.setAttribute( 'role', 'option' );
         a.tabIndex = -1;
         var ic = h( 'span', 'ls-ic' );
@@ -447,7 +456,7 @@
         if( ! shortcuts && enough )
         {
             var asks = [];
-            var server = [ 'contacts', 'events' ].filter( function ( k ) { return p[ k ]; } );
+            var server = [ 'contacts', 'events', 'notes' ].filter( function ( k ) { return p[ k ]; } );
             if( server.length ) asks.push( askServer( p, server, QUICK_N ).then( function ( r ) { Object.assign( groups, r ); }, function () {} ) );
             if( p.files ) asks.push( askFiles( p, q, QUICK_N ).then( function ( r ) { groups.files = r; }, function () {} ) );
             showQuick( groups, false, seq );            // the apps at once; the rest as it comes
@@ -463,7 +472,7 @@
         var keep = quick.querySelector( '.ls-row.active' ), keepHref = keep && keep.getAttribute( 'href' );
         quick.textContent = '';
         var any = false;
-        [ 'apps', 'contacts', 'files', 'events' ].forEach( function ( k )
+        [ 'apps', 'contacts', 'notes', 'files', 'events' ].forEach( function ( k )
         {
             var r = groups[ k ];
             if( ! r || ! r.items.length ) return;
@@ -606,7 +615,7 @@
             return;
         }
         // a group per kind, in this order, each filled as its answer comes
-        var order = [ 'contacts', 'events', 'files', 'mail', 'chats' ].filter( function ( k ) { return p[ k ]; } );
+        var order = [ 'contacts', 'notes', 'events', 'files', 'mail', 'chats' ].filter( function ( k ) { return p[ k ]; } );
         var slots = {};
         order.forEach( function ( k )
         {
@@ -644,16 +653,34 @@
             done();
         };
         var fail = function ( k ) { return function () { fill( k, { items: [], more: false, failed: [ T( 'search.failed' ) ] } ); }; };
-        var server = [ 'contacts', 'events', 'chats' ].filter( function ( k ) { return p[ k ]; } );
+        var server = [ 'contacts', 'events', 'chats', 'notes' ].filter( function ( k ) { return p[ k ]; } );
         if( server.length )
         {
-            // one call for the three; "Show more" on one asks again with its new size for all
+            // one call for all of them; "Show more" on one asks again with its new size for all
             var lim = Math.max.apply( null, server.map( limit ) );
             askServer( p, server, lim ).then( function ( r ) { server.forEach( function ( k ) { fill( k, cut( r[ k ], limit( k ) ) ); } ); },
                                               function () { server.forEach( function ( k ) { fail( k )(); } ); } );
         }
         if( p.files ) askFiles( p, q, limit( 'files' ) ).then( function ( r ) { fill( 'files', r ); }, fail( 'files' ) );
         if( p.mail ) askMail( p, q, limit( 'mail' ) ).then( function ( r ) { fill( 'mail', r ); }, fail( 'mail' ) );
+    }
+
+    // A note picked: where the notes are. The launcher on its own (a phone): the
+    // note opens full screen (shared/notes.js). In the desktop's menu: the menu
+    // shuts, the notes panel opens on the note (a pinned one comes to the front).
+    function openNote( id )
+    {
+        if( window.top === window ) { if( window.NayiveNotes ) NayiveNotes.show( id ); return; }
+        var up = window.parent;
+        setTimeout( function ()
+        {
+            try
+            {
+                if( up.AyniDesk && up.AyniDesk.menu && ! up.document.getElementById( 'menu' ).hidden ) up.AyniDesk.menu();
+                if( up.NayiveNotes ) up.NayiveNotes.show( id );
+            }
+            catch( e ) {}
+        }, 0 );     // after the search dialog has closed: the menu shuts only then
     }
 
     function cut( r, n ) { return r.items.length > n ? { items: r.items.slice( 0, n ), more: true } : r; }
@@ -698,6 +725,8 @@
             if( ! row ) return;
             if( quick.contains( row ) ) setTimeout( hideQuick, 0 );     // after the click: a link taken out of the page goes nowhere
             else if( dlg.contains( row ) ) dlg.close();
+            // a note: no page to go to (and the desktop's menu must not take it as one)
+            if( row.dataset.note ) { e.preventDefault(); e.stopPropagation(); openNote( row.dataset.note ); }
         }, true );
 
         $( 'lsWords' ).addEventListener( 'input', function () { changed( false ); } );

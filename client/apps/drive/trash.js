@@ -34,8 +34,9 @@ function closeTrash()
 
 async function refreshTrash()
 {
+    // A failed read keeps the rows it had and says so: never "The bin is empty" (D8).
     try { trashItems = shownTrash( await withBusy( AyniNet.trashList() ) ); }
-    catch( _ ) { trashItems = []; }
+    catch( _ ) { Ayni.toast( 'err', T( 'drive.trashOpenFailed' ) ); return; }
     render();
 }
 

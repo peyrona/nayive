@@ -107,7 +107,12 @@ func (s *Server) apiShares(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, r, http.StatusOK, map[string]any{"mine": mine, "with_me": withMe})
 
 	case http.MethodDelete:
-		if !s.shares.Revoke(queryValue(r, "id"), user) {
+		found, err := s.shares.RevokeChecked(queryValue(r, "id"), user)
+		if err != nil {
+			sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+			return
+		}
+		if !found {
 			sendError(w, r, http.StatusNotFound,
 				"no existe eso que quieres dejar de compartir")
 			return
@@ -185,7 +190,11 @@ func (s *Server) shareCreate(w http.ResponseWriter, r *http.Request, user, role 
 	if title == "" {
 		title = lastSegment(root)
 	}
-	grant := s.shares.Create(user, to, root, app, title, mode)
+	grant, err := s.shares.CreateChecked(user, to, root, app, title, mode)
+	if err != nil {
+		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+		return
+	}
 	if grant == nil {
 		sendError(w, r, http.StatusConflict, "ya lo has compartido con esa persona o con todos")
 		return
@@ -219,7 +228,11 @@ func (s *Server) linkCreate(w http.ResponseWriter, r *http.Request, user, role s
 		return
 	}
 
-	grant, created := s.shares.CreateLink(user, root, strings.TrimSpace(body.Title))
+	grant, created, err := s.shares.CreateLinkChecked(user, root, strings.TrimSpace(body.Title))
+	if err != nil {
+		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+		return
+	}
 	status := http.StatusOK
 	if created {
 		status = http.StatusCreated

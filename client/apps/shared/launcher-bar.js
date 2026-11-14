@@ -5,11 +5,10 @@
    has no such row.
 
    ONE PER USER: data/launcher/bar.json = { "items": [ id, ... ] }, other keys
-   kept as they are. An id is "desk" (show the desk: the desktop's #deskBtn,
-   only there), "note" (a new note: the desktop's #noteNewBtn or the phone's
-   #notesNewBtn) or an app's href as its tile has it ("drive/index.html").
-   No file yet = "desk", "note". An id this launcher does not know (an app
-   gone) stays in the file, unshown. "search" (the magnifier) and "gear" (the
+   kept as they are. An id is an app's href as its tile has it ("drive/index.html").
+   No file yet = none. An id this launcher does not know (an app gone, or
+   "desk" / "note": the notes buttons, gone 2026-11-14 - Office › Notes now)
+   stays in the file, unshown. "search" (the magnifier) and "gear" (the
    settings) are always in the row: moved like the rest, never removed; a list
    without them gets search first and gear last (2026-11-12).
 
@@ -26,7 +25,7 @@
 {
     'use strict';
 
-    var FILE = 'data/launcher/bar.json', MAX = 6, DEFAULT = [ 'desk', 'note' ], FIXED = [ 'search', 'gear' ];
+    var FILE = 'data/launcher/bar.json', MAX = 6, DEFAULT = [], FIXED = [ 'search', 'gear' ];
     var items = null;          // the list as last read or saved (null: not yet)
     var canEdit = false;       // the file was read: the editor may change it
 
@@ -78,17 +77,15 @@
     }
 
     //------------------------------------------------------------------------//
-    // WHAT CAN GO IN THE ROW - the two actions, then every app tile (the
+    // WHAT CAN GO IN THE ROW - search, settings, then every app tile (the
     // grid's and its groups' popups), as the launcher shows them.
 
     function catalog()
     {
-        var desk = $( 'deskBtn' ), note = $( 'noteNewBtn' ) || $( 'notesNewBtn' ), mag = document.querySelector( '#lsBox > [data-search]' );
+        var mag = document.querySelector( '#lsBox > [data-search]' );
         var out = [
             { id: 'search', name: T( 'search.title' ), icon: mag ? mag.innerHTML : Ayni.icon( 'search' ) },
-            { id: 'gear', name: T( 'ui.settings' ), icon: Ayni.icon( 'settings' ) },
-            { id: 'desk', name: T( 'desktop.showDesk' ), icon: desk ? desk.innerHTML : Ayni.icon( 'show-desk' ) },
-            { id: 'note', name: T( 'notes.new' ),        icon: note ? note.innerHTML : Ayni.icon( 'plus' ) }
+            { id: 'gear', name: T( 'ui.settings' ), icon: Ayni.icon( 'settings' ) }
         ];
         document.querySelectorAll( '.apps-panel a.btn.large[href]' ).forEach( function ( a )
         {
@@ -102,16 +99,13 @@
     function byId( cat, id ) { return cat.filter( function ( c ) { return c.id === id; } )[ 0 ]; }
 
     //------------------------------------------------------------------------//
-    // THE ROW - #quickBar in #lsBox. The two action buttons are the pages' own
-    // (their handlers go with them): moved into the row, or parked (hidden).
+    // THE ROW - #quickBar in #lsBox.
 
     function render()
     {
-        var bar = $( 'quickBar' ), park = $( 'quickPark' );
-        if( ! bar || ! park || ! document.documentElement.classList.contains( 'ls-top' ) ) return;
+        var bar = $( 'quickBar' );
+        if( ! bar || ! document.documentElement.classList.contains( 'ls-top' ) ) return;
         var list = full( items || cacheGet() || DEFAULT ), cat = catalog();
-        var own = { desk: $( 'deskBtn' ), note: $( 'noteNewBtn' ) || $( 'notesNewBtn' ) };
-        Object.keys( own ).forEach( function ( k ) { if( own[ k ] ) park.appendChild( own[ k ] ); } );
         bar.textContent = '';
         // #quickBar is display: contents here, so every button - and the
         // magnifier, the field and the gear's #tools beside it - takes its
@@ -124,7 +118,6 @@
                 return;
             }
             if( id === 'gear' ) { if( $( 'tools' ) ) $( 'tools' ).style.order = n; return; }
-            if( id === 'desk' || id === 'note' ) { if( own[ id ] ) { own[ id ].classList.remove( 'sm' ); own[ id ].style.order = n; bar.appendChild( own[ id ] ); } return; }
             var c = byId( cat, id );
             if( ! c ) return;
             var a = document.createElement( 'a' );

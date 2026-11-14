@@ -128,13 +128,16 @@ function renderCrumbs()
 //------------------------------------------------------------------------//
 // ITEMS
 
+// The name a row shows: a bookmark with no title shows its domain.
+function shownTitle( n ) { return n.title || ( isFolder( n ) ? '' : domainOf( n.url ) || n.url || '' ); }
+
 function sortNodes( list )
 {
     const by = ui.sort;
     if( by === 'saved' ) return list;
     const cmp = {
-        az:  function( a, b ) { return Ayni.fold( a.title ).localeCompare( Ayni.fold( b.title ) ); },
-        za:  function( a, b ) { return Ayni.fold( b.title ).localeCompare( Ayni.fold( a.title ) ); },
+        az:  function( a, b ) { return Ayni.fold( shownTitle( a ) ).localeCompare( Ayni.fold( shownTitle( b ) ) ); },
+        za:  function( a, b ) { return Ayni.fold( shownTitle( b ) ).localeCompare( Ayni.fold( shownTitle( a ) ) ); },
         new: byDate( true ),
         old: byDate( false )
     }[ by ];

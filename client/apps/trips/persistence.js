@@ -46,8 +46,13 @@ async function loadTrips()
 
     if( paths === null )
     {
+        // Trips shared with us too: cached under shared/<slug>/, which the
+        // data/trips/ prefix leaves out - they vanished just when there was no
+        // signal (T5).
         const cached = await store.listCached( 'data/trips/' );
-        paths = cached.filter( function( p ) { return /\/trip\.json$/.test( p ); } );
+        const shared = await store.listCached( 'shared/' );
+        paths = cached.filter( function( p ) { return /\/trip\.json$/.test( p ); } )
+                .concat( shared.filter( function( p ) { return /^shared\/[^/]+\/trip\.json$/.test( p ); } ) );
     }
 
     const loaded = [];
@@ -231,6 +236,7 @@ function onTripMerged( path, body )
 
     trips = trips.map( function( x ) { return x === old ? t : x; } );
     if( ! anySheetOpen() ) renderAll();
+    else redrawAfterSheet = true;   // drawn once the sheet closes (N5)
     if( redrawTrip  && tripDraft )  renderTripSheet();
     if( redrawStage && stageDraft ) renderStageSheet();
 }

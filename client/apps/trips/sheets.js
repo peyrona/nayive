@@ -150,6 +150,21 @@ function refreshTripDocPaths()
 let stageTzDebounceTimer = null;
 let stageTzLookupSeq     = 0;
 
+// The place text the draft's lat/lon/tz belong to ('' = none yet). Saving a
+// stage whose text is not this one (its lookup still out, or offline) drops
+// them, so the map lookup (ensureRouteCoords) does it again for the new place
+// (T1). Kept out of the draft: the draft is what trip.json gets.
+let stageGeoFor = '';
+
+// The sheet closed or another stage opened: a lookup still waiting or out
+// must never land in the next draft (T2).
+function stopStageTzLookup()
+{
+    clearTimeout( stageTzDebounceTimer );
+    stageTzDebounceTimer = null;
+    stageTzLookupSeq++;
+}
+
 // Never call renderStageSheet() from these - they fire on every keystroke in Location
 // (via the debounce below) and rebuilding the whole sheet would drop that input's focus
 // mid-keystroke, same issue as the destination/document-name fields. They only ever
@@ -179,26 +194,34 @@ function scheduleStageTzLookup()
 
 async function runStageTzLookup()
 {
-    const loc    = stageDraft.location.trim();
+    stageTzDebounceTimer = null;
+    const draft  = stageDraft;
+    if( ! draft ) return;
+    const loc    = draft.location.trim();
     const mySeq  = ++stageTzLookupSeq;
-    const result = await geocodeLocation( loc, stageDraft.startDate );
+    const result = await geocodeLocation( loc, draft.startDate );
 
-    if( mySeq !== stageTzLookupSeq || ! stageDraft )
-        return;   // superseded by a newer lookup, or the sheet was closed meanwhile
+    if( mySeq !== stageTzLookupSeq || draft !== stageDraft )
+        return;   // superseded by a newer lookup, or the sheet was closed / another opened meanwhile
 
     if( result && result.unreachable )
     {
-        // Offline / service down: keep whatever tz the stage already had,
-        // don't wipe it to "not-found".
+        // Offline / service down: not "not-found".
         stageDraft.tzStatus = 'offline';
 
-        // Same for the coordinates - real ones are kept - but a stage that never had any
-        // must be left at undefined ("retry later"), never null, or saving it now would
-        // pin it as unlocatable forever: ensureRouteCoords only retries lat === undefined.
-        if( typeof stageDraft.lat !== 'number' || typeof stageDraft.lon !== 'number' )
+        // Real coordinates and zone are kept only while they are still this
+        // place's: a stage edited from "Paris" to "Rome" offline must not keep
+        // Paris's pin, clock and weather (T1). Undefined, never null, = "retry
+        // later": ensureRouteCoords only retries lat === undefined.
+        if( loc !== stageGeoFor || typeof stageDraft.lat !== 'number' || typeof stageDraft.lon !== 'number' )
         {
             stageDraft.lat = undefined;
             stageDraft.lon = undefined;
+        }
+        if( loc !== stageGeoFor )
+        {
+            stageDraft.tz = null;
+            stageDraft.tzLabel = '';
         }
     }
     else if( result )
@@ -208,6 +231,7 @@ async function runStageTzLookup()
         stageDraft.tzStatus = 'found';
         stageDraft.lat = result.lat;
         stageDraft.lon = result.lon;
+        stageGeoFor = loc;
     }
     else
     {
@@ -216,6 +240,7 @@ async function runStageTzLookup()
         stageDraft.tzStatus = 'not-found';
         stageDraft.lat = null;
         stageDraft.lon = null;
+        stageGeoFor = loc;
     }
 
     refreshTzStatusDisplay();

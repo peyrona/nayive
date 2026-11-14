@@ -109,8 +109,9 @@ const (
 	chatTypingFor    = 6 * time.Second  // "escribiendo..." lasts this long after the last key
 	chatPushRecheck  = 30 * time.Second
 	chatPushTTL      = 24 * 60 * 60
-	chatMaxSubs      = 5  // devices per person
-	chatGuestPerMin  = 30 // messages a person may send per minute
+	chatMaxSubs      = 5   // devices per person
+	chatGuestPerMin  = 30  // messages a person may send per minute
+	chatGuestActsMin = 120 // edits, reactions, votes, prefs, watch moves a person may make per minute
 	chatGuestDayByte = 300 << 20
 	chatMaxLater     = 100                  // scheduled texts one sender may have waiting in one home
 	chatLaterMax     = 366 * 24 * time.Hour // how far ahead a text may be scheduled
@@ -360,6 +361,7 @@ type chatOwner struct {
 	watch   map[string]*chatWatch           // conv -> the video playing for all (chat_watch.go)
 
 	sent map[string][]time.Time // a person's recent messages (rate limit)
+	acts map[string][]time.Time // their recent edits, reactions, votes... (allowAct)
 	day  map[string]chatDayUse  // a person's upload bytes today
 
 	calls *chatCalls // voice and video calls (chat_call.go); nil until a page with a device id waits
@@ -598,6 +600,7 @@ func (h *ChatHub) owner(user string) *chatOwner {
 		typing:  make(map[string]map[string]time.Time),
 		zones:   make(map[string]string),
 		sent:    make(map[string][]time.Time),
+		acts:    make(map[string][]time.Time),
 		day:     make(map[string]chatDayUse),
 	}
 	h.loadData(o, true)
@@ -2140,6 +2143,13 @@ func mediaName(m *ChatMsg) string {
 // allowSend is the per-person rate limit (the owner has none).
 func (o *chatOwner) allowSend(pid string) bool {
 	return allowIn(o.sent, pid, chatGuestPerMin, time.Now())
+}
+
+// allowAct is the per-person limit on the other writes - an edit, a reaction,
+// a vote, a pin or mute, a watch move. Each rewrites a chat file under the
+// hub's one lock: a link looping them would stall every chat of every user.
+func (o *chatOwner) allowAct(pid string) bool {
+	return allowIn(o.acts, pid, chatGuestActsMin, time.Now())
 }
 
 // allowBytes is the per-person daily upload allowance.

@@ -58,6 +58,9 @@ final class Updater {
                 return true;
             }
             if (codeOf(c, apk) != code) {
+                // About 4 MB: only on Wi-Fi (or another unmetered network); again in an hour.
+                android.net.ConnectivityManager cm = c.getSystemService(android.net.ConnectivityManager.class);
+                if (cm == null || cm.isActiveNetworkMetered()) return false;
                 String url = v.optString("apk", "/app/nayive.apk");
                 download(url.startsWith("http") ? url : BuildConfig.ORIGIN + url, apk);
                 if (codeOf(c, apk) != code) {
@@ -66,7 +69,9 @@ final class Updater {
                     return false;
                 }
             }
-            Notes.update(c, installIntent(c, apk));
+            // A failed install (another signing key...) must not bring it back every
+            // 6 h for ever: 4 times for one version, then once a week.
+            if (Prefs.updateNag(c, code)) Notes.update(c, installIntent(c, apk));
             return true;
         } catch (IOException | JSONException e) {
             Log.i(TAG, "update check failed: " + e);

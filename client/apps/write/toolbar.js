@@ -128,7 +128,7 @@ export function createToolbar( o )
             if( ! s ) continue;
 
             b.ariaDisabled = ! s.enabled || ( !! o.blocked && o.blocked( b.dataset.slot ) );
-            b.setAttribute( 'aria-pressed', !! s.active );
+            // Only a toggle is a pressed / not-pressed button: undo, a page break ... are plain ones.
             if( TOGGLES.has( b.dataset.slot ) ) b.setAttribute( 'aria-pressed', String( !! s.active ) );
         }
 

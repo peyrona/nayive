@@ -11,14 +11,21 @@
 function openNewFolder()
 {
     document.getElementById( 'newFolderName' ).value = '';
+    showNameError( document.getElementById( 'newFolderName' ), null );
     setBackdrop( 'newFolderBackdrop', true );
     document.getElementById( 'newFolderName' ).focus();
 }
 
 async function confirmNewFolder()
 {
-    const name = document.getElementById( 'newFolderName' ).value.trim();
+    const box  = document.getElementById( 'newFolderName' );
+    const name = box.value.trim();
     if( ! name ) return;
+
+    // "a/b" would make two folders, a "." name would vanish, and a name
+    // already here makes nothing: each is said, the dialog stays (D5).
+    const bad = badName( name ) || ( rowNode( joinPath( currentFolder, name ) ) ? 'drive.nameTaken' : null );
+    if( bad ) { showNameError( box, bad ); return; }
 
     setBackdrop( 'newFolderBackdrop', false );
     setStatus( T( 'drive.creatingFolder' ) );
@@ -51,11 +58,20 @@ function onUploadInputChange( e )
     uploadItems( items );
 }
 
+// Files from the computer may be dropped here: not on the bin (its rows
+// hide the folder they would go to), nor in a shared folder that only
+// lets you read (D3) - the same rule as the Upload button.
+function canDropFiles()
+{
+    return ! trashMode && ! ( readOnlyHere() && ! canAddHere );
+}
+
 function onDrop( e )
 {
     if( Ayni.dragIds() ) return;                 // an internal move, handled by the folder row
     e.preventDefault();
     document.getElementById( 'listPane' ).classList.remove( 'drag-over' );
+    if( ! canDropFiles() ) return;
 
     const dt = e.dataTransfer;
     if( ! dt ) return;
@@ -75,7 +91,12 @@ function onDrop( e )
     {
         setStatus( T( 'drive.readingFolder' ) );
         Promise.all( entries.map( function( en ) { return walkEntry( en, '' ); } ) )
-               .then( function( lists ) { uploadItems( [].concat.apply( [], lists ) ); } )
+               .then( function( lists )
+               {
+                   const all = [].concat.apply( [], lists );        // { dir: true } = an empty folder (N2)
+                   uploadItems( all.filter( function( it ) { return ! it.dir; } ),
+                                all.filter( function( it ) { return it.dir; } ).map( function( it ) { return it.relPath; } ) );
+               } )
                .catch( function() { setStatus( '' ); Ayni.toast( 'err', T( 'drive.readFolderFailed' ) ); } );
         return;
     }
@@ -103,6 +124,8 @@ function walkEntry( entry, prefix )
             reader.readEntries( function( batch ) {
                 if( ! batch.length )
                 {
+                    // An empty folder has no file to bring it: it comes as itself (N2).
+                    if( ! all.length ) { resolve( [ { relPath: dirPath.slice( 0, -1 ), dir: true } ] ); return; }
                     Promise.all( all.map( function( en ) { return walkEntry( en, dirPath ); } ) )
                            .then( function( lists ) { resolve( [].concat.apply( [], lists ) ); } )
                            .catch( reject );
@@ -270,7 +293,8 @@ function paintConvertBadge( row )
 }
 
 // Every 5 s while this user has a job. When one ends, the listing is
-// reloaded: the mp4 has appeared and the original gone to the papelera.
+// refreshed quietly, the picks kept (N3): the mp4 has appeared and the
+// original gone to the papelera.
 async function pollConvert()
 {
     convertTimer = null;
@@ -282,7 +306,7 @@ async function pollConvert()
 
         let ended = false;
         before.forEach( function( _, p ) { if( ! convertJobs.has( p ) ) ended = true; } );
-        if( ended ) await reload();
+        if( ended ) { await applyNews(); refreshDiskGauge(); }
         else document.querySelectorAll( '#listing .row[data-path]' ).forEach( paintConvertBadge );
     }
     if( convertJobs.size && ! convertTimer ) convertTimer = setTimeout( pollConvert, 5000 );
@@ -923,19 +947,43 @@ async function sendNew( dest, relPath, blob, conv, used )
     }
 }
 
-async function uploadItems( items )
+// ONE upload at a time (D11): a second one dropped meanwhile waits its
+// turn - two at once shared the dialogs' one resolver and one never went on.
+// `emptyDirs`: folders of a drop with nothing inside (N2), made as they are.
+let uploadChain = Promise.resolve();
+
+function uploadItems( items, emptyDirs )
 {
-    if( ! items.length ) return;
+    emptyDirs = emptyDirs || [];
+    if( ! items.length && ! emptyDirs.length ) return Promise.resolve();
 
     // THE FOLDER IT GOES TO, fixed now: the user may open another folder while
-    // it runs, and a "Replace" said for this one must never land on a
-    // same-named file there (nor anything else of this upload).
+    // it runs (or waits), and a "Replace" said for this one must never land on
+    // a same-named file there (nor anything else of this upload).
     const dest = currentFolder;
+    const run  = uploadChain.then( function() { return runUpload( items, dest, emptyDirs ); } );
+    uploadChain = run.catch( function() {} );
+    return run;
+}
+
+async function runUpload( items, dest, emptyDirs )
+{
 
     // `notes` are said again in the last message, so a long upload cannot
     // bury them. LibreOffice kinds with no app here (Impress, Draw, Math,
     // Base) upload as they are: only Writer and Calc files get a twin.
     const notes   = [];
+
+    // A shared folder lends its folders to drop files in, never to make new
+    // ones (the server's mkdir answers 403): only the loose files go, and
+    // that is said once - not one error per file (D10).
+    if( NayiveUI.isShared( dest ) && ( emptyDirs.length || items.some( function( it ) { return it.relPath.indexOf( '/' ) !== -1; } ) ) )
+    {
+        items     = items.filter( function( it ) { return it.relPath.indexOf( '/' ) === -1; } );
+        emptyDirs = [];
+        if( ! items.length ) { setStatus( '' ); Ayni.toast( 'warn', T( 'drive.noFoldersHere' ) ); return; }
+        notes.push( T( 'drive.noFoldersHere' ) );
+    }
 
     // .ics / .vcf files: ONE question for all of them - add them to
     // Calendar / Contacts, or keep them as files (they then go on with the
@@ -950,7 +998,7 @@ async function uploadItems( items )
         {
             items = items.filter( function( it ) { return ! isAppImport( it ); } );
             await runAppImports( imports );
-            if( ! items.length ) { setStatus( '' ); await reload(); return; }
+            if( ! items.length && ! emptyDirs.length ) { setStatus( '' ); await reload(); return; }
         }
     }
 
@@ -994,7 +1042,7 @@ async function uploadItems( items )
         {
             const drop = new Set( collisions );
             items = items.filter( function( it ) { return ! drop.has( it ); } );
-            if( ! items.length ) { setStatus( '' ); return; }
+            if( ! items.length && ! emptyDirs.length ) { setStatus( '' ); return; }
         }
         // "Replace" replaces exactly what the question listed - the file, and
         // the twin, each listed on its own. Everything else goes up
@@ -1038,9 +1086,11 @@ async function uploadItems( items )
 
     // Create every directory that appears in the item paths, shallow first.
     const dirs = new Set();
-    for( const it of items )
+    const made = items.map( function( it ) { return it.relPath; } )
+                      .concat( emptyDirs.map( function( d ) { return d + '/'; } ) );   // "a/b/" makes a and a/b
+    for( const rel of made )
     {
-        const segs = it.relPath.split( '/' );
+        const segs = rel.split( '/' );
         let acc = '';
         for( let i = 0; i < segs.length - 1; i++ )
         {
@@ -1061,6 +1111,7 @@ async function uploadItems( items )
         catch( _ ) { /* already exists — fine */ }
     }
 
+    const failed = [];       // said once, at the end (N4)
     for( let i = 0; i < items.length; i++ )
     {
         const it = items[i];
@@ -1109,9 +1160,12 @@ async function uploadItems( items )
                 Ayni.toast( 'err', TF( 'drive.uploadQuota', { name: it.relPath } ) );
                 break;
             }
-            Ayni.toast( 'err', TF( 'drive.uploadFailed', { name: it.relPath } ) );
+            failed.push( it.relPath );
         }
     }
+    if( failed.length )
+        notes.push( TF( 'drive.notSentN', { n: failed.length,
+                        names: failed.slice( 0, 3 ).join( ', ' ) + ( failed.length > 3 ? '…' : '' ) } ) );
 
     // LibreOffice documents: now their Microsoft Office twins, beside
     // them - one at a time, as the server does them anyway.
@@ -1161,6 +1215,6 @@ async function uploadItems( items )
             startConvertPoll();
         }
     }
-    // One message with all of it: a toast replaces the one before.
-    if( notes.length ) Ayni.toast( 'info', notes.join( ' ' ) );
+    // One message with all of it, said last, so a long upload cannot bury it.
+    if( notes.length ) Ayni.toast( failed.length ? 'err' : 'info', notes.join( ' ' ) );
 }

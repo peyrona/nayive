@@ -285,6 +285,22 @@ func TestChatReactVoteRead(t *testing.T) {
 	}
 	f.call(t, guest, "POST", p+"/react", `{"emoji":"<script>"}`, 400, nil)
 
+	// A link looping reactions, votes, edits... hits allowAct (each rewrites the chat under the hub's lock).
+	h := f.srv.chat
+	h.mu.Lock()
+	full := make([]time.Time, chatGuestActsMin)
+	for i := range full {
+		full[i] = time.Now()
+	}
+	h.owners["ana"].acts[f.ids["Carmen"]] = full
+	h.mu.Unlock()
+	f.call(t, guest, "POST", p+"/react", `{"emoji":"👍"}`, 429, nil)
+	f.call(t, guest, "POST", p+"/vote", `{"opt":0}`, 429, nil)
+	f.call(t, guest, "POST", "/api/c/"+f.carmen+"/conv/"+conv+"/prefs", `{"pin":true}`, 429, nil)
+	h.mu.Lock()
+	delete(h.owners["ana"].acts, f.ids["Carmen"])
+	h.mu.Unlock()
+
 	f.call(t, guest, "POST", "/api/c/"+f.carmen+"/conv/"+conv+"/read", fmt.Sprintf(`{"id":%d}`, poll.ID), 200, nil)
 	var list msgList
 	f.call(t, f.owner, "GET", "/api/chat/conv/"+conv+"/messages", "", 200, &list)

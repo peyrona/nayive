@@ -376,7 +376,13 @@ func (s *Server) adminSaveUser(w http.ResponseWriter, r *http.Request, body *adm
 			// A password set or cleared here signs them out everywhere, as
 			// their own change does: a kept session must not pick the next one,
 			// nor a passkey added under the old password.
-			s.sessions.DropUser(name)
+			if !s.sessions.DropUser(name) {
+				s.log.Error("user saved, but the sign-out of their sessions was not saved", "name", name)
+				sendError(w, r, http.StatusInternalServerError,
+					"usuario guardado, pero no se pudieron cerrar sus sesiones: vuelve a guardar")
+				s.dropLoginKeys("user", name)
+				return
+			}
 			s.dropLoginKeys("user", name)
 		}
 		s.log.Info("user saved", "status", status, "name", name)

@@ -222,7 +222,11 @@ func (r *Reminders) tick() {
 	// items past their retention period.
 	if now.Sub(r.lastDaily) >= dailyChore {
 		r.lastDaily = now
-		r.trash.SweepExpired(r.cfg.TrashDays)
+		// The admin's live setting, as the bin's own GET shows it - never the
+		// number read at start-up (G3).
+		var def *int
+		r.cfg.Read(func(c *ServerConfig) { def = c.TrashDays })
+		r.trash.SweepExpired(intOr(def, r.cfg.TrashDays))
 	}
 
 	homes, err := os.ReadDir(r.cfg.HomesDir)
@@ -283,6 +287,12 @@ func (r *Reminders) announce(user string, subs []PushSub, ev Event, start time.T
 	window time.Duration, loc *time.Location) {
 
 	hhmm := formatHHMM(start, loc)
+	// Calendar has no tile of its own: the push opens Planner on the event's day (N1).
+	day := start.Local()
+	if loc != nil {
+		day = start.In(loc)
+	}
+	url := URLPrefix + "/planner/?date=" + day.Format("2006-01-02")
 	for _, sub := range subs {
 		dev := deviceID(sub.Endpoint)
 		key := fmt.Sprintf("%s|%s|%s@%d", user, stableDeviceID(sub), ev.UID, start.Unix())
@@ -293,7 +303,7 @@ func (r *Reminders) announce(user string, subs []PushSub, ev Event, start time.T
 		payload := map[string]string{
 			"title": title,
 			"body":  body,
-			"url":   URLPrefix + "/calendar/",
+			"url":   url,
 			"tag":   ev.UID,
 		}
 		if r.send(user, sub, dev, payload, int(window.Seconds())) {
@@ -585,6 +595,9 @@ func (r *Reminders) phrase(lang, key, builtin string) string {
 func (r *Reminders) eventText(lang, summary, hhmm string) (string, string) {
 	title := r.phrase(lang, "push.eventTitle", "Recordatorio")
 	body := r.phrase(lang, "push.eventBody", "«{summary}» empieza a las {time}.")
+	if strings.TrimSpace(summary) == "" { // no title (an import): named as the Calendar shows it (N5)
+		summary = r.phrase(lang, "calendar.untitledEvent", "(sin título)")
+	}
 	return title, strings.NewReplacer("{summary}", ellipsis(summary), "{time}", hhmm).Replace(body)
 }
 

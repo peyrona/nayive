@@ -10,8 +10,10 @@
      then opens it:
        - photos and videos only (inbox kind "media") -> a Photos album;
        - anything else, or a mix (kind "files")      -> a Drive folder.
-     A shared link (no files) arrives as ?link=&title=&text=: two buttons send
-     it to Bookmarks or to Chat. Nothing is written here for a link.
+     A shared link (no files) arrives as ?link=&title=&text=: buttons send it
+     to Bookmarks, to Chat or to a new note. Text alone arrives as ?text=:
+     Chat or a new note. Nothing is written here for either: the app it goes
+     to does (a note: the launcher, ?note=, shared/notes.js).
      ?err=1: the service worker could not keep what was shared (storage full).
 
      Online only (it uploads). iOS Safari does not support Web Share Target at
@@ -125,6 +127,7 @@
         }
 
         .st-link { word-break: break-all; font-size: 0.9rem; margin: 0 0 4px; }
+        .st-link.st-text { word-break: normal; overflow-wrap: anywhere; white-space: pre-wrap; max-height: 40vh; overflow: auto; }
         .st-link-title { font-weight: 600; margin: 0 0 6px; overflow-wrap: anywhere; }
 
         .st-dest { display: flex; align-items: center; gap: 10px; }
@@ -165,6 +168,7 @@
         <div class="st-actions" id="linkActions" hidden>
             <button type="button" class="btn text bordered" id="toBookmarks"><span class="icon" data-icon="bookmark"></span><span data-i18n="st.toBookmarks"></span></button>
             <button type="button" class="btn text bordered" id="toChat"><span class="icon" data-icon="chat"></span><span data-i18n="st.toChat"></span></button>
+            <button type="button" class="btn text bordered" id="toNote"><span class="icon" data-icon="sticky"></span><span data-i18n="st.toNote"></span></button>
         </div>
 
         <div class="st-card" id="review" hidden>
@@ -500,16 +504,20 @@ $( "#cancelBtn" ).addEventListener( "click", async () =>
     location.replace( "../index.html" );
 } );
 
-// A shared link: Bookmarks or Chat, the user picks. Only a page is opened.
+// A shared link: Bookmarks, Chat or a note, the user picks. Text alone: Chat
+// or a note (no Bookmarks). Only a page is opened.
 function showLink()
 {
     const link  = PARAMS.get( "link" );
     const title = PARAMS.get( "title" ) || "";
     const text  = PARAMS.get( "text" ) || link;
 
-    $( "#headIcon" ).dataset.icon = "link";
-    $( "#linkUrl" ).textContent = link;
-    if( title && title !== link ) { $( "#linkTitle" ).textContent = title; $( "#linkTitle" ).hidden = false; }
+    $( "#headIcon" ).dataset.icon = link ? "link" : "chat";
+    $( "#linkUrl" ).textContent = link || text;
+    $( "#linkUrl" ).classList.toggle( "st-text", ! link );
+    if( title && title !== link && title !== text ) { $( "#linkTitle" ).textContent = title; $( "#linkTitle" ).hidden = false; }
+    $( "#toBookmarks" ).hidden = ! link;
+    if( ! link ) { const q = $( "#linkCard .st-count" ); q.dataset.i18n = "st.textWhere"; q.textContent = Ayni.t( "st.textWhere" ); }
     $( "#linkCard"    ).hidden = false;
     $( "#linkActions" ).hidden = false;
 
@@ -517,11 +525,14 @@ function showLink()
         location.replace( "../bookmarks/?" + new URLSearchParams( { add: link, title: title } ).toString() ) );
     $( "#toChat" ).addEventListener( "click", () =>
         location.replace( "../chat/?text=" + encodeURIComponent( text ) ) );
+    // a note: its title (a page's) on the first line, then the text
+    $( "#toNote" ).addEventListener( "click", () =>
+        location.replace( "../index.html?note=" + encodeURIComponent( title && text.indexOf( title ) < 0 ? title + "\n" + text : text ) ) );
 }
 
 async function boot()
 {
-    if( /^https?:\/\//i.test( PARAMS.get( "link" ) || "" ) ) { showLink(); return; }
+    if( /^https?:\/\//i.test( PARAMS.get( "link" ) || "" ) || ( ! PARAMS.get( "link" ) && ( PARAMS.get( "text" ) || "" ).trim() ) ) { showLink(); return; }
 
     ITEMS = await readInbox();
 

@@ -175,9 +175,8 @@ function compressFailText( err )
     return T( 'drive.compressFailed' );
 }
 
-// Toolbar / menu "Compress": the selected items (or, nothing ticked, the
-// open folder) into ONE new .zip, in the folder of the first of them,
-// named after it (the server picks the name, " (2)" when it is taken).
+// Toolbar / menu "Compress": the selected items into ONE new .zip, in the
+// folder of the first of them, named after it (the server picks the name, " (2)" when it is taken).
 async function compressSelection()
 {
     const paths = actionTargets();

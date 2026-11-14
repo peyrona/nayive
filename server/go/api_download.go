@@ -225,7 +225,7 @@ func (s *Server) dlStart(w http.ResponseWriter, r *http.Request, role, user stri
 
 	if len(virts) == 1 {
 		src, ok := s.users.Resolve(role, user, virts[0])
-		if !ok {
+		if !ok || s.inConfig(src.Abs) {
 			sendError(w, r, http.StatusForbidden, "forbidden")
 			return
 		}
@@ -333,7 +333,7 @@ func (s *Server) dlSend(w http.ResponseWriter, r *http.Request, job *dlJob) {
 // dlSendFile sends one file as it is; http.ServeContent answers a Range too.
 func (s *Server) dlSendFile(ctx context.Context, w *dlWriter, r *http.Request, job *dlJob) error {
 	src, ok := s.users.Resolve(job.role, job.user, job.virts[0])
-	if !ok {
+	if !ok || s.inConfig(src.Abs) {
 		return &dlRefusal{http.StatusForbidden, "forbidden"}
 	}
 	// What is sent is what was OPENED (OpenRegular). A home the admin moved

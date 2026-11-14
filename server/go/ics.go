@@ -144,7 +144,10 @@ func dtstartTime(params, rawValue string, loc *time.Location) (time.Time, bool) 
 		tzid := strings.SplitN(params, "TZID=", 2)[1]
 		tzid = strings.TrimSpace(strings.SplitN(tzid, ";", 2)[0])
 		tzid = strings.Trim(tzid, `"`) // TZID="Europe/Madrid" is legal RFC 5545 too
-		zone = Location(&tzid)
+		zone = icsZone(tzid)
+		if zone == nil {
+			zone = loc // a zone no one can place: floating, as the Calendar shows it
+		}
 	default:
 		zone = loc // floating: the calendar owner's own zone
 	}
@@ -153,6 +156,50 @@ func dtstartTime(params, rawValue string, loc *time.Location) (time.Time, bool) 
 	}
 
 	return time.Date(n[0], time.Month(n[1]), n[2], n[3], n[4], n[5], 0, zone), true
+}
+
+// windowsZones maps Outlook's Windows zone names to IANA - the same table as
+// the Calendar's (shared/ayni/formats/ical.js WINDOWS_ZONES), so the screen and
+// the reminders read one TZID the same way (S1).
+var windowsZones = map[string]string{
+	"UTC": "UTC", "GMT Standard Time": "Europe/London", "Greenwich Standard Time": "Atlantic/Reykjavik",
+	"W. Europe Standard Time": "Europe/Berlin", "Romance Standard Time": "Europe/Paris",
+	"Central Europe Standard Time": "Europe/Budapest", "Central European Standard Time": "Europe/Warsaw",
+	"E. Europe Standard Time": "Europe/Chisinau", "GTB Standard Time": "Europe/Bucharest",
+	"FLE Standard Time": "Europe/Kiev", "Russian Standard Time": "Europe/Moscow", "Turkey Standard Time": "Europe/Istanbul",
+	"Morocco Standard Time": "Africa/Casablanca", "South Africa Standard Time": "Africa/Johannesburg",
+	"Egypt Standard Time": "Africa/Cairo", "Israel Standard Time": "Asia/Jerusalem", "Arabian Standard Time": "Asia/Dubai",
+	"India Standard Time": "Asia/Kolkata", "China Standard Time": "Asia/Shanghai", "Tokyo Standard Time": "Asia/Tokyo",
+	"Korea Standard Time": "Asia/Seoul", "Singapore Standard Time": "Asia/Singapore",
+	"AUS Eastern Standard Time": "Australia/Sydney", "New Zealand Standard Time": "Pacific/Auckland",
+	"Eastern Standard Time": "America/New_York", "Central Standard Time": "America/Chicago",
+	"Mountain Standard Time": "America/Denver", "US Mountain Standard Time": "America/Phoenix",
+	"Pacific Standard Time": "America/Los_Angeles", "Alaskan Standard Time": "America/Anchorage",
+	"Hawaiian Standard Time": "Pacific/Honolulu", "Atlantic Standard Time": "America/Halifax",
+	"Central Standard Time (Mexico)": "America/Mexico_City", "SA Pacific Standard Time": "America/Bogota",
+	"Venezuela Standard Time": "America/Caracas", "Pacific SA Standard Time": "America/Santiago",
+	"Argentina Standard Time": "America/Buenos_Aires", "E. South America Standard Time": "America/Sao_Paulo",
+	"Canada Central Standard Time": "America/Regina", "Newfoundland Standard Time": "America/St_Johns",
+}
+
+// tzPrefixRE is a vendor prefix on a TZID: "/mozilla.org/20050126_1/Europe/Berlin".
+var tzPrefixRE = regexp.MustCompile(`^/[^/]*/[^/]*/`)
+
+// icsZone is a TZID as a Go zone, the way the Calendar reads it (ical.js
+// ianaZone): IANA as it is, a vendor prefix dropped, Windows names mapped.
+// nil when there is no telling.
+func icsZone(tzid string) *time.Location {
+	name := strings.TrimSpace(tzPrefixRE.ReplaceAllString(strings.TrimSpace(tzid), ""))
+	if name == "" {
+		return nil
+	}
+	if z := Location(&name); z != nil {
+		return z
+	}
+	if iana, ok := windowsZones[name]; ok {
+		return Location(&iana)
+	}
+	return nil
 }
 
 // ParseEvents returns one Event per VEVENT.

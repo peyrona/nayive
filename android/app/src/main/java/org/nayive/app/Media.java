@@ -60,8 +60,16 @@ final class Media {
         MediaJob.schedule(c);
         if (allowed(c)) Notes.cancel(c, Notes.MEDIA_FIX);
         else if (since != had) Notes.mediaFix(c);   // once at the switch; then once a day (MediaJob)
-        if (since != had) Prefs.setMediaSince(c, since);
+        if (since != had) {
+            // Off and on again between two waits (the 0 never seen here): what was
+            // queued from before the new "since" must not go.
+            if (had > 0) dropBefore(c, since - CLOCK_SLACK_S);
+            Prefs.setMediaSince(c, since);
+        }
     }
+
+    /** The phone's clock may be behind the server's: "since" a little earlier, so no first photo is missed. */
+    static final long CLOCK_SLACK_S = 5 * 60;
 
     static boolean on(Context c) { return Prefs.mediaSince(c) > 0; }
 
@@ -199,7 +207,7 @@ final class Media {
             return;
         }
         try (Cursor cur = c.getContentResolver().query(files, cols, sel,
-                new String[]{String.valueOf(since), String.valueOf(last), String.valueOf(back)}, "_id ASC")) {
+                new String[]{String.valueOf(since - CLOCK_SLACK_S), String.valueOf(last), String.valueOf(back)}, "_id ASC")) {
             if (cur == null) return;
             while (cur.moveToNext()) {
                 if (cols.length > 8 && cur.getInt(8) != 0) continue;   // still being written: a later look
@@ -309,6 +317,16 @@ final class Media {
 
     static synchronized void clear(Context c) {
         file(c).delete();
+    }
+
+    /** Drops from the queue what was added before `s` (unix s); the rest stays. */
+    private static synchronized void dropBefore(Context c, long s) {
+        JSONArray q = load(c), keep = new JSONArray();
+        for (int i = 0; i < q.length(); i++) {
+            JSONObject o = q.optJSONObject(i);
+            if (o != null && o.optLong("added") >= s) keep.put(o);
+        }
+        if (keep.length() != q.length()) save(c, keep);
     }
 
     /** The rows already queued (key -> DATE_ADDED), for the look back. */

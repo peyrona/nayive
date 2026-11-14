@@ -1,17 +1,17 @@
 package main
 
 // =============================================================================
-// search_all.go - the launcher's search: contacts, events and chats at once.
+// search_all.go - the launcher's search: contacts, events, chats and notes at once.
 // =============================================================================
 //
-//	GET /api/search?in=contacts,events,chats&name=has:ana&name=not:pérez
+//	GET /api/search?in=contacts,events,chats,notes&name=has:ana&name=not:pérez
 //	                &from=<text>&since=<unix s>&until=<unix s>&tz=<zone>&limit=N
 //
 // Read only: it never writes anything. Files are Drive's search
 // (/api/files?search=1) and mail is eMail's (/api/mail/<a>/list?q=); the
 // launcher asks those itself, beside this.
 //
-//	in      the kinds wanted (default: all three)
+//	in      the kinds wanted (default: all four)
 //	name    repeated; the rules of Drive's search (search.go): "has" and "not"
 //	        are what the launcher sends - a word or "phrase" that must, or must
 //	        not, be somewhere in the record. Folded like every search
@@ -22,14 +22,15 @@ package main
 //	tz      the page's zone: an all-day event's day starts at ITS midnight
 //	limit   per kind (default 50, at most 200)
 //
-// Answer: {"contacts": [...], "events": [...], "chats": [...],
+// Answer: {"contacts": [...], "events": [...], "chats": [...], "notes": [...],
 // "more": {"contacts": bool, ...}} - only the kinds asked for. A filter a
 // kind has nothing to test with (a date on a contact, "from" on an event)
 // leaves that kind out: the page does not ask for it then.
 //
-// The admin has no contacts, calendar or chat: every list is empty.
+// The admin has no contacts, calendar, chat or notes: every list is empty.
 
 import (
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -62,6 +63,16 @@ type EventHit struct {
 	Day   string `json:"day"`          // "2006-01-02" on the page's clock
 	Where string `json:"where,omitempty"`
 	Rep   bool   `json:"rep,omitempty"` // it repeats
+}
+
+// NoteHit is one quick note found (shared/notes.js, data/notes/notes.json):
+// the launcher opens it in place. Text is a snippet around the first word.
+type NoteHit struct {
+	ID     string `json:"id"`
+	Title  string `json:"title,omitempty"`
+	Text   string `json:"text,omitempty"`
+	Color  *int   `json:"color,omitempty"`
+	Pinned bool   `json:"pinned,omitempty"`
 }
 
 type searchAll struct {
@@ -182,7 +193,7 @@ func (s *Server) apiSearchAll(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	want := map[string]bool{"contacts": true, "events": true, "chats": true}
+	want := map[string]bool{"contacts": true, "events": true, "chats": true, "notes": true}
 	if v := raw.Get("in"); v != "" {
 		want = map[string]bool{}
 		for _, k := range strings.Split(v, ",") {
@@ -226,6 +237,13 @@ func (s *Server) apiSearchAll(w http.ResponseWriter, r *http.Request) {
 			}, q.snip, q.limit)
 		}
 		out["chats"] = hits
+	}
+	if want["notes"] && !dated && q.from == nil {
+		hits := []NoteHit{}
+		if user != "" {
+			hits = searchNotes(filepath.Join(home, "notes", "notes.json"), q)
+		}
+		out["notes"], more["notes"] = cutHits(hits, q.limit)
 	}
 	out["more"] = more
 	sendJSON(w, r, http.StatusOK, out)
@@ -305,6 +323,56 @@ func searchContacts(path string, q searchAll) []ContactHit {
 		}
 	}
 	sort.SliceStable(hits, func(i, j int) bool { return fold(hits[i].Name) < fold(hits[j].Name) })
+	return hits
+}
+
+// searchNotes reads the quick notes and answers those that hold every rule in
+// their title, text or (an old checklist's) items: pinned first, then the
+// latest changed. A missing or damaged file finds nothing.
+func searchNotes(path string, q searchAll) []NoteHit {
+	hits := []NoteHit{}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return hits
+	}
+	var list []struct {
+		ID    string `json:"id"`
+		Title string `json:"title"`
+		Text  string `json:"text"`
+		Items []struct {
+			Text string `json:"text"`
+		} `json:"items"`
+		Pinned  bool    `json:"pinned"`
+		Color   *int    `json:"color"`
+		Updated float64 `json:"updated"`
+	}
+	if json.Unmarshal(raw, &list) != nil {
+		return hits
+	}
+	type found struct {
+		NoteHit
+		at float64
+	}
+	var all []found
+	for _, n := range list {
+		body := n.Text
+		for _, it := range n.Items {
+			body += "\n" + it.Text
+		}
+		if n.ID == "" || strings.TrimSpace(n.Title+body) == "" || !q.text(n.Title, body) {
+			continue
+		}
+		all = append(all, found{NoteHit{ID: n.ID, Title: strings.TrimSpace(n.Title), Text: q.snip(body), Color: n.Color, Pinned: n.Pinned}, n.Updated})
+	}
+	sort.SliceStable(all, func(i, j int) bool {
+		if all[i].Pinned != all[j].Pinned {
+			return all[i].Pinned
+		}
+		return all[i].at > all[j].at
+	})
+	for _, h := range all {
+		hits = append(hits, h.NoteHit)
+	}
 	return hits
 }
 

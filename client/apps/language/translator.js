@@ -39,6 +39,13 @@ const MIN_CONFIDENCE = 0.5;
 
 const clone = ( o ) => JSON.parse( JSON.stringify( o ) );
 
+// An engine is switched on only with its required options set (a server's address).
+function needOptions( adapter, options )
+{
+    for( const f of ( adapter && adapter.optionsSchema ) || [] )
+        if( f.required && ! ( options && options[ f.key ] ) ) throw new TranslationError( 'invalid-input', 'Missing ' + f.key, { field: f.key } );
+}
+
 export class Translator
 {
     constructor( options = {} )
@@ -480,6 +487,9 @@ export class Translator
         checkEngineFields( p );
         if( p.enabled && e.missingAdapter ) throw new TranslationError( 'invalid-input', 'Adapter not available', { field: 'enabled' } );
         if( 'options' in p ) p.options = this._adapters.get( e.adapter ).validateOptions( p.options );
+        // Switched on, or the options of an engine that is on changed (its address cleared).
+        if( p.enabled || ( 'options' in p && ! ( 'enabled' in p ) && e.enabled ) )
+            needOptions( this._adapters.get( e.adapter ), 'options' in p ? p.options : e.options );
         if( 'name' in p ) p.name = p.name.trim();
 
         if( e.builtIn )
@@ -508,6 +518,7 @@ export class Translator
         const a = this._adapters.get( c.adapter );
         if( ! a ) throw new TranslationError( 'invalid-input', 'No such adapter', { field: 'adapter' } );
         c.options = a.validateOptions( c.options );
+        if( c.enabled ) needOptions( a, c.options );
         c.name = c.name.trim();
         this._saved.custom.push( { id: c.id, name: c.name, adapter: c.adapter, enabled: c.enabled, score: c.score,
                                    timeoutMs: c.timeoutMs, options: c.options } );
@@ -651,7 +662,7 @@ export class Translator
     async lookup( word, options = {} )
     {
         this._alive();
-        const w = String( word || '' ).trim().toLowerCase();
+        const w = String( word || '' ).trim();             // as typed: Wiktionary titles are case-sensitive ("Bahnhof")
         if( ! w ) throw new TranslationError( 'invalid-input', 'Empty word', { field: 'word' } );
         const { source, target, signal } = options;
         if( ! LANGS.includes( source ) || ! LANGS.includes( target ) || source === target )
@@ -684,7 +695,8 @@ export class Translator
         if( signal && signal.aborted ) throw abortError( signal );
         if( ! entry.sources.length )
         {
-            if( failures.length === allowed.length ) throw failures[ 0 ] instanceof TranslationError ? failures[ 0 ] : new TranslationError( 'network', 'Lookup failed' );
+            // A failed source may have had the entry: say why, not "No entry".
+            if( failures.length ) throw failures[ 0 ] instanceof TranslationError ? failures[ 0 ] : new TranslationError( 'network', 'Lookup failed' );
             return null;
         }
         return entry;

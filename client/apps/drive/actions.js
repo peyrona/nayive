@@ -49,12 +49,33 @@ function openRename()
     const path = renameTarget = targets[0];
     const node = rowNode( path );
     document.getElementById( 'renameName' ).value = node ? displayName( node ) : path.split( '/' ).pop();
-    document.getElementById( 'renameError' ).hidden = true;
+    showNameError( document.getElementById( 'renameName' ), null );
     setBackdrop( 'renameBackdrop', true );
     document.getElementById( 'renameName' ).focus();
 }
 
-// A name never holds "/" (it would make a folder and move the item into it).
+// The name boxes (Rename, New folder) and the line under each that says
+// what is wrong with the name. null hides it.
+function showNameError( box, key )
+{
+    const el = document.getElementById( box.id === 'newFolderName' ? 'newFolderError' : 'renameError' );
+    el.hidden = ! key;
+    if( ! key ) return;
+    el.setAttribute( 'data-i18n', key );
+    el.textContent = T( key );
+}
+
+// What is wrong with a new name, as a string key, or null. A name never
+// holds "/" (it would make a folder and move the item into it), and a
+// regular user never sees a name starting with "." (pruneNodes), so it
+// would look lost (D5).
+function badName( name )
+{
+    if( name.includes( '/' ) )                return 'drive.noSlash';
+    if( ! IS_ADMIN && name.charAt( 0 ) === '.' ) return 'drive.noDotName';
+    return null;
+}
+
 // A pasted path keeps only its last part, the name; a "/" typed is dropped
 // at once. Either way the field says why.
 function pasteName( e )
@@ -64,17 +85,26 @@ function pasteName( e )
     e.preventDefault();
     const name = text.trim().split( /[\/\\]/ ).filter( Boolean ).pop() || '';
     e.target.setRangeText( name, e.target.selectionStart, e.target.selectionEnd, 'end' );
-    document.getElementById( 'renameError' ).hidden = false;
+    showNameError( e.target, 'drive.noSlash' );
 }
 
-function noSlash()
+function noSlash( e )
 {
-    const box = document.getElementById( 'renameName' );
+    const box = e.target;
     if( ! box.value.includes( '/' ) ) return;
     const at = box.selectionStart - ( box.value.slice( 0, box.selectionStart ).split( '/' ).length - 1 );
     box.value = box.value.replace( /\//g, '' );
     box.setSelectionRange( at, at );
-    document.getElementById( 'renameError' ).hidden = false;
+    showNameError( box, 'drive.noSlash' );
+}
+
+// Is `path` (an item in folder `parent`) taken? The open folder and those
+// open in place are on screen; any other one - a search hit's - is asked
+// (D4). A failed ask says no: the server refuses a clash anyway (409).
+async function nameTaken( parent, path )
+{
+    if( parent === currentFolder || openDirs.has( parent ) ) return !! rowNode( path );
+    return ( await destNameSet( parent ) ).has( path.split( '/' ).pop() );
 }
 
 async function confirmRename()
@@ -82,8 +112,11 @@ async function confirmRename()
     const oldPath = renameTarget;
     if( ! oldPath ) return;
 
-    const newName = document.getElementById( 'renameName' ).value.trim();
-    if( ! newName || newName.includes( '/' ) ) return;     // a "/" would move it into a folder (noSlash)
+    const box     = document.getElementById( 'renameName' );
+    const newName = box.value.trim();
+    if( ! newName ) return;
+    const bad = badName( newName );                        // a "/" would move it into a folder (noSlash)
+    if( bad ) { showNameError( box, bad ); return; }       // the dialog stays open
     renameTarget = null;
 
     setBackdrop( 'renameBackdrop', false );
@@ -102,7 +135,7 @@ async function confirmRename()
     // The server refuses to rename onto an existing item (it would be
     // destroyed with no trip through the papelera). Offer to move the
     // one in the way to the papelera first.
-    if( newPath !== oldPath && rowNode( newPath ) )
+    if( newPath !== oldPath && await nameTaken( parent, newPath ) )
     {
         if( ! await Ayni.confirm( {
             title: T( 'drive.nameExistsTitle' ),
@@ -122,7 +155,7 @@ async function confirmRename()
         await withBusy( AyniNet.rename( oldPath, newPath ) );
         step.moved = true;
         await NayiveMedia.remapPaths( [ [ oldPath, newPath ] ] );
-        if( oldPath === currentFolder ) currentFolder = newPath;   // renamed the folder we're in — stay in it
+        currentFolder = Ayni.followPath( currentFolder, [ [ oldPath, newPath ] ] );   // renamed the folder we're in (or one above it) — stay in it
         clearSel();
         await reload();
 

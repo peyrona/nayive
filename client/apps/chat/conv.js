@@ -61,10 +61,15 @@
     // opening and closing
     // ---------------------------------------------------------------------
 
+    // The chat whose first page is still on its way: no loadSince for it -
+    // its rev is still 0, and since=0 would bring the whole chat.
+    var firstOf = null;
+
     C.openConv = async function ( id )
     {
         if( ! C.convOf( id ) ) { await C.loadSummary().catch( function () {} ); if( ! C.convOf( id ) ) return; }
         if( C.closeInfoNow ) C.closeInfoNow();
+        C.closeSheets( id );  // a sheet of the chat left would act on this one (compose.js)
         if( S.open !== id ) C.flushDeletes();
         C.settleConv( id );   // opening a chat just deleted (its "Undo" on show) makes the delete final
         S.open = id;
@@ -95,10 +100,12 @@
         if( S.shared ) { C.fillComposer( S.shared ); S.shared = null; }
         C.showUnsent( id );       // mine still on this device (compose.js, THE OUTBOX)
 
+        firstOf = id;
         try
         {
             var r = await C.api( "GET", "conv/" + id + "/messages" );
             if( S.open !== id ) return;
+            firstOf = null;
             ingest( r );
             S.more = !! r.more;
             var me = C.me( id );
@@ -116,8 +123,12 @@
             else C.toBottom( false );
             C.markRead();
             C.restoreEdit( id, kept );
+            // A change a wait saw while this page was loading (loadSince skipped it).
+            var rv = C.W( id ).revs[ id ];
+            if( rv > S.openRev ) C.loadSince();
         }
         catch( e ) { C.fail( e ); }
+        if( firstOf === id ) firstOf = null;
         C.flushOutbox( id );
         if( ! matchMedia( "(pointer: coarse)" ).matches ) C.focusComposer();
     };
@@ -354,7 +365,7 @@
     C.loadSince = async function ()
     {
         var id = S.open;
-        if( ! id ) return;
+        if( ! id || firstOf === id ) return;
         var since = S.openRev;
         try
         {
@@ -409,7 +420,7 @@
             wall.scrollTop = t0 + ( wall.scrollHeight - h0 );
         }
         catch( e ) { C.fail( e ); }
-        loadingOlder = false;
+        finally { loadingOlder = false; }     // also when another chat opened meanwhile
     }
 
     // Every message (search, the media of an info screen).

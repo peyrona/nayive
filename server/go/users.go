@@ -1418,7 +1418,8 @@ func (u *Users) RemovePushSub(user, endpoint string) bool {
 // DropPushSubs forgets every device of `user` (a password change: an
 // intruder's browser must stop getting chat and mail). The window stays; each
 // page of the owner registers its own device again (index.html healPush).
-func (u *Users) DropPushSubs(user string) {
+// false: push.json could not be written - the devices still get pushes (G7).
+func (u *Users) DropPushSubs(user string) bool {
 	_, err := u.editPush(user, func(data *PushConfig) bool {
 		if len(data.Subs) == 0 {
 			return false
@@ -1428,7 +1429,9 @@ func (u *Users) DropPushSubs(user string) {
 	})
 	if err != nil {
 		u.log.Error("cannot save push.json", "user", user, "err", err)
+		return false
 	}
+	return true
 }
 
 // cleanTZ is a zone name this server can load, or "".
