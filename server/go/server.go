@@ -47,6 +47,10 @@ type Server struct {
 	loginPK   *LoginPasskeys // sign in with a passkey (login_passkey.go)
 	sos       *Sos           // SOS button and "no sign of life" alerts (sos.go)
 
+	// watchCtx is done once the server shuts down: it ends every /api/watch
+	// wait at once (api_watch.go).
+	watchCtx context.Context
+
 	httpd  *http.Server
 	scheme string // "http" or "https", decided at construction
 
@@ -143,6 +147,9 @@ func NewServer(cfg *Config, log Logger) (*Server, error) {
 	s.httpd.RegisterOnShutdown(s.chat.Close)
 	s.httpd.RegisterOnShutdown(s.devices.Close) // the phones' waits, held minutes
 	s.httpd.RegisterOnShutdown(s.ssh.CloseAll)  // the SSH tab's session
+	var endWatch context.CancelFunc
+	s.watchCtx, endWatch = context.WithCancel(context.Background())
+	s.httpd.RegisterOnShutdown(endWatch) // the file waits (api_watch.go), 25 s each
 	s.ssh.alive = func(token string) bool {
 		sess, ok := s.sessions.Get(token)
 		return ok && sess.Role == "admin"
@@ -303,6 +310,7 @@ func (s *Server) routes() http.Handler {
 
 	// --- the file API ------------------------------------------------------
 	mux.HandleFunc("/api/files", s.apiFiles)
+	mux.HandleFunc("/api/watch", s.apiWatch)                // "tell me when this file changes" (api_watch.go)
 	mux.HandleFunc("/api/convert", s.apiConvert)            // Go only - see convert.go
 	mux.HandleFunc("/api/office", s.apiOffice)              // Go only - see office.go
 	mux.HandleFunc("/api/zip", s.apiZip)                    // what is in a .zip, "Extract here"

@@ -545,6 +545,10 @@ func (s *Server) chatWait(w http.ResponseWriter, r *http.Request, who func() (ch
 		dev = ""
 	}
 	sigSeen, _ := strconv.ParseInt(queryValue(r, "s"), 10, 64)
+	pe := queryValue(r, "pe") // its push endpoint's tag: it shows Chat, no push to it (announce)
+	if !validPageTag(pe) {
+		pe = ""
+	}
 	tz := queryValue(r, "tz") // the page's time zone (zonesFor)
 	if !validZone(tz) {
 		tz = ""
@@ -572,6 +576,7 @@ func (s *Server) chatWait(w http.ResponseWriter, r *http.Request, who func() (ch
 		// Presence first, THEN the channel: coming online wakes everybody
 		// else's wait, and must not wake this one.
 		h.waitStart(o, pid)
+		o.pageStart(pe)
 		if dev != "" {
 			o.cs().waitStart(dev)
 		}
@@ -589,6 +594,7 @@ func (s *Server) chatWait(w http.ResponseWriter, r *http.Request, who func() (ch
 
 		h.mu.Lock()
 		h.waitEnd(o, pid)
+		o.pageStop(pe)
 		if dev != "" {
 			o.cs().waitEnd(dev, time.Now())
 		}

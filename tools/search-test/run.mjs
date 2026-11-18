@@ -49,6 +49,8 @@ fs.mkdirSync( `${RUN}/homes/test/files` );
 fs.writeFileSync( `${RUN}/config/server.json`, JSON.stringify( { host: "127.0.0.1", port: PORT, base_dir: ".", admin: { name: "jefe", password: "secreto" } } ) );
 fs.writeFileSync( `${RUN}/homes/test/data/config.json`, JSON.stringify( { password: "test" } ) );
 for( const n of [ "a.txt", "b.txt", "c.txt" ] ) fs.writeFileSync( `${RUN}/homes/test/files/${n}`, n );
+fs.mkdirSync( `${RUN}/homes/test/files/W/deep`, { recursive: true } );            // Drive searches the open folder and under it
+fs.writeFileSync( `${RUN}/homes/test/files/W/deep/inner.txt`, "inner" );
 // Data for the searches: two Split groups, three Calendar events, two pictures (the
 // media apps' folder is files/, so no first-run folder question).
 for( const [ id, name ] of [ [ "lisboa-2026-aaaa", "Lisboa 2026" ], [ "piso-bbbb", "Piso" ] ] )
@@ -136,7 +138,7 @@ try
     await c.send( "Page.navigate", { url: BASE + "/nayive/login.html" } );
     await sleep( 1500 );
     const st = await ev( `localStorage.setItem('balata-coach-seen','1'); localStorage.setItem('nayive-install-snooze','never');
-        localStorage.setItem('balata-intro-dismiss:launcher','1'); localStorage.setItem('ayni-lang','en');
+        localStorage.setItem('balata-intro-dismiss:launcher','1'); localStorage.setItem('nayive-sos-tip','1'); localStorage.setItem('ayni-lang','en');
         fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:'test',password:'test'})}).then(r=>r.status)` );
     ok( st === 200, "signed in", st );
 
@@ -193,6 +195,17 @@ try
     ok( await ev( "! document.getElementById('searchBuilderBtn').classList.contains('is-active') && document.getElementById('searchBuilderBtn').dataset.tip === Ayni.t( 'drive.sbTitle' )" ), "typing in the field ends the advanced search" );
     await press( "#driveTools .search-field [data-clear]" );
     ok( await ev( "! document.querySelector('#driveTools .search-field').classList.contains('is-open') && document.getElementById('searchInput').value === ''" ), "the × clears and folds in one press" );
+    await ev( "navigateTo( 'files/W' ); true" );
+    ok( await until( `/deep/.test( ${LIST} )` ), "into folder W" );
+    await press( "#searchToggleBtn" );
+    await typeIn( "#searchInput", "txt" );
+    ok( await until( `/inner\\.txt/.test( ${LIST} ) && ! /a\\.txt/.test( ${LIST} )` ), "a search looks in the open folder and under it only", await ev( LIST ) );
+    ok( await ev( "/W/.test( document.getElementById('breadcrumb').innerText )" ), "…and the crumbs say which folder", await ev( "document.getElementById('breadcrumb').innerText" ) );
+    await typeIn( "#searchInput", "b.txt" );
+    ok( await until( "!! document.querySelector('#listing .search-all')" ), "nothing in it: a button to search all of Home", await ev( LIST ) );
+    await press( "#listing .search-all" );
+    ok( await until( `/b\\.txt/.test( ${LIST} )` ), "…which finds it", await ev( LIST ) );
+    await press( "#driveTools .search-field [data-clear]" );
     ok( ! errors().length, "no errors", errors() );
 
     console.log( "CALENDAR - steps through its hits" );

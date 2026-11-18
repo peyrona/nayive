@@ -154,7 +154,7 @@ try
     ok( await ev( "document.getElementById('password').type === 'text' && document.getElementById('pwEye').getAttribute('aria-pressed') === 'true' && document.activeElement.id === 'password'" ),
         "login: the eye shows the password and leaves the cursor in it" );
     const st = await ev( `localStorage.setItem('balata-coach-seen','1'); localStorage.setItem('nayive-install-snooze','never');
-        localStorage.setItem('balata-intro-dismiss:launcher','1'); localStorage.setItem('ayni-lang','en');
+        localStorage.setItem('balata-intro-dismiss:launcher','1'); localStorage.setItem('nayive-sos-tip','1'); localStorage.setItem('ayni-lang','en');
         fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:'test',password:'test'})}).then(r=>r.status)` );
     ok( st === 200, "signed in", st );
 

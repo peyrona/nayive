@@ -50,7 +50,7 @@ try
 
     await nav( `${BASE}/nayive/login.html`, "/nayive/login.html" );
     await ev( `localStorage.setItem('balata-coach-seen','1'); localStorage.setItem('nayive-install-snooze','never'); localStorage.setItem('balata-desktop','never');
-        ['launcher','email'].forEach( a => localStorage.setItem('balata-intro-dismiss:' + a, '1') ); localStorage.setItem('ayni-lang','en');
+        ['launcher','email'].forEach( a => localStorage.setItem('balata-intro-dismiss:' + a, '1') ); localStorage.setItem('nayive-sos-tip','1'); localStorage.setItem('ayni-lang','en');
         fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:'ana',password:'abc'})}).then(r=>r.status)` );
     await nav( `${BASE}/nayive/index.html`, "/nayive/index.html" );
     await until( "window.NayiveSearch && Ayni.ready" );

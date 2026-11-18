@@ -105,6 +105,16 @@ function closeAllDirs() { openDirs = new Set(); dirKids = new Map(); dirKidsSeq+
 // files" list - is on screen.
 function isSearching() { return !! searchQuery.trim() || !! advSearch || bigMode; }
 
+// A search looks in the open folder and everything under it; searchAll = the
+// "Search all of Home" button was pressed (clearSearch resets it). Home, and
+// the virtual "Shared with me", search all of Home, as before.
+let searchAll = false;
+function searchScope()
+{
+    const f = currentFolder;
+    return searchAll || ! f || f === FS_ROOT || f === 'shared' ? '' : f;
+}
+
 // Phone layout: the search field collapses behind a magnifier and the view
 // switch moves into the ⋮ (see @media ≤640px).
 const PHONE = window.matchMedia( '(max-width: 640px)' );

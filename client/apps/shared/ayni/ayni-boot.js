@@ -67,11 +67,13 @@
     // second monitor, a Planner pane) never fires visibilitychange; the
     // #syncIndicator click -> refreshNow; window.ayniRefresh = refreshNow for
     // Planner's single plug; while the store is "offline", a retry ("retry", 5 s
-    // up to 1 min) and "online" -> maybeRefresh( true, "online" ).
+    // up to 1 min) and "online" -> maybeRefresh( true, "online" ); with opts.watch
+    // (a file path), a re-read as soon as that file changes on the server
+    // ("push", see watchFile below).
     //
     // `guard( force, why )` returns true while a re-read must NOT happen (a sheet is
     // open, text is being typed); the default is "any dialog is open".
-    // `why` is "visible" / "focus" / "plug" / "retry" / "online", so an app can tell a DELIBERATE refresh
+    // `why` is "visible" / "focus" / "plug" / "retry" / "online" / "push", so an app can tell a DELIBERATE refresh
     // from an automatic one - Trips lets the plug re-read from any screen but keeps
     // the automatic paths on the trip list, where re-rendering costs nothing.
     function wireRefresh( opts )
@@ -81,12 +83,14 @@
         var throttle    = opts.throttleMs || 20000;
         var guard       = opts.guard || function () { return !! document.querySelector( "dialog.panel[open]" ); };
 
+        // True when the read ran; false when the throttle or the guard said no.
         async function maybeRefresh( force, why )
         {
-            if( ! force && Date.now() - lastRefresh < throttle ) return;
-            if( guard( force, why || "plug" ) ) return;
+            if( ! force && Date.now() - lastRefresh < throttle ) return false;
+            if( guard( force, why || "plug" ) ) return false;
             lastRefresh = Date.now();          // stamped only when a read really happens
             await opts.read( force );
+            return true;
         }
 
         async function refreshNow()
@@ -168,10 +172,137 @@
             window.addEventListener( "online", function () { maybeRefresh( true, "online" ); } );
         }
 
+        // While a button is held, no push read either (the click would be lost):
+        // watchFile tries again 2 s later.
+        if( opts.watch ) watchFile( opts.watch, opts.store, function ( force, why )
+        {
+            return held ? Promise.resolve( false ) : maybeRefresh( force, why );
+        } );
+
         var dot = document.getElementById( opts.indicatorId || "syncIndicator" );
         if( dot && dot.tagName === "BUTTON" ) dot.addEventListener( "click", refreshNow );
 
         return { maybeRefresh: maybeRefresh, refreshNow: refreshNow };
+    }
+
+    //------------------------------------------------------------------------//
+    // LIVE RE-READ (2026-11-17)  -  wireRefresh( { ..., watch: "data/calendar.ics" } )
+    //
+    // One request stays open on <api>watch?file=&etag= and the server answers
+    // as soon as the file's version moves (Nayive: server/go/api_watch.go). The
+    // page then re-reads as on a focus: maybeRefresh( true, "push" ). So an
+    // event added on the phone shows in a PC window nobody touches.
+    //   - The first answer only brings the version: one read then, for a change
+    //     between the page's own load and that answer.
+    //   - The guard said no (a sheet open, an Undo held): the version stays
+    //     what the screen shows and the read is tried again every 2 s until it
+    //     runs. Asking the server again at once would answer at once, for ever.
+    //   - Hidden: no wait open; the version is kept, so a change made meanwhile
+    //     answers at once on return.
+    //   - Any failure (offline, signed out, 429, 5xx), or a wait answered at
+    //     once with the version it was given: wait 1 s, doubling up to 1 min.
+    //     A sign-in in another tab then picks it up again.
+    //   - The read itself failed (the store says "error" or "needs-auth"):
+    //     read again by itself, 2 s doubling up to 1 min, until one works.
+    //   - Plain HTTP (a dev box) is HTTP/1.1: 6 sockets per server for ALL
+    //     tabs and frames, so five watching windows and Chat would hold every
+    //     one and the rest would wait. There no wait is held: the page asks
+    //     every 10 s and compares the version itself. Over HTTPS (HTTP/2) the
+    //     waits share one connection.
+    //   - A version the page already shows - its own save coming back, its
+    //     first look after its own load - is not read again (store.heldTag).
+    function watchFile( file, store, maybeRefresh )
+    {
+        var API = ( window.AyniNames || {} ).api || "/api/";
+        var url = API + "watch?file=" + encodeURIComponent( file );
+        var tag = null, readFirst = true, delay = 1000;
+        var busy = false, more = false, again = 0, failWait = 2000;
+        var nav  = performance.getEntriesByType ? performance.getEntriesByType( "navigation" )[ 0 ] : null;
+        var hold = location.protocol === "https:" && ! ( nav && nav.nextHopProtocol === "http/1.1" );
+        var pause = function ( ms ) { return new Promise( function ( ok ) { setTimeout( ok, ms ); } ); };
+
+        // The page's model came from version `t` already.
+        function onScreen( t ) { return !! ( t && store && store.heldTag && store.heldTag( file ) === t ); }
+
+        function changed()
+        {
+            if( again ) return;                 // a retry is due: it reads the newest anyway
+            if( busy ) { more = true; return; }
+            reread();
+        }
+
+        async function reread()
+        {
+            again = 0;
+            if( onScreen( tag ) ) { more = false; return; }   // a read meanwhile showed it
+            busy  = true;
+            var ran = true;
+            try { ran = await maybeRefresh( true, "push" ); }
+            catch ( e ) {}                      // a read that throws: wireRefresh's own retry takes over
+            busy = false;
+            // The read ran but failed (a server error, signed out): store.read()
+            // then answers from the cache without throwing, and the next wait
+            // holds on the NEW version - nothing would read it again until a
+            // focus or a click. So again by itself: 2 s, doubling up to 1 min.
+            // ("offline" has wireRefresh's own retry.)
+            var failed = ran && store && ( store.state === "error" || store.state === "needs-auth" );
+            if( ! ran )        { more = false; again = setTimeout( reread, 2000 ); }
+            else if( failed )  { more = false; again = setTimeout( reread, failWait ); failWait = Math.min( failWait * 2, 60000 ); }
+            else
+            {
+                failWait = 2000;
+                if( more ) { more = false; reread(); }
+            }
+        }
+
+        function shown()
+        {
+            return new Promise( function ( ok )
+            {
+                document.addEventListener( "visibilitychange", function on()
+                {
+                    if( document.hidden ) return;
+                    document.removeEventListener( "visibilitychange", on );
+                    ok();
+                } );
+            } );
+        }
+
+        ( async function loop()
+        {
+            for( ;; )
+            {
+                // Hidden: no wait open. The tag is kept: a change made meanwhile
+                // answers at once on return (the "visible" read may have been
+                // refused by the guard).
+                if( document.hidden ) await shown();
+                var r = null, got = null, sent = tag === null || ! hold ? null : tag, asked = Date.now();
+                try
+                {
+                    r = await fetch( url + ( sent === null ? "" : "&etag=" + encodeURIComponent( sent ) ),
+                                     { cache: "no-store", credentials: "same-origin" } );
+                    if( r.ok ) got = ( await r.json() ).etag;
+                }
+                catch ( e ) {}
+                // A wait that came back at once with the very version it was
+                // given never waited (a server shutting down, a proxy that does
+                // not hold): as a failure, or the loop asks without a pause for
+                // ever. A wait that held (up to 25 s) and found nothing new is
+                // normal: asked again at once.
+                if( typeof got !== "string" || ( sent !== null && got === sent && Date.now() - asked < 1000 ) )
+                {
+                    await pause( delay );
+                    delay = Math.min( delay * 2, 60000 );
+                    continue;
+                }
+                delay = 1000;
+                var was = tag;
+                tag = got;                      // first: reread() checks the newest
+                if( ( was === null ? readFirst : got !== was ) && ! onScreen( got ) ) changed();
+                readFirst = false;
+                if( ! hold ) await pause( 10000 );
+            }
+        } )();
     }
 
     window.AyniBoot = { boot: bootWithStore, wireRefresh: wireRefresh };

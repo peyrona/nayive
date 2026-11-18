@@ -1480,6 +1480,17 @@
                 // This page has it open from now on: a parked save is never
                 // sent - nor dropped - behind its back (PARKED SAVES).
                 if( queued.park ) await takePark( path );
+                // A write() landed while this looked (or took the lock): the
+                // user's newest edit is the truth, as after a GET below - not the
+                // save found here, which adopt() would make this page's model
+                // again (and the newer save would then not move it).
+                if( ( writeSeq[ path ] || 0 ) !== seq )
+                {
+                    try { await writing[ path ]; } catch ( e ) {}
+                    var latest = await ownCopy( db, path );
+                    scheduleFlush();
+                    if( latest ) return { body: latest.body, source: "cache", mtime: latest.mtime || latest.queuedAt };
+                }
                 scheduleFlush();
                 adopt( path, queued, cached );
                 if( queued.park ) settle();        // kept here on purpose (PARKED SAVES): no "pending"
@@ -2598,6 +2609,17 @@
             return e.page || ! ( await flushPath( path ) ).ok;
         }
 
+        // The server's version (strong ETag) this page's model of `path` came
+        // from - its last read, or its own save once the server took it - or
+        // null when not known. Read-only: AyniBoot's watch asks it so a page
+        // does not read again a version it already shows (its own save coming
+        // back, its first look). Any doubt is null, and null means "read".
+        function heldTag( path )
+        {
+            var h = held[ path ];
+            return h && ! h.none && strongTag( h.tag ) || null;
+        }
+
         // What waits to go up for `path` from this account: null when nothing
         // does, else { conflict, mine, page, at } - conflict: held back as
         // changed elsewhere (CONFLICTS); mine: this page's model holds it; page:
@@ -2681,6 +2703,7 @@
             renamed:      renamed,
             conflicted:   conflicted,
             pending:      pending,
+            heldTag:      heldTag,
             onConflict:   onConflict,
             onMerged:     onMerged,
             onSaved:      onSaved,

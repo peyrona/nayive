@@ -665,6 +665,7 @@
                 store: store,
                 read:  loadTasks,
                 guard: editBusy,
+                watch: TASKS_FILE,   // a task saved on another device shows here by itself (api_watch.go)
                 onVisible: function()
                 {
                     maybeSyncBirthdaysToday();

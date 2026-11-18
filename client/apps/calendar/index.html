@@ -644,6 +644,7 @@
 
         const LAST_VIEW_KEY = 'gum_calendar_last_view';
         const LAST_DATE_KEY = 'gum_calendar_last_date';   // anchor date (YYYY-MM-DD) so a reload stays where you were
+        const LAST_TODAY_KEY = 'gum_calendar_last_today'; // the day that was today when the anchor was stored (startDate)
 
         // ?date=YYYY-MM-DD - another app (e.g. Trips) links here to land on a specific day.
         // It opens in day view on that date; normal navigation afterwards is unaffected.
@@ -714,6 +715,8 @@
                     else           refetchAll();
                 },
                 guard: function() { return ! calendar || anyBackdropOpen() || undoHold; },
+                // An event saved on another device shows here by itself (api_watch.go).
+                watch: CAL_FILE,
                 // FullCalendar has already re-read the clock on this same event.
                 onVisible: function() { checkToday( false ); }
             } );
@@ -721,6 +724,14 @@
             window.addEventListener( 'focus',    function() { checkToday( true ); } );
             window.addEventListener( 'pageshow', function() { checkToday( true ); } );
             window.nayiveCheckToday = function() { checkToday( true ); };   // Planner calls it
+
+            // onVisible waits for the re-read, and a phone just woken can take many
+            // seconds to answer: move today at once. setTimeout: after FullCalendar's
+            // own listener has re-read the clock.
+            document.addEventListener( 'visibilitychange', function()
+            {
+                if( document.visibilityState === 'visible' ) setTimeout( function() { checkToday( false ); }, 0 );
+            } );
 
             // Probe the API, then load. On a failed probe the shared helper bounces to the
             // sign-in page only when we are really online with nothing cached; otherwise it
@@ -823,11 +834,7 @@
                 // No explicit `plugins:` needed — the global <script> builds for daygrid/timegrid/
                 // interaction/list self-register into FullCalendar.globalPlugins when loaded.
                 initialView: startView,
-                // Week always opens centred on today, so the stored anchor is
-                // deliberately ignored for it. undefined -> FullCalendar uses today.
-                initialDate: DEEP_LINK_DATE
-                          || ( startView === 'rollWeek' ? undefined
-                                                        : localStorage.getItem( LAST_DATE_KEY ) || undefined ),
+                initialDate: DEEP_LINK_DATE || startDate( startView ),
                 headerToolbar: false,
                 height: '100%',
                 nowIndicator: true,
@@ -891,6 +898,7 @@
                                  ? arg.view.calendar.getDate()
                                  : arg.view.currentStart;
                     localStorage.setItem( LAST_DATE_KEY, DateTime.fromJSDate( anchor ).toISODate() );
+                    localStorage.setItem( LAST_TODAY_KEY, DateTime.now().toISODate() );
                     syncPhoneMonth( arg.view );
                 },
 
@@ -1003,6 +1011,23 @@
                 calendar.today();
 
             refreshPhoneMonth();   // FullCalendar's repaint drops the picked mark and the dots
+        }
+
+        // Where a reload lands: where you were - unless that was the day that was
+        // today then (Mes / Agenda: its month) and the date has moved since. Then
+        // today, as checkToday() moves a page left open. A phone drops a page in the
+        // background and reloads it, so this is its everyday path. Week always
+        // opens centred on today. undefined -> FullCalendar uses today.
+        function startDate( view )
+        {
+            const date = localStorage.getItem( LAST_DATE_KEY );
+            const then = localStorage.getItem( LAST_TODAY_KEY );   // null: stored before this key existed
+
+            if( ! date || view === 'rollWeek' ) return undefined;
+            if( ! then ) return date;
+
+            const month = view === 'dayGridMonth' || view === 'listMonth';
+            return ( month ? date.slice( 0, 7 ) === then.slice( 0, 7 ) : date === then ) ? undefined : date;
         }
 
         function earlyOfDayHint() { return '07:00:00'; }

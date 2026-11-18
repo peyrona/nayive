@@ -171,6 +171,46 @@ func TestChatCallFlow(t *testing.T) {
 	}
 }
 
+// TestChatCallSigAfterRestart: a page left open across a server restart still
+// waits with the number of the last signal it read. The next call's signals
+// must reach it, not be dropped as "already read" (2026-11-17: every call
+// stuck on "Connecting" after a deploy, until the page was reloaded).
+func TestChatCallSigAfterRestart(t *testing.T) {
+	f := newCallFixture(t)
+	carmen := anonymous()
+	conv := "d-" + f.ids["Carmen"]
+	cp := "/api/c/" + f.carmen
+	h := f.srv.chat
+
+	ring := func() string {
+		var start struct{ ID string }
+		f.call(t, f.owner, "POST", "/api/chat/conv/"+conv+"/call", `{"video":true,"dev":"owner-page-1"}`, 201, &start)
+		f.call(t, carmen, "POST", cp+"/call/"+start.ID+"/answer", `{"dev":"carmen-page-1"}`, 200, nil)
+		f.call(t, f.owner, "POST", "/api/chat/call/"+start.ID+"/sig", `{"dev":"owner-page-1","data":{"t":"offer"}}`, 204, nil)
+		return start.ID
+	}
+
+	first := ring()
+	w := f.wait(t, carmen, cp, "carmen-page-1", 0)
+	if len(w.Sig) != 1 {
+		t.Fatalf("first offer: %+v", w.Sig)
+	}
+	read := w.Sig[0].Seq // what Carmen's page keeps
+	f.call(t, f.owner, "POST", "/api/chat/call/"+first+"/end", `{}`, 200, nil)
+
+	// The restart: the calls live in memory only, so a new process has none.
+	time.Sleep(5 * time.Millisecond) // the clock moves on, as it does between two runs
+	h.mu.Lock()
+	h.owner("ana").calls = nil
+	h.mu.Unlock()
+
+	second := ring()
+	w = f.wait(t, carmen, cp, "carmen-page-1", read)
+	if len(w.Sig) != 1 || w.Sig[0].Call != second || w.Sig[0].Seq <= read {
+		t.Fatalf("after the restart the page with s=%d got %+v", read, w.Sig)
+	}
+}
+
 // TestChatCallRules: who may call whom, busy, both at once, no coturn.
 func TestChatCallRules(t *testing.T) {
 	f := newCallFixture(t)

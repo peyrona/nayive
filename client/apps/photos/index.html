@@ -2877,6 +2877,8 @@ function photoActions()
           run: ids => pickAlbumFor( ids, "copy" ) },
         { id: "info", label: Ayni.t( "photos.info" ), icon: "info", key: "Alt+Enter", rank: 4, group: 2,
           where: () => ! DEMO, when: one, run: ids => showInfo( ids[ 0 ] ) },
+        { id: "readText", label: Ayni.t( "photos.readText" ), icon: "ocr", rank: 9, group: 2, where: () => ! DEMO,
+          when: ids => { const p = one( ids ) && photoById( ids[ 0 ] ); return !! p && ! p.video; }, run: ids => showText( ids[ 0 ] ) },
         { id: "map", label: Ayni.t( "photos.seeOnMap" ), icon: MAP_PIN, rank: 8, hideOff: true, group: 2,
           when: ids => ids.every( id => { const p = photoById( id ); return !! p && p.cluster != null; } ), run: showOnMap },
         { id: "bin", label: Ayni.t( "ui.toTrash" ), icon: "trash", key: Ayni.isMac ? [ "Del", "Ctrl+Backspace" ] : "Del",   // never a bare ⌫ (Drive's rule)
@@ -3063,6 +3065,36 @@ function showInfo( id )
     close.focus();
     pixelSize( p ).then( s => { px = s; paint(); } );
     if( jpeg ) exifHead( p ).then( b => parseJpegExif( b, true ), () => null ).then( e => { ex = e; paint(); } );
+}
+
+/* ---------------------------------------------------------------------------
+ * READ TEXT  (one photo)
+ *
+ * The text in the photo, read on this device with tesseract.js - Language's
+ * ocr.js (../language/, through NayiveUI.ocr), nothing on the server. The language data comes
+ * from tesseract's CDN the first time. The text can be fixed and copied;
+ * nothing is saved.
+ * -------------------------------------------------------------------------*/
+// Ayni's photo step (AyniPhoto.review), text only: Crop and Rotate help the
+// reading and change nothing that is kept; Copy keeps the sheet open.
+async function showText( id )
+{
+    const p = photoById( id );
+    if( ! p || p.video || DEMO ) return;
+    let blob = p.localFile;
+    if( ! blob )
+    {
+        try { const res = await fetch( srcFor( p ) ); if( ! res.ok ) throw 0; blob = await res.blob(); }
+        catch( _ ) { Ayni.toast( "err", Ayni.t( "language.ocrNoNet" ) ); return; }
+    }
+    AyniPhoto.review( [ new File( [ blob ], p.name, { type: blob.type } ) ], {
+        title: Ayni.t( "photos.readText" ), ocr: NayiveUI.ocr(), textOnly: true, autoRead: true,
+        go:    { tip: Ayni.t( "ui.copy" ), icon: "copy" },
+        onGo:  out =>
+        {
+            Ayni.copyText( out.text ).then( () => Ayni.toast( "ok", Ayni.t( "photos.textCopied" ) ), () => {} );
+            return false;
+        } } );
 }
 
 // A name for a new album or a rename: a small dialog (Ayni.ask).

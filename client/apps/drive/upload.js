@@ -58,6 +58,29 @@ function onUploadInputChange( e )
     uploadItems( items );
 }
 
+// The "Photos" choice: up to REVIEW_MAX pictures first go through Ayni's
+// photo step (AyniPhoto.review: Crop, Rotate, Read text). After Read text,
+// Text sends only the text and Both the photos and the text, as a .txt named
+// after the first photo; it goes up as any other file (the same room check
+// and the same "already there" question). More pictures go straight, as before.
+const REVIEW_MAX = 10;
+async function onUploadPhotosChange( e )
+{
+    const files = Array.from( e.target.files || [] );
+    e.target.value = '';
+    if( ! files.length ) return;
+    if( files.length > REVIEW_MAX ) { uploadItems( files.map( function( f ) { return { relPath: f.name, file: f }; } ) ); return; }
+    const out = await AyniPhoto.review( files, { ocr: NayiveUI.ocr(), go: { tip: T( 'ui.upload' ), icon: 'upload' } } );
+    if( ! out ) return;
+    const items = out.files.map( function( f ) { return { relPath: f.name, file: f }; } );
+    if( out.text )
+    {
+        const name = files[ 0 ].name.replace( /\.[^.\/]*$/, '' ) + '.txt';
+        items.push( { relPath: name, file: new File( [ out.text + '\n' ], name, { type: 'text/plain' } ) } );
+    }
+    uploadItems( items );
+}
+
 // Files from the computer may be dropped here: not on the bin (its rows
 // hide the folder they would go to), nor in a shared folder that only
 // lets you read (D3) - the same rule as the Upload button.

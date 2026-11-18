@@ -519,7 +519,7 @@ func waitEv(t *testing.T, ch <-chan traceEv, ev string) int {
 
 // TestChatPush: a person who is away gets the new message on their devices; a
 // device the push service calls gone is forgotten; a muted chat stays quiet;
-// someone looking at the chat right now is not buzzed.
+// the device showing the chat right now is not buzzed, their other devices are.
 func TestChatPush(t *testing.T) {
 	f := newChatFixture(t)
 	push := newFakePush(t, false, map[string]int{"/gone": http.StatusGone})
@@ -560,7 +560,11 @@ func TestChatPush(t *testing.T) {
 	}
 	f.call(t, anonymous(), "POST", "/api/c/"+f.carmen+"/conv/"+conv+"/prefs", `{"mute":false}`, 200, nil)
 
-	// Looking at it (a wait open): not now.
+	// Looking at it on one device (a wait open, with that device's tag): that
+	// one not now, her other device at once.
+	h.mu.Lock()
+	carmen.Subs = append(carmen.Subs, testSub(t, push.URL+"/other"))
+	h.mu.Unlock()
 	var first map[string]any
 	f.call(t, anonymous(), "GET", "/api/c/"+f.carmen+"/wait?v=-1", "", 200, &first)
 	// Cancelled and joined at the end; it reports nothing, so no t.Fatalf in it.
@@ -570,7 +574,7 @@ func TestChatPush(t *testing.T) {
 	go func() {
 		defer close(waited)
 		req, _ := http.NewRequestWithContext(ctx, "GET",
-			fmt.Sprintf("%s/api/c/%s/wait?v=%d", f.base, f.carmen, int64(first["v"].(float64))), nil)
+			fmt.Sprintf("%s/api/c/%s/wait?v=%d&pe=%s", f.base, f.carmen, int64(first["v"].(float64)), pageTag(push.URL+"/good")), nil)
 		if resp, err := anonymous().Do(req); err == nil {
 			io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
@@ -589,11 +593,12 @@ func TestChatPush(t *testing.T) {
 		}
 	}
 	send("¿estás?")
-	if now, later := waitEv(t, evs, "push-now"), waitEv(t, evs, "push-later"); now != 0 || later != 1 {
-		t.Fatalf("someone looking at the chat: %d devices now (want 0), %d people re-checked later (want 1)", now, later)
+	if now, later := waitEv(t, evs, "push-now"), waitEv(t, evs, "push-later"); now != 1 || later != 1 {
+		t.Fatalf("one device looking at the chat: %d devices now (want 1), %d re-checked later (want 1)", now, later)
 	}
+	push.waitHits(t, "/other", 1)
 	if count("/good") != 1 {
-		t.Fatalf("someone looking at the chat was pushed: %d", count("/good"))
+		t.Fatalf("the device looking at the chat was pushed: %d", count("/good"))
 	}
 }
 
@@ -719,5 +724,30 @@ func TestChatPhotos(t *testing.T) {
 	f.call(t, f.owner, "DELETE", "/api/chat/me/photo", "", 200, nil)
 	if c := get(anonymous(), "/api/c/"+f.carmen+"/avatar/o"); c != 404 {
 		t.Fatalf("the owner's removed picture is still served: %d", c)
+	}
+}
+
+// TestChatPushAppPhone: a push to an app phone's target counts as the Chrome
+// inside that phone - when its Chat page is on screen, the phone is skipped.
+func TestChatPushAppPhone(t *testing.T) {
+	chrome := "https://push.example/phone-chrome"
+	h := &ChatHub{chromeOf: func(account, endpoint string) string {
+		if account == "ana" && endpoint == appEndpoint+"p1" {
+			return chrome
+		}
+		return ""
+	}}
+	o := &chatOwner{pages: map[string]int{}, pageEnd: map[string]time.Time{}}
+	app := chatPushJob{sub: PushSub{Endpoint: appEndpoint + "p1"}, owner: "ana"}
+	if o.showing(h.jobTag(app)) {
+		t.Fatal("no page open, yet the phone counts as showing Chat")
+	}
+	o.pageStart(pageTag(chrome))
+	if !o.showing(h.jobTag(app)) {
+		t.Fatal("the phone's Chrome shows Chat, yet its app target would be pushed")
+	}
+	other := chatPushJob{sub: PushSub{Endpoint: appEndpoint + "p2"}, owner: "ana"}
+	if o.showing(h.jobTag(other)) {
+		t.Fatal("another phone counts as showing Chat")
 	}
 }

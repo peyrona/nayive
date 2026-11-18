@@ -99,7 +99,7 @@ try
     await c.send( "Emulation.setDeviceMetricsOverride", { width: 1280, height: 820, deviceScaleFactor: 1, mobile: false } );
     await nav( c, `${BASE}/nayive/login.html`, "/nayive/login.html" );
     await c.evaluate( `localStorage.setItem('balata-coach-seen','1'); localStorage.setItem('nayive-install-snooze','never');
-        ['launcher','email','chat'].forEach( a => localStorage.setItem('balata-intro-dismiss:' + a, '1') );
+        ['launcher','email','chat'].forEach( a => localStorage.setItem('balata-intro-dismiss:' + a, '1') ); localStorage.setItem('nayive-sos-tip','1');
         localStorage.setItem('ayni-lang','es');
         fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:'ana',password:'abc'})}).then(r=>r.status)` );
 
@@ -159,6 +159,21 @@ try
     await c.evaluate( `window.__clicked = null; ( () => { const i = document.getElementById('cFileInput'); i.click = function () { window.__clicked = i.accept; }; } )(); true` );
     await c.evaluate( "document.getElementById('cAttach').click(); [...document.querySelectorAll('.attach .att')][2].click(); true" );
     ok( await c.evaluate( "window.__clicked === 'image/*'" ), "Galería asks for pictures" );
+    // ...and they go through the photo step (AyniPhoto.review; the OCR stubbed):
+    // after Read text, Text puts the text in the mail and attaches nothing
+    const textWas = await c.evaluate( "document.getElementById('cText').innerHTML" );
+    await c.evaluate( `NayiveUI.ocr = () => ( { langs: [ "es" ], lang: "es", setLang() {}, recognize: async () => ( { text: "Alquilo piso", truncated: false } ) } );
+        ( async () => { const cv = document.createElement( "canvas" ); cv.width = 60; cv.height = 40;
+            const b = await new Promise( r => cv.toBlob( r, "image/jpeg" ) );
+            const i = document.getElementById( "cFileInput" ), dt = new DataTransfer(); dt.items.add( new File( [ b ], "anuncio.jpg", { type: "image/jpeg" } ) );
+            i.files = dt.files; i.dispatchEvent( new Event( "change" ) ); } )(); true` );
+    ok( await waitFor( c, "document.querySelector('dialog.panel[open].photo-review-sheet')", 5000 ), "Galería's pictures open the photo step" );
+    await c.evaluate( "document.querySelector('dialog.panel[open] .prev-tools .btn:nth-child(3)').click(); true" );
+    ok( await waitFor( c, "document.querySelector('dialog.panel[open] .prev-text textarea')?.value === 'Alquilo piso'", 5000 ), "Read text reads it" );
+    await c.evaluate( "document.querySelector('dialog.panel[open] footer button:last-child').click(); true" );
+    ok( await waitFor( c, "! document.querySelector('dialog.panel[open].photo-review-sheet') && /Alquilo piso/.test( document.getElementById('cText').textContent )", 5000 ), "Text puts it in the mail" );
+    ok( await c.evaluate( "! /anuncio/.test( document.getElementById('cFiles').textContent )" ), "and attaches nothing" );
+    await c.evaluate( TYPE( textWas ) );
     await c.evaluate( "document.getElementById('cAttach').click(); [...document.querySelectorAll('.attach .att')][0].click(); true" );
     ok( await c.evaluate( "window.__clicked === ''" ), "Doc. local asks for any file" );
 

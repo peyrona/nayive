@@ -1126,7 +1126,36 @@
         throw e;
     }
 
+    // ---------------------------------------------------------------------
+    // READ TEXT: the OCR the photo step (AyniPhoto.review) is given -
+    // Language's ocr.js (tesseract.js, on this device, never the server),
+    // loaded on the first use. The language picked last is kept (the key
+    // Photos' Read text always used).
+    // ---------------------------------------------------------------------
+    var OCR_URL   = document.currentScript ? new URL( "../language/ocr.js", document.currentScript.src ).href : "/nayive/language/ocr.js";
+    var OCR_LANGS = [ "es", "en", "fr", "de", "pt", "zh" ];
+    var OCR_KEY   = "photos-ocr-lang";
+    var ocrMod    = null;
+
+    function ocr()
+    {
+        var ui = Ayni.i18n.lang(), lang = null;
+        try { lang = localStorage.getItem( OCR_KEY ); } catch( _ ) {}
+        if( OCR_LANGS.indexOf( lang ) === -1 ) lang = OCR_LANGS.indexOf( ui ) !== -1 ? ui : "en";
+        return {
+            langs:   OCR_LANGS,
+            lang:    lang,
+            setLang: function ( v ) { try { localStorage.setItem( OCR_KEY, v ); } catch( _ ) {} },
+            recognize: function ( blob, o )
+            {
+                if( ! ocrMod ) ocrMod = import( OCR_URL ).catch( function () { ocrMod = null; throw { category: "network" }; } );
+                return ocrMod.then( function ( m ) { return m.ocr.recognize( blob, o ); } );
+            }
+        };
+    }
+
     window.NayiveUI = {
+        ocr:            ocr,              // Read text for AyniPhoto.review: { langs, lang, setLang, recognize }
         refuseOfficeLocked: refuseOfficeLocked,   // Write / Calc: an Office password file, said and refused
         loginRedirect:  loginRedirect,   // to the sign-in page and back here (AyniNet.loginRedirect too)
         signOut:        signOut,          // the launcher's and admin's sign-out ({ unlinkPhone, swScope })

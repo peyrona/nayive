@@ -58,7 +58,7 @@ function wireStaticUI()
     document.getElementById( 'uploadPickDirBtn'  ).addEventListener( 'click', function() { setBackdrop( 'uploadBackdrop', false ); document.getElementById( 'uploadDirInput' ).click(); } );
     document.getElementById( 'uploadInput'       ).addEventListener( 'change', onUploadInputChange );
     document.getElementById( 'uploadDirInput'    ).addEventListener( 'change', onUploadInputChange );
-    document.getElementById( 'uploadPhotoInput'  ).addEventListener( 'change', onUploadInputChange );
+    document.getElementById( 'uploadPhotoInput'  ).addEventListener( 'change', onUploadPhotosChange );
     // New documents are created in the folder currently open in Drive
     // (?dir=), so they save where the user is looking, not the files/ root.
     document.getElementById( 'syncIndicator'     ).addEventListener( 'click', function() { reload(); } );

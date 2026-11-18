@@ -21,7 +21,8 @@ store.onMerged( onFileMerged );
 
 // The plug's click and the focus / visibility re-reads. Not while a sheet
 // is open or something is being dragged: the re-read repaints the list.
-AyniBoot.wireRefresh( { store: store, read: loadData, guard: function()
+// watch: a bookmark saved on another device shows here by itself (api_watch.go).
+AyniBoot.wireRefresh( { store: store, read: loadData, watch: FILE, guard: function()
 {
     return !! document.querySelector( 'dialog.panel[open]' ) || !! Ayni.dragIds();
 } } );

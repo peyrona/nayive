@@ -11,12 +11,14 @@ package main
 // many addresses until the whole server was full. This caps them per
 // credential (docs/audit/server-go.md #14).
 //
-// The two long-polls, and the key each one counts under:
+// The long-polls, and the key each one counts under:
 //
 //	chatWait    /api/c/<token>/wait           "chat-link:" + SHA-256 of the link
 //	            /api/chat/wait                "chat:" + SHA-256 of the session + ":"
 //	            /api/chat/via/<owner>/wait    "chat:" + SHA-256 of the session + ":" + owner
 //	deviceWait  /api/device/wait              "device:" + the stored hash of the phone's token
+//	apiWatch    /api/watch                    "watch:" + SHA-256 of the session - its own
+//	                                          counter, watchWaits (api_watch.go)
 //
 // Only hashes: a key is never a credential, and nothing here logs it.
 //

@@ -616,6 +616,25 @@ func (d *Devices) SkipCallPush(account, endpoint string) bool {
 	return r != nil && time.Since(time.Unix(r.Seen, 0)) < deviceOnline
 }
 
+// ChromeOf: the push endpoint of the Chrome inside the phone whose app target
+// (push_app.go) is `endpoint` - the one its Chat page says it shows Chat on
+// (chat.go, jobTag). "" when unknown.
+func (d *Devices) ChromeOf(account, endpoint string) string {
+	id, ok := strings.CutPrefix(endpoint, appEndpoint)
+	if !ok {
+		return ""
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.ensureLoaded()
+	for _, r := range d.rows {
+		if r.Owner == account && r.ID == id {
+			return r.Endpoint
+		}
+	}
+	return ""
+}
+
 // HasApp: this push endpoint belongs to a phone with the app, which turns its
 // positions on and off by itself - it needs no "turn it on" alert. The app's
 // own target (push_app.go) is that phone too.

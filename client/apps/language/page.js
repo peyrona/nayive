@@ -8,7 +8,7 @@
  */
 
 import { Translator, LocalModeError, AllEnginesFailedError } from './translator.js';
-import { LANGS, languageName } from './languages.js';
+import { LANGS, OCR, languageName } from './languages.js';
 import { MAX_TEXT_LENGTH } from './config.js';
 import chromeBuiltin from './engine-chrome.js';
 import bergamot from './engine-bergamot.js';
@@ -295,50 +295,27 @@ async function speak()
     finally { b.classList.remove( 'busy' ); }
 }
 
-// OCR: a photo's text into the box, for the user to check first.
-let ocrBusy = null;
-
+// OCR: a photo's text into the box, for the user to check first - in Ayni's
+// photo step (AyniPhoto.review), where Crop and Rotate help the reading.
 async function onImage( file )
 {
     if( ! file ) return;
-    const st = $( 'ocr-status' ), btn = $( 'ocr-btn' );
-    const lang = pick( 'from' ).value === 'auto' ? 'es' : pick( 'from' ).value;
-    const controller = new AbortController();
-    ocrBusy = controller;
-    btn.setAttribute( 'aria-pressed', true );
-    Ayni.setTip( btn, T( 'language.ocrCancel' ) );
+    const st = $( 'ocr-status' );
+    const from = pick( 'from' ).value;
+    const langs = Object.keys( OCR );
+    const out = await AyniPhoto.review( [ file ], {
+        title: T( 'language.ocr' ), textOnly: true, autoRead: true,
+        go:    { tip: T( 'language.ocrUse' ), icon: 'check' },
+        ocr:   { langs, lang: langs.indexOf( from ) !== -1 ? from : 'es',
+                 recognize: ( blob, o ) => tr.recognizeImage( blob, o ) } } );
+    if( ! out ) return;
+    const src = $( 'src' );
+    src.value = src.value.trim() ? src.value.replace( /\s*$/, '\n\n' ) + out.text : out.text;
+    src.value = src.value.slice( 0, MAX_TEXT_LENGTH );
+    onSrcInput();
     st.hidden = false;
-    const bar = progressBar( 0 );
-    const label = el( 'span', null, TF( 'language.ocrReading', { name: file.name || '', lang: langName( lang ), pct: 0 } ) );
-    st.textContent = '';
-    st.append( label, bar );
-    try
-    {
-        const r = await tr.recognizeImage( file, { language: lang, signal: controller.signal, onProgress: ( p ) =>
-        {
-            bar.value = p;
-            label.textContent = TF( 'language.ocrReading', { name: file.name || '', lang: langName( lang ), pct: Math.round( p * 100 ) } );
-        } } );
-        if( ! r.text.trim() ) { st.textContent = T( 'language.ocrNothing' ); return; }
-        const src = $( 'src' );
-        src.value = src.value.trim() ? src.value.replace( /\s*$/, '\n\n' ) + r.text : r.text;
-        src.value = src.value.slice( 0, MAX_TEXT_LENGTH );
-        onSrcInput();
-        st.textContent = r.truncated ? T( 'language.ocrTruncated' ) : T( 'language.ocrDone' );
-        src.focus();
-    }
-    catch( e )
-    {
-        st.textContent = e.category === 'aborted' ? T( 'language.cancelled' )
-                       : e.category === 'invalid-input' ? T( 'language.ocrNotImage' )
-                       : e.category === 'network' ? T( 'language.ocrNoNet' ) : T( 'language.ocrFailed' );
-    }
-    finally
-    {
-        if( ocrBusy === controller ) ocrBusy = null;
-        btn.setAttribute( 'aria-pressed', false );
-        Ayni.setTip( btn, T( 'language.ocr' ) );
-    }
+    st.textContent = T( 'language.ocrDone' );
+    src.focus();
 }
 
 //------------------------------------------------------------------------//
@@ -501,7 +478,7 @@ function wire()
     $( 'clearSrc' ).addEventListener( 'click', () => { $( 'src' ).value = ''; onSrcInput(); setResult( null ); setStatus( '' ); $( 'src' ).focus(); } );
     $( 'copy' ).addEventListener( 'click', copyResult );
     $( 'speak' ).addEventListener( 'click', speak );
-    $( 'ocr-btn' ).addEventListener( 'click', () => { if( ocrBusy ) ocrBusy.abort(); else $( 'ocr-file' ).click(); } );
+    $( 'ocr-btn' ).addEventListener( 'click', () => $( 'ocr-file' ).click() );
     $( 'ocr-file' ).addEventListener( 'change', ( e ) => { onImage( e.target.files && e.target.files[ 0 ] ); e.target.value = ''; } );
     $( 'local' ).addEventListener( 'change', () => tr.setLocalMode( $( 'local' ).checked ) );
     // Enter or the Go magnifier (Ayni: the field is data-enter); its × empties it.

@@ -121,6 +121,7 @@
     //
     //   var label = AyniDoc.fileLabel( { onCommit: async function ( raw ) { ... } } );
     //   label.set( "carta.docx" );   label.get();
+    //   label.set( "Cartas/carta.docx", "carta.docx" );   shown, and what a click edits
     //
     // Enter commits (through blur), Escape cancels. `onCommit( raw )` receives
     // the trimmed new text only when it differs from what was shown; the app
@@ -130,18 +131,21 @@
         opts = opts || {};
         var label = byId( opts.labelId || "fileLabel" );
         var input = byId( opts.inputId || "fileNameInput" );
+        var name  = null;     // set( text, name ): what the field edits - the bare name, never the folder or suffix shown with it
 
-        function set( text )                     // <bdi>: see .file-label in app.css
+        function set( text, edit )               // <bdi>: see .file-label in app.css
         {
             var bdi = document.createElement( "bdi" );
             bdi.textContent = text;
             label.replaceChildren( bdi );
+            name = edit != null ? String( edit ) : null;
         }
         function get()       { return label.textContent; }
+        function editText()  { return name != null ? name : label.textContent === t( "ayni.untitled" ) ? "" : label.textContent; }
 
         function start()
         {
-            input.value = ( label.textContent === t( "ayni.untitled" ) ) ? "" : label.textContent;
+            input.value = editText();
             label.style.display = "none";
             input.style.display = "";
             input.focus();
@@ -149,7 +153,7 @@
         }
         function cancel()
         {
-            input.value = label.textContent;
+            input.value = editText();             // the blur that follows then commits nothing
             input.style.display = "none";
             label.style.display = "";
         }
@@ -158,7 +162,7 @@
             var raw = input.value.trim();
             input.style.display = "none";
             label.style.display = "";
-            if( ! raw || raw === label.textContent ) return;
+            if( ! raw || raw === editText() ) return;
             if( opts.onCommit ) await opts.onCommit( raw );
         }
 
@@ -1461,7 +1465,10 @@
         // goes up at the next boot (keepalive could not carry it anyway).
         window.addEventListener( "beforeunload", function ( e )
         {
-            if( ! timer && ! busy && ! failed && ! held ) return;   // held: in the device draft only, the file never got it
+            // held: in the device draft only, the file never got it. And an edit
+            // the file cannot take (untitled, someone else's) whose device draft
+            // FAILED (storage blocked or full) is only on screen: asked too.
+            if( ! timer && ! busy && ! failed && ! held && ( draftOk || writable() || ! dirty ) ) return;
             flush();                          // start it now, in case they stay
             e.preventDefault();
             e.returnValue = "";
@@ -1786,8 +1793,12 @@
 
         function showLabel()
         {
+            // Shown: the path below the app's folder, and "(read only)" on someone
+            // else's file. Edited: the bare name ("Cartas/carta.docx" renamed
+            // to "carta2" stays in Cartas, not "Cartas carta2.docx").
             label.set( path ? relLabel( path, o.appDir, o.openRoot ) + ( readOnly ? t( "text.readOnlySuffix" ) : "" )
-                            : ( pending || t( "ayni.untitled" ) ) );
+                            : ( pending || t( "ayni.untitled" ) ),
+                       path ? baseName( path ) : ( pending || "" ) );
             showLock();
             showAddress();
             if( o.onChange ) o.onChange();

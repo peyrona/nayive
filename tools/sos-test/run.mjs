@@ -82,7 +82,7 @@ try
     await c.send( "Page.navigate", { url: BASE + "/nayive/login.html" } );
     await sleep( 1500 );
     const st = await ev( `localStorage.setItem('balata-coach-seen','1'); localStorage.setItem('nayive-install-snooze','never');
-        localStorage.setItem('balata-intro-dismiss:launcher','1'); localStorage.setItem('ayni-lang','en'); localStorage.setItem('balata-desktop','never');
+        localStorage.setItem('balata-intro-dismiss:launcher','1'); localStorage.setItem('nayive-sos-tip','1'); localStorage.setItem('ayni-lang','en'); localStorage.setItem('balata-desktop','never');
         fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:'test',password:'test'})}).then(r=>r.status)` );
     ok( st === 200, "signed in", st );
 
@@ -199,6 +199,25 @@ try
     const row = JSON.parse( ph ).sort( ( a, b ) => a[ 1 ] - b[ 1 ] );
     ok( row.length && row[ 0 ][ 0 ] === "sosBtn", "...first in the top row", ph );
     await shot( "phone" );
+    ok( ! errors().length, "no errors", errors() );
+
+    console.log( "THE TIP (until \"Don't show again\")" );
+    const TIP = "document.querySelector('dialog.help-card[open]')";
+    await ev( "localStorage.removeItem('nayive-sos-tip'); true" );
+    c.logs.length = 0;
+    await open( "index.html", 1280 );
+    ok( await until( `!! ${TIP} && /2 functions/.test( ${TIP}.textContent )`, 6000 ), "a launcher visit shows the SOS tip" );
+    ok( await ev( `! /SOS is off/.test( ${TIP}.textContent )` ), "...without the \"off\" line once a contact is set" );
+    await shot( "tip" );
+    await ev( `${TIP}.querySelector('[data-close]').click(), true` );
+    ok( await until( `! ${TIP}` ), "× closes it" );
+    await open( "index.html", 1280 );
+    ok( await until( `!! ${TIP}`, 6000 ), "...and it comes back on the next visit" );
+    await ev( `${TIP}.querySelector('.help-dismiss').click(), true` );
+    ok( await until( `! ${TIP}` ) && await ev( "localStorage.getItem('nayive-sos-tip') === '1'" ), "\"Don't show again\" closes it for good" );
+    await open( "index.html", 1280 );
+    await sleep( 2500 );
+    ok( await ev( `! ${TIP}` ), "...it does not come back" );
     ok( ! errors().length, "no errors", errors() );
 
     console.log( "DESKTOP - the launcher in the desktop's menu" );

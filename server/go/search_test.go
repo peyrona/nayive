@@ -277,3 +277,50 @@ func TestBiggestRoute(t *testing.T) {
 		t.Errorf("?stat=disk user = %v", st["user"])
 	}
 }
+
+// TestSearchIn - ?in=<folder> keeps ?find= and ?search= to that folder and
+// everything under it; a folder ?dir= could not open is refused.
+func TestSearchIn(t *testing.T) {
+	srv, ts, client := newTestServer(t)
+	home := filepath.Join(srv.cfg.HomesDir, "ana")
+	for _, rel := range []string{"files/nota.txt", "files/W/nota-w.txt", "files/W/deep/nota-d.txt", "files/X/nota-x.txt"} {
+		p := filepath.Join(home, rel)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte("n"), 0o644)
+	}
+	signIn(t, client, ts.URL, "ana", "abc")
+
+	get := func(q string) (int, string) {
+		resp := do(t, client, "GET", ts.URL+"/api/files?"+q, nil, nil)
+		defer resp.Body.Close()
+		var out map[string]any
+		json.NewDecoder(resp.Body).Decode(&out)
+		paths := []string{}
+		nodes, _ := out["nodes"].([]any)
+		for _, n := range nodes {
+			paths = append(paths, n.(map[string]any)["path"].(string))
+		}
+		sort.Strings(paths)
+		return resp.StatusCode, strings.Join(paths, ",")
+	}
+
+	want := "files/W/deep/nota-d.txt,files/W/nota-w.txt"
+	for _, q := range []string{"find=*nota*&in=files/W", "search=1&name=has:nota&in=files/W/"} {
+		if code, got := get(q); code != http.StatusOK || got != want {
+			t.Errorf("?%s = %d %s, want %s", q, code, got, want)
+		}
+	}
+	if _, got := get("find=*nota*"); strings.Count(got, ",") != 3 {
+		t.Errorf("no ?in= = %s, want all four", got)
+	}
+	for q, code := range map[string]int{
+		"find=*nota*&in=files/none":        http.StatusNotFound,
+		"find=*nota*&in=files/nota.txt":    http.StatusNotFound,
+		"find=*nota*&in=files/../../bob":   http.StatusForbidden,
+		"search=1&name=has:a&in=other/dir": http.StatusForbidden,
+	} {
+		if got, _ := get(q); got != code {
+			t.Errorf("?%s = %d, want %d", q, got, code)
+		}
+	}
+}

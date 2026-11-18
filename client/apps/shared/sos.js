@@ -660,6 +660,28 @@
         close.focus();
     }
 
+    // ---- the tip -----------------------------------------------------------
+
+    // What the two presses do, for old and new users alike. Comes back on
+    // every launcher visit until "Don't show again" (per device, like every
+    // help card). Never on top of another dialog, a red screen or the lock:
+    // the launcher's own intro card goes first.
+    var TIP_KEY = 'nayive-sos-tip';
+
+    function tip()
+    {
+        var seen;
+        try { seen = localStorage.getItem( TIP_KEY ); } catch( e ) { seen = '1'; }   // no storage: never nag
+        if( seen === '1' ) return;
+        setTimeout( function wait()
+        {
+            if( document.querySelector( 'dialog.panel[open], .sos-screen, html.ayni-locked' ) ) { setTimeout( wait, 1000 ); return; }
+            var off = ! ( settings && settings.contacts && settings.contacts.length );
+            Ayni.help.show( { key: TIP_KEY, autoShow: true, title: T( 'sos.title' ),
+                              lead: T( 'sos.tip' ) + ( off ? '\n\n' + T( 'sos.tipOff' ) : '' ) } );
+        }, 1500 );
+    }
+
     // ---- start -------------------------------------------------------------
 
     document.addEventListener( 'DOMContentLoaded', function ()
@@ -674,6 +696,7 @@
                 showButton();
                 addSettingsButton();
                 if( j.watch > 0 && ! document.querySelector( '.sos-screen' ) ) watch( j.watch );
+                else tip();
             } ).catch( function () {} );
         } );
     } );

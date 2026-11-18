@@ -173,6 +173,7 @@ try
             localStorage.setItem( 'balata-coach-seen', '1' );
             localStorage.setItem( 'nayive-install-snooze', 'never' );
             localStorage.setItem( 'balata-intro-dismiss:launcher', '1' );
+            localStorage.setItem( 'nayive-sos-tip', '1' );
             localStorage.setItem( 'balata-intro-dismiss:desktop', '1' );
             localStorage.setItem( '__ptr', ${JSON.stringify( JSON.stringify( { fine, coarse } ) )} );
             if( ${vv} ) localStorage.setItem( '__vv', '1' ); else localStorage.removeItem( '__vv' );

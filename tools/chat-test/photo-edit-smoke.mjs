@@ -41,8 +41,8 @@ await c.evaluate( `( async () => {
     return true; } )()` );
 const IMG = "document.querySelector( 'dialog.panel[open] .prev-one' )";
 ok( await c.until( IMG + " && " + IMG + ".naturalWidth === 400" ), "the dropped photo shows, 400 wide" );
-const tools = await c.evaluate( `[ ...document.querySelectorAll( 'dialog.panel[open] .prev-tools .btn' ) ].map( b => b.title )` );
-ok( tools.length === 2, "two buttons under it", tools );
+const tools = await c.evaluate( `[ ...document.querySelectorAll( 'dialog.panel[open] .prev-tools .btn' ) ].map( b => b.dataset.tip )` );
+ok( tools.length === 3 && tools[ 2 ] === "Read text", "three buttons under it: Crop, Rotate, Read text", tools );
 const mid = await c.evaluate( `( () => { const p = document.querySelector( '.prev-tools' ).getBoundingClientRect(), s = document.querySelector( 'dialog.panel[open]' ).getBoundingClientRect();
     return Math.abs( ( p.left + p.right ) / 2 - ( s.left + s.right ) / 2 ) < 2 && document.querySelector( '.prev-tools' ).children[ 0 ].getBoundingClientRect().left > s.left + 40; } )()` );
 ok( mid, "they are centred" );

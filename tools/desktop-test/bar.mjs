@@ -132,6 +132,7 @@ try
         await until( "document.readyState === 'complete'" );
         await ev( `( localStorage.clear(), localStorage.setItem( 'balata-coach-seen', '1' ), localStorage.setItem( 'nayive-install-snooze', 'never' ),
                      localStorage.setItem( 'balata-intro-dismiss:launcher', '1' ),
+                     localStorage.setItem( 'nayive-sos-tip', '1' ),
                      localStorage.setItem( 'balata-desktop', ${JSON.stringify( JSON.stringify( Object.assign( { mode: "always" }, settings ) ) )} ), true )` );
         await reload();
         for( let i = 0; i < n; i++ ) await openWin( url( i ) );

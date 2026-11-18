@@ -389,7 +389,7 @@
             if( ! photo ) { var reply = C.takeReply(); C.nightGate( conv, function ( silent ) { upload( file, "file", "", reply, null, silent ); } ); }
             else if( /\.jpe?g$/i.test( f.name ) && C.canEditPhotos() ) previewPhotos( [ file ], function ( caption, reply, url, silent )
             {
-                measure( file ).then( function ( dims )
+                return measure( file ).then( function ( dims )
                 {
                     C.sendMsg( { kind: "photo", ref: f.path, text: caption, replyTo: reply, silent: silent || undefined,
                                  w: dims ? dims[ 0 ] : 0, h: dims ? dims[ 1 ] : 0 }, conv,
@@ -401,68 +401,84 @@
         catch( e ) { C.fail( e ); }
     };
 
-    // WhatsApp's step before sending photos: see them, add a line, send.
+    // WhatsApp's step before sending photos: see them, add a line, send -
+    // Ayni's (AyniPhoto.review): Crop and Rotate for one photo, Read text.
     // sendOne( caption, replyTo, previewUrl, silent ): sends a single photo another way.
-    // One photo: Recortar and Girar under it, before it goes.
+    // Read text, then Text: only the text goes, as messages (a long one in
+    // parts, splitText); Both: the photo with the text as its caption, and
+    // what does not fit in one message after it.
     function previewPhotos( files, sendOne )
     {
-        var body = h( "div" );
-        files = files.slice();
-        var urls = files.map( function ( f ) { return URL.createObjectURL( f ); } );
-        var edited = false, busy = false;
-        if( files.length === 1 )
-        {
-            var one = h( "img", { class: "prev-one", attrs: { src: urls[ 0 ], alt: "" } } );
-            // The edit replaces the photo here; it is what goes.
-            var take = function ( f )
+        var conv = S.open;
+        AyniPhoto.review( files, {
+            title:   files.length === 1 ? T( "chat.photo" ) : C.TF( "chat.nPhotos", { n: files.length } ),
+            go:      { tip: T( "chat.sendMsg" ), icon: "send" },
+            caption: T( "chat.addCaption" ),
+            ocr:     S.mode === "owner" ? NayiveUI.ocr() : null,     // a guest has no session: language/ is not public
+            nav:     { push: C.pushNav, pop: C.popNav },
+            track:   C.trackSheet,
+            onGo:    function ( out )
             {
-                busy = false;
-                if( ! f ) return;
-                files[ 0 ] = f;
-                edited = true;
-                URL.revokeObjectURL( urls[ 0 ] );
-                urls[ 0 ] = URL.createObjectURL( f );
-                one.src = urls[ 0 ];
-            };
-            var failed = function () { busy = false; C.toast( "err", "chat.failed" ); };
-            body.appendChild( one );
-            body.appendChild( h( "div", { class: "prev-tools" },
-                C.btn( "crop", "imgEd.crop", function () { if( ! busy ) cropPhoto( files[ 0 ], take ); } ),
-                C.btn( "rotate-cw", "imgEd.rotate", function ()
+                // The message box's limit (compose.js send): over it the server refuses
+                // the photo's caption. The sheet stays open, the caption in its box.
+                if( Array.from( out.caption ).length > 4000 ) { C.toast( "warn", "chat.tooLong" ); return false; }
+            }
+        } ).then( function ( out )
+        {
+            if( ! out || S.open !== conv ) return;
+            var reply = C.takeReply(), caption = out.caption;     // the box's words stay (J3)
+            var parts = out.text ? splitText( out.text, 4000 ) : [];
+            if( parts.length && out.files.length ) caption = parts.shift();
+            C.nightGate( conv, function ( silent )
+            {
+                // One after the other, each once the one before is in the outbox.
+                async function texts( answer )
                 {
-                    if( busy ) return;
-                    busy = true;
-                    loadImg( files[ 0 ] ).then( function ( img ) { return redrawPhoto( files[ 0 ], img, null, true ); } ).then( take, failed );
-                } ) ) );
-        }
-        else
-        {
-            var grid = h( "div", { class: "prev-grid" } );
-            urls.forEach( function ( u ) { grid.appendChild( h( "img", { attrs: { src: u, alt: "" } } ) ); } );
-            body.appendChild( grid );
-        }
-        var cap = h( "input", { class: "input", attrs: { type: "text", placeholder: T( "chat.addCaption" ), "aria-label": T( "chat.addCaption" ) } } );
-        body.appendChild( h( "div", { class: "field" }, cap ) );
-        var go = Ayni.dialogButton( "primary", T( "chat.sendMsg" ), "send" );
-        var sh = C.sheet( files.length === 1 ? T( "chat.photo" ) : C.TF( "chat.nPhotos", { n: files.length } ), body, go );
-        function send()
-        {
-            // The message box's limit (compose.js send): over it the server refuses
-            // the photo's caption. The sheet stays open, the caption in its box.
-            if( Array.from( cap.value.trim() ).length > 4000 ) { C.toast( "warn", "chat.tooLong" ); return; }
-            if( busy ) return;                                  // a turn still being drawn
-            sh.close();
-            var reply = C.takeReply(), caption = cap.value.trim();     // the box's words stay (J3)
-            C.nightGate( S.open, function ( silent )
-            {
+                    for( var i = 0; i < parts.length; i++ )
+                    {
+                        var body = { kind: "text", text: parts[ i ], replyTo: i ? 0 : answer };
+                        if( silent ) body.silent = true;
+                        await C.sendMsg( body, conv );
+                    }
+                }
+                if( ! out.files.length ) { texts( reply ); return; }
                 // Edited here: sent as a new file - sendOne's file is the unedited one.
-                if( sendOne && ! edited ) { sendOne( caption, reply, urls[ 0 ], silent ); return; }
-                files.forEach( function ( f, i ) { upload( f, "photo", i === 0 ? caption : "", i === 0 ? reply : 0, urls[ i ], silent ); } );
+                if( sendOne && ! out.edited ) { Promise.resolve( sendOne( caption, reply, out.urls[ 0 ], silent ) ).then( function () { texts( 0 ); } ); return; }
+                // The rest of the text after the photos, not above them.
+                Promise.all( out.files.map( function ( f, i ) { return upload( f, "photo", i === 0 ? caption : "", i === 0 ? reply : 0, out.urls[ i ], silent ); } ) )
+                    .then( function () { if( parts.length ) texts( 0 ); } );
             } );
+        } );
+    }
+
+    // A long text in parts of at most `max` characters (counted as the server
+    // does, chat.go chatMaxText: runes), cut at the ends of paragraphs; a
+    // paragraph longer than that at its last space before the limit.
+    function splitText( text, max )
+    {
+        var out = [], cur = "";
+        function add( p )
+        {
+            if( ! p ) return;
+            var both = cur ? cur + "\n\n" + p : p;
+            if( Array.from( both ).length <= max ) { cur = both; return; }
+            if( cur ) out.push( cur );
+            cur = p;
         }
-        go.addEventListener( "click", send );
-        cap.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); send(); } } );
-        setTimeout( function () { cap.focus(); }, 50 );
+        text.split( /\n{2,}/ ).forEach( function ( para )
+        {
+            var chars = Array.from( para.trim() );
+            while( chars.length > max )
+            {
+                var at = chars.lastIndexOf( " ", max );
+                if( at <= 0 ) at = max;
+                add( chars.slice( 0, at ).join( "" ).trim() );
+                chars = Array.from( chars.slice( at ).join( "" ).trim() );
+            }
+            add( chars.join( "" ) );
+        } );
+        if( cur ) out.push( cur );
+        return out;
     }
 
     // One photo or file: shown at once, then sent with a progress figure.
@@ -524,7 +540,8 @@
             if( temp ) { temp.progress = null; temp._retry = function () { upload( file, kind === "photo" ? "photo" : "file", caption, replyTo, localUrl, silent ); }; C.failTemp( temp ); }
             C.fail( { status: status } );
         }
-        xhr.send( blob );
+        // Settles once it is up or failed (previewPhotos sends a text after it).
+        return new Promise( function ( done ) { xhr.addEventListener( "loadend", function () { done(); } ); xhr.send( blob ); } );
     }
 
     function measure( blob )
@@ -538,165 +555,15 @@
             img.src = u;
         } );
     }
-
-    // ---------------------------------------------------------------------
-    // Recortar / Girar a photo before it goes
-    // ---------------------------------------------------------------------
-
-    var EDIT_MAX = 4096;                  // longest side of an edit: upload() shrinks it later; an iPhone canvas stops near 16.7 MP
-
-    // A picture, drawn the way it is seen (the browser applies its Exif turn).
-    function loadImg( blob )
-    {
-        return new Promise( function ( ok, no )
-        {
-            var img = new Image();
-            var u = URL.createObjectURL( blob );
-            img.onload  = function () { URL.revokeObjectURL( u ); ok( img ); };
-            img.onerror = function () { URL.revokeObjectURL( u ); no( new Error( "load" ) ); };
-            img.src = u;
-        } );
-    }
-
-    // The part `box` of `img` (all of it when null), a quarter turn right when
-    // `turn`, as a new JPEG File - with `file`'s Exif (its date, its place).
-    async function redrawPhoto( file, img, box, turn )
-    {
-        box = box || { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
-        var k = Math.min( 1, EDIT_MAX / Math.max( box.w, box.h ) );
-        var w = Math.max( 1, Math.round( box.w * k ) ), ht = Math.max( 1, Math.round( box.h * k ) );
-        var c = document.createElement( "canvas" );
-        c.width  = turn ? ht : w;
-        c.height = turn ? w : ht;
-        var g = c.getContext( "2d" );
-        if( turn ) { g.translate( ht, 0 ); g.rotate( Math.PI / 2 ); }
-        g.drawImage( img, box.x, box.y, box.w, box.h, 0, 0, w, ht );
-        var blob = await new Promise( function ( ok ) { c.toBlob( ok, "image/jpeg", 0.92 ); } );
-        if( ! blob ) throw new Error( "render" );
-        if( AyniPhoto.isJpeg( file ) ) blob = await AyniPhoto.copyExif( file, blob, c.width, c.height );
-        return new File( [ blob ], AyniPhoto.jpegName( file.name || "foto" ), { type: "image/jpeg" } );
-    }
-
-    // Recortar: the photo full screen, a box over it - a corner sizes it,
-    // inside it moves it. ✓ keeps what is in the box: done( file ); × leaves
-    // the photo as it was.
-    function cropPhoto( file, done )
-    {
-        var okB = h( "button", { class: "btn on-media", attrs: { type: "button", "data-tip": T( "imgEd.crop" ), "aria-label": T( "imgEd.crop" ) } }, C.ic( "check" ) );
-        var f = fullLayer( T( "imgEd.crop" ), okB );
-        f.layer.classList.add( "cropper" );
-        var url = URL.createObjectURL( file );
-        var img = h( "img", { attrs: { src: url, alt: "", draggable: "false" } } );
-        var box = h( "div", { class: "crop-box" }, [ "nw", "ne", "sw", "se" ].map( function ( c ) { return h( "span", { class: c, attrs: { "data-c": c } } ); } ) );
-        box.hidden = true;
-        f.canvas.appendChild( img );
-        f.canvas.appendChild( box );
-
-        var r = { x: 0, y: 0, w: 1, h: 1 };        // the box, as parts of the picture
-        var MIN = 48;                               // px on screen: the box never smaller
-        function place()
-        {
-            var ib = img.getBoundingClientRect(), cb = f.canvas.getBoundingClientRect();
-            if( ! ib.width ) return;
-            box.style.left   = ( ib.left - cb.left + r.x * ib.width ) + "px";
-            box.style.top    = ( ib.top - cb.top + r.y * ib.height ) + "px";
-            box.style.width  = ( r.w * ib.width ) + "px";
-            box.style.height = ( r.h * ib.height ) + "px";
-            box.hidden = false;
-        }
-        img.onload  = place;
-        img.onerror = function () { f.close(); C.toast( "err", "chat.failed" ); };
-        window.addEventListener( "resize", place );
-        f.layer._onClose = function () { window.removeEventListener( "resize", place ); URL.revokeObjectURL( url ); };
-
-        function clamp( v, lo, hi ) { return Math.max( lo, Math.min( hi, v ) ); }
-        var drag = null;
-        box.addEventListener( "pointerdown", function ( e )
-        {
-            if( e.button > 0 || drag ) return;
-            e.preventDefault();
-            drag = { id: e.pointerId, c: e.target.getAttribute( "data-c" ) || "", x0: e.clientX, y0: e.clientY,
-                     r: { x: r.x, y: r.y, w: r.w, h: r.h }, ib: img.getBoundingClientRect() };
-            box.setPointerCapture( e.pointerId );
-        } );
-        box.addEventListener( "pointermove", function ( e )
-        {
-            if( ! drag || e.pointerId !== drag.id ) return;
-            var o = drag.r;
-            var dx = ( e.clientX - drag.x0 ) / drag.ib.width, dy = ( e.clientY - drag.y0 ) / drag.ib.height;
-            var mw = Math.min( 1, MIN / drag.ib.width ), mh = Math.min( 1, MIN / drag.ib.height );
-            if( ! drag.c ) r = { x: clamp( o.x + dx, 0, 1 - o.w ), y: clamp( o.y + dy, 0, 1 - o.h ), w: o.w, h: o.h };
-            else
-            {
-                var x1 = o.x, y1 = o.y, x2 = o.x + o.w, y2 = o.y + o.h;
-                if( drag.c.indexOf( "w" ) >= 0 ) x1 = clamp( x1 + dx, 0, x2 - mw ); else x2 = clamp( x2 + dx, x1 + mw, 1 );
-                if( drag.c.indexOf( "n" ) >= 0 ) y1 = clamp( y1 + dy, 0, y2 - mh ); else y2 = clamp( y2 + dy, y1 + mh, 1 );
-                r = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
-            }
-            place();
-        } );
-        function end( e ) { if( drag && e.pointerId === drag.id ) drag = null; }
-        box.addEventListener( "pointerup", end );
-        box.addEventListener( "pointercancel", end );
-
-        var busy = false;
-        okB.addEventListener( "click", function ()
-        {
-            if( busy || ! img.naturalWidth ) return;
-            if( ! r.x && ! r.y && r.w === 1 && r.h === 1 ) { f.close(); return; }     // the box not moved: nothing to cut
-            busy = true;
-            var W = img.naturalWidth, H = img.naturalHeight;
-            var cut = { x: Math.round( r.x * W ), y: Math.round( r.y * H ) };
-            cut.w = Math.max( 1, Math.min( W - cut.x, Math.round( r.w * W ) ) );
-            cut.h = Math.max( 1, Math.min( H - cut.y, Math.round( r.h * H ) ) );
-            redrawPhoto( file, img, cut, false ).then( function ( out ) { f.close(); done( out ); },
-                                                       function () { busy = false; C.toast( "err", "chat.failed" ); } );
-        } );
-    }
-
     // ---------------------------------------------------------------------
     // full screen: photos (with prev/next), a map
     // ---------------------------------------------------------------------
 
-    // A full screen opened from a dialog (the photo sheet's crop) lives in
-    // it, as a popover in the top layer: outside it, the modal dialog would
-    // cover it and keep its presses.
-    function onTopOfDialog( layer )
-    {
-        var dlg = [].slice.call( document.querySelectorAll( "dialog.panel[open]" ) ).pop();
-        if( ! dlg ) { document.body.appendChild( layer ); return; }
-        layer.popover = "manual";
-        dlg.appendChild( layer );
-        layer.showPopover();
-    }
-
+    // A full screen, Ayni's (AyniPhoto.fullLayer): over the page, or inside
+    // the open dialog; Back closes it.
     function fullLayer( title, extra )
     {
-        var closeB = h( "button", { class: "btn on-media", attrs: { type: "button", "data-tip": T( "ui.close" ), "aria-label": T( "ui.close" ) } } );
-        closeB.appendChild( C.ic( "x" ) );
-        var actions = h( "div", { class: "editor-actions" }, extra || null, closeB );
-        var titleEl = h( "div", { class: "editor-title", text: title } );
-        var canvas  = h( "div", { class: "editor-canvas" } );
-        var layer = h( "div", { class: "editor-backdrop full open", attrs: { role: "dialog", "aria-modal": "true" } }, h( "div", { class: "editor-bar" }, titleEl, actions ), canvas );
-        onTopOfDialog( layer );
-        function close() { layer.remove(); document.removeEventListener( "keydown", key, true ); if( layer._onClose ) layer._onClose(); }
-        // Keys belong to whatever is on top: the editor or a sheet opened from
-        // here answers its own Escape.
-        function onTop()
-        {
-            for( var n = layer.nextElementSibling; n; n = n.nextElementSibling )
-                if( n.matches( ".photo-editor, .full, dialog.panel[open], .ctx" ) ) return false;
-            return true;
-        }
-        function key( e )
-        {
-            if( ! onTop() ) return;
-            if( e.key === "Escape" ) { e.preventDefault(); C.popNav( "full" ); close(); } else if( layer._onKey ) layer._onKey( e );
-        }
-        closeB.addEventListener( "click", function () { C.popNav( "full" ); close(); } );
-        document.addEventListener( "keydown", key, true );
-        C.pushNav( "full", close );
-        return { layer: layer, canvas: canvas, title: titleEl, close: function () { C.popNav( "full" ); close(); } };
+        return AyniPhoto.fullLayer( title, extra, { push: C.pushNav, pop: C.popNav } );
     }
 
     // ---------------------------------------------------------------------

@@ -79,7 +79,7 @@ export const QUIRKS =
     {
         id: 'imageInsertAsync', kind: 'note', value: true,
         what: 'exec( insertImage ) is refused ("insertImage is asynchronous; use executeImageCommand"): the bundle entry exports executeImageCommand (tools/build-docx-editor.sh) and Write awaits it.',
-        since: '2026-09-19', verifiedOn: '2.21.0', site: 'insertPickedImage'
+        since: '2026-09-19', verifiedOn: '2.21.0', site: 'insertImageFile'
     },
     {
         id: 'tableBordersOnSelectedCells', kind: 'api', value: true,

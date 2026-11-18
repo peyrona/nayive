@@ -242,7 +242,7 @@ function sbChanged()
 
     if( ! spec ) { count.hidden = true; return; }
 
-    const key = JSON.stringify( spec );
+    const key = JSON.stringify( [ spec, searchScope() ] );
     count.hidden = false;
     if( sbPreview && sbPreview.key === key ) { sbShowCount( sbPreview ); return; }
 
@@ -256,7 +256,7 @@ async function sbFetchCount( spec, key )
     const seq = ++sbSeq;
     try
     {
-        const r = await AyniNet.search( spec, true );
+        const r = await AyniNet.search( spec, true, searchScope() );
         if( seq !== sbSeq ) return;
         sbPreview = { key: key, nodes: pruneNodes( r.nodes || [] ), truncated: !! r.truncated };
         sbShowCount( sbPreview );
@@ -339,7 +339,7 @@ function applySearchBuilder()
                   summary: sbDescribe( d ), nFilters: sbFilterCount( d ) };
     showAdvSearchBox();
 
-    const key = JSON.stringify( spec );
+    const key = JSON.stringify( [ spec, searchScope() ] );
     if( sbPreview && sbPreview.key === key )        // the live count already fetched these
     {
         ++searchSeq;

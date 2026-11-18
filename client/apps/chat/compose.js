@@ -1478,6 +1478,14 @@
     {
         Array.from( sheets ).forEach( function ( s ) { if( s.conv && s.conv !== conv ) s.close(); } );   // opened with no chat: not one's
     };
+    // A sheet made elsewhere (the photo step, AyniPhoto.review) goes the
+    // same way: close() closes it; call the returned function once it is closed.
+    C.trackSheet = function ( close )
+    {
+        var me = { conv: S.open, close: close };
+        sheets.add( me );
+        return function () { sheets.delete( me ); };
+    };
 
     C.showReactions = function ( m )
     {

@@ -1984,6 +1984,11 @@
             .then( function ( me ) {
                 if( ! me || ! me.user ) return;
 
+                // The admin has no launcher and no apps: its page is the admin panel
+                // (login.html sends it there; this catches the start URL, a bookmark).
+                // Before sendLeft: another account's parked saves never go up as admin.
+                if( me.role === 'admin' ) { location.replace( 'admin.html' ); return; }
+
                 // The ACCOUNT's language beats this device's, so a language
                 // picked on the phone lands here. adopt() reloads when it
                 // changes anything - then there is nothing else worth doing on

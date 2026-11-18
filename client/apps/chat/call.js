@@ -49,7 +49,33 @@
     // tz: this page's time zone - the others are offered "without sound" when
     // it is night here (compose.js nightAsk; the server's zonesFor).
     var myZone = Ayni.dates.zone( "" );
-    C.waitQuery = function ( w ) { return "&dev=" + S.dev + "&s=" + ( w || S ).sigSeen + ( myZone ? "&tz=" + encodeURIComponent( myZone ) : "" ); };
+    // pe: the tag of this device's push endpoint (server/go/chat.go pageTag) -
+    // while this page waits, the server sends that device no Chat push, as it
+    // shows the message itself; every other device of the person still gets one.
+    // Looked up again on each wait: a subscription can come or change later.
+    var pageTag = "", tagBusy = false;   // busy: one look at a time (ready may never resolve)
+    function refreshPageTag()
+    {
+        if( tagBusy || ! navigator.serviceWorker || ! window.crypto || ! crypto.subtle ) return;
+        tagBusy = true;
+        navigator.serviceWorker.ready
+            .then( function ( r ) { return r.pushManager ? r.pushManager.getSubscription() : null; } )
+            .then( function ( sub ) {
+                if( ! sub ) { pageTag = ""; return; }
+                return crypto.subtle.digest( "SHA-256", new TextEncoder().encode( sub.endpoint ) ).then( function ( d ) {
+                    pageTag = Array.prototype.map.call( new Uint8Array( d ).slice( 0, 8 ),
+                        function ( b ) { return ( b < 16 ? "0" : "" ) + b.toString( 16 ); } ).join( "" );
+                } );
+            } )
+            .catch( function () {} )
+            .then( function () { tagBusy = false; } );
+    }
+    refreshPageTag();
+    C.waitQuery = function ( w )
+    {
+        refreshPageTag();
+        return "&dev=" + S.dev + "&s=" + ( w || S ).sigSeen + ( myZone ? "&tz=" + encodeURIComponent( myZone ) : "" ) + ( pageTag ? "&pe=" + pageTag : "" );
+    };
 
     // ---------------------------------------------------------------------
     // what the server says: the calls (summary and every wait) and signals

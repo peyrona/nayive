@@ -141,7 +141,7 @@ func (c *chatCall) inList() []chatCallIn {
 type chatCalls struct {
 	byID   map[string]*chatCall
 	sigs   []*chatSig
-	seq    int64
+	seq    int64                  // the last signal's number (starts at the clock: see cs)
 	waits  map[string]int         // device -> open waits
 	seen   map[string]time.Time   // device -> last seen
 	starts map[string][]time.Time // a person's recent calls (rate limit)
@@ -149,9 +149,15 @@ type chatCalls struct {
 	member func(conv, pid string) bool
 }
 
+// The signal numbers start at the clock (ms), not at 0: a page left open
+// across a restart still sends the number it read last ("s" on its wait), and
+// everything at or below it is dropped unread (ack, sigsFor, call.js onCalls).
+// Counting from 0 again, every call of that page stuck on "Connecting" until
+// the count passed its old number (2026-11-17).
 func (o *chatOwner) cs() *chatCalls {
 	if o.calls == nil {
 		o.calls = &chatCalls{
+			seq:    time.Now().UnixMilli(),
 			byID:   make(map[string]*chatCall),
 			waits:  make(map[string]int),
 			seen:   make(map[string]time.Time),

@@ -656,7 +656,8 @@
             // open all day showed a stale agenda AND could upload it over a contact added on
             // the phone. The guard keeps the read out of an open dialog: loadContacts() ends
             // in render(), which would repaint under a detail / edit / duplicates sheet.
-            AyniBoot.wireRefresh( { store: store, read: loadContacts } );
+            // watch: a contact saved on another device shows here by itself (api_watch.go).
+            AyniBoot.wireRefresh( { store: store, read: loadContacts, watch: CONTACTS_FILE } );
 
             // Probe the API, then load. On a failed probe the shared helper bounces to the
             // sign-in page only when we are really online with nothing cached; otherwise it

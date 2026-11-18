@@ -709,7 +709,7 @@
         var av = c ? C.withDot( C.avatar( c.id, u.name ), c.id ) : C.avatar( "u:" + u.user, u.name, null, null );
         var face = h( "button", { class: "face sm", attrs: { type: "button", "data-tip": T( "chat.changePhoto" ), "aria-label": T( "chat.changePhoto" ) },
                                   on: { click: function () { userFace( u.user ); } } }, av, h( "span", { class: "cam" }, C.ic( "camera" ) ) );
-        return h( "div", { class: "row split" }, face,
+        return h( "div", { class: "row two-tap" }, face,
             h( "button", { class: "body", attrs: { type: "button" }, on: { click: function () { C.chatWithUser( u.user ); } } },
                 h( "span", { class: "name", text: u.name } ) ) );
     }

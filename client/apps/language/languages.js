@@ -11,7 +11,7 @@ export const LANGS = [ 'es', 'fr', 'zh', 'de', 'pt' ];
 
 // Speech voices (Web Speech API), OCR data (tesseract.js) and Tatoeba codes.
 export const VOICE    = { es: 'es-ES', fr: 'fr-FR', zh: 'zh-CN', de: 'de-DE', pt: 'pt-PT' };
-export const OCR      = { es: 'spa', fr: 'fra', zh: 'chi_sim', de: 'deu', pt: 'por' };
+export const OCR      = { es: 'spa', fr: 'fra', zh: 'chi_sim', de: 'deu', pt: 'por', en: 'eng' };   // en: for Photos' Read text
 export const ISO639_3 = { es: 'spa', fr: 'fra', zh: 'cmn', de: 'deu', pt: 'por' };
 
 // "es-ES" -> "es", "zh-Hans-CN" -> "zh", "EN" -> "en"; null when not ours.

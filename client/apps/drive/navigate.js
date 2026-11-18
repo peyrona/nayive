@@ -12,6 +12,7 @@ function renderBreadcrumb()
     // the way back. Every crumb but the open folder takes dropped items
     // (menus.js): the way to move something up.
     const searching = isSearching();
+    const scope     = searching && ! bigMode ? searchScope() : '';    // "Biggest files" is all of Home
     const rootCrumb = document.createElement( 'span' );
     rootCrumb.className    = 'crumb crumb-root' + (currentFolder === FS_ROOT && ! searching ? ' current' : '');
     rootCrumb.textContent  = homeName();
@@ -19,7 +20,8 @@ function renderBreadcrumb()
     rootCrumb.addEventListener( 'click', function() { navigateTo( FS_ROOT ); } );
     host.appendChild( rootCrumb );
 
-    if( searching )
+    // A search: Home / the folder searched (when it is not Home) / the results.
+    function searchCrumbs()
     {
         const sep = document.createElement( 'span' );
         sep.className   = 'crumb-sep';
@@ -32,8 +34,8 @@ function renderBreadcrumb()
         if( bigMode )        bigFilesCrumbs( host, info );      // listing.js
         else if( advSearch ) advSearchCrumbs( host, info );     // advsearch.js
         else                 host.appendChild( info );
-        return;
     }
+    if( searching && ! scope ) { searchCrumbs(); return; }
 
     // "shared/..." is not under FS_ROOT (files/): it is the other virtual
     // root, so its crumbs are built from the real path, and the first
@@ -53,7 +55,7 @@ function renderBreadcrumb()
         host.appendChild( sep );
 
         const crumb = document.createElement( 'span' );
-        crumb.className    = 'crumb' + (i === segs.length - 1 ? ' current' : '');
+        crumb.className    = 'crumb' + (i === segs.length - 1 && ! searching ? ' current' : '');
         crumb.dataset.path = path;
         // "shared" -> its Spanish name; "shared/<slug>" -> the grant's real
         // title ("le-nord" -> "Le Nord"); anything deeper is a real folder
@@ -67,6 +69,7 @@ function renderBreadcrumb()
         crumb.addEventListener( 'click', function() { navigateTo( path ); } );
         host.appendChild( crumb );
     });
+    if( searching ) searchCrumbs();
 }
 
 // The crumb of a folder the user shared gets the same people / globe icon
@@ -149,6 +152,7 @@ function clearSearch()
     searchHits      = null;
     searchTruncated = false;
     bigMode         = false;
+    searchAll       = false;
     if( searchTimer ) { clearTimeout( searchTimer ); searchTimer = null; }
     const el = document.getElementById( 'searchInput' );
     if( el ) el.value = '';

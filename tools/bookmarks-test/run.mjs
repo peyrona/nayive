@@ -91,7 +91,7 @@ async function signIn( c )
 {
     await nav( c, `${BASE}/nayive/login.html`, "/nayive/login.html" );
     await c.evaluate( `localStorage.setItem('balata-coach-seen','1'); localStorage.setItem('nayive-install-snooze','never');
-        localStorage.setItem('balata-intro-dismiss:launcher','1'); localStorage.setItem('balata-intro-dismiss:bookmarks','1');
+        localStorage.setItem('balata-intro-dismiss:launcher','1'); localStorage.setItem('nayive-sos-tip','1'); localStorage.setItem('balata-intro-dismiss:bookmarks','1');
         localStorage.setItem('ayni-lang','en');
         fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:'test',password:'test'})}).then(r=>r.status)` );
 }

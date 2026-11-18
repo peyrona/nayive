@@ -1603,8 +1603,19 @@
         E.$( "cAttach" ).addEventListener( "click", function ( e ) { e.stopPropagation(); toggleAttach(); } );
         E.$( "cFileInput" ).addEventListener( "change", function ( e )
         {
-            addFiles( [].map.call( e.target.files || [], upFile ) );
+            var list = [].slice.call( e.target.files || [] ), pictures = e.target.accept === "image/*";
             e.target.value = "";
+            if( ! pictures || ! list.length || list.length > 10 ) { addFiles( list.map( upFile ) ); return; }
+            // Pictures from the gallery: Ayni's photo step first (AyniPhoto.review:
+            // Crop, Rotate, Read text). After Read text, Text puts only the text
+            // in the mail, at the caret; Both attaches the pictures too.
+            var mine = C;
+            AyniPhoto.review( list, { ocr: NayiveUI.ocr(), go: { tip: E.T( "mail.attach" ), icon: "clip" } } ).then( function ( out )
+            {
+                if( ! out || C !== mine ) return;
+                if( out.files.length ) addFiles( out.files.map( upFile ) );
+                if( out.text && ed ) { ed.focus(); ed.insertPlainText( out.text, false ); paintEmpty(); changed(); }
+            } );
         } );
         // the clip's panel closes on a tap elsewhere, Escape, or a resize
         document.addEventListener( "click", function ( e ) { if( attach && ! attach.contains( e.target ) ) closeAttach(); } );

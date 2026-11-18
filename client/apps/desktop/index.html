@@ -36,6 +36,10 @@
             .then( function ( me )
             {
                 if( ! me ) return;
+                // The admin has no desktop and no apps: its page is the admin panel
+                // (login.html sends it there; this catches the start URL, a bookmark).
+                // Before sendLeft: another account's parked saves never go up as admin.
+                if( me.role === 'admin' ) { location.replace( '../admin.html' ); return; }
                 if( ! me.must_set_password )
                 {
                     // What an editor closed meanwhile left parked on this device

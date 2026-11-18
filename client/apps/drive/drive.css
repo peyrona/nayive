@@ -95,6 +95,7 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
    sideways while each row's border / hover still spans the full width. */
 .list-rows { min-width: 100%; width: max-content; }
 .empty-hint { padding: 40px 20px; text-align: center; color: var(--text-dim); font-size: 0.9rem; }
+.empty-hint .search-all { margin-top: 12px; }
 /* "Biggest files" (listing.js): the bin reminder over the rows. */
 .big-note { padding: 8px 14px 10px; color: var(--text-dim); font-size: 0.85rem; }
 

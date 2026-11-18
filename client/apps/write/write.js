@@ -2787,9 +2787,21 @@ function pickImage()
     document.getElementById( 'imgInput' ).click();
 }
 
+// A picked picture first goes through Ayni's photo step (AyniPhoto.review:
+// Crop, Rotate, Read text). After Read text, Text puts in only the text at
+// the caret - as a plain paste, its lines become paragraphs - and Both the
+// picture, then the text.
 async function insertPickedImage( file )
 {
     if( ! file || ! ready || ! editor ) return;
+    const out = await AyniPhoto.review( [ file ], { ocr: NayiveUI.ocr(), go: { tip: Ayni.t( 'write.tb.image' ), icon: 'check' } } );
+    if( ! out || ! ready || ! editor ) return;
+    if( out.files.length ) await insertImageFile( out.files[ 0 ] );
+    if( out.text ) runExec( { type: 'pasteWithoutFormatting', text: out.text } );
+}
+
+async function insertImageFile( file )
+{
 
     try
     {

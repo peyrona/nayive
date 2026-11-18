@@ -27,6 +27,9 @@
  * That is only possible when the source is itself a JPEG; a PNG or a HEIC has
  * no Exif to copy, and those photos arrive without a position.
  *
+ * review() is the step before a photo goes (Chat, Drive, Write, eMail,
+ * Translator...): see it, Crop, Rotate, Read text - it writes nothing.
+ *
  * It also holds what the image editors (Image, Chat) share: loading and
  * building the editor (loadEditor, newEditor - the editor itself is
  * ayni-image-editor.js), dataUrlBytes, keepExif() and the thumbnail an
@@ -632,6 +635,419 @@
         return cancel;
     }
 
+    //------------------------------------------------------------------------//
+    //  Before a photo goes: see it, Crop, Rotate, Read text  (review)
+    //------------------------------------------------------------------------//
+    //
+    // The crop, the turn and the full screen they use came from Chat
+    // (chat/media.js, 2026-11-18): every app that sends or uploads a photo
+    // now shows the same step. It writes NOTHING: review() resolves what the
+    // user chose and the app sends it its own way. A photo nobody touched is
+    // the very same File (its bytes go as they are); only an edit is drawn
+    // again (a JPEG with the original's Exif).
+
+    function h() { return Ayni.h.apply( null, arguments ); }
+    function ic( name )
+    {
+        var t = document.createElement( "template" );
+        t.innerHTML = Ayni.icon( name );
+        return t.content.firstChild;
+    }
+
+    var EDIT_MAX = 4096;                  // longest side of an edit: an upload shrinks it later; an iPhone canvas stops near 16.7 MP
+
+    // A picture, drawn the way it is seen (the browser applies its Exif turn).
+    function loadImg( blob )
+    {
+        return new Promise( function ( ok, no )
+        {
+            var img = new Image();
+            var u = URL.createObjectURL( blob );
+            img.onload  = function () { URL.revokeObjectURL( u ); ok( img ); };
+            img.onerror = function () { URL.revokeObjectURL( u ); no( new Error( "load" ) ); };
+            img.src = u;
+        } );
+    }
+
+    // The part `box` of `img` (all of it when null), a quarter turn right when
+    // `turn`, as a new JPEG File - with `file`'s Exif (its date, its place).
+    async function redrawPhoto( file, img, box, turn )
+    {
+        box = box || { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
+        var k = Math.min( 1, EDIT_MAX / Math.max( box.w, box.h ) );
+        var w = Math.max( 1, Math.round( box.w * k ) ), ht = Math.max( 1, Math.round( box.h * k ) );
+        var c = document.createElement( "canvas" );
+        c.width  = turn ? ht : w;
+        c.height = turn ? w : ht;
+        var g = c.getContext( "2d" );
+        if( turn ) { g.translate( ht, 0 ); g.rotate( Math.PI / 2 ); }
+        g.drawImage( img, box.x, box.y, box.w, box.h, 0, 0, w, ht );
+        var blob = await new Promise( function ( ok ) { c.toBlob( ok, "image/jpeg", 0.92 ); } );
+        if( ! blob ) throw new Error( "render" );
+        if( isJpeg( file ) ) blob = await copyExif( file, blob, c.width, c.height );
+        return new File( [ blob ], jpegName( file.name || "foto" ), { type: "image/jpeg" } );
+    }
+
+    // Recortar: the photo full screen, a box over it - a corner sizes it,
+    // inside it moves it. ✓ keeps what is in the box: done( file ); × leaves
+    // the photo as it was.
+    function cropPhoto( file, done, nav )
+    {
+        var okB = h( "button", { class: "btn on-media", attrs: { type: "button", "data-tip": Ayni.t( "imgEd.crop" ), "aria-label": Ayni.t( "imgEd.crop" ) } }, ic( "check" ) );
+        var f = fullLayer( Ayni.t( "imgEd.crop" ), okB, nav );
+        f.layer.classList.add( "cropper" );
+        var url = URL.createObjectURL( file );
+        var img = h( "img", { attrs: { src: url, alt: "", draggable: "false" } } );
+        var box = h( "div", { class: "crop-box" }, [ "nw", "ne", "sw", "se" ].map( function ( c ) { return h( "span", { class: c, attrs: { "data-c": c } } ); } ) );
+        box.hidden = true;
+        f.canvas.appendChild( img );
+        f.canvas.appendChild( box );
+
+        var r = { x: 0, y: 0, w: 1, h: 1 };        // the box, as parts of the picture
+        var MIN = 48;                               // px on screen: the box never smaller
+        function place()
+        {
+            var ib = img.getBoundingClientRect(), cb = f.canvas.getBoundingClientRect();
+            if( ! ib.width ) return;
+            box.style.left   = ( ib.left - cb.left + r.x * ib.width ) + "px";
+            box.style.top    = ( ib.top - cb.top + r.y * ib.height ) + "px";
+            box.style.width  = ( r.w * ib.width ) + "px";
+            box.style.height = ( r.h * ib.height ) + "px";
+            box.hidden = false;
+        }
+        img.onload  = place;
+        img.onerror = function () { f.close(); Ayni.toast( "err", Ayni.t( "ayni.photo.failed" ) ); };
+        window.addEventListener( "resize", place );
+        f.layer._onClose = function () { window.removeEventListener( "resize", place ); URL.revokeObjectURL( url ); };
+
+        function clamp( v, lo, hi ) { return Math.max( lo, Math.min( hi, v ) ); }
+        var drag = null;
+        box.addEventListener( "pointerdown", function ( e )
+        {
+            if( e.button > 0 || drag ) return;
+            e.preventDefault();
+            drag = { id: e.pointerId, c: e.target.getAttribute( "data-c" ) || "", x0: e.clientX, y0: e.clientY,
+                     r: { x: r.x, y: r.y, w: r.w, h: r.h }, ib: img.getBoundingClientRect() };
+            box.setPointerCapture( e.pointerId );
+        } );
+        box.addEventListener( "pointermove", function ( e )
+        {
+            if( ! drag || e.pointerId !== drag.id ) return;
+            var o = drag.r;
+            var dx = ( e.clientX - drag.x0 ) / drag.ib.width, dy = ( e.clientY - drag.y0 ) / drag.ib.height;
+            var mw = Math.min( 1, MIN / drag.ib.width ), mh = Math.min( 1, MIN / drag.ib.height );
+            if( ! drag.c ) r = { x: clamp( o.x + dx, 0, 1 - o.w ), y: clamp( o.y + dy, 0, 1 - o.h ), w: o.w, h: o.h };
+            else
+            {
+                var x1 = o.x, y1 = o.y, x2 = o.x + o.w, y2 = o.y + o.h;
+                if( drag.c.indexOf( "w" ) >= 0 ) x1 = clamp( x1 + dx, 0, x2 - mw ); else x2 = clamp( x2 + dx, x1 + mw, 1 );
+                if( drag.c.indexOf( "n" ) >= 0 ) y1 = clamp( y1 + dy, 0, y2 - mh ); else y2 = clamp( y2 + dy, y1 + mh, 1 );
+                r = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+            }
+            place();
+        } );
+        function end( e ) { if( drag && e.pointerId === drag.id ) drag = null; }
+        box.addEventListener( "pointerup", end );
+        box.addEventListener( "pointercancel", end );
+
+        var busy = false;
+        okB.addEventListener( "click", function ()
+        {
+            if( busy || ! img.naturalWidth ) return;
+            if( ! r.x && ! r.y && r.w === 1 && r.h === 1 ) { f.close(); return; }     // the box not moved: nothing to cut
+            busy = true;
+            var W = img.naturalWidth, H = img.naturalHeight;
+            var cut = { x: Math.round( r.x * W ), y: Math.round( r.y * H ) };
+            cut.w = Math.max( 1, Math.min( W - cut.x, Math.round( r.w * W ) ) );
+            cut.h = Math.max( 1, Math.min( H - cut.y, Math.round( r.h * H ) ) );
+            redrawPhoto( file, img, cut, false ).then( function ( out ) { f.close(); done( out ); },
+                                                       function () { busy = false; Ayni.toast( "err", Ayni.t( "ayni.photo.failed" ) ); } );
+        } );
+    }
+
+    // A full screen (a dark layer, its title and buttons on top) over the page,
+    // or inside the open dialog. nav: the page's own Back, if it has one.
+
+    // A full screen opened from a dialog (the photo sheet's crop) lives in
+    // it, as a popover in the top layer: outside it, the modal dialog would
+    // cover it and keep its presses.
+    function onTopOfDialog( layer )
+    {
+        var dlg = [].slice.call( document.querySelectorAll( "dialog.panel[open]" ) ).pop();
+        if( ! dlg ) { document.body.appendChild( layer ); return; }
+        layer.popover = "manual";
+        dlg.appendChild( layer );
+        layer.showPopover();
+    }
+
+    function fullLayer( title, extra, nav )
+    {
+        var closeB = h( "button", { class: "btn on-media", attrs: { type: "button", "data-tip": Ayni.t( "ayni.close" ), "aria-label": Ayni.t( "ayni.close" ) } } );
+        closeB.appendChild( ic( "close" ) );
+        var actions = h( "div", { class: "editor-actions" }, extra || null, closeB );
+        var titleEl = h( "div", { class: "editor-title", text: title } );
+        var canvas  = h( "div", { class: "editor-canvas" } );
+        var layer = h( "div", { class: "editor-backdrop full open", attrs: { role: "dialog", "aria-modal": "true" } }, h( "div", { class: "editor-bar" }, titleEl, actions ), canvas );
+        onTopOfDialog( layer );
+        function close() { layer.remove(); document.removeEventListener( "keydown", key, true ); if( layer._onClose ) layer._onClose(); }
+        // Keys belong to whatever is on top: the editor or a sheet opened from
+        // here answers its own Escape.
+        function onTop()
+        {
+            for( var n = layer.nextElementSibling; n; n = n.nextElementSibling )
+                if( n.matches( ".photo-editor, .full, dialog.panel[open], .ctx" ) ) return false;
+            return true;
+        }
+        function key( e )
+        {
+            if( ! onTop() ) return;
+            if( e.key === "Escape" ) { e.preventDefault(); if( nav ) nav.pop( "full" ); close(); } else if( layer._onKey ) layer._onKey( e );
+        }
+        closeB.addEventListener( "click", function () { if( nav ) nav.pop( "full" ); close(); } );
+        document.addEventListener( "keydown", key, true );
+        if( nav ) nav.push( "full", close );
+        return { layer: layer, canvas: canvas, title: titleEl, close: function () { if( nav ) nav.pop( "full" ); close(); } };
+    }
+
+    /* A photo turned a quarter right, as a new JPEG File (with its Exif). */
+    function turn( file )
+    {
+        return loadImg( file ).then( function ( img ) { return redrawPhoto( file, img, null, true ); } );
+    }
+
+    /* The crop on its own: resolves the cut File, or null when closed. */
+    function crop( file, opts )
+    {
+        return new Promise( function ( ok )
+        {
+            cropPhoto( file, ok, opts && opts.nav );
+        } );
+    }
+
+    var TEXT_MAX = 50000;                 // characters Read text keeps (a long letter); ocr.recognize's own default is 5000
+
+    /* await AyniPhoto.review( files, opts ): the step before photos go - see
+     * them, and for one photo Crop and Rotate under it; Read text for one or
+     * several (several: read in turn, joined by a blank line, as the pages
+     * of one letter). Resolves null when closed, else
+     *   { files, urls, text, caption, edited }
+     *   files    what goes: the same File objects unless edited; [] when the
+     *            user chose Text
+     *   urls     an object URL of each (a bubble can show it at once)
+     *   text     the text read and checked by the user; "" unless Text or
+     *            Both was chosen
+     *   caption  the caption box's words (opts.caption)
+     * opts:
+     *   title     the sheet's title
+     *   go        { tip, icon }: the main button (default: Accept, check)
+     *   ocr       { recognize( blob, { language, signal, onProgress, maxLength } ) -> { text, truncated },
+     *               langs: [ "es", ... ], lang: "es", setLang( code ) }; without it, no Read text
+     *   textOnly  only the text counts - no Photo / Text / Both (Translator, a stored photo)
+     *   autoRead  read at once
+     *   noCrop    no Crop / Rotate (they would change nothing that is kept)
+     *   caption   a placeholder: shows a caption box (Chat); it goes once the text is read
+     *   nav       { push( name, close ), pop( name ) }: the page's own Back (Chat)
+     *   track     fn( close ) -> fn: the page may close the sheet itself; the
+     *             returned function is called once it is closed
+     *   onGo      fn( result ) -> false keeps the sheet open (a check failed, or Copy) */
+    function review( files, opts )
+    {
+        opts = opts || {};
+        return new Promise( function ( resolve )
+        {
+            var T = Ayni.t;
+            var body = h( "div", { class: "photo-review" } );
+            files = files.slice();
+            var urls = files.map( function ( f ) { return URL.createObjectURL( f ); } );
+            var edited = false, busy = false;
+            var tools = h( "div", { class: "prev-tools" } );
+            if( files.length === 1 )
+            {
+                var one = h( "img", { class: "prev-one", attrs: { src: urls[ 0 ], alt: "" } } );
+                // The edit replaces the photo here; it is what goes.
+                var take = function ( f )
+                {
+                    busy = false;
+                    if( ! f ) return;
+                    files[ 0 ] = f;
+                    edited = true;
+                    URL.revokeObjectURL( urls[ 0 ] );
+                    urls[ 0 ] = URL.createObjectURL( f );
+                    one.src = urls[ 0 ];
+                };
+                var failed = function () { busy = false; Ayni.toast( "err", T( "ayni.photo.failed" ) ); };
+                body.appendChild( one );
+                if( ! opts.noCrop )
+                {
+                    tools.appendChild( btn( "crop", T( "imgEd.crop" ), function () { if( ! busy ) cropPhoto( files[ 0 ], take, opts.nav ); } ) );
+                    tools.appendChild( btn( "retry", T( "imgEd.rotate" ), function ()
+                    {
+                        if( busy ) return;
+                        busy = true;
+                        turn( files[ 0 ] ).then( take, failed );
+                    } ) );
+                }
+            }
+            else
+            {
+                var grid = h( "div", { class: "prev-grid" } );
+                urls.forEach( function ( u ) { grid.appendChild( h( "img", { attrs: { src: u, alt: "" } } ) ); } );
+                body.appendChild( grid );
+            }
+
+            // Read text: the language, the bar, the text to check, then what goes.
+            var ocr = opts.ocr, lang = ocr && ( ocr.langs.indexOf( ocr.lang ) !== -1 ? ocr.lang : ocr.langs[ 0 ] );
+            var panel, status, bar, box, choices, pick = "photo", read = null;
+            if( ocr )
+            {
+                tools.appendChild( btn( "ocr", T( "ayni.photo.readText" ), function () { read(); } ) );
+                var ui = Ayni.i18n.lang();
+                var name = function ( code )
+                {
+                    try { var n = new Intl.DisplayNames( [ ui ], { type: "language" } ).of( code ); return n.charAt( 0 ).toLocaleUpperCase( ui ) + n.slice( 1 ); }
+                    catch( _ ) { return code; }
+                };
+                panel = h( "div", { class: "prev-text" } );
+                panel.hidden = true;
+                var pk = h( "div" );
+                var field = h( "div", { class: "field" }, h( "label", { text: T( "ayni.photo.textLang" ) } ), pk );
+                status = h( "p", { class: "hint" } );
+                bar = h( "progress", { max: 1 } );
+                box = h( "textarea", { class: "input", rows: 8, attrs: { "aria-label": T( "ayni.photo.readText" ) } } );
+                box.hidden = true;
+                choices = h( "div", { class: "choices", attrs: { role: "group", "aria-label": T( "ayni.photo.whatGoes" ) } } );
+                choices.hidden = true;
+                [ [ "photo", "ayni.photo.pickPhoto" ], [ "text", "ayni.photo.pickText" ], [ "both", "ayni.photo.pickBoth" ] ].forEach( function ( c )
+                {
+                    choices.appendChild( h( "button", { class: "btn text sm bordered", text: T( c[ 1 ] ),
+                                                        attrs: { type: "button", "aria-pressed": "false", "data-pick": c[ 0 ] },
+                                                        on: { click: function () { choose( c[ 0 ] ); } } } ) );
+                } );
+                panel.append( field, status, bar, box, choices );
+                body.appendChild( panel );
+                Ayni.picker( pk, { options: ocr.langs.map( function ( c ) { return { value: c, text: name( c ) }; } ), value: lang, onChange: function ( v )
+                {
+                    if( ocr.langs.indexOf( v ) === -1 || v === lang ) return;
+                    lang = v;
+                    if( ocr.setLang ) ocr.setLang( v );
+                    if( ! panel.hidden ) read();
+                } } );
+
+                var run = null;
+                read = async function ()
+                {
+                    if( run ) run.abort();
+                    var ctl = run = new AbortController();
+                    var live = function () { return run === ctl && dl.dialog.isConnected; };
+                    panel.hidden = false; box.hidden = true; choices.hidden = true; bar.hidden = false; bar.value = 0;
+                    body.classList.remove( "has-text" );
+                    // Until this read finds text, the photo is what goes (a read
+                    // again that finds nothing must not leave Send dead).
+                    if( ! opts.textOnly ) choose( "photo" );
+                    if( cap ) cap.parentNode.hidden = false;
+                    syncGo();
+                    var say = function ( pct ) { status.textContent = Ayni.tf( "ayni.photo.reading", { lang: name( lang ), pct: pct } ); };
+                    say( 0 );
+                    try
+                    {
+                        var parts = [], cut = false;
+                        for( var i = 0; i < files.length; i++ )
+                        {
+                            var at = i;
+                            var r = await ocr.recognize( files[ i ], { language: lang, maxLength: TEXT_MAX, signal: ctl.signal,
+                                onProgress: function ( f ) { if( live() ) { var p = ( at + f ) / files.length; bar.value = p; say( Math.round( p * 100 ) ); } } } );
+                            if( ! live() ) return;
+                            if( r.text.trim() ) parts.push( r.text.trim() );
+                            cut = cut || r.truncated;
+                        }
+                        bar.hidden = true;
+                        if( ! parts.length ) { status.textContent = T( "ayni.photo.noText" ); return; }
+                        status.textContent = cut ? T( "ayni.photo.textCut" ) : "";
+                        box.value = parts.join( "\n\n" );
+                        box.hidden = false;
+                        body.classList.add( "has-text" );              // the photo gets small: the text is what to check now
+                        if( cap ) cap.parentNode.hidden = true;        // the text says it all
+                        if( ! opts.textOnly ) { choices.hidden = false; choose( "text" ); }
+                        syncGo();
+                    }
+                    catch( e )
+                    {
+                        if( ! live() || ( e && ( e.name === "AbortError" || e.category === "aborted" ) ) ) return;
+                        bar.hidden = true;
+                        status.textContent = T( e && e.category === "invalid-input" ? "ayni.photo.notImage"
+                                              : e && e.category === "network" ? "ayni.photo.noNet" : "ayni.photo.readFailed" );
+                    }
+                };
+            }
+            if( tools.children.length ) body.insertBefore( tools, panel || null );
+
+            var cap = null;
+            if( opts.caption != null )
+            {
+                cap = h( "input", { class: "input", attrs: { type: "text", placeholder: opts.caption, "aria-label": opts.caption } } );
+                body.appendChild( h( "div", { class: "field" }, cap ) );
+            }
+
+            var dl = Ayni.dialog( { cls: "photo-review-sheet", title: opts.title ||
+                                    ( files.length === 1 ? T( "ayni.photo.one" ) : Ayni.tf( "ayni.photo.n", { n: files.length } ) ) } );
+            dl.body.appendChild( body );
+            var close = Ayni.dialogButton( "close", T( "ayni.close" ) );
+            var go = Ayni.dialogButton( "primary", ( opts.go && opts.go.tip ) || T( "ayni.accept" ), opts.go && opts.go.icon );
+            dl.place( [ close, go ] );
+
+            function hasText() { return !! ( box && ! box.hidden && box.value.trim() ); }
+            function wanted() { return opts.textOnly ? "text" : pick; }
+            function syncGo() { go.ariaDisabled = wanted() !== "photo" && ! hasText() ? "true" : null; }
+            function choose( p )
+            {
+                pick = p;
+                [].forEach.call( choices.children, function ( b ) { b.setAttribute( "aria-pressed", String( b.getAttribute( "data-pick" ) === p ) ); } );
+                syncGo();
+            }
+            if( box ) box.addEventListener( "input", syncGo );
+            syncGo();
+
+            var untrack = null, ended = false;
+            function finish( out )
+            {
+                if( ended ) return;
+                ended = true;
+                if( run ) run.abort();
+                dl.close();
+                if( untrack ) untrack();
+                if( ! out ) urls.forEach( function ( u ) { URL.revokeObjectURL( u ); } );
+                resolve( out );
+            }
+            function send()
+            {
+                if( busy ) return;                                   // a turn still being drawn
+                var w = wanted();
+                if( w !== "photo" && ! hasText() ) return;
+                var out = { files: w === "text" ? [] : files.slice(), urls: w === "text" ? [] : urls.slice(),
+                            text: w === "photo" ? "" : box.value.trim(),
+                            caption: cap && ! cap.parentNode.hidden ? cap.value.trim() : "", edited: edited };
+                if( opts.onGo && opts.onGo( out ) === false ) return;
+                if( w === "text" ) urls.forEach( function ( u ) { URL.revokeObjectURL( u ); } );
+                finish( out );
+            }
+            go.addEventListener( "click", send );
+            close.addEventListener( "click", function () { finish( null ); } );
+            dl.dialog.addEventListener( "close", function () { finish( null ); } );
+            if( cap ) cap.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); send(); } } );
+            if( opts.track ) untrack = opts.track( function () { finish( null ); } );
+            dl.show();
+            if( cap ) setTimeout( function () { cap.focus(); }, 50 );
+            if( ocr && opts.autoRead ) read();
+        } );
+    }
+
+    function btn( icon, tip, onClick )
+    {
+        var b = h( "button", { class: "btn", attrs: { type: "button", "data-tip": tip, "aria-label": tip }, on: { click: onClick } } );
+        b.appendChild( ic( icon ) );
+        return b;
+    }
+
     window.AyniPhoto =
     {
         face:         face,
@@ -653,6 +1069,10 @@
         ownCamera:    ownCamera,
         canTakePhoto: canTakePhoto,
         cameraWatch:  cameraWatch,
-        camera:       camera
+        camera:       camera,
+        review:       review,       // the step before a photo goes: Crop, Rotate, Read text
+        crop:         crop,
+        turn:         turn,
+        fullLayer:    fullLayer     // a dark full screen (Chat's photo and map viewers)
     };
 } )();

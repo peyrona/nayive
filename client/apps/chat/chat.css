@@ -798,19 +798,14 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
 /* The owner's image editor (Editar foto) opens over the viewer; a dialog asked
    from either (the Photos folder question, "close without saving?") is in the
    top layer, above them. A full screen opened FROM a dialog (the photo sheet's
-   crop) lives in that dialog as a popover (media.js onTopOfDialog). */
+   crop) lives in that dialog as a popover (AyniPhoto.fullLayer). */
 .photo-editor   { z-index: 170; }
-.editor-backdrop[popover] { width: auto; height: auto; margin: 0; padding: 0; border: 0; color: inherit; overflow: visible; }
-.full .editor-canvas { display: flex; align-items: center; justify-content: center; overflow: hidden; }
-.full .editor-canvas img { max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; }
 .full .nav      { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2; }
 .full .nav.prev { left: 10px; }
 .full .nav.next { right: 10px; }
 .full .caption  { flex: 0 0 auto; padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); color: white; text-align: center; font-size: 0.9rem; background: #151515; white-space: pre-wrap; }
 .full .caption:empty { display: none; }
 .full .map-host { position: absolute; inset: 0; }
-/* Recortar: the box over the photo (.crop-box, shared app.css); outside it is dimmed. Corners are 44 px to a finger. */
-.cropper .editor-canvas { padding: 24px; touch-action: none; }
 
 .place-picker         { position: fixed; inset: 0; z-index: 160; display: flex; flex-direction: column; background: var(--head); }
 .place-picker .map-box { position: relative; flex: 1 1 auto; min-height: 0; }
@@ -826,11 +821,6 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 .place-picker .me-btn svg { width: 20px; height: 20px; }
 
-/* photo preview before sending */
-.prev-tools     { display: flex; justify-content: center; gap: 16px; margin: -4px 0 12px; }
-.prev-grid      { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 12px; }
-.prev-grid img  { flex: 0 0 auto; width: 96px; height: 96px; border-radius: var(--radius-s); object-fit: cover; background: var(--card2); }
-.prev-one       { display: block; max-width: 100%; max-height: 50vh; margin: 0 auto 12px; border-radius: var(--radius-s); }
 
 /* poll creator */
 .opt-row        { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
@@ -1006,8 +996,10 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
 .call-screen.video.live:not(.small):is(:not(.peer-cam-off), .group) .call-note  { order: 1; flex: none; }
 .call-screen.video.live:not(.small):is(:not(.peer-cam-off), .group) .call-state { order: 2; flex: none; margin-left: auto; }
 .call-screen.video.live:not(.small):is(:not(.peer-cam-off), .group) .call-btns  { margin-top: auto; }
-.call-screen.video.live:not(.small):is(:not(.peer-cam-off), .group) .call-pip.at-tl,
-.call-screen.video.live:not(.small):is(:not(.peer-cam-off), .group) .call-pip.at-tr { top: calc(54px + env(safe-area-inset-top)); }
+/* Video talking: my box slides under the name, the timer and the buttons
+   (they are drawn over it); their empty space lets presses reach the box. */
+.call-screen.video.live:not(.small) :is(.call-top, .call-btns) { z-index: 4; pointer-events: none; }
+.call-screen.video.live:not(.small) .call-btns > *              { pointer-events: auto; }
 /* My picture: a box in one corner (.at-tl / tr / bl / br), as close to the
    bottom edge as to the top one. */
 .call-screen .call-pip
@@ -1092,10 +1084,11 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
 
 /* "New chat": a Nayive user's row has two targets - the circle (my picture
    for that account) and the rest (open the chat). */
-.row.split          { cursor: default; }
-.row.split > .body  { align-self: stretch; display: flex; flex-direction: column; justify-content: center;
-                      padding: 0; border: none; background: none;
-                      color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.row.two-tap        { cursor: default; }
+.row.two-tap > .body { align-self: stretch; display: flex; flex-direction: column; justify-content: center;
+                       padding: 0; border: none; background: none;
+                       color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.row.two-tap > .body .name { flex: none; }      /* centred beside the circle, not stretched to its height */
 /* "New person": the address book's cards under the form. */
 .pane .book-lbl     { padding: 18px 0 4px; }
 .pane .book-rows    { overflow: visible; margin: 0 -16px; }

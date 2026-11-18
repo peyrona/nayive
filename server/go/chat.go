@@ -65,10 +65,13 @@ package main
 // chatWaitMax. A participant with a wait open is "online"; pages drop their
 // wait when they go to the background. No sockets, no SSE.
 //
-// PUSH. A new message is pushed to every other participant who is not online
-// and has not muted the conversation. One who LOOKED online (an iPhone app
-// suspended mid-wait still looks online for a few seconds) is checked again
-// after chatPushRecheck: still unread and gone -> pushed then.
+// PUSH. A new message is pushed to every device of every other participant
+// who has not muted the conversation - except a device whose page is showing
+// Chat right now (its wait carries its push endpoint's tag, pageTag): that one
+// already has it on screen. A PC left on with Chat open no longer keeps the
+// phone quiet. A device that LOOKED present (an iPhone app suspended mid-wait
+// still looks present for a few seconds) is checked again after
+// chatPushRecheck: still unread and gone -> pushed then.
 //
 // ONE LOCK. Every owner and every conversation sits behind ChatHub.mu. A
 // personal server has a handful of writers; one lock is the honest size, and
@@ -356,6 +359,8 @@ type chatOwner struct {
 	waits   map[string]int       // participant -> open waits
 	lastEnd map[string]time.Time // participant -> when their last wait ended
 	online  map[string]bool
+	pages   map[string]int                  // pageTag of a device showing Chat -> open waits
+	pageEnd map[string]time.Time            // pageTag -> when its last wait ended
 	typing  map[string]map[string]time.Time // conv -> participant -> until
 	zones   map[string]string               // participant -> their page's time zone (memory only, zonesFor)
 	watch   map[string]*chatWatch           // conv -> the video playing for all (chat_watch.go)
@@ -414,6 +419,7 @@ type ChatHub struct {
 	onChange func()                                             // any change: the phones' waits re-check
 	onCall   func(account string, ring deviceRing, kind string) // a call to an account: ring | missed | quiet
 	skipPush func(account, endpoint string) bool                // that Chrome's phone rings the call itself
+	chromeOf func(account, endpoint string) string              // an app phone's target -> the endpoint of the Chrome inside it
 
 	laterRead bool // every home's scheduled texts are in memory (sendDue)
 
@@ -597,6 +603,8 @@ func (h *ChatHub) owner(user string) *chatOwner {
 		waits:   make(map[string]int),
 		lastEnd: make(map[string]time.Time),
 		online:  make(map[string]bool),
+		pages:   make(map[string]int),
+		pageEnd: make(map[string]time.Time),
 		typing:  make(map[string]map[string]time.Time),
 		zones:   make(map[string]string),
 		sent:    make(map[string][]time.Time),
@@ -1713,6 +1721,7 @@ func (h *ChatHub) Hook(d *Devices) {
 	h.onChange = d.Kick
 	h.onCall = d.OnCall
 	h.skipPush = d.SkipCallPush
+	h.chromeOf = d.ChromeOf
 }
 
 // bump gives `c` a new rev and stamps it on `m` (when there is one).
@@ -1964,6 +1973,67 @@ func (o *chatOwner) isOnline(pid string) bool {
 	return o.waits[pid] > 0 || time.Since(o.lastEnd[pid]) < chatOnlineGrace
 }
 
+// pageStart / pageEnd count the waits of the device whose push endpoint has
+// tag `tag` ("" = a page that has no push: nothing to count).
+func (o *chatOwner) pageStart(tag string) {
+	if tag != "" {
+		o.pages[tag]++
+	}
+}
+
+func (o *chatOwner) pageStop(tag string) {
+	if tag == "" {
+		return
+	}
+	if o.pages[tag] > 1 {
+		o.pages[tag]--
+	} else {
+		delete(o.pages, tag)
+	}
+	o.pageEnd[tag] = time.Now()
+}
+
+// showing: the device with this tag has Chat on screen (a wait open, or one
+// ended moments ago), so it needs no push.
+func (o *chatOwner) showing(tag string) bool {
+	return tag != "" && (o.pages[tag] > 0 || time.Since(o.pageEnd[tag]) < chatOnlineGrace)
+}
+
+// pageTag is what a page sends (chat/call.js waitQuery, "pe") to say which
+// push endpoint is its own: the first 16 hex of the endpoint's SHA-256.
+func pageTag(endpoint string) string {
+	if endpoint == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(endpoint))
+	return hex.EncodeToString(sum[:8])
+}
+
+func validPageTag(t string) bool {
+	if len(t) != 16 {
+		return false
+	}
+	for _, c := range t {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// jobTag is the tag of the device a push job goes to. An app phone's target
+// (push_app.go) is the phone whose Chrome shows Chat: that Chrome's endpoint.
+func (h *ChatHub) jobTag(j chatPushJob) string {
+	ep := j.sub.Endpoint
+	if strings.HasPrefix(ep, appEndpoint) {
+		ep = ""
+		if h.chromeOf != nil {
+			ep = h.chromeOf(j.owner, j.sub.Endpoint)
+		}
+	}
+	return pageTag(ep)
+}
+
 // sweep turns off "online" and "escribiendo..." once they run out.
 func (h *ChatHub) sweep() {
 	tick := time.NewTicker(2 * time.Second)
@@ -1984,6 +2054,11 @@ func (h *ChatHub) sweep() {
 				if on && !o.isOnline(p) {
 					o.online[p] = false
 					moved = true
+				}
+			}
+			for t, at := range o.pageEnd {
+				if o.pages[t] == 0 && now.Sub(at) > chatOnlineGrace {
+					delete(o.pageEnd, t)
 				}
 			}
 			for conv, who := range o.typing {
@@ -2247,48 +2322,52 @@ func traced(who any, ev string, n int) {
 	}
 }
 
-// announce pushes a new message to whoever is away, and re-checks the ones who
-// looked present. Caller holds h.mu; the sending happens on its own goroutine.
+// announce pushes a new message to every device not showing Chat, and
+// re-checks the ones that are. Caller holds h.mu; the sending happens on its
+// own goroutine.
 func (h *ChatHub) announce(o *chatOwner, c *chatConv, m *ChatMsg) {
-	var now, later []string
-	for _, p := range o.members(c.id) {
-		if p == m.From || c.st.Mute[p] {
-			continue
-		}
-		if o.isOnline(p) {
-			later = append(later, p)
+	var now, later []chatPushJob
+	for _, j := range h.pushTargets(o, c, m, "") {
+		if o.showing(h.jobTag(j)) {
+			later = append(later, j)
 		} else {
-			now = append(now, p)
+			now = append(now, j)
 		}
 	}
-	var jobs []chatPushJob
-	for _, p := range now {
-		jobs = append(jobs, h.pushTargets(o, c, m, p)...)
-	}
-	traced(h, "push-now", len(jobs))
+	traced(h, "push-now", len(now))
 	traced(h, "push-later", len(later))
-	if len(jobs) > 0 {
-		go h.sendPushes(o.user, jobs)
+	if len(now) > 0 {
+		go h.sendPushes(o.user, now)
 	}
-	for _, p := range later {
-		p := p
-		user, conv, id := o.user, c.id, m.ID
-		time.AfterFunc(chatPushRecheck, func() {
-			h.mu.Lock()
-			o := h.owners[user]
-			var jobs []chatPushJob
-			if o != nil && o.isMember(conv, p) && !o.isOnline(p) {
+	if len(later) == 0 {
+		return
+	}
+	wait := make(map[string]bool, len(later))
+	for _, j := range later {
+		wait[j.sub.Endpoint] = true
+	}
+	user, conv, id := o.user, c.id, m.ID
+	time.AfterFunc(chatPushRecheck, func() {
+		h.mu.Lock()
+		var jobs []chatPushJob
+		if o := h.owners[user]; o != nil {
+			if _, ok := o.convs[conv]; ok {
 				c := h.conv(o, conv)
 				if msg := c.byID[id]; msg != nil && !msg.Deleted {
-					jobs = h.pushTargets(o, c, msg, p)
+					// pushTargets again: still a member, not muted, not read.
+					for _, j := range h.pushTargets(o, c, msg, "") {
+						if wait[j.sub.Endpoint] && !o.showing(h.jobTag(j)) {
+							jobs = append(jobs, j)
+						}
+					}
 				}
 			}
-			h.mu.Unlock()
-			if len(jobs) > 0 {
-				h.sendPushes(user, jobs)
-			}
-		})
-	}
+		}
+		h.mu.Unlock()
+		if len(jobs) > 0 {
+			h.sendPushes(user, jobs)
+		}
+	})
 }
 
 func (h *ChatHub) phrase(lang, key, builtin string) string {

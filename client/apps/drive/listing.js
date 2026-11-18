@@ -37,12 +37,13 @@ async function runSearch()
     }
 
     const seq = ++searchSeq;
+    const dir = searchScope();                   // the open folder and under it ('' = all of Home)
     try
     {
         const r = bigMode   ? await AyniNet.biggest( BIG_COUNT )
-                : advSearch ? await AyniNet.search( advSearch.spec, true )
-                : asked.spec ? await AyniNet.search( asked.spec, true )
-                :             await AyniNet.find( asked.glob, true );
+                : advSearch ? await AyniNet.search( advSearch.spec, true, dir )
+                : asked.spec ? await AyniNet.search( asked.spec, true, dir )
+                :             await AyniNet.find( asked.glob, true, dir );
         if( seq !== searchSeq ) return;          // a newer query already went out
         searchHits      = pruneNodes( r.nodes || [] );
         searchTruncated = !! r.truncated;
@@ -171,6 +172,16 @@ function renderListing()
                              : advSearch ? T( 'drive.sbNoResults' )
                              :             TF( 'drive.noResultsFor', { q: searchQuery.trim() } );
             box.appendChild( hint );
+            if( ! bigMode && searchScope() )      // nothing in this folder: look in all of Home
+            {
+                const all = document.createElement( 'button' );
+                all.type        = 'button';
+                all.className   = 'btn text sm bordered search-all';
+                all.textContent = TF( 'drive.searchAllOf', { home: homeName() } );
+                all.addEventListener( 'click', function() { searchAll = true; searchHits = null; render(); runSearch(); } );
+                hint.appendChild( document.createElement( 'br' ) );
+                hint.appendChild( all );
+            }
             return;
         }
 

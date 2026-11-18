@@ -191,3 +191,27 @@
 .ie-crop.fixed :is(.n, .s, .e, .w) { display: none; }
 .ie-crop.is-off                    { pointer-events: none; }
 .ie-crop.is-off span               { display: none; }
+
+/* -----------------------------------------------------------------------------
+ * A FULL SCREEN and THE STEP BEFORE A PHOTO GOES  (AyniPhoto.fullLayer, review)
+ *
+ * Moved from Chat (2026-11-18). A full screen opened from a dialog (the photo
+ * sheet's crop) lives in that dialog as a popover, in the top layer.
+ * ---------------------------------------------------------------------------*/
+.editor-backdrop[popover] { width: auto; height: auto; margin: 0; padding: 0; border: 0; color: inherit; overflow: visible; }
+.full .editor-canvas { display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.full .editor-canvas img { max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; }
+/* Recortar: the box over the photo (.crop-box, above); outside it is dimmed. Corners are 44 px to a finger. */
+.cropper .editor-canvas { padding: 24px; touch-action: none; }
+/* The sheet (review): the photo, its tools, Read text */
+.prev-tools     { display: flex; justify-content: center; gap: 16px; margin: -4px 0 12px; }
+.prev-grid      { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 12px; }
+.prev-grid img  { flex: 0 0 auto; width: 96px; height: 96px; border-radius: var(--radius-s); object-fit: cover; background: var(--card2); }
+.prev-one       { display: block; max-width: 100%; max-height: 50vh; margin: 0 auto 12px; border-radius: var(--radius-s); }
+.prev-text      { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.photo-review.has-text .prev-one { max-height: 22vh; }
+.photo-review.has-text .prev-grid img { width: 64px; height: 64px; }
+.prev-text .field { margin: 0; }
+.prev-text .hint:empty { display: none; }
+.prev-text progress { width: 100%; }
+.prev-text textarea { width: 100%; box-sizing: border-box; resize: vertical; }

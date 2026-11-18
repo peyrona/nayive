@@ -588,11 +588,13 @@
     // (`*`, `?`, `[seq]`) matched against each basename, case-insensitive.
     // GET ?find=<pattern>  -> { pattern, nodes:[...], truncated, role, user };
     // `nodes` is capped at 500 (same node shape as listDir()), `truncated` is
-    // true when there were more.
-    async function find( pattern, links )
+    // true when there were more. `inDir` (optional) keeps it to that folder
+    // and everything under it (&in=).
+    async function find( pattern, links, inDir )
     {
         var q = new URLSearchParams( { find: pattern } );
         if( links ) q.set( "links", "1" );
+        if( inDir ) q.set( "in", inDir );
         return JSON.parse( await fetchText( API_FILES + "?" + q.toString() ) );
     }
 
@@ -600,12 +602,13 @@
     // folders, exts: [ ... ], since, until }, every part optional: op is
     // has | not | starts | ends | is on the basename, `any` = one rule is
     // enough, `folders` / `exts` = the kinds wanted, since / until = modified
-    // in [since, until) in Unix seconds. Same answer as find().
-    // GET ?search=1&name=<op>:<text>&any=1&folders=1&ext=pdf&since=&until=
-    async function search( spec, links )
+    // in [since, until) in Unix seconds. `inDir` as in find(). Same answer as find().
+    // GET ?search=1&name=<op>:<text>&any=1&folders=1&ext=pdf&since=&until=&in=
+    async function search( spec, links, inDir )
     {
         var q = new URLSearchParams( { search: "1" } );
         if( links ) q.set( "links", "1" );
+        if( inDir ) q.set( "in", inDir );
         ( spec.rules || [] ).forEach( function ( r ) { q.append( "name", r.op + ":" + r.text ); } );
         if( spec.any )     q.append( "any", "1" );
         if( spec.folders ) q.append( "folders", "1" );

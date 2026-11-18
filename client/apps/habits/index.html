@@ -586,7 +586,8 @@
         // backgrounded tab from the bfcache, so this is where "it is tomorrow now" gets
         // noticed. The default guard keeps the read out of an open sheet, where
         // re-rendering would throw away what is being typed.
-        AyniBoot.wireRefresh( { store: store, read: load } );
+        // watch: a tick made on another device shows here by itself (api_watch.go).
+        AyniBoot.wireRefresh( { store: store, read: load, watch: FILE } );
 
         // Probe the API, then load. On a failed probe the shared helper bounces to the
         // sign-in page only when we are really online with nothing cached; otherwise it

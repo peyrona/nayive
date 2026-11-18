@@ -156,14 +156,18 @@ func (s *Server) apiFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ---- GET ?find=<glob>  -> a flat name search --------------------------
+	// ---- GET ?find=<glob>[&in=<folder>]  -> a flat name search -------------
 	if r.Method == http.MethodGet && q.Has("find") {
 		pat := strings.TrimSpace(q.Get("find"))
 		if pat == "" {
 			sendError(w, r, http.StatusBadRequest, "patrón vacío")
 			return
 		}
-		nodes, truncated := Search(s.searchRoots(role, user), pat, searchLimit)
+		roots, ok := s.searchRootsIn(w, r, role, user, q)
+		if !ok {
+			return
+		}
+		nodes, truncated := Search(roots, pat, searchLimit)
 		sendJSON(w, r, http.StatusOK, map[string]any{
 			"pattern": pat, "role": role, "user": user,
 			"nodes": s.withLinks(role, user, q, nodes), "truncated": truncated,
@@ -171,14 +175,18 @@ func (s *Server) apiFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ---- GET ?search=1&name=&ext=&folders=&since=&until=  -> the advanced search
+	// ---- GET ?search=1&name=&ext=&folders=&since=&until=[&in=]  -> the advanced search
 	if r.Method == http.MethodGet && q.Has("search") {
 		spec, err := parseSearchSpec(q)
 		if err != nil {
 			sendError(w, r, http.StatusBadRequest, err.Error())
 			return
 		}
-		nodes, truncated := SearchBy(s.searchRoots(role, user), searchLimit, spec.keep)
+		roots, ok := s.searchRootsIn(w, r, role, user, q)
+		if !ok {
+			return
+		}
+		nodes, truncated := SearchBy(roots, searchLimit, spec.keep)
 		sendJSON(w, r, http.StatusOK, map[string]any{
 			"role": role, "user": user,
 			"nodes": s.withLinks(role, user, q, nodes), "truncated": truncated,
@@ -408,6 +416,31 @@ func (s *Server) searchRoots(role, user string) []SearchRoot {
 		return []SearchRoot{{Dir: p, Prefix: "files"}}
 	}
 	return []SearchRoot{}
+}
+
+// searchRootsIn is searchRoots, or - with ?in=<folder> - that one folder and
+// everything under it (Drive searches the folder it shows). The folder goes
+// through Resolve like any listing, so ?in= reaches nothing ?dir= cannot.
+func (s *Server) searchRootsIn(w http.ResponseWriter, r *http.Request, role, user string, q Query) ([]SearchRoot, bool) {
+	in := strings.Trim(q.Get("in"), "/")
+	if in == "" {
+		return s.searchRoots(role, user), true
+	}
+	target, ok := s.users.Resolve(role, user, in)
+	if !ok {
+		sendError(w, r, http.StatusForbidden, "forbidden")
+		return nil, false
+	}
+	info, err := target.Stat()
+	if err != nil {
+		sendMissing(w, r, err, "no such folder")
+		return nil, false
+	}
+	if !info.IsDir() {
+		sendError(w, r, http.StatusNotFound, "no such folder")
+		return nil, false
+	}
+	return []SearchRoot{{Dir: target.Abs, Prefix: in}}, true
 }
 
 // -----------------------------------------------------------------------------
