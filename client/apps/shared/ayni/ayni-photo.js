@@ -565,20 +565,38 @@
         layer.querySelector( ".cam-bar" ).appendChild( shutter );
         var video = layer.querySelector( "video" );
         video.muted = true;
+        var back = document.activeElement;   // the focus goes back there on close
         document.body.appendChild( layer );
 
         var stream = null, cams = [], at = 0;
         var starts = 0;          // bumped by every start(): a switch clicked twice must not leave the first camera on
 
         function stop() { if( stream ) stream.getTracks().forEach( function ( t ) { t.stop(); } ); stream = null; }
-        function cancel() { layer.remove(); document.removeEventListener( "keydown", key, true ); stop(); }
+        function cancel()
+        {
+            var had = layer.contains( document.activeElement );
+            layer.remove(); document.removeEventListener( "keydown", key, true ); stop();
+            if( had && back && back.isConnected && back.focus ) back.focus();
+        }
         function finish( file ) { cancel(); done( file ); }
 
-        // The page behind gets no keys while this is up.
+        // The page behind gets no keys while this is up: none reaches its listeners, and none does there what it
+        // would do (Space or Enter on its focused button opened a second camera). The focus is on the layer, and Tab
+        // goes round its buttons.
         function key( e )
         {
             e.stopPropagation();
-            if( e.key === "Escape" ) { e.preventDefault(); finish( null ); }
+            if( e.key === "Escape" ) { e.preventDefault(); finish( null ); return; }
+            if( e.key === "Tab" )
+            {
+                var bs = [].filter.call( layer.querySelectorAll( "button" ), function ( b ) { return ! b.hidden; } );
+                var i = bs.indexOf( document.activeElement ), n = bs.length;
+                e.preventDefault();
+                if( n ) bs[ i < 0 ? ( e.shiftKey ? n - 1 : 0 ) : ( i + ( e.shiftKey ? n - 1 : 1 ) ) % n ].focus();
+                return;
+            }
+            // Only what would press the page's focused button: F5, Ctrl+R or zoom still work
+            if( ! layer.contains( e.target ) && ( e.key === "Enter" || e.key === " " ) ) e.preventDefault();
         }
 
         async function start( deviceId )
@@ -631,6 +649,7 @@
         } );
 
         document.addEventListener( "keydown", key, true );
+        shutter.focus();          // off (aria-disabled) until the camera starts: Enter does nothing till then
         start( "" );
         return cancel;
     }
