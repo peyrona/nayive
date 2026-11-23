@@ -7,6 +7,7 @@
 # deploy.sh appends its own Android step after these.
 # ==============================================================================
 PREBUILD_STEPS=(
+    "bash tools/check-ayni.sh"                  # shared/ayni/ is Ayni itself: nothing there that Ayni has not committed
     "cd server/go && test -z \"\$(gofmt -l .)\""   # formatting is not a matter of opinion
     "cd server/go && go vet ./..."                  # the built-in static analyser
     "cd server/go && go test ./..."                 # the whole suite (Go caches a pass: unchanged Go code = instant)

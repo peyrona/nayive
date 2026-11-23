@@ -1,0 +1,3 @@
+[submodule "client/apps/shared/ayni"]
+	path = client/apps/shared/ayni
+	url = https://github.com/peyrona/ayni.git

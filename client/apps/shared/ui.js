@@ -101,7 +101,7 @@
     var i18nReady = window.Ayni ? Ayni.i18n.ready : Promise.resolve( {} );
 
     // Parts built after this script runs (a trip sheet, a dialog made in code):
-    // home links, sync dots, toast lifts, and Ayni's info "i"s, number fields and eyes.
+    // home links, sync dots, and Ayni's info "i"s, number fields and eyes.
     // (Their data-i18n text is shared/i18n.js's own observer's job, not this one's.)
     if( window.MutationObserver )
     {
@@ -118,7 +118,6 @@
                     if( n.matches( ".info-tip, .spin, [data-reveal]" ) || n.querySelector( ".info-tip, .spin, [data-reveal]" ) ) Ayni.init( n );
                     applyHomeLinks( n );
                     Ayni.plug.draw( n );
-                    watchToastLifts( n );
                 }
             }
         } );
@@ -929,38 +928,6 @@
     }
 
     //------------------------------------------------------------------------//
-    // TOASTS ABOVE A BOTTOM BAR
-    //
-    // On a phone Ayni's notifications sit at the bottom of the screen. A bar
-    // along the bottom (a player, Chat's message box, Calc's sheet tabs) marks
-    // itself data-toasts-above, and its height lifts them over it
-    // (--toasts-lift, shared/ayni/ayni-toasts.css). Asked again whenever such
-    // a bar changes size, shows or hides, and on resize.
-
-    var liftObserver = window.ResizeObserver ? new ResizeObserver( liftToasts ) : null;
-
-    function liftToasts()
-    {
-        var h = 0, H = window.innerHeight;
-        document.querySelectorAll( "[data-toasts-above]" ).forEach( function ( el )
-        {
-            var r = el.getBoundingClientRect();
-            if( r.height && r.bottom >= H - 2 ) h = Math.max( h, H - r.top );
-        } );
-        document.documentElement.style.setProperty( "--toasts-lift", Math.round( h ) + "px" );
-    }
-
-    function watchToastLifts( root )
-    {
-        if( ! liftObserver || ! root.querySelectorAll ) return;
-        if( root.matches && root.matches( "[data-toasts-above]" ) ) liftObserver.observe( root );
-        root.querySelectorAll( "[data-toasts-above]" ).forEach( function ( el ) { liftObserver.observe( el ); } );
-    }
-
-    if( document.body ) watchToastLifts( document.body );
-    else document.addEventListener( "DOMContentLoaded", function () { watchToastLifts( document.body ); } );
-    window.addEventListener( "resize", liftToasts );
-
     // UPLOAD PROGRESS: Ayni.uploads. AyniNet.putBinary announces every upload as
     // "nayive:upload" events; a real upload (not an autosave or a thumbnail) may
     // just have pushed the space past 90%: look now rather than at the next page.

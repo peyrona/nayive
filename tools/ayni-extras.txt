@@ -1,0 +1,18 @@
+# What client/apps/shared/ayni/ (the Ayni repo, a git submodule) holds that is NOT
+# the library: never deployed (deploy.sh --exclude-from) nor packed (pack.sh).
+# rsync patterns, relative to client/apps/. deploy.local.sh holds a private address.
+/shared/ayni/.git
+/shared/ayni/.gitignore
+/shared/ayni/api/
+/shared/ayni/docs/
+/shared/ayni/gallery/
+/shared/ayni/sample/
+/shared/ayni/tests/
+/shared/ayni/tools/
+/shared/ayni/deploy.sh
+/shared/ayni/deploy.local.sh
+/shared/ayni/deploy.local.sh.example
+/shared/ayni/CHANGELOG.md
+/shared/ayni/CHANGELOG.md.gz
+/shared/ayni/CLAUDE.md
+/shared/ayni/CLAUDE.md.gz

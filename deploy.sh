@@ -321,8 +321,9 @@ SW_FILES=("$APPSSRC/sw.js")
 if ! rsync "${DRY[@]}" -rltz --itemize-changes --delete-delay --delay-updates \
       --exclude='.*' --exclude='*~' --exclude='*.swp' \
       --exclude='/sw.js' --exclude='/sw.js.gz' \
+      --exclude-from="$SCRIPT_DIR/tools/ayni-extras.txt" \
       -e "$RSYNC_RSH" \
-      "$APPSSRC/" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/" | tee "$BUILD_DIR/apps.log" ||
+      "$APPSSRC/""$REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/" | tee "$BUILD_DIR/apps.log" ||
    ! rsync "${DRY[@]}" -ltz --itemize-changes --delay-updates \
       -e "$RSYNC_RSH" \
       "${SW_FILES[@]}" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/" | tee -a "$BUILD_DIR/apps.log"; then

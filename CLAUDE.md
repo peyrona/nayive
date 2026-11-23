@@ -1,5 +1,18 @@
 # Nayive - rules for Claude
 
+## Ayni is the source of the UI (FUNDAMENTAL)
+
+Nayive USES Ayni (github.com/peyrona/ayni); it does not own a copy of it.
+`client/apps/shared/ayni/` IS the Ayni repo (a git submodule; ~/proyectos/ayni
+is a symlink to it), never a fork. Every UI change (controls, styles, icons,
+Ayni i18n keys, anything in shared/ayni/) may be built and tested in Nayive,
+but once it works it is committed in Ayni in the same task, before it is
+called done, and Nayive records that commit (`git add client/apps/shared/ayni`).
+`tools/check-ayni.sh` (in the pre-build) fails while Ayni has uncommitted
+changes or Nayive records another Ayni commit. Ayni's own rules:
+client/apps/shared/ayni/CLAUDE.md. A fresh clone needs
+`git submodule update --init`.
+
 ## Sealed CRUD code (data safety)
 
 Every file that writes, moves or deletes user data starts with a `SEALED` line,

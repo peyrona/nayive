@@ -196,6 +196,27 @@ var pageExceptions = map[string]bool{
 	"trips/public.html": true, // /s/<token>  (server/go/api_public.go)
 }
 
+// notDeployed says whether rel is one of the paths tools/ayni-extras.txt keeps
+// out of the deploy and the pack: shared/ayni/ is the whole Ayni repo (a git
+// submodule), and its gallery, tests and sample pages are not Nayive's.
+func notDeployed(apps, rel string) bool {
+	b, err := os.ReadFile(filepath.Join(apps, "..", "..", "tools", "ayni-extras.txt"))
+	if err != nil {
+		return false
+	}
+	for _, x := range strings.Split(string(b), "\n") {
+		x = strings.TrimSpace(x)
+		if x == "" || strings.HasPrefix(x, "#") {
+			continue
+		}
+		x = strings.TrimPrefix(x, "/")
+		if rel == x || strings.HasPrefix(rel, strings.TrimSuffix(x, "/")+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 // checkPages FAILS the build when a page under apps/ is not in the precache:
 // sw.js serves a cached page as it is (never re-saved in the background), so a
 // page outside the list - and so outside CACHE_VERSION - would stay stale.
@@ -210,7 +231,7 @@ func checkPages(apps string, rels []string) {
 			return nil
 		}
 		rel := relTo(apps, p)
-		if !in[rel] && !pageExceptions[rel] {
+		if !in[rel] && !pageExceptions[rel] && !notDeployed(apps, rel) {
 			missing = append(missing, rel)
 		}
 		return nil

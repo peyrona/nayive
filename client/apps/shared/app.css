@@ -117,55 +117,11 @@
  * ===========================================================================*/
 
 
-/* Desktop mode: a window behind others (html[data-win-behind], set by the
-   desktop) shows its icon + name in the same colour, softer. */
-html[data-win-behind] .topbar .app-icon,
-html[data-win-behind] .header .app-icon,
-html[data-win-behind] .topbar h1,
-html[data-win-behind] .header h1,
-html[data-win-behind] .trip-header .app-icon,
-html[data-win-behind] .app-title     { opacity: 0.55; }
-
-/* Desktop mode: the window's title row has its own colour, apart from the page
-   under it - accent-tinted on the window in front, grey on one behind. Only in
-   a desktop window (html.is-windowed - a phone never has one); the desktop marks
-   the app's own title row data-win-head (adoptHead, ayni-deskpage.js). A layer
-   under the row's content, so a row that paints its own background (Trips, a
-   card's sticky .header) still shows it; :where keeps a sticky row sticky. */
-html.is-windowed [data-win-head]          { isolation: isolate; }
-html.is-windowed :where([data-win-head])  { position: relative; }
-html.is-windowed [data-win-head]::before
-{
-    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
-    background: color-mix(in oklab, var(--card) 80%, var(--accent));
-}
-html.is-windowed[data-win-behind] [data-win-head]::before
-{
-    background: color-mix(in oklab, var(--card) 93%, var(--text));
-}
-/* "Raised controls" on (html.bevel): the front title row is raised too - the
-   buttons' soft edge, light on top and dark under it - with no border, so it
-   never passes for a button. */
-html.is-windowed.bevel:not([data-win-behind]) [data-win-head]::before
-{
-    background-image: var(--bevel);
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / .35), inset 0 -1px 0 rgb(0 0 0 / .12);
-}
+/* Desktop mode: a window behind others - Trips' own header dims like the others (ayni-shell.css). */
+html[data-win-behind] .trip-header .app-icon { opacity: 0.55; }
 
 
-/* The right-hand groups (see HEADER) are Ayni's: the header's actions are an
-   Ayni toolbar (role="toolbar" .tall: one Tab stop, the arrows move) whose
-   .tb-group boxes take no room when nothing in them shows, with a line drawn
-   between two that show (shared/ayni/ayni-menus.css). The image editor's bar
-   (.ie-bar) is not a toolbar yet: it keeps the line here. */
-.ie-bar > .tb-group:not([hidden]):has(> :not([hidden]):not(.fit-out):not(.search-field.fold:not(.is-open))) ~ .tb-group::before
-{
-    content: "";
-    align-self: stretch;
-    width: 1px;
-    margin: 6px 4px;
-    background: var(--line);
-}
+
 
 /* -----------------------------------------------------------------------------
  * FOLDER-BACKED VIEWERS  (Photos, Music, Movies)  -  one header row
@@ -236,13 +192,6 @@ html.is-windowed.bevel:not([data-win-behind]) [data-win-head]::before
  * 44 x 44 (Ayni, html.touch).
  * ---------------------------------------------------------------------------*/
 
-/* A bare inline <svg> straight inside a .btn (no width attribute, no .icon
-   span) got no size once .icon-btn's "svg { 19px }" left with family 2, so it
-   filled the whole 36 px circle (Language, Bookmarks, Chat...). Give it the
-   icon size Ayni gives a .btn .icon. :where() weighs nothing: an app's own
-   svg rule still wins. */
-:where(.btn > svg:not([width]))    { width: 18px; height: 18px; flex: none; }
-:where(.btn.sm > svg:not([width])) { width: 15px; height: 15px; }
 
 
 /* -----------------------------------------------------------------------------
@@ -274,26 +223,6 @@ html.is-windowed.bevel:not([data-win-behind]) [data-win-head]::before
  *   query), plus (a compose bar).
  * ---------------------------------------------------------------------------*/
 
-/* A row of buttons inside a dialog's body (not its bottom row): Calendar's
-   export, the launcher's colour schemes, Write's templates. .extra pins the
-   left-hand ones, as in a footer. */
-.actions-row          { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); }
-.actions-row > .extra { display: flex; gap: var(--space-2); margin-right: auto; }
-
-/* Properties / Info dialog (Drive, Photos): a label / value grid. The dimmed
-   label reads like a .field label; the exact byte count goes under its own
-   value in small type, the way every file manager writes it. */
-.props
-{
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 8px 16px;
-    margin: 0 0 14px;
-    font-size: 0.9rem;
-}
-.props dt { color: var(--text-dim); }
-.props dd { margin: 0; overflow-wrap: anywhere; }
-.props dd .props-sub { display: block; font-size: 0.8rem; color: var(--text-dim); }
 
 /* SWITCH - Ayni's (ayni-buttons.css): <label class="switch end">Text
  * <input type="checkbox" role="switch"></label>. Every on / off option is one
@@ -331,15 +260,8 @@ html.is-windowed.bevel:not([data-win-behind]) [data-win-head]::before
  * Before saving a form with typed dates, times or numbers:
  *   if( Ayni.focusFirstError( dialog ) ) return;
  *
- * Still Nayive's below: the browser's own check / radio / colour / file boxes.
  * ---------------------------------------------------------------------------*/
 
-/* Check / radio / colour / file keep the browser's box, in the accent. A
- * switch is Ayni's drawing. */
-input[type="checkbox"]:not([role="switch"]),
-input[type="radio"],
-input[type="color"],
-input[type="file"] { accent-color: var(--accent); }
 
 
 
@@ -349,55 +271,15 @@ input[type="file"] { accent-color: var(--accent); }
 
 
 
-/* In a dialog: a red box that says plainly what went wrong or cannot be
-   trusted (.warn-box), and a small dim line under the facts (.dim-note).
-   Trips (its route, file and map sheets) and Calculator (its rate check). */
-.warn-box { font-size: 0.8rem; color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent); border-radius: var(--radius-s); padding: 10px 12px; margin: 0 0 14px; line-height: 1.4; }
-.dim-note { font-size: 0.78rem; color: var(--text-dim); margin: 0 0 14px; line-height: 1.4; }
 
 
 
-/* A long-press on a button would otherwise pop the iOS callout / selection menu.
-   Menus too: a long-press opens a menu under the finger and, if the finger stays
-   down, iOS goes on and selects the word under it ("Responder" painted blue). */
-button,
-.popup
-{
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none;
-}
-/* A field inside a menu or popup still takes typing and selection (iOS). */
-.popup :is(input, textarea)
-{
-    -webkit-user-select: text;
-    user-select: text;
-}
 
 
 /* ---------------------------------------------------------------------------
    SHARING  -  the "Compartir" dialog (NayiveUI.shareSheet) and the read-only
    badge a shared item shows in an app header.
    ------------------------------------------------------------------------- */
-.ro-badge
-{
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 2px 8px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-pill);
-    background: var(--card);
-    font-size: 0.78rem;
-    color: var(--text-dim);
-    white-space: nowrap;
-}
-
-/* The padlock is BLUE on purpose: it is the one thing in the chip that has to
-   read at a glance ("you cannot change this"), and blue is the only tone the
-   apps never use for an action. --link is the blue token, deep enough on the
-   beige light ground and bright enough on the dark one. */
-.ro-badge svg { flex: 0 0 auto; width: 15px; height: 15px; color: var(--link); }
 
 .share-link-app  { margin-top: 12px; }
 .share-link-how  { margin: 6px 0 0; }
@@ -447,13 +329,6 @@ button,
 .popup:not(.panel).open  { display: block; }
 
 
-/* A row for a button that IS on the bar on a PC and only disappears on a
-   phone (Write's print, page setup, comments...). The menu carries it for
-   the phone and drops it here, so a PC never offers the same thing twice. */
-@media (min-width: 641px)
-{
-    .panel.menu .mi-phone { display: none; }
-}
 
 /* Ayni.icon("nayive"): a text-sized default, for buttons with no svg rule */
 .icon[data-icon="nayive"] > svg { width: 1.2em; height: 1.2em; flex: none; }
@@ -461,44 +336,12 @@ button,
 .att .ai:has([data-icon="nayive"])     { background: #fff; box-shadow: inset 0 0 0 1px var(--line); }
 .att .ai [data-icon="nayive"] > svg { width: 30px; height: 30px; }
 
-/* A PICTURE YOU CAN CHANGE (.face): a round picture as a button, a small
-   camera badge on its corner - Chat's people and profile, Contacts' cards.
-   .face.sm: the badge for a list row's small circle. .face-pick: the circle
-   on top of a dialog; inside it a .face-box can hold a .face-bin, a red
-   trash badge on the lower-left corner, the camera's twin (Chat, Contacts). */
-.face { position: relative; flex: 0 0 auto; padding: 0; border: none; border-radius: 50%; background: none; cursor: pointer; }
-.face .cam
-{
-    position: absolute; right: 2px; bottom: 2px; width: 30px; height: 30px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    color: var(--on-accent); background: var(--accent); border: 2px solid var(--head);
-}
-.face .cam svg { width: 15px; height: 15px; }
-.face:hover > :first-child { filter: brightness(0.95); }
-.face.sm .cam     { right: -3px; bottom: -3px; width: 18px; height: 18px; border-width: 1.5px; }
-.face.sm .cam svg { width: 10px; height: 10px; }
-.face-pick        { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 2px 0 14px; }
-.face-pick .face .cam { border-color: var(--card); }
-.face-box         { position: relative; display: inline-flex; }
-.face-bin
-{
-    position: absolute; left: 2px; bottom: 2px; width: 30px; height: 30px; padding: 0; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center; cursor: pointer;
-    color: var(--on-solid); background: var(--danger); border: 2px solid var(--card);
-}
-.face-bin svg   { width: 15px; height: 15px; }
-.face-bin:hover { filter: brightness(0.92); }
 
 
 /* -----------------------------------------------------------------------------
  * ITEM LISTS AND TREES: Ayni's (Ayni.list, Ayni.tree, shared/ayni/ayni-lists.css).
  * On a phone, while rows are picked, the picked group takes the view switch's room.
  * ---------------------------------------------------------------------------*/
-@media (max-width: 640px)
-{
-    .topbar:has(.has-selection) > .tb-modes,
-    .header:has(.has-selection) > .tb-modes      { display: none; }
-}
 
 /* ---------------------------------------------------------------------------
  * FINGER-SIZED TARGETS (touch screens only)
@@ -536,7 +379,6 @@ button,
         inset: min(0px, calc((100% - var(--hit)) / 2));
     }
 
-    html .ie-bar > .tb-group::before { margin-inline: 0 !important; }
 
     :where(.stage-top, .subtask-row, .queue-row)
     {

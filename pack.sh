@@ -68,6 +68,13 @@ mkdir -p "$STAGE/$GOSRC" "$STAGE/$SRC"
 
 cp    install.sh       "$STAGE/install.sh"
 cp -r "$SRC/apps"      "$STAGE/$SRC/apps"
+# Ayni (client/apps/shared/ayni/, a git submodule) is the whole Ayni repo: keep
+# only the library - tools/ayni-extras.txt lists the rest (deploy.sh skips it too).
+while IFS= read -r x; do
+    case "$x" in ''|\#*) continue ;; esac
+    x="${x#/}"; x="${x%/}"
+    rm -rf "${STAGE:?}/$SRC/apps/$x"
+done < tools/ayni-extras.txt
 mkdir -p "$STAGE/$(dirname "$EXAMPLE")"
 cp    "$EXAMPLE"       "$STAGE/$EXAMPLE"
 chmod +x "$STAGE/install.sh" "$STAGE/$GOSRC/nayive"

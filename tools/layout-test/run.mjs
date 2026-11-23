@@ -13,7 +13,7 @@
 //   turn): Ayni's layout family is loaded; none of the old parts (.pill, .tabs,
 //   .set-tabs, .sheet-tab, .pane-resizer, .hsplitter, .btn.is-active); every tab
 //   row is named, has one selected tab and never sits in a title row; a tab's
-//   panel exists; a view switch is toggles; every bar is a named separator, 7 px;
+//   panel exists; a view switch is toggles; every bar is a named separator, 11 px;
 //   a More fields line controls something; every choice has aria-pressed;
 //   tabs are 44 px high on touch; no error.
 // BEHAVIOURS: Calc's sheets (under the page, in the status bar; keys, typing kept
@@ -97,7 +97,7 @@ const RULES = `( async () => { const o = [];
             if( b.getAttribute( 'role' ) !== 'separator' ) { if( ! b.hidden ) o.push( 'a bar Ayni did not wire: ' + b.id ); continue; }   // hidden: its app has nothing to divide yet
             if( ! b.getAttribute( 'aria-label' ) || /\bayni\./.test( b.getAttribute( 'aria-label' ) ) ) o.push( 'a bar with no name: ' + b.id );
             const r = b.getBoundingClientRect(), side = b.classList.contains( 'rows' ) ? r.height : r.width;
-            if( b.checkVisibility() && Math.round( side ) !== 13 ) o.push( 'bar ' + b.id + ' is ' + side + ' px' );
+            if( b.checkVisibility() && Math.round( side ) !== 11 ) o.push( 'bar ' + b.id + ' is ' + side + ' px' );
         }
         for( const b of document.querySelectorAll( '.more-toggle' ) )
         {
@@ -379,7 +379,7 @@ try
         await size( 1280, 900 );
         await c.send( "Page.navigate", { url: BASE + "/nayive/admin.html" } );
         await sleep( 2000 );
-        ok( ( await tabsOf( "#tabs" ) ) === "Account|Web sites|Users|Language", "Admin: four tabs", await tabsOf( "#tabs" ) );
+        ok( ( await tabsOf( "#tabs" ) ) === "Account|Web sites|Users|Language|SSH", "Admin: five tabs", await tabsOf( "#tabs" ) );
         ok( await ev( "! document.getElementById('tabs').closest('.brand') && ! document.getElementById('adminSec').hidden && document.getElementById('usersSec').hidden" ), "…in a row of their own, Account first" );
         await shot( "admin" );
         await press( "#tabs > [role=\"tab\"]:nth-of-type(3)" ); await sleep( 300 );
