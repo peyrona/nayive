@@ -142,6 +142,12 @@ func (s *Server) signIn(w http.ResponseWriter, r *http.Request, user, role strin
 // (login.html, LEFTOVERS). A header, not a parameter: another site's form
 // cannot set it, so it can never wipe a browser from outside.
 //
+// "NO, IT IS NOT MINE". A session WITH "Keep me signed in" is wiped too when
+// the sign-out sends "X-Nayive-Not-Mine: 1": the switch may have been on out
+// of habit, so the sign-out asks "Is this your device?" (shared/ui.js
+// signOut). Only with a live session: X-Nayive-Forget never wipes one, so a
+// sign-in in another tab is never wiped by the login page.
+//
 // NEVER THE ADMIN'S. The admin's sign-out asks nothing (admin.html): the
 // browser may hold another account's unsent saves (ana's own PC), and a wipe
 // would delete them with nobody asked. The admin keeps no saves of its own
@@ -153,7 +159,8 @@ func (s *Server) apiLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	sess, live := s.sessions.Get(tokenFrom(r))
 	_, remembered := s.sessions.Remembered(tokenFrom(r))
-	if (live && !remembered && sess.Role != "admin") || (!live && r.Header.Get("X-Nayive-Forget") == "1") {
+	notMine := r.Header.Get("X-Nayive-Not-Mine") == "1"
+	if (live && (!remembered || notMine) && sess.Role != "admin") || (!live && r.Header.Get("X-Nayive-Forget") == "1") {
 		w.Header().Set("Clear-Site-Data", `"cache", "storage"`)
 	}
 	if !s.sessions.Drop(tokenFrom(r)) {
@@ -199,6 +206,9 @@ func (s *Server) apiWhoami(w http.ResponseWriter, r *http.Request) {
 	if remembered {
 		w.Header().Set("Set-Cookie", sessionCookieHeader(tokenFrom(r), ttl, true, r.TLS != nil))
 	}
+	// The sign-out asks "Is this your device?" only for such a session
+	// (shared/ui.js signOut; apiLogout, "NO, IT IS NOT MINE").
+	me["remember"] = remembered
 	// Who this browser belongs to, for shared/ayni/ayni-store.js (store_owner.go) - set
 	// here too so a session from before that cookie existed gets it, and an
 	// admin rename puts the new name in it.

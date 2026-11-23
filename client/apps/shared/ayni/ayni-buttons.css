@@ -64,12 +64,12 @@
 .hold-ring { position: fixed; z-index: 100; width: 56px; height: 56px; translate: -50% -50%; border-radius: 50%; pointer-events: none;
   background: conic-gradient(var(--accent) calc(var(--hold) * 1turn), transparent 0);
   mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
-  animation: hold var(--hold-ms, 500ms) linear forwards; }
+  animation: hold var(--hold-ms, 400ms) linear forwards; }
 @property --hold { syntax: "<number>"; inherits: false; initial-value: 0; }
 .btn:is([data-alt], [data-hold]).holding::before { content: ""; position: absolute; inset: -6px; border-radius: 50%; pointer-events: none;
   background: conic-gradient(var(--accent) calc(var(--hold) * 1turn), transparent 0);
   mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
-  animation: hold var(--hold-ms, 500ms) linear forwards; }
+  animation: hold var(--hold-ms, 400ms) linear forwards; }
 @keyframes hold { to { --hold: 1; } }
 .choice { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .choice input { width: 16px; height: 16px; margin: 0; }

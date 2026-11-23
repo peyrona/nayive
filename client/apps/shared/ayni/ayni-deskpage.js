@@ -1214,27 +1214,33 @@
     }
     if( finePtr.addEventListener ) finePtr.addEventListener( 'change', onFineChange );
 
-    // THE CLOCK AND THE BAR - every change applies at once; the menu stays open,
-    // and follows the bar when it moves or changes size.
+    // THE CLOCK AND THE BAR - every change applies at once; the menu (and the
+    // CLOCK AND DATE dialog) stays open, the menu follows the bar when it moves or
+    // changes size. The clock's rows live in that dialog (below).
     var F = {
-        dow:  document.getElementById( 'setDow' ), date: document.getElementById( 'setDate' ),
-        secs: document.getElementById( 'setSecs' ), bar: document.getElementById( 'setBar' ),
-        barH: document.getElementById( 'setBarH' )
+        dow:  document.getElementById( 'setDow' ), date: document.getElementById( 'setDateFmt' ),
+        secs: document.getElementById( 'setSecs' ), pad: document.getElementById( 'setPad' ),
+        h12:  document.getElementById( 'clk12' ), h24: document.getElementById( 'clk24' ),
+        bar:  document.getElementById( 'setBar' ), barH: document.getElementById( 'setBarH' )
     };
     var barHOut = document.getElementById( 'setBarHOut' );
-    F.date.checked = !! set.date; F.secs.checked = !! set.secs;
+    F.secs.checked = !! set.secs; F.pad.checked = set.hourPad !== false;
+    F.h12.checked = !! set.h12; F.h24.checked = ! set.h12;
     F.barH.value = set.barH; barHOut.textContent = set.barH + ' px';
-    // The weekday and the bar's side are Ayni list pickers: set once Ayni has started
+    // The weekday, the date and the bar's side are Ayni list pickers: set once Ayni has started
     document.addEventListener( 'DOMContentLoaded', function () { if( window.Ayni ) Ayni.ready.then( function ()
     {
         Ayni.picker( F.dow ).set( set.dow ); Ayni.picker( F.bar ).set( set.bar );
-        loadTz2(); h.loadLocker();
+        loadDateFmts(); loadZones(); h.loadLocker();
     } ); } );
     Object.keys( F ).forEach( function ( k )
     {
-        F[ k ].addEventListener( k === 'barH' ? 'input' : k === 'dow' || k === 'bar' ? 'ayni:change' : 'change', function ()
+        F[ k ].addEventListener( k === 'barH' ? 'input' : k === 'dow' || k === 'bar' || k === 'date' ? 'ayni:change' : 'change', function ()
         {
-            set.dow = Ayni.picker( F.dow ).value; set.date = F.date.checked; set.secs = F.secs.checked;
+            var df = Ayni.picker( F.date ).value || 'none';
+            set.dow = Ayni.picker( F.dow ).value; set.secs = F.secs.checked;
+            set.date = df !== 'none'; if( set.date ) set.dateFmt = df;      // the format is kept while the date is off
+            set.hourPad = F.pad.checked; set.h12 = F.h12.checked;
             set.bar = Ayni.picker( F.bar ).value; set.barH = +F.barH.value;
             barHOut.textContent = set.barH + ' px';
             saveSet();
@@ -1244,40 +1250,103 @@
         } );
     } );
 
-    // THE SECOND CLOCK's rows: the switch shows the zone's list; the list is
-    // filled at each menu open (ui.js is deferred), its first pick UTC.
-    var tz2On = document.getElementById( 'setTz2On' ), tz2Sel = document.getElementById( 'setTz2' ),
-        tz2Wrap = document.getElementById( 'tz2Wrap' );
-    function loadTz2()
+    // OTHER CLOCKS' rows (2026-11-23): one per zone of set.zones (ZONES_MAX at most, the bar's order), each
+    // an Ayni filtered list of the time zones and a bin; "+" adds one (UTC) and opens its list at once, to
+    // type the city. Made again at each menu open (ui.js is deferred) and after an add or a remove.
+    var ZONES_MAX = 5;
+    if( ! Array.isArray( set.zones ) ) set.zones = [];
+    set.zones = set.zones.filter( function ( z ) { return typeof z === 'string' && z; } ).slice( 0, ZONES_MAX );
+    delete set.tz2; delete set.tz2On;      // the one second clock until 2026-11-23: not carried over (his call)
+    var zoneRows = document.getElementById( 'zoneRows' ), zoneAdd = document.getElementById( 'zoneAdd' ), zoneOpts = null;
+    function zoneItem( z ) { return { value: z, text: z.replace( /_/g, ' ' ) }; }
+    function zoneOptions()
     {
-        if( ! window.Ayni || ! Ayni.picker ) return;      // an Ayni filtered list; called again once Ayni has started
-        var pk = Ayni.picker( tz2Sel );
-        var zones = Ayni.dates.zones().slice();
-        if( set.tz2 && zones.indexOf( set.tz2 ) < 0 ) zones.unshift( set.tz2 );
-        if( zones.indexOf( 'UTC' ) < 0 ) zones.unshift( 'UTC' );
-        if( pk.options.length !== zones.length )
-            pk.options = zones.map( function ( z ) { return { value: z, text: z.replace( /_/g, ' ' ) }; } );
-        pk.set( set.tz2 || 'UTC' );
-        tz2On.checked = !! set.tz2On;
-        tz2Wrap.hidden = ! set.tz2On;
+        if( ! zoneOpts )
+        {
+            var zones = Ayni.dates.zones().slice();
+            if( zones.indexOf( 'UTC' ) < 0 ) zones.unshift( 'UTC' );
+            zoneOpts = zones.map( zoneItem );
+        }
+        // a saved zone the browser's list lacks still shows
+        var extra = set.zones.filter( function ( z ) { return ! zoneOpts.some( function ( o ) { return o.value === z; } ); } );
+        return extra.filter( function ( z, i ) { return extra.indexOf( z ) === i; } ).map( zoneItem ).concat( zoneOpts );
     }
-    function saveTz2()
+    function loadZones()
     {
-        set.tz2On = tz2On.checked; set.tz2 = Ayni.picker( tz2Sel ).value || 'UTC';
-        tz2Wrap.hidden = ! set.tz2On;
+        zoneAdd.disabled = set.zones.length >= ZONES_MAX;
+        if( ! window.Ayni || ! Ayni.picker ) return;      // called again once Ayni has started
+        zoneRows.textContent = '';
+        var opts = zoneOptions();
+        return set.zones.map( function ( z, i )
+        {
+            var row = document.createElement( 'div' ), el = document.createElement( 'div' ), del = document.createElement( 'button' );
+            row.className = 'set-row';
+            el.className = 'picker'; el.dataset.picker = 'filter'; el.setAttribute( 'aria-label', t( 'desktop.clock2Zone' ) );
+            del.type = 'button'; del.className = 'btn'; del.innerHTML = Ayni.icon( 'trash' );
+            del.dataset.tip = t( 'desktop.clockDel' ); del.setAttribute( 'aria-label', del.dataset.tip );
+            row.append( el, del );
+            zoneRows.append( row );
+            var pk = Ayni.picker( el );
+            pk.options = opts; pk.set( z );
+            el.addEventListener( 'ayni:change', function () { set.zones[ i ] = pk.value || 'UTC'; saveSet(); tick(); } );
+            del.addEventListener( 'click', function ()
+            {
+                set.zones.splice( i, 1 );
+                saveSet(); loadZones(); tick(); placeMore();
+                zoneAdd.focus();
+            } );
+            return pk;
+        } );
+    }
+    zoneAdd.addEventListener( 'click', function ()
+    {
+        if( set.zones.length >= ZONES_MAX ) return;
+        set.zones.push( 'UTC' );
         saveSet();
-        tick();
-        placeMore();
-    }
-    // SHOW THE CLOCK - off (set.clockOff) hides both clocks; its rows stay, greyed.
-    var clockChk = document.getElementById( 'setClock' ), clockRows = document.getElementById( 'clockRows' );
-    function clockShown() { clockChk.checked = ! set.clockOff; clockRows.inert = !! set.clockOff; }
+        var pks = loadZones() || [];
+        tick(); placeMore();
+        var pk = pks[ pks.length - 1 ];
+        if( pk ) { pk.field.focus(); if( pk.field.select ) pk.field.select(); pk.open(); }
+    } );
+    // SHOW THE CLOCK - off (set.clockOff) hides all the clocks, disables the cog before it (CLOCK AND DATE)
+    // and greys the other clocks' rows.
+    var clockChk = document.getElementById( 'setClock' ), clockSetBtn = document.getElementById( 'clockSetBtn' ),
+        clock2Rows = document.getElementById( 'clock2Rows' );
+    function clockShown() { clockChk.checked = ! set.clockOff; clockSetBtn.disabled = !! set.clockOff; clock2Rows.inert = !! set.clockOff; }
     clockShown();
     clockChk.addEventListener( 'change', function () { set.clockOff = ! clockChk.checked; clockShown(); saveSet(); tick(); placeMore(); } );
-    tz2On.addEventListener( 'change', saveTz2 );
-    tz2Sel.addEventListener( 'ayni:change', saveTz2 );
-    loadTz2();
-    moreBtn.addEventListener( 'click', loadTz2 );
+    loadZones();
+    moreBtn.addEventListener( 'click', loadZones );
+
+    // CLOCK AND DATE (2026-11-23) - the cog in the menu's clock row: a close-only
+    // dialog with the clock as the bar shows it on top (drawn by tick), then the
+    // time (24 h / 12 h, two-digit hour, seconds) and the date (weekday, format)
+    // of the main clock; the second clock stays in the menu, always short. The cog is a button inside the row's <label>: a press on
+    // it never flips the switch (a label leaves its buttons alone).
+    var clkBack = document.getElementById( 'clkBackdrop' ), clkPrev = document.getElementById( 'clkPreview' );
+    clockSetBtn.addEventListener( 'click', function ()
+    {
+        closeMore();
+        loadDateFmts();
+        clkBack.showModal();
+        tick();
+    } );
+    clkBack.addEventListener( 'close', function () { moreBtn.focus(); } );      // its cog went with the menu
+    // THE DATE's list: "Don't show", then today in each format, grouped by what comes first (so
+    // 05/06 and 06/05 never look alike); the month's name in the interface language.
+    function loadDateFmts()
+    {
+        if( ! window.Ayni || ! Ayni.picker ) return;      // called again once Ayni has started
+        var now = new Date(), items = [ { value: 'none', text: t( 'desktop.weekdayNone' ) } ];
+        DATE_GROUPS.forEach( function ( g )
+        {
+            items.push( { heading: t( g[ 0 ] ) } );
+            g[ 1 ].forEach( function ( f ) { items.push( { value: f, text: dateText( now, f ) } ); } );
+        } );
+        var pk = Ayni.picker( F.date );
+        pk.options = items;
+        pk.set( set.date ? set.dateFmt || 'iso' : 'none' );
+    }
 
     //------------------------------------------------------------------------//
     // WEATHER - this device's choice (set.weatherBar, the "⋮" menu): the sky
@@ -1749,16 +1818,71 @@
     hookAlt( window );
 
     //------------------------------------------------------------------------//
-    // THE CLOCK - "<weekday> <yyyy-mm-dd> <hh:mm[:ss]>", weekday and date as the
-    // settings say, the weekday in the interface language. A press on the time
-    // opens the countdown (below), on the weekday / date the month (THE MONTH).
+    // THE CLOCK - "<weekday> <date> <time>", as CLOCK AND DATE says: the weekday
+    // short or long, the date in one of DATE_GROUPS' formats (yyyy-mm-dd until
+    // 2026-11-23, still the first), the time 24 h or 12 h, with or without the
+    // hour's leading zero and the seconds; names in the interface language. A
+    // press on the time opens the countdown (below), on the weekday / date the
+    // month (THE MONTH).
 
     var clock = document.getElementById( 'clock' ), clockTimer = 0;
     var pad = Ayni.dates.pad, isoDate = Ayni.dates.iso;
+    // The date formats, by what comes first: [ heading, [ format... ] ].
+    var DATE_GROUPS = [
+        [ 'desktop.dateYearFirst',  [ 'iso', 'ymd/' ] ],
+        [ 'desktop.dateDayFirst',   [ 'dmy/', 'dmy.', 'dmy-', 'dmyy/', 'dm/' ] ],
+        [ 'desktop.dateMonthFirst', [ 'mdy/', 'mdyy/', 'md/' ] ],
+        [ 'desktop.dateNamed',      [ 'dMMMy', 'dMMMMy', 'dMMM', 'dMMMM' ] ]
+    ];
+    var NAMED = { dMMMy:  { day: 'numeric', month: 'short', year: 'numeric' }, dMMMMy: { day: 'numeric', month: 'long', year: 'numeric' },
+                  dMMM:   { day: 'numeric', month: 'short' },                  dMMMM:  { day: 'numeric', month: 'long' } };
+    function uiLang() { return window.Ayni && Ayni.i18n.lang ? Ayni.i18n.lang() : undefined; }
     function dayName( d, style )
     {
         var iso = d.getDay() || 7;
         return window.Ayni ? Ayni.i18n.weekday( iso, style ) : d.toLocaleDateString( undefined, { weekday: style } );
+    }
+    function dateText( d, f )
+    {
+        if( NAMED[ f ] ) { try { return d.toLocaleDateString( uiLang(), NAMED[ f ] ); } catch( e ) { f = 'iso'; } }
+        var y = String( d.getFullYear() ), m = pad( d.getMonth() + 1 ), dd = pad( d.getDate() ), sep = f.slice( -1 );
+        switch( f )
+        {
+            case 'ymd/':  return y + sep + m + sep + dd;
+            case 'dmy/': case 'dmy.': case 'dmy-': return dd + sep + m + sep + y;
+            case 'dmyy/': return dd + sep + m + sep + y.slice( -2 );
+            case 'dm/':   return dd + sep + m;
+            case 'mdy/':  return m + sep + dd + sep + y;
+            case 'mdyy/': return m + sep + dd + sep + y.slice( -2 );
+            case 'md/':   return m + sep + dd;
+            default:      return isoDate( d );
+        }
+    }
+    // "AM" / "PM" in the interface language ("a. m." in Spanish), for 12 h.
+    var dayPeriods = {};
+    function dayPeriod( hr )
+    {
+        var k = ( uiLang() || '' ) + ( hr < 12 ? 'a' : 'p' );
+        if( ! dayPeriods[ k ] )
+        {
+            try
+            {
+                var part = new Intl.DateTimeFormat( uiLang(), { hour: 'numeric', hour12: true, timeZone: 'UTC' } )
+                    .formatToParts( new Date( Date.UTC( 2024, 0, 1, hr < 12 ? 9 : 21 ) ) )
+                    .filter( function ( x ) { return x.type === 'dayPeriod'; } )[ 0 ];
+                dayPeriods[ k ] = part ? part.value : '';
+            }
+            catch( e ) {}
+            dayPeriods[ k ] = dayPeriods[ k ] || ( hr < 12 ? 'AM' : 'PM' );
+        }
+        return dayPeriods[ k ];
+    }
+    // "14:05", "2:05 PM", "09:05:30"...: the main clock.
+    function timeText( hr, min, sec )
+    {
+        var suffix = '';
+        if( set.h12 ) { suffix = ' ' + dayPeriod( hr ); hr = hr % 12 || 12; }
+        return ( set.hourPad === false ? String( hr ) : pad( hr ) ) + ':' + pad( min ) + ( sec == null ? '' : ':' + pad( sec ) ) + suffix;
     }
     function tick()
     {
@@ -1767,27 +1891,42 @@
         clock.hidden = !! set.clockOff;
         var head = [];
         if( set.dow !== 'none' ) head.push( dayName( now, set.dow ) );
-        if( set.date )           head.push( isoDate( now ) );
+        if( set.date )           head.push( dateText( now, set.dateFmt || 'iso' ) );
+        var time = timeText( now.getHours(), now.getMinutes(), set.secs ? now.getSeconds() : null );
         clock.querySelector( 'span:not(.icon)' ).textContent = head.join( ' ' );
         clock.querySelector( 'span:not(.icon)' ).hidden = ! head.length;
-        clock.querySelector( 'b' ).textContent =
-            pad( now.getHours() ) + ':' + pad( now.getMinutes() ) + ( set.secs ? ':' + pad( now.getSeconds() ) : '' );
-        setTip( clock, dayName( now, 'long' ) + ' ' + isoDate( now ) );
+        clock.querySelector( 'b' ).textContent = time;
+        setTip( clock, dayName( now, 'long' ) + ' ' + dateText( now, 'dMMMMy' ) );
         tick2( now );
+        // CLOCK AND DATE's top line: the same text
+        if( clkBack.open )
+        {
+            clkPrev.children[ 0 ].textContent = head.join( ' ' );
+            clkPrev.children[ 1 ].textContent = time;
+        }
         clockTimer = setTimeout( tick, set.secs ? 1000 - now.getMilliseconds() + 20
                                                 : 60000 - now.getSeconds() * 1000 - now.getMilliseconds() + 50 );
     }
 
-    // THE SECOND CLOCK (2026-10-09) - another time zone (set.tz2On + set.tz2,
-    // the "⋮" menu; the zone is kept while off): "<city> <hh:mm>" just before the clock, paler, and "+1" / "-1"
-    // when that place is already on another day. Shows only: no press.
-    var clock2 = document.getElementById( 'clock2' );
+    // OTHER CLOCKS (2026-10-09, up to 5 since 2026-11-23) - other time zones (set.zones, the "⋮"
+    // menu): each "<city> <hh:mm>" just before the clock, paler, and "+1" / "-1" when that place is
+    // already on another day. Always short: CLOCK AND DATE is the main clock's only. Shows only: no press.
+    var clocks2 = document.getElementById( 'clocks2' );
     function zoneCity( z ) { return z.split( '/' ).pop().replace( /_/g, ' ' ); }
     function tick2( now )
     {
-        var z = ! set.clockOff && set.tz2On && set.tz2;
-        clock2.hidden = ! z;
-        if( ! z ) return;
+        var zs = set.clockOff ? [] : set.zones;
+        while( clocks2.children.length > zs.length ) clocks2.lastChild.remove();
+        while( clocks2.children.length < zs.length )
+        {
+            var w = document.createElement( 'span' );
+            w.className = 'widget clock2'; w.innerHTML = '<span></span><b></b><i></i>';
+            clocks2.append( w );
+        }
+        zs.forEach( function ( z, n ) { zoneTick( clocks2.children[ n ], z, now ); } );
+    }
+    function zoneTick( el, z, now )
+    {
         var p = {};
         try
         {
@@ -1795,14 +1934,15 @@
                                                 hour: '2-digit', minute: '2-digit', hourCycle: 'h23' } )
                 .formatToParts( now ).forEach( function ( x ) { p[ x.type ] = x.value; } );
         }
-        catch( e ) { clock2.hidden = true; return; }      // a zone this browser no longer knows
+        catch( e ) { el.hidden = true; return; }      // a zone this browser no longer knows
+        el.hidden = false;
         var there = Date.UTC( +p.year, +p.month - 1, +p.day ),
             here  = Date.UTC( now.getFullYear(), now.getMonth(), now.getDate() ),
             days  = Math.round( ( there - here ) / 86400000 );
-        clock2.querySelector( 'span:not(.icon)' ).textContent = zoneCity( z );
-        clock2.querySelector( 'b' ).textContent = p.hour + ':' + p.minute;
-        clock2.querySelector( 'i' ).textContent = days > 0 ? '+' + days : days < 0 ? String( days ) : '';
-        clock2.title = z + ' - ' + p.year + '-' + p.month + '-' + p.day + ' ' + p.hour + ':' + p.minute;
+        el.children[ 0 ].textContent = zoneCity( z );
+        el.children[ 1 ].textContent = p.hour + ':' + p.minute;
+        el.children[ 2 ].textContent = days > 0 ? '+' + days : days < 0 ? String( days ) : '';
+        el.title = z + ' - ' + p.year + '-' + p.month + '-' + p.day + ' ' + p.hour + ':' + p.minute;
     }
     tick();
     // the weekday is written in the interface language: once more when that is in

@@ -11,6 +11,10 @@
 //     of its version (the cached copy became his), his edit replaced her save
 //     outright (one record per path). Now both stay, and each goes up to its
 //     own home with its own version.
+// IS THIS YOUR DEVICE? A session with "Keep me signed in" on is asked before
+//     signing out; "Not mine" asks the server to wipe this browser
+//     (X-Nayive-Not-Mine). Asked BEFORE the unsent-work count, so that count
+//     stays the last step before the wipe; ×, or "Stay" there, signs nothing out.
 import { server, browser, ok, section, done, onDisk } from "./lib.mjs";
 import { stPage, seed, untilNode } from "./store-lib.mjs";
 
@@ -112,6 +116,85 @@ section( "L4 · TWO ACCOUNTS ON ONE BROWSER" );
     ok( onDisk( s, F, "beto" ) === JSON.stringify( [ { id: "b" }, { id: "beto-new" } ] ), "beto's file is untouched" );
     const left = await C.evaluate( "idb( 'outbox' )" );
     ok( left.length === 0, "nothing is left waiting", left.map( e => e.path ) );
+}
+
+//----------------------------------------------------------------------------//
+section( "IS THIS YOUR DEVICE? · \"KEEP ME SIGNED IN\" ON, THEN SIGN OUT" );
+{
+    // ana again, now with "Keep me signed in" on. On the launcher every
+    // question is noted and answered by the test, and the sign-out's POST is
+    // noted (with or without X-Nayive-Not-Mine) and held, so the page stays
+    // and the session lives on for the next case.
+    const R = await A.tab();
+    await R.open( "/nayive/st.html" );
+    ok( await R.evaluate( `fetch( '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify( { user: 'ana', password: 'aaa', remember: true } ) } ).then( r => r.status === 200 )` ),
+        "ana signs in with \"Keep me signed in\" on" );
+    const HOLD = `( function () {
+        window.asks = []; Ayni.confirm = function ( o ) { return new Promise( function ( r ) { asks.push( { title: o.title, r: r } ); } ); };
+        window.calls = []; var f = window.fetch;
+        window.fetch = function ( u, o ) {
+            if( /\\/api\\/logout$/.test( String( u && u.url || u ) ) )
+            {
+                calls.push( ( ( o && o.headers ) || {} )[ 'X-Nayive-Not-Mine' ] === '1' ? 'logout+notmine' : 'logout' );
+                return new Promise( function () {} );
+            }
+            return f.apply( this, arguments );
+        };
+        return true; } )()`;
+    const L = await A.tab();
+    const openLauncher = async ( offline ) =>
+    {
+        await L.open( "/nayive/" );
+        ok( await L.until( "window.AyniStore && window.NayiveUI && document.getElementById( 'logoutBtn' )" ), "the launcher is up" );
+        await L.evaluate( HOLD );
+        if( offline ) await L.evaluate( "Object.defineProperty( navigator, 'onLine', { get: () => false, configurable: true } ), true" );
+    };
+    const pressSignOut = async ( open = true ) =>
+    {
+        if( open ) await openLauncher();
+        await L.evaluate( "document.getElementById( 'logoutBtn' ).click(), true" );
+        ok( await L.until( "asks.length === 1" ), "Sign out asks" );
+        const title = await L.evaluate( "asks[ 0 ].title" );
+        ok( title === await L.evaluate( "Ayni.t( 'launcher.mineTitle' )" ), "...\"Is this your device?\" first", title );
+    };
+    const pause = ms => new Promise( r => setTimeout( r, ms ) );
+
+    await pressSignOut();
+    await L.evaluate( "asks[ 0 ].r( 'other' ), true" );                    // "It is mine: keep"
+    ok( await L.until( "calls.length === 1", 20000 ), "\"It is mine\": it signs out" );
+    ok( await L.evaluate( "calls[ 0 ]" ) === "logout", "...and asks for no wipe", await L.evaluate( "calls" ) );
+
+    await pressSignOut();
+    await L.evaluate( "asks[ 0 ].r( true ), true" );                       // "Not mine: delete everything"
+    ok( await L.until( "calls.length === 1", 20000 ), "\"Not mine\": it signs out" );
+    ok( await L.evaluate( "calls[ 0 ]" ) === "logout+notmine", "...and asks the server to wipe this browser", await L.evaluate( "calls" ) );
+
+    await pressSignOut();
+    await L.evaluate( "asks[ 0 ].r( false ), true" );                      // × / Esc
+    await pause( 2000 );
+    ok( await L.evaluate( "calls.length === 0 && asks.length === 1" ), "× / Esc: no sign-out, nothing wiped",
+        await L.evaluate( "( { calls: calls, asks: asks.length } )" ) );
+
+    // "Not mine", but a save still waits here: the unsent-work question comes
+    // after it, and "Stay" keeps everything - no sign-out, no wipe. The
+    // launcher first, offline, before the save is made (as K5: its boot
+    // would send a save made before).
+    await openLauncher( true );
+    ok( await R.evaluate( "offline( true ), SC.write( 'files/not-mine.txt', 'still only here\\n' ).then( r => r.offline )" ),
+        "a save waits here (offline)" );
+    await pressSignOut( false );
+    await L.evaluate( "asks[ 0 ].r( true ), true" );                       // "Not mine: delete everything"
+    ok( await L.until( "asks.length === 2", 20000 ), "then it asks about the save still here" );
+    ok( await L.evaluate( "asks[ 1 ].title === Ayni.t( 'launcher.unsavedTitle' )" ), "...the unsent-work question",
+        await L.evaluate( "asks[ 1 ].title" ) );
+    await L.evaluate( "asks[ 1 ].r( false ), true" );                      // "Stay"
+    await pause( 2000 );
+    ok( await L.evaluate( "calls.length === 0" ), "\"Stay\": no sign-out, nothing wiped", await L.evaluate( "calls" ) );
+    ok( ( await R.evaluate( "idb( 'outbox' ).then( l => l.map( e => e.path ) )" ) ).includes( "files/not-mine.txt" ),
+        "the save is still here" );
+    await R.evaluate( "offline( false ), SC.flush().then( () => true )" );
+    ok( await untilNode( () => onDisk( s, "files/not-mine.txt", "ana" ) === "still only here\n" ), "and it goes up" );
 }
 
 await done( A, s );

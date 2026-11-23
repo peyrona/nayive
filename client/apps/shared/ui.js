@@ -806,7 +806,10 @@
     // Sign out is a POST (a GET could be fired by a picture in an email, or a
     // link on another site): the link only works through this.
     //
-    // First the saves still waiting here get one more chance to go up (up to
+    // A session with "Keep me signed in" on is asked "Is this your device?"
+    // first (IS THIS YOUR DEVICE? below).
+    //
+    // Then the saves still waiting here get one more chance to go up (up to
     // 10 s while one is being sent, no wait offline); what is left - saves and
     // untitled drafts - is counted, the user is asked, and only what was
     // counted is deleted: a save another tab makes while the question is up is
@@ -875,6 +878,28 @@
         signingOut = true;
         try
         {
+            // IS THIS YOUR DEVICE? A session with "Keep me signed in" on that
+            // signs out may be on someone else's device (the switch on out of
+            // habit): asked, and "No" wipes this browser like a session with
+            // it off (X-Nayive-Not-Mine, api_auth.go apiLogout). Asked FIRST,
+            // so the count of unsent work below stays the last step before the
+            // wipe: a save made while this is up is counted there, never wiped
+            // unseen. The server says what the session is (whoami "remember";
+            // 3 s cap); off, or the admin: nothing to ask. × / Esc: stays in.
+            var notMine = false;
+            var me = await Promise.race( [
+                fetch( "/api/whoami", { credentials: "same-origin" } )
+                    .then( function ( r ) { return r.ok ? r.json() : null; } )
+                    .catch( function () { return null; } ),
+                new Promise( function ( r ) { setTimeout( function () { r( null ); }, 3000 ); } ) ] );
+            if( me && me.remember === true && me.role !== "admin" && window.Ayni && window.Ayni.confirm )
+            {
+                var mine = await window.Ayni.confirm( { title: t( "launcher.mineTitle" ), body: t( "launcher.mineBody" ),
+                                                        other: t( "launcher.mineKeep" ),
+                                                        confirm: t( "launcher.mineWipe" ), danger: true } );
+                if( mine === false ) return;
+                notMine = mine === true;
+            }
             if( window.AyniStore )
             {
                 var go = true;
@@ -896,7 +921,8 @@
                 if( ! go ) return;
             }
             await forgetBrowser( opts );
-            try { await fetch( "/api/logout", { method: "POST", credentials: "same-origin" } ); } catch ( err ) {}
+            try { await fetch( "/api/logout", { method: "POST", credentials: "same-origin",
+                                                headers: notMine ? { "X-Nayive-Not-Mine": "1" } : {} } ); } catch ( err ) {}
             location.href = "/nayive/login.html";
         }
         finally { signingOut = false; }

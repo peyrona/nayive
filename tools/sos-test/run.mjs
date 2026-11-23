@@ -127,7 +127,7 @@ try
 
     console.log( "DANGER WATCH (held down)" );
     const myRow = () => { try { return JSON.parse( fs.readFileSync( `${RUN}/config/sos.json`, "utf8" ) ).users.find( u => u.owner === "test" ) || {}; } catch { return {}; } };
-    const hold = () => ev( `( b => { b.dispatchEvent( new PointerEvent( 'pointerdown', { bubbles: true, button: 0 } ) ); setTimeout( () => b.dispatchEvent( new PointerEvent( 'pointerup', { bubbles: true } ) ), 900 ); true } )( document.getElementById('sosBtn') )` );
+    const hold = () => ev( `( b => { b.dispatchEvent( new PointerEvent( 'pointerdown', { bubbles: true, button: 0 } ) ); setTimeout( () => b.dispatchEvent( new PointerEvent( 'pointerup', { bubbles: true } ) ), 550 ); true } )( document.getElementById('sosBtn') )` );
     await hold();
     ok( await until( "!! document.querySelector('.sos-screen.watch .sos-count')" ), "held down: the watch screen" );
     ok( await until( "/^1:2\\d$/.test( document.querySelector('.sos-screen.watch .sos-count').textContent )" ), "...counting from 1:30", await ev( "document.querySelector('.sos-screen.watch .sos-count').textContent" ) );

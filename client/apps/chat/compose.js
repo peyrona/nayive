@@ -412,9 +412,14 @@
     function wireSendHold()
     {
         Ayni.init( sendBtn );
+        // Chat's own tip: in the box Shift+Enter is a new line, a right-click
+        // opens the menu too, and the menu has more than two choices.
+        sendBtn.setTip = function () { sendBtn.dataset.tip = T( Ayni.isTouch() ? "chat.sendTipHold" : "chat.sendTipMouse" ); };
+        sendBtn.setTip();
         sendBtn.addEventListener( "ayni:press", function ( e ) { if( e.detail.second ) openSendMenu(); else send(); } );
-        // A right-click opens the menu too (the help says so).
-        sendBtn.addEventListener( "contextmenu", function () { openSendMenu(); } );
+        // A right-click opens the menu too (the help says so). A finger's own
+        // long press is Ayni's hold above: it must not open the menu twice.
+        sendBtn.addEventListener( "contextmenu", function ( e ) { if( e.pointerType !== "touch" ) openSendMenu(); } );
     }
 
     // A small menu over the button (an Ayni menu, Ayni.menuAt: it shows when
@@ -429,8 +434,7 @@
         ];
         // The translator needs a signed-in account (/api/translate/config).
         if( S.mode === "owner" ) items.push( { id: "translate", label: T( "chat.translateSend" ), icon: Ayni.icon( "translate" ), run: translateSend } );
-        Ayni.menuAt( items, { anchor: sendBtn } );
-        if( navigator.vibrate ) try { navigator.vibrate( 15 ); } catch( _ ) {}
+        Ayni.menuAt( items, { anchor: sendBtn } );   // a hold has buzzed already (Ayni)
     }
 
     // ---------------------------------------------------------------------
@@ -478,27 +482,50 @@
         else setTimeout( function () { nightAsk( who, conv, go ); } );   // after this click's own "close the panel"
     };
 
-    // The question, over the Send button like the hold menu.
+    // The question, a modal dialog with no way out but its two answers: by
+    // now the photo step or the sheet is closed, the reply taken, so closing
+    // it lost the message (a press outside a menu did). A press outside does
+    // nothing, nor Esc; a phone's Back that closes it anyway asks again.
+    // Another chat opening under it (a notification tapped) drops it.
     function nightAsk( who, conv, go )
     {
         if( S.open !== conv ) return;
         closePanel();
         var names = who.slice( 0, 2 ).map( function ( x ) { return x.name; } ).join( ", " ) + ( who.length > 2 ? " +" + ( who.length - 2 ) : "" );
-        function item( icon, key, silent )
+        var d = Ayni.dialog( { title: who.length === 1 ? C.TF( "chat.nightAt", { time: who[ 0 ].time, who: names } ) : C.TF( "chat.nightFor", { who: names } ) } );
+        var done = false, untrack = null;
+        function choice( icon, key, silent )
         {
-            return { id: silent ? "silent" : "loud", label: T( key ), icon: C.icon( icon ), run: function ()
+            var b = h( "button", { class: "btn text bordered", attrs: { type: "button" } }, C.ic( icon ), T( key ) );
+            b.addEventListener( "click", function ()
             {
+                if( done ) return;
+                done = true;
+                untrack();
+                d.close();
+                if( S.open !== conv ) return;
                 nightPick[ conv ] = { silent: silent, until: Date.now() + 60 * 60 * 1000 };
                 go( silent );
-            } };
+            } );
+            d.body.appendChild( h( "div", { class: "pick-opt" }, b ) );
+            return b;
         }
-        Ayni.menuAt( [
-            { caption: who.length === 1 ? C.TF( "chat.nightAt", { time: who[ 0 ].time, who: names } ) : C.TF( "chat.nightFor", { who: names } ) },
-            item( "bell-off", "chat.sendSilent", true ),
-            item( "bell", "chat.sendLoud", false ),
-            // Say the answer holds, so a later quiet send is not taken for a loud one.
-            { caption: C.TF( "chat.nightHold", { time: C.time( Date.now() + 60 * 60 * 1000 ) } ) }
-        ], { anchor: sendBtn, keyboard: true } );
+        choice( "bell-off", "chat.sendSilent", true ).autofocus = true;
+        choice( "bell", "chat.sendLoud", false );
+        // Say the answer holds, so a later quiet send is not taken for a loud one.
+        d.body.appendChild( h( "p", { class: "hint", text: C.TF( "chat.nightHold", { time: C.time( Date.now() + 60 * 60 * 1000 ) } ) } ) );
+        d.dialog.addEventListener( "keydown", function ( e ) { if( e.key === "Escape" ) e.preventDefault(); } );   // before Ayni's Esc
+        d.dialog.addEventListener( "cancel", function ( e ) { e.preventDefault(); } );
+        d.dialog.addEventListener( "close", function ()
+        {
+            if( done ) return;
+            done = true;
+            untrack();
+            setTimeout( function () { nightAsk( who, conv, go ); } );
+        } );
+        untrack = C.trackSheet( function () { done = true; untrack(); d.close(); } );
+        d.show();
+        NayiveUI.applySheetButtons( d.dialog );
     }
 
     function whenLabel( ms ) { return C.dayLabel( ms ) + " " + C.time( ms ); }
@@ -1237,7 +1264,7 @@
                 var sel = window.getSelection && window.getSelection();   // what the press selected, if anything
                 if( sel ) sel.removeAllRanges();
                 C.openCtx( m );
-            }, 480 );
+            }, Ayni.holdMs || 400 );   // Ayni's long tap, as every hold
         } );
         el.addEventListener( "pointermove", function ( e )
         {
@@ -1276,7 +1303,7 @@
         {
             held = false;
             if( e.pointerType === "mouse" || ! menu() ) return;
-            timer = setTimeout( function () { timer = null; held = true; C.openCtx( m ); }, 480 );
+            timer = setTimeout( function () { timer = null; held = true; C.openCtx( m ); }, Ayni.holdMs || 400 );
         } );
         function stop() { clearTimeout( timer ); timer = null; }
         el.addEventListener( "pointerup", stop );

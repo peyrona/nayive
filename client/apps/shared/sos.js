@@ -18,7 +18,7 @@
 
     var COUNT = 5;   // seconds before an SOS goes
     var WATCH = 90;  // seconds a danger watch runs (the server's sosWatchFor)
-    var HOLD  = 700; // ms a press must last to start one
+    var HOLD  = Ayni.holdMs || 400; // ms a press must last to start one: Ayni's long tap, as every hold
     var T  = function ( k ) { return Ayni.t( k ); };
     var TF = function ( k, o ) { return Ayni.tf( k, o ); };
     var $  = function ( id ) { return document.getElementById( id ); };

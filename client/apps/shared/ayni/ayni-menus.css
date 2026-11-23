@@ -68,8 +68,8 @@ header [role="toolbar"], [role="toolbar"].tall { background: none; border: 0; bo
 /* A popup of settings may grow to the height of the screen; it scrolls past that */
 .panel.popup.controls.tall { max-height: calc(100dvh - 16px); overflow: auto; }
 /* Section titles: accent colour + a rule under them, so a section's start stands out (his ask, 2026-11-11). */
-.panel.popup.controls h4 { margin: 4px 0 0; padding-bottom: 4px; border-bottom: 1px solid var(--line); font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
-.panel.popup.controls h4:first-child { margin-top: 0; }
+.panel.popup.controls h4, dialog.panel > .body.controls h4 { margin: 4px 0 0; padding-bottom: 4px; border-bottom: 1px solid var(--line); font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.panel.popup.controls h4:first-child, dialog.panel > .body.controls h4:first-child { margin-top: 0; }
 /* Tool group: the real tools of a group, in a row under the one button that stands for them */
 .panel.popup.tools { padding: 6px; display: flex; flex-direction: column; gap: 2px; }
 .panel.popup.tools:not(:popover-open) { display: none; }

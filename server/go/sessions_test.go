@@ -151,6 +151,21 @@ func TestSessionsBrokenFileSetAside(t *testing.T) {
 	}
 }
 
+// TestWhoamiSaysRemember: whoami says whether "Keep me signed in" is on - the
+// sign-out asks "Is this your device?" only then (shared/ui.js signOut).
+func TestWhoamiSaysRemember(t *testing.T) {
+	for _, remember := range []string{"true", "false"} {
+		_, ts, client := newTestServer(t)
+		jsonCall(t, client, "POST", ts.URL+"/api/login",
+			`{"user":"ana","password":"abc","remember":`+remember+`}`, http.StatusOK, nil)
+		var me map[string]any
+		jsonCall(t, client, "GET", ts.URL+"/api/whoami", "", http.StatusOK, &me)
+		if got, ok := me["remember"].(bool); !ok || (got != (remember == "true")) {
+			t.Errorf("signed in with remember=%s: whoami says remember=%v", remember, me["remember"])
+		}
+	}
+}
+
 // TestWhoamiRenewsRememberedCookie: "Mantenme conectado" is counted again from
 // every page load; a plain sign-in keeps its browser-session cookie.
 func TestWhoamiRenewsRememberedCookie(t *testing.T) {

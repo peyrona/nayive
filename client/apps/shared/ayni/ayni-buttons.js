@@ -32,14 +32,16 @@ const initAlt = (b) => {
   b.setTip();
   b.setAttribute('aria-description', `Shift+Enter: ${alt}`);
   b.style.setProperty('--hold-ms', HOLD_MS + 'ms');
-  const run = (second) => fire(b, 'ayni:press', { second, label: second ? alt : base });
+  /* A disabled or busy button does nothing: no ring, no buzz, no second action (double-click and Shift+Enter included) */
+  const off = () => b.getAttribute('aria-disabled') === 'true' || b.getAttribute('aria-busy') === 'true';
+  const run = (second) => { if (!off()) fire(b, 'ayni:press', { second, label: second ? alt : base }); };
   let timer, held = false, t0 = 0;
-  const hold = () => { if (held || !t0) return; clearTimeout(timer); held = true; t0 = 0; b.classList.remove('holding'); navigator.vibrate?.(15); run(true); };
+  const hold = () => { if (held || !t0) return; clearTimeout(timer); held = true; t0 = 0; b.classList.remove('holding'); if (navigator.userActivation?.hasBeenActive !== false) navigator.vibrate?.(15); run(true); };
   /* A finger that stays down past HOLD_MS always gets the second action, even when the browser ends the touch first
      (its own long press: pointercancel, or contextmenu) or lifts it before the timer ran */
   const end = (e) => { if (!held && t0 && (e.type === 'contextmenu' || performance.now() - t0 >= HOLD_MS)) hold(); else { clearTimeout(timer); t0 = 0; b.classList.remove('holding'); } };
   b.addEventListener('pointerdown', (e) => {
-    if (e.pointerType === 'mouse' && !isTouch()) return;
+    if ((e.pointerType === 'mouse' && !isTouch()) || off()) return;
     held = false; t0 = performance.now(); b.classList.add('holding');
     clearTimeout(timer); timer = setTimeout(hold, HOLD_MS);
   });

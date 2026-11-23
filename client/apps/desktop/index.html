@@ -138,8 +138,9 @@
             <button id="wxBtn" class="widget" type="button" popovertarget="wxPop" hidden data-i18n-attr="aria-label:desktop.weather, data-tip:desktop.weather"></button>
             <!-- BATTERY - its level (set.battBar, see BATTERY below); shows only, no press. -->
             <span id="batt" class="widget" role="img" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"/><line x1="22" y1="11" x2="22" y2="13"/><rect class="batt-fill" x="4" y="9" width="14" height="6" rx="1" stroke="none" fill="currentColor"/></svg><b></b></span>
-            <!-- SECOND CLOCK - another time zone (set.tz2, see THE SECOND CLOCK); shows only, no press. -->
-            <span id="clock2" class="widget" hidden><span></span><b></b><i></i></span>
+            <!-- OTHER CLOCKS - up to 5 time zones (set.zones, see OTHER CLOCKS): one short ".clock2" each, made
+                 by the code in here; shows only, no press. -->
+            <span id="clocks2"></span>
             <button id="clock" class="widget" type="button"><span></span><b></b></button>
             <!-- MORE (2026-09-28) - the "⋮" after the clock: what used to sit on the
                  bar (Free/Tile) and what has no room there (Lock now, the clock, the bar).
@@ -157,13 +158,11 @@
         <!-- MORE - the "⋮": Ayni's popup with controls. Every change applies at once and leaves it
              open; only the two buttons at its end close it. -->
         <div class="panel popup controls tall" id="moreMenu" popover data-i18n-attr="aria-label:ui.moreOptions">
-            <!-- BATTERY ON THE BAR - set.battBar (2026-10-04): the #batt on the bar (see
-                 BATTERY). Always the first row; greyed with no battery or no browser API. -->
-            <label class="switch end" id="battRow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line><line x1="6" y1="11" x2="6" y2="13"></line><line x1="10" y1="11" x2="10" y2="13"></line></svg><span data-i18n="desktop.battBar"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.battBarInfo"></span><input role="switch" type="checkbox" id="battBarChk" disabled></label>
             <!-- WEATHER (2026-11-11) - on the bar: set.weatherBar, this device (the #wxBtn, see WEATHER).
                  Where, who gives it, units: ONE per user (data/weather.json), for the bar AND both lockers;
                  filled and saved at once by ayni-deskpage.js (wxSet*). -->
             <h4 data-i18n="desktop.weatherLabel"></h4>
+            <label class="switch end"><span class="icon" data-icon="cloud"></span><span data-i18n="desktop.weatherBar"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.weatherBarInfo"></span><input role="switch" type="checkbox" id="weatherBarChk"></label>
             <!-- The place: the list, then the city (always there, usable only with "A city" picked). -->
             <div class="set-row" id="wxPlaceRow"><label for="wxPlace" data-i18n="salon.place"></label>
                 <div class="picker" id="wxPlace"></div><span class="input-group"><input class="input" id="wxCity" type="text" spellcheck="false" data-i18n-attr="placeholder:salon.city, aria-label:salon.city"><button class="btn" type="button" id="wxFind" data-i18n-attr="data-tip:salon.cityFind, aria-label:salon.cityFind"><span class="icon" data-icon="search"></span></button></span></div>
@@ -172,7 +171,6 @@
                 <div class="picker" id="wxBy"></div></div>
             <div class="set-row"><label for="wxUnits" data-i18n="salon.units"></label>
                 <div class="picker" id="wxUnits"></div></div>
-            <label class="switch end"><span class="icon" data-icon="cloud"></span><span data-i18n="desktop.weatherBar"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.weatherBarInfo"></span><input role="switch" type="checkbox" id="weatherBarChk"></label>
             <!-- WINDOWS - how the windows behave on the desk. -->
             <h4 data-i18n="desktop.windowsLabel"></h4>
             <!-- TILE - one switch for the whole desk (see TILE / UNTILE): Free <-> Tile. -->
@@ -185,19 +183,18 @@
             <label class="switch end"><span class="icon" data-icon="window-half"></span><span data-i18n="desktop.sticky"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.stickyInfo"></span><input role="switch" type="checkbox" id="stickyChk"></label>
             <!-- SCALE ON OPEN - new windows start with Scale on (set.scaleNew; see SCALE). -->
             <label class="switch end"><span class="icon" data-icon="window-scale"></span><span data-i18n="desktop.scaleNew"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.scaleNewInfo"></span><input role="switch" type="checkbox" id="scaleNewChk"></label>
-            <!-- THE CLOCK - what it shows beside the time (see THE CLOCK). -->
+            <!-- THE CLOCK - shown or not; the cog before the switch opens CLOCK AND DATE (below), where the
+                 time and the date are set (2026-11-23); then the second clock. -->
             <h4 data-i18n="desktop.tabClock"></h4>
-            <!-- SHOW THE CLOCK - set.clockOff (2026-11-12): off hides both clocks and greys the rows below. -->
-            <label class="switch end"><span data-i18n="desktop.showClock"></span><input role="switch" type="checkbox" id="setClock"></label>
-            <div id="clockRows">
-            <div class="set-row"><label for="setDow" data-i18n="desktop.weekday"></label>
-                <div class="picker" id="setDow"><input type="hidden" value="none"><div class="panel popup picker-pop" popover="manual"><ul role="listbox"><li role="option" data-value="none" data-i18n="desktop.weekdayNone"></li><li role="option" data-value="short" data-i18n="desktop.weekdayShort"></li><li role="option" data-value="long" data-i18n="desktop.weekdayLong"></li></ul></div></div></div>
-            <label class="switch end"><span data-i18n="desktop.showDate"></span><input role="switch" type="checkbox" id="setDate"></label>
-            <label class="switch end"><span data-i18n="desktop.showSeconds"></span><input role="switch" type="checkbox" id="setSecs"></label>
-            <!-- SECOND CLOCK - on: its zone's list below (filled at each menu open, see THE CLOCK AND THE BAR). -->
-            <label class="switch end"><span data-i18n="desktop.clock2"></span><input role="switch" type="checkbox" id="setTz2On"></label>
-            <div class="set-row" id="tz2Wrap" hidden><label for="setTz2" data-i18n="desktop.clock2Zone"></label>
-                <div class="picker" id="setTz2" data-picker="filter"></div></div>
+            <!-- SHOW THE CLOCK - set.clockOff (2026-11-12): off hides both clocks. -->
+            <label class="switch end" id="clockRow"><span data-i18n="desktop.showClock"></span><button class="btn" id="clockSetBtn" type="button" data-i18n-attr="data-tip:desktop.clockSet, aria-label:desktop.clockSet"><span class="icon" data-icon="settings"></span></button><input role="switch" type="checkbox" id="setClock"></label>
+            <!-- OTHER CLOCKS (2026-11-23) - up to 5 time zones, in the bar's order: "+" adds one (its list opens
+                 at once), each row's bin removes it. Greyed and dead while the clock is off. Never follow CLOCK AND
+                 DATE: always "<city> <hh:mm>". The rows are made by OTHER CLOCKS in ayni-deskpage.js. -->
+            <div id="clock2Rows">
+            <div class="set-row"><span data-i18n="desktop.clocks2"></span>
+                <button class="btn" id="zoneAdd" type="button" data-i18n-attr="data-tip:desktop.clockAdd, aria-label:desktop.clockAdd"><span class="icon" data-icon="plus"></span></button></div>
+            <div id="zoneRows"></div>
             </div>
             <!-- THE BAR - its side of the screen and its height (its width when at a side). -->
             <h4 data-i18n="desktop.tabDesktop"></h4>
@@ -205,8 +202,6 @@
                 <div class="picker" id="setBar"><input type="hidden" value="bottom"><div class="panel popup picker-pop" popover="manual"><ul role="listbox"><li role="option" data-value="top" data-i18n="desktop.barTop"></li><li role="option" data-value="bottom" data-i18n="desktop.barBottom"></li><li role="option" data-value="left" data-i18n="desktop.barLeft"></li><li role="option" data-value="right" data-i18n="desktop.barRight"></li></ul></div></div></div>
             <div class="set-row"><label for="setBarH" data-i18n="desktop.barHeight"></label>
                 <span class="slider-row"><input type="range" id="setBarH" min="36" max="72" step="2"><output id="setBarHOut" for="setBarH"></output></span></div>
-            <!-- BEVEL - set.bevel (2026-11-08, default on): buttons, tabs, switches and splitters look raised, here and in every window. -->
-            <label class="switch end"><span data-i18n="desktop.bevel"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.bevelInfo"></span><input role="switch" type="checkbox" id="bevelChk"></label>
             <!-- SCREEN LOCKER (shared/locker.js): which one + after how many idle
                  minutes (ONE value for every locker, his rule 2026-09-30); the clock's own line of text only shows with the clock.
                  DEVICE state (localStorage "nayive-locker"); moved here from My account 2026-09-28. -->
@@ -218,6 +213,13 @@
             <div class="set-row" id="lockTextWrap" hidden><label for="lockText" data-i18n="acct.lockerText"></label>
                 <input class="input" id="lockText" type="text" maxlength="60" spellcheck="false"></div>
             <button class="btn text" id="lockNowBtn" type="button"><span class="icon" data-icon="lock"></span><span data-i18n="desktop.lockNow"></span></button>
+            <!-- OTHER - what fits no section above (2026-11-23): the battery on the bar and the raised look. -->
+            <h4 data-i18n="desktop.othersLabel"></h4>
+            <!-- BATTERY ON THE BAR - set.battBar (2026-10-04): the #batt on the bar (see
+                 BATTERY). Greyed with no battery or no browser API. -->
+            <label class="switch end" id="battRow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line><line x1="6" y1="11" x2="6" y2="13"></line><line x1="10" y1="11" x2="10" y2="13"></line></svg><span data-i18n="desktop.battBar"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.battBarInfo"></span><input role="switch" type="checkbox" id="battBarChk" disabled></label>
+            <!-- BEVEL - set.bevel (2026-11-08, default on): buttons, tabs, switches and splitters look raised, here and in every window. -->
+            <label class="switch end"><span data-i18n="desktop.bevel"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.bevelInfo"></span><input role="switch" type="checkbox" id="bevelChk"></label>
         </div>
 
         <!-- TODAY'S WEATHER - opened by #wxBtn, beside it on the desk side of the bar
@@ -254,6 +256,35 @@
             <button class="btn" data-close type="button" data-i18n-attr="data-tip:ui.close"><span class="icon" data-icon="close"></span></button>
             <button class="btn primary" id="cdPlay" type="button" data-i18n-attr="data-tip:desktop.cdStart"><span class="icon" data-icon="play"></span></button>
         </footer>
+    </dialog>
+
+    <!-- CLOCK AND DATE (2026-11-23) - opened by the cog in the "⋮" menu's clock row. Close only: every
+         change shows on the bar and is kept at once (see THE CLOCK AND THE BAR). On top, the clock as the
+         bar will show it; then the time and the date. The second clock is not set here (it stays in the menu). -->
+    <dialog class="panel" id="clkBackdrop" data-i18n-attr="aria-label:desktop.clockSet">
+        <header>
+            <h2 data-i18n="desktop.clockSet"></h2>
+            <button class="btn" type="button" data-close data-i18n-attr="data-tip:ui.close, aria-label:ui.close"><span class="icon" data-icon="close"></span></button>
+        </header>
+        <div class="body controls" id="clockRows">
+            <div class="clk-preview" id="clkPreview" aria-hidden="true"><span></span><b></b></div>
+            <h4 data-i18n="desktop.clockTime"></h4>
+            <!-- 24 h or 12 h (set.h12), the hour with two digits (set.hourPad), the seconds (set.secs). -->
+            <div class="set-row"><span data-i18n="desktop.clockCycle"></span>
+                <div class="switch-pair" role="radiogroup" id="clkCycle" data-i18n-attr="aria-label:desktop.clockCycle">
+                    <label><input type="radio" name="clkCycle" id="clk24" checked><span>24 h</span></label>
+                    <span class="track" aria-hidden="true"></span>
+                    <label><input type="radio" name="clkCycle" id="clk12"><span>12 h</span></label>
+                </div></div>
+            <label class="switch end"><span data-i18n="desktop.clockPad"></span><input role="switch" type="checkbox" id="setPad"></label>
+            <label class="switch end"><span data-i18n="desktop.showSeconds"></span><input role="switch" type="checkbox" id="setSecs"></label>
+            <h4 data-i18n="desktop.clockDate"></h4>
+            <div class="set-row"><label for="setDow" data-i18n="desktop.weekday"></label>
+                <div class="picker" id="setDow"><input type="hidden" value="none"><div class="panel popup picker-pop" popover="manual"><ul role="listbox"><li role="option" data-value="none" data-i18n="desktop.weekdayNone"></li><li role="option" data-value="short" data-i18n="desktop.weekdayShort"></li><li role="option" data-value="long" data-i18n="desktop.weekdayLong"></li></ul></div></div></div>
+            <!-- THE DATE - set.date (shown or not) + set.dateFmt; each item is today in that format (filled at each open). -->
+            <div class="set-row"><label for="setDateFmt" data-i18n="desktop.dateFmt"></label>
+                <div class="picker" id="setDateFmt"></div></div>
+        </div>
     </dialog>
 
 <script src="../shared/ayni/ayni-deskpage.js"></script>
