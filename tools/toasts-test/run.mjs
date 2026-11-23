@@ -186,6 +186,9 @@ try
         await ev( `localStorage.setItem( 'ayni-theme', '${theme}' ); true` );
         await open( "calc", 390, 760 );
         await sleep( 1500 );
+        // A phone shows Calc's bar only with 2+ sheets (calc.css): show its tabs, as a second sheet would
+        await ev( "document.getElementById( 'sheetTabs' ).hidden = false; true" );
+        await sleep( 300 );
         await ev( "Ayni.toast( 'ok', 'Saved.' ); true" );
         await sleep( 400 );
         const g = JSON.parse( await ev( `JSON.stringify( [ document.getElementById( 'statusBar' ).getBoundingClientRect().top, document.getElementById( 'statusBar' ).getBoundingClientRect().bottom, innerHeight,

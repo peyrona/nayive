@@ -78,7 +78,8 @@ ok( ( await sharedWith( "files/Amigos" ) )[ "Shared with" ] === "ana", "Properti
 ok( ( await sharedWith( "files/Lista" ) )[ "Shared with" ] === "ana, bea", "Properties: every user", await sharedWith( "files/Lista" ) );
 ok( ( await sharedWith( "files/Todos" ) )[ "Shared with" ] === "All Nayive users", "Properties: everybody" );
 ok( ( await sharedWith( "files/Ambos" ) )[ "Shared with" ] === "All Nayive users", "Properties: both ways says everybody" );
-ok( ! ( "Shared with" in await sharedWith( "files/Plain" ) ), "Properties: not shared, no row" );
+const plainRows = await sharedWith( "files/Plain" );
+ok( plainRows[ "Shared with" ] === "None", "Properties: not shared, says None", plainRows );
 ok( await c.evaluate( "! document.querySelector('#selActions [data-pick-act=props]')" ), "no second (i) in the selection group" );
 await key( c, "Escape" );
 await c.evaluate( "browse.clear ? browse.clear() : 0; true" );

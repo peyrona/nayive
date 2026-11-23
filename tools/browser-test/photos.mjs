@@ -93,7 +93,7 @@ await key( c, "Escape" );
 ok( await c.evaluate( "( ! document.querySelector('#ayni-menu')?.matches(':popover-open') )" ), "Esc closes the menu" );
 ok( await c.evaluate( "! document.querySelector('#grid [data-more], #tree [data-more], #selActions [data-pick=menu]')" ), "no tile ⋮, no tree ⋮, no ⋮ in the selection group" );
 let fb = await fitState( c );
-ok( fb.acts.join() === "edit,share,download,move,copyTo,info,bin" && ! fb.out.length && ! fb.more && ! fb.crowded,
+ok( fb.acts.join() === "edit,share,download,move,copyTo,info,readText,bin" && ! fb.out.length && ! fb.more && ! fb.crowded,
     "wide: every action is a button, in menu order (no See on map without a place); no ⋮", fb );
 await c.evaluate( "browse.clear(); true" );
 await mouse( c, "#grid", { dx: 20, button: "right" } );
@@ -253,7 +253,7 @@ ok( await sel() === [ "a.png", "c.png" ].map( L ).join(), "…then a tap adds", 
 fb = await fitState( c );
 ok( ! fb.crowded && fb.more && fb.acts.includes( "bin" ) && ! fb.tools.includes( "reloadBtn" ),   // 8 px touch gaps: only the top rank fits at 390
     "phone header: one row; the top ranks stay, the tools leave first, the ⋮ shows", fb );
-ok( fb.out.length && fb.rows.filter( r => r !== "all" ).slice( 0, fb.out.length ).join() === fb.out.join() && fb.out.join() === [ "edit", "share", "download", "move", "copyTo", "info", "bin" ].filter( a => fb.out.includes( a ) ).join(),
+ok( fb.out.length && fb.rows.filter( r => r !== "all" ).slice( 0, fb.out.length ).join() === fb.out.join() && fb.out.join() === [ "edit", "share", "download", "move", "copyTo", "info", "readText", "bin" ].filter( a => fb.out.includes( a ) ).join(),
     "…its ⋮ lists the hidden actions in toolbar order (Select all first, when hidden), then the hidden tools", fb );
 await finger( c, ".topbar .fit-more" );
 const mrows = await menuRows( c );
