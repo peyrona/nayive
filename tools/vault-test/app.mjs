@@ -77,7 +77,8 @@ try
         const end = Date.now() + ms;
         for( ;; ) { let v = null; try { v = await c.evaluate( expr ); } catch {} if( v || Date.now() > end ) return v; await sleep( 120 ); }
     };
-    const helpers = fs.readFileSync( path.join( HERE, "page.html" ), "utf8" ).split( "// Helpers the runner drives the real dialogs with." )[ 1 ].split( "</script>" )[ 0 ];
+    // The helpers that drive the real dialogs: Ayni's vault checks page (here as page.html, with run.mjs, until 2026-11-23)
+    const helpers = fs.readFileSync( path.join( REPO, "client/apps/shared/ayni/tests/vault-only.html" ), "utf8" ).split( "// Helpers the runner drives the real dialogs with." )[ 1 ].split( "</script>" )[ 0 ];
     async function go( url, ready )
     {
         await c.send( "Page.navigate", { url: BASE + url } );
