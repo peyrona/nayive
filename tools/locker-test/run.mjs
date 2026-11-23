@@ -46,17 +46,20 @@ try
     await a.go( "index.html" );
     ok( await a.evaluate( "typeof AyniLocker" ) === "object", "AyniLocker loaded in launcher" );
 
-    // --- My account row
-    await a.evaluate( "openAccountDialog(); 1" );
+    // --- its rows in the desktop's "⋮" (they left My account 2026-09-28)
+    await a.evaluate( "localStorage.setItem('balata-desktop',JSON.stringify({mode:'always'}));1" );
+    await a.go( "desktop/index.html" );
+    await a.evaluate( "document.getElementById('moreBtn').click();1" );
     await sleep( 600 );
     const row = JSON.parse( await a.evaluate( `JSON.stringify((()=>{var s=document.getElementById('lockSel'),m=document.getElementById('lockMin');var a=s.getBoundingClientRect(),b=m.getBoundingClientRect();return {opts:Ayni.picker(s).options.map(o=>o.value+'='+o.text),v:Ayni.picker(s).value,min:m.value,dis:m.disabled,sameRow:Math.abs((a.top+a.height/2)-(b.top+b.height/2))<4,vis:a.width>0&&b.width>0,textHidden:document.getElementById('lockTextWrap').hidden}})())` ) );
     console.log( row );
-    ok( row.opts.length === 5 && row.v === "" && row.min === "15" && row.sameRow && row.vis && row.textHidden, "row: none default, 15 min, same row" );
-    await a.evaluate( `(()=>{Ayni.picker(document.getElementById('lockSel')).choose('clock');var m=document.getElementById('lockMin');m.value='0';m.dispatchEvent(new Event('change'));var t=document.getElementById('lockText');t.value='Back soon';t.dispatchEvent(new Event('input'));return 1})()` );
+    ok( row.opts.length === 6 && row.v === "" && row.min === "0" && row.sameRow && row.vis && row.textHidden, "row: black by default, locking off (0 min), same row" );
+    await a.evaluate( `(()=>{Ayni.picker(document.getElementById('lockSel')).choose('clock');var m=document.getElementById('lockMin');m.value='1';m.dispatchEvent(new Event('change'));var t=document.getElementById('lockText');t.value='Back soon';t.dispatchEvent(new Event('input'));return 1})()` );
     const st = await a.evaluate( "localStorage.getItem('nayive-locker')+'|'+document.getElementById('lockMin').value+'|'+document.getElementById('lockTextWrap').hidden" );
-    ok( st === '{"id":"clock","min":1,"text":"Back soon"}|1|false', "saved clock, min clamped to 1, text row shown: " + st );
-    await a.shot( "account" );
-    await a.evaluate( "document.getElementById( 'pwBackdrop' ).close();1" );
+    ok( st === '{"v":2,"id":"clock","min":1,"text":"Back soon"}|1|false', "saved clock, 1 min, text row shown: " + st );
+    await a.shot( "more" );
+    await a.evaluate( "document.getElementById( 'moreMenu' ).hidePopover();1" );
+    // ...the idle lock below: only the desktop counts the idle time and locks (AyniLockerConfig.isDesk)
 
     // --- idle lock: pretend the last activity was 61 s ago
     await a.evaluate( "localStorage.setItem('nayive-lock-seen', String(Date.now()-61000));1" );
@@ -67,7 +70,7 @@ try
     await a.shot( "clock" );
 
     // --- reload keeps it locked
-    await a.go( "index.html" );
+    await a.go( "desktop/index.html" );
     ok( await a.evaluate( "!!document.querySelector('dialog.lock-dlg[open]') && document.documentElement.classList.contains('ayni-locked')" ), "still locked after reload" );
 
     // --- a second tab (Drive) is locked too
@@ -116,8 +119,8 @@ try
     ok( await a.evaluate( "!document.querySelector('dialog.lock-dlg') && !document.documentElement.classList.contains('ayni-locked') && localStorage.getItem('nayive-lock')===null" ), "right password unlocks" );
     ok( await b.evaluate( "!document.querySelector('dialog.lock-dlg') && !document.documentElement.classList.contains('ayni-locked')" ), "the other tab unlocks too" );
 
-    // --- the other two lockers draw something
-    for( const id of [ "matrix", "stars", "life" ] )
+    // --- the other two drawn lockers draw something
+    for( const id of [ "matrix", "life" ] )
     {
         await a.evaluate( `AyniLocker.save({id:'${id}'});AyniLocker.lock();1` );
         await sleep( 2500 );
@@ -130,7 +133,7 @@ try
     }
 
     // --- desktop mode: only the top window draws
-    await a.evaluate( "AyniLocker.save({id:'stars'});1" );
+    await a.evaluate( "AyniLocker.save({id:'matrix'});1" );
     await a.go( "desktop/index.html" );
     await sleep( 2000 );
     await a.evaluate( "AyniLocker.lock();1" );

@@ -16,8 +16,8 @@ client/apps/shared/ayni/CLAUDE.md. A fresh clone needs
 ## Sealed CRUD code (data safety)
 
 Every file that writes, moves or deletes user data starts with a `SEALED` line,
-or a `DATA:` line in `client/apps/shared/ayni/` (Ayni is public: ayni-net.js, ayni-store.js, ayni-doc.js
-and formats/ical.js are sealed code too)
+or a `DATA:` line in `client/apps/shared/ayni/` (Ayni is public: ayni-net.js, ayni-store.js, ayni-doc.js,
+ayni-vault.js, ayni-deskpage.js and formats/ical.js are sealed code too)
 (`grep -rlE "SEALED - a user-data write path|^// DATA:" server client` lists them; the
 full list with functions and tests is docs/sealed-crud.md, kept local).
 

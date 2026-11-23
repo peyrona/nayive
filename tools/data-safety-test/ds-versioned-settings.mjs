@@ -6,6 +6,7 @@
 // A5 (office #8): Write's "Add to dictionary" (data/write/dict.json).
 // F6 write half (store-core #11, list-apps #27): the screen-locker settings
 //     dialog's ✓ (data/salon.json).
+// The desktop's "⋮" weather rows (desktop/weather.js, wxsSave; data/weather.json).
 // share-target: "remember this album" (data/photos/config.json).
 import { server, browser, ok, section, done, onDisk, disk } from "./lib.mjs";
 import { installRace, arm, raced } from "./race.mjs";
@@ -70,6 +71,26 @@ section( "SHARE TO NAYIVE: \"REMEMBER THIS ALBUM\" KEEPS A SETTING SAVED IN BETW
         "the album is remembered, and the setting saved in between is kept", json( CFG ) );
     // Then the page goes on to Photos by itself: let it, before the next case opens a page.
     ok( await c.until( "location.pathname.indexOf( '/photos/' ) !== -1 && document.readyState === 'complete'" ), "...and goes on to Photos" );
+}
+
+//----------------------------------------------------------------------------
+section( "DESKTOP ⋮ · WEATHER: THE PHONE SAVES BETWEEN THE MENU'S READ AND ITS WRITE" );
+{
+    const WX = "data/weather.json";
+    await seed( WX, JSON.stringify( { place: "geo", city: null, weather: "open-meteo", units: "f" } ) );
+    ok( await c.open( "/nayive/desktop/index.html" ), "desktop page opens" );
+    ok( await c.until( "typeof Ayni !== 'undefined' && !! Ayni.picker && !! document.getElementById( 'wxBy' )" ), "ready" );
+    await installRace( c );
+    await c.evaluate( "document.getElementById( 'moreBtn' ).click(); true" );
+    ok( await c.until( "! Ayni.picker( document.getElementById( 'wxBy' ) ).disabled && Ayni.picker( document.getElementById( 'wxBy' ) ).value === 'open-meteo'" ),
+        "the ⋮'s weather rows hold the server's settings (a good read)" );
+    await arm( c, WX, add( { units: "c" } ) );
+    await c.evaluate( "( Ayni.picker( document.getElementById( 'wxBy' ) ).choose( 'met-no' ), true )" );
+    ok( await raced( c ), "the phone set °C in between" );
+    ok( await disk( () => ( json( WX ) || {} ).weather === "met-no" ), "the menu's change landed", json( WX ) );
+    const w = json( WX );
+    ok( w && w.units === "c" && w.place === "geo", "...and the phone's °C is not put back", w );
+    ok( w && Object.keys( w ).every( k => [ "place", "city", "weather", "units" ].includes( k ) ), "only the weather's keys in the file", w );
 }
 
 //----------------------------------------------------------------------------

@@ -1,7 +1,21 @@
-/* desktop/desktop.css - the desktop's own gadgets, out of ayni-deskpage.css with their code (2026-11-23): the
-   clock and the other clocks, CLOCK AND DATE, the month (desktop/clocks.js), the weather (weather.js), the
-   battery (battery.js), the countdowns (countdowns.js), and the screen locker's rows in the "⋮". Linked
-   right after ayni-deskpage.css, so every rule weighs what it did there. */
+/* desktop/desktop.css - the desktop's own parts, out of ayni-deskpage.css (2026-11-23): Nayive's logo on
+   the desk, the eMail and Planner marks, the clock and the other clocks, CLOCK AND DATE, the month
+   (desktop/clocks.js), the weather (weather.js), the battery (battery.js), the countdowns (countdowns.js),
+   and the screen locker's rows in the "⋮". Linked right after ayni-deskpage.css, so every rule weighs
+   what it did there. */
+
+/* THE DESK's logo, engraved in its centre (ayni-deskpage.css draws the groove and the lit edge). */
+.desk::before,
+.desk::after
+{
+    content: "";
+    -webkit-mask: url(../icons/logo-lines.svg) center / contain no-repeat;
+            mask: url(../icons/logo-lines.svg) center / contain no-repeat;
+}
+/* The bar's marks (index.html: CHAT, EMAIL, PLANNER): Chat's is Ayni's red dot; eMail's is blue, at the
+   menu button's top-left; Planner's day is green, only ever on its own chip. */
+#bar .icon-badge.mail-dot  { right: auto; left: 3px; background: var(--busy); }
+#bar .icon-badge.plan-dot  { background: var(--ok); }
 
 /* The clock's row: its cog (CLOCK AND DATE) sits at the row's end, just before the switch. */
 #clockRow > .btn     { margin-left: auto; }
