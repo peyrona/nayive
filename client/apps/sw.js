@@ -30,7 +30,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-5b78ac068ff4";
+var CACHE_VERSION = "nayive-752eb4673fc7";
 /* @end */
 
 /* @generated:precache */
@@ -83,7 +83,12 @@ var PRECACHE_SHELL = [
     "contact/icons/icon-512.png",
     "contact/index.html",
     "contact/manifest.json",
+    "desktop/battery.js",
+    "desktop/clocks.js",
+    "desktop/countdowns.js",
+    "desktop/desktop.css",
     "desktop/index.html",
+    "desktop/weather.js",
     "device.html",
     "drive/actions.js",
     "drive/advsearch.js",

@@ -86,6 +86,7 @@
     <link rel="stylesheet" href="../shared/ayni/ayni-image.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-map.css">
     <link rel="stylesheet" href="../shared/ayni/ayni-deskpage.css">
+    <link rel="stylesheet" href="desktop.css">
     <link rel="stylesheet" href="../shared/notes.css">
     <script>try{ document.documentElement.dataset.theme = localStorage.getItem( 'ayni-theme' ) || ( matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light' ); var z = localStorage.getItem( 'ayni-text-size' ); if( z ) document.documentElement.style.fontSize = z + '%'; }catch( e ){}</script>
     <script src="../shared/ayni/ayni-icons.js" defer></script>
@@ -124,115 +125,88 @@
     
 </head>
 <body>
-    <div class="desktop" id="desktop" data-edge="bottom" data-mode="app">
-        <main class="area desk" id="desk"><div class="desk-empty"></div><!-- NOTES (shared/notes.js) put their panel here. --><div class="snap-ghost" id="snapGhost" hidden></div></main>
-
-        <nav class="taskbar" id="bar" data-i18n-attr="aria-label:ayni.desk.taskbar">
-            <button class="btn" id="menuBtn" data-i18n-attr="data-tip:ui.toApps" data-tip="Apps"><img src="../icons/icon-192.png" alt=""></button>
-            <div class="chips" id="tasks" role="group" data-i18n-attr="aria-label:desktop.switchWin"></div>
-            <div class="widgets">
-            <!-- COUNTDOWNS - one chip each (see THE COUNTDOWNS), cloned from cdTpl. -->
-            <span id="cds"></span>
-            <template id="cdTpl"><div class="widget cd-chip" role="group"><button class="cd-main" type="button"><b></b><span class="cd-text"></span></button><button class="btn cd-pp" type="button" data-cd="pp"></button><button class="btn cd-stop" type="button" data-cd="stop"></button><button class="btn cd-x" type="button" data-cd="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button></div></template>
-            <!-- WEATHER - the sky now (set.weatherBar, see WEATHER below); a press shows today's forecast. -->
-            <button id="wxBtn" class="widget" type="button" popovertarget="wxPop" hidden data-i18n-attr="aria-label:desktop.weather, data-tip:desktop.weather"></button>
-            <!-- BATTERY - its level (set.battBar, see BATTERY below); shows only, no press. -->
-            <span id="batt" class="widget" role="img" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"/><line x1="22" y1="11" x2="22" y2="13"/><rect class="batt-fill" x="4" y="9" width="14" height="6" rx="1" stroke="none" fill="currentColor"/></svg><b></b></span>
-            <!-- OTHER CLOCKS - up to 5 time zones (set.zones, see OTHER CLOCKS): one short ".clock2" each, made
-                 by the code in here; shows only, no press. -->
-            <span id="clocks2"></span>
-            <button id="clock" class="widget" type="button"><span></span><b></b></button>
-            <!-- MORE (2026-09-28) - the "⋮" after the clock: what used to sit on the
-                 bar (Free/Tile) and what has no room there (Lock now, the clock, the bar).
-                 More rows will come; see MORE below. -->
-            <button id="moreBtn" class="btn" type="button" popovertarget="moreMenu" data-i18n-attr="data-tip:ui.moreOptions, aria-label:ui.moreOptions"><span class="icon" data-icon="more"></span></button>
-            <!-- HELP - the shared help card (Ayni.help, see HELP below). -->
-            <button id="helpBtn" class="btn" data-help-open type="button" data-i18n-attr="data-tip:ayni.help, aria-label:ayni.help"><span class="icon" data-icon="help"></span></button>
-            <!-- ONE connection status for every window (see SYNC below); hidden until one has its own. -->
-            <button id="syncIndicator" class="sync-indicator" type="button" hidden data-i18n-attr="data-tip:ui.synced"></button>
-            </div>
-        </nav>
-
-        <div class="menu" id="menu" hidden></div>
-
-        <!-- MORE - the "⋮": Ayni's popup with controls. Every change applies at once and leaves it
-             open; only the two buttons at its end close it. -->
-        <div class="panel popup controls tall" id="moreMenu" popover data-i18n-attr="aria-label:ui.moreOptions">
-            <!-- WEATHER (2026-11-11) - on the bar: set.weatherBar, this device (the #wxBtn, see WEATHER).
-                 Where, who gives it, units: ONE per user (data/weather.json), for the bar AND both lockers;
-                 filled and saved at once by ayni-deskpage.js (wxSet*). -->
-            <h4 data-i18n="desktop.weatherLabel"></h4>
-            <label class="switch end"><span class="icon" data-icon="cloud"></span><span data-i18n="desktop.weatherBar"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.weatherBarInfo"></span><input role="switch" type="checkbox" id="weatherBarChk"></label>
-            <!-- The place: the list, then the city (always there, usable only with "A city" picked). -->
-            <div class="set-row" id="wxPlaceRow"><label for="wxPlace" data-i18n="salon.place"></label>
-                <div class="picker" id="wxPlace"></div><span class="input-group"><input class="input" id="wxCity" type="text" spellcheck="false" data-i18n-attr="placeholder:salon.city, aria-label:salon.city"><button class="btn" type="button" id="wxFind" data-i18n-attr="data-tip:salon.cityFind, aria-label:salon.cityFind"><span class="icon" data-icon="search"></span></button></span></div>
-            <p class="set-note" id="wxMsg" role="status" hidden></p>
-            <div class="set-row"><label for="wxBy" data-i18n="salon.weatherBy"></label>
-                <div class="picker" id="wxBy"></div></div>
-            <div class="set-row"><label for="wxUnits" data-i18n="salon.units"></label>
-                <div class="picker" id="wxUnits"></div></div>
-            <!-- WINDOWS - how the windows behave on the desk. -->
-            <h4 data-i18n="desktop.windowsLabel"></h4>
-            <!-- TILE - one switch for the whole desk (see TILE / UNTILE): Free <-> Tile. -->
-            <div class="switch-pair" role="radiogroup" id="tileSw" data-i18n-attr="aria-label:desktop.tileTip, data-tip:desktop.tileTip">
-                <label><input type="radio" name="tileSw" id="tileOff" checked><span data-i18n="desktop.tileFree"></span></label>
-                <span class="track" aria-hidden="true"></span>
-                <label><input type="radio" name="tileSw" id="tileOn"><span data-i18n="desktop.tileOn"></span></label>
-            </div>
-            <!-- STICKY WINDOWS - on: a window dropped on an edge of the desk takes that half (see drag). -->
-            <label class="switch end"><span class="icon" data-icon="window-half"></span><span data-i18n="desktop.sticky"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.stickyInfo"></span><input role="switch" type="checkbox" id="stickyChk"></label>
-            <!-- SCALE ON OPEN - new windows start with Scale on (set.scaleNew; see SCALE). -->
-            <label class="switch end"><span class="icon" data-icon="window-scale"></span><span data-i18n="desktop.scaleNew"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.scaleNewInfo"></span><input role="switch" type="checkbox" id="scaleNewChk"></label>
-            <!-- THE CLOCK - shown or not; the cog before the switch opens CLOCK AND DATE (below), where the
-                 time and the date are set (2026-11-23); then the second clock. -->
-            <h4 data-i18n="desktop.tabClock"></h4>
-            <!-- SHOW THE CLOCK - set.clockOff (2026-11-12): off hides both clocks. -->
-            <label class="switch end" id="clockRow"><span data-i18n="desktop.showClock"></span><button class="btn" id="clockSetBtn" type="button" data-i18n-attr="data-tip:desktop.clockSet, aria-label:desktop.clockSet"><span class="icon" data-icon="settings"></span></button><input role="switch" type="checkbox" id="setClock"></label>
-            <!-- OTHER CLOCKS (2026-11-23) - up to 5 time zones, in the bar's order: "+" adds one (its list opens
-                 at once), each row's bin removes it. Greyed and dead while the clock is off. Never follow CLOCK AND
-                 DATE: always "<city> <hh:mm>". The rows are made by OTHER CLOCKS in ayni-deskpage.js. -->
-            <div id="clock2Rows">
-            <div class="set-row"><span data-i18n="desktop.clocks2"></span>
-                <button class="btn" id="zoneAdd" type="button" data-i18n-attr="data-tip:desktop.clockAdd, aria-label:desktop.clockAdd"><span class="icon" data-icon="plus"></span></button></div>
-            <div id="zoneRows"></div>
-            </div>
-            <!-- THE BAR - its side of the screen and its height (its width when at a side). -->
-            <h4 data-i18n="desktop.tabDesktop"></h4>
-            <div class="set-row"><label for="setBar" data-i18n="desktop.barPos"></label>
-                <div class="picker" id="setBar"><input type="hidden" value="bottom"><div class="panel popup picker-pop" popover="manual"><ul role="listbox"><li role="option" data-value="top" data-i18n="desktop.barTop"></li><li role="option" data-value="bottom" data-i18n="desktop.barBottom"></li><li role="option" data-value="left" data-i18n="desktop.barLeft"></li><li role="option" data-value="right" data-i18n="desktop.barRight"></li></ul></div></div></div>
-            <div class="set-row"><label for="setBarH" data-i18n="desktop.barHeight"></label>
-                <span class="slider-row"><input type="range" id="setBarH" min="36" max="72" step="2"><output id="setBarHOut" for="setBarH"></output></span></div>
-            <!-- SCREEN LOCKER (shared/locker.js): which one + after how many idle
-                 minutes (ONE value for every locker, his rule 2026-09-30); the clock's own line of text only shows with the clock.
-                 DEVICE state (localStorage "nayive-locker"); moved here from My account 2026-09-28. -->
-            <h4 data-i18n="acct.locker"></h4>
-            <div class="set-row">
-                <div class="picker" id="lockSel" data-i18n-attr="aria-label:acct.locker"></div>
-                <span class="lock-min"><span class="input-group spin" id="lockMinSpin"><input class="input" id="lockMin" type="number" min="0" max="999" step="1" inputmode="numeric"
-                       data-i18n-attr="title:acct.lockerMin, aria-label:acct.lockerMin"></span> <span data-i18n="acct.lockerUnit"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:acct.lockerOff"></span><button class="btn" id="salonBtn" type="button" hidden data-i18n-attr="data-tip:salon.settings, aria-label:salon.settings"><span class="icon" data-icon="settings"></span></button></span></div>
-            <div class="set-row" id="lockTextWrap" hidden><label for="lockText" data-i18n="acct.lockerText"></label>
-                <input class="input" id="lockText" type="text" maxlength="60" spellcheck="false"></div>
-            <button class="btn text" id="lockNowBtn" type="button"><span class="icon" data-icon="lock"></span><span data-i18n="desktop.lockNow"></span></button>
-            <!-- OTHER - what fits no section above (2026-11-23): the battery on the bar and the raised look. -->
-            <h4 data-i18n="desktop.othersLabel"></h4>
-            <!-- BATTERY ON THE BAR - set.battBar (2026-10-04): the #batt on the bar (see
-                 BATTERY). Greyed with no battery or no browser API. -->
-            <label class="switch end" id="battRow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line><line x1="6" y1="11" x2="6" y2="13"></line><line x1="10" y1="11" x2="10" y2="13"></line></svg><span data-i18n="desktop.battBar"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.battBarInfo"></span><input role="switch" type="checkbox" id="battBarChk" disabled></label>
-            <!-- BEVEL - set.bevel (2026-11-08, default on): buttons, tabs, switches and splitters look raised, here and in every window. -->
-            <label class="switch end"><span data-i18n="desktop.bevel"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.bevelInfo"></span><input role="switch" type="checkbox" id="bevelChk"></label>
+    <!-- THE DESK, THE BAR, THE "⋮" AND THE SWITCHER are Ayni's (2026-11-23): Ayni.deskPage puts them on the page
+         (shared/ayni/ayni-deskpage.js). What follows is Nayive's, word for word as it sat in them, put in the
+         desk page's slots by the script at the end (NAYIVE'S PARTS); the gadgets' code is desktop/*.js. -->
+    <!-- THE BAR'S GADGETS - before Ayni's "⋮" (D.addWidget) -->
+    <template id="barParts">
+        <!-- COUNTDOWNS - one chip each (see THE COUNTDOWNS), cloned from cdTpl. -->
+        <span id="cds"></span>
+        <template id="cdTpl"><div class="widget cd-chip" role="group"><button class="cd-main" type="button"><b></b><span class="cd-text"></span></button><button class="btn cd-pp" type="button" data-cd="pp"></button><button class="btn cd-stop" type="button" data-cd="stop"></button><button class="btn cd-x" type="button" data-cd="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button></div></template>
+        <!-- WEATHER - the sky now (set.weatherBar, see WEATHER below); a press shows today's forecast. -->
+        <button id="wxBtn" class="widget" type="button" popovertarget="wxPop" hidden data-i18n-attr="aria-label:desktop.weather, data-tip:desktop.weather"></button>
+        <!-- BATTERY - its level (set.battBar, see BATTERY below); shows only, no press. -->
+        <span id="batt" class="widget" role="img" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"/><line x1="22" y1="11" x2="22" y2="13"/><rect class="batt-fill" x="4" y="9" width="14" height="6" rx="1" stroke="none" fill="currentColor"/></svg><b></b></span>
+        <!-- OTHER CLOCKS - up to 5 time zones (set.zones, see OTHER CLOCKS): one short ".clock2" each, made
+             by desktop/clocks.js; shows only, no press. -->
+        <span id="clocks2"></span>
+        <button id="clock" class="widget" type="button"><span></span><b></b></button>
+    </template>
+    <!-- ...and after its "?" -->
+    <template id="barEnd">
+        <!-- ONE connection status for every window (see SYNC below); hidden until one has its own. -->
+        <button id="syncIndicator" class="sync-indicator" type="button" hidden data-i18n-attr="data-tip:ui.synced"></button>
+    </template>
+    <!-- THE "⋮": WEATHER, its first section (D.addMenuSection, before Ayni's WINDOWS) -->
+    <template id="moreWeather">
+        <!-- WEATHER (2026-11-11) - on the bar: set.weatherBar, this device (the #wxBtn, see WEATHER).
+             Where, who gives it, units: ONE per user (data/weather.json), for the bar AND both lockers;
+             filled and saved at once by desktop/weather.js (wxs*). -->
+        <h4 data-i18n="desktop.weatherLabel"></h4>
+        <label class="switch end"><span class="icon" data-icon="cloud"></span><span data-i18n="desktop.weatherBar"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.weatherBarInfo"></span><input role="switch" type="checkbox" id="weatherBarChk"></label>
+        <!-- The place: the list, then the city (always there, usable only with "A city" picked). -->
+        <div class="set-row" id="wxPlaceRow"><label for="wxPlace" data-i18n="salon.place"></label>
+            <div class="picker" id="wxPlace"></div><span class="input-group"><input class="input" id="wxCity" type="text" spellcheck="false" data-i18n-attr="placeholder:salon.city, aria-label:salon.city"><button class="btn" type="button" id="wxFind" data-i18n-attr="data-tip:salon.cityFind, aria-label:salon.cityFind"><span class="icon" data-icon="search"></span></button></span></div>
+        <p class="set-note" id="wxMsg" role="status" hidden></p>
+        <div class="set-row"><label for="wxBy" data-i18n="salon.weatherBy"></label>
+            <div class="picker" id="wxBy"></div></div>
+        <div class="set-row"><label for="wxUnits" data-i18n="salon.units"></label>
+            <div class="picker" id="wxUnits"></div></div>
+    </template>
+    <!-- THE "⋮": THE CLOCK, after Ayni's WINDOWS -->
+    <template id="moreClock">
+        <!-- THE CLOCK - shown or not; the cog before the switch opens CLOCK AND DATE (below), where the
+             time and the date are set (2026-11-23); then the second clock. -->
+        <h4 data-i18n="desktop.tabClock"></h4>
+        <!-- SHOW THE CLOCK - set.clockOff (2026-11-12): off hides both clocks. -->
+        <label class="switch end" id="clockRow"><span data-i18n="desktop.showClock"></span><button class="btn" id="clockSetBtn" type="button" data-i18n-attr="data-tip:desktop.clockSet, aria-label:desktop.clockSet"><span class="icon" data-icon="settings"></span></button><input role="switch" type="checkbox" id="setClock"></label>
+        <!-- OTHER CLOCKS (2026-11-23) - up to 5 time zones, in the bar's order: "+" adds one (its list opens
+             at once), each row's bin removes it. Greyed and dead while the clock is off. Never follow CLOCK AND
+             DATE: always "<city> <hh:mm>". The rows are made by OTHER CLOCKS in desktop/clocks.js. -->
+        <div id="clock2Rows">
+        <div class="set-row"><span data-i18n="desktop.clocks2"></span>
+            <button class="btn" id="zoneAdd" type="button" data-i18n-attr="data-tip:desktop.clockAdd, aria-label:desktop.clockAdd"><span class="icon" data-icon="plus"></span></button></div>
+        <div id="zoneRows"></div>
         </div>
+    </template>
+    <!-- THE "⋮": THE SCREEN LOCKER, after Ayni's THE BAR -->
+    <template id="moreLocker">
+        <!-- SCREEN LOCKER (shared/locker.js): which one + after how many idle
+             minutes (ONE value for every locker, his rule 2026-09-30); the clock's own line of text only shows with the clock.
+             DEVICE state (localStorage "nayive-locker"); moved here from My account 2026-09-28. -->
+        <h4 data-i18n="acct.locker"></h4>
+        <div class="set-row">
+            <div class="picker" id="lockSel" data-i18n-attr="aria-label:acct.locker"></div>
+            <span class="lock-min"><span class="input-group spin" id="lockMinSpin"><input class="input" id="lockMin" type="number" min="0" max="999" step="1" inputmode="numeric"
+                   data-i18n-attr="title:acct.lockerMin, aria-label:acct.lockerMin"></span> <span data-i18n="acct.lockerUnit"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:acct.lockerOff"></span><button class="btn" id="salonBtn" type="button" hidden data-i18n-attr="data-tip:salon.settings, aria-label:salon.settings"><span class="icon" data-icon="settings"></span></button></span></div>
+        <div class="set-row" id="lockTextWrap" hidden><label for="lockText" data-i18n="acct.lockerText"></label>
+            <input class="input" id="lockText" type="text" maxlength="60" spellcheck="false"></div>
+        <button class="btn text" id="lockNowBtn" type="button"><span class="icon" data-icon="lock"></span><span data-i18n="desktop.lockNow"></span></button>
+    </template>
+    <!-- THE "⋮": the battery's row, first in Ayni's OTHER (before its Raised controls) -->
+    <template id="moreBattery">
+        <!-- BATTERY ON THE BAR - set.battBar (2026-10-04): the #batt on the bar (see
+             BATTERY). Greyed with no battery or no browser API. -->
+        <label class="switch end" id="battRow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line><line x1="6" y1="11" x2="6" y2="13"></line><line x1="10" y1="11" x2="10" y2="13"></line></svg><span data-i18n="desktop.battBar"></span><span class="info-tip" role="button" tabindex="0" data-i18n-attr="data-help:desktop.battBarInfo"></span><input role="switch" type="checkbox" id="battBarChk" disabled></label>
+    </template>
 
-        <!-- TODAY'S WEATHER - opened by #wxBtn, beside it on the desk side of the bar
-             (see WEATHER): a sliding bar until the forecast comes, then 5 hours. -->
-        <div class="panel popup controls" id="wxPop" popover data-i18n-attr="aria-label:desktop.weather"></div>
+    <!-- TODAY'S WEATHER - opened by #wxBtn, beside it on the desk side of the bar
+         (see WEATHER): a sliding bar until the forecast comes, then 5 hours. -->
+    <div class="panel popup controls" id="wxPop" popover data-i18n-attr="aria-label:desktop.weather"></div>
 
-        <!-- THE MONTH - opened by the clock's weekday / date (see THE MONTH): Ayni's calendar,
-             view only, with week numbers. -->
-        <div class="panel popup controls" id="calPop" popover data-i18n-attr="aria-label:desktop.calendar"><div class="cal" id="calView" data-weeks></div></div>
-
-        <!-- WINDOW SWITCHER - Alt pressed and let go on its own (see SWITCHER). -->
-        <div class="switcher" id="switcher" role="listbox" hidden data-i18n-attr="aria-label:desktop.switchWin"></div>
-    </div>
+    <!-- THE MONTH - opened by the clock's weekday / date (see THE MONTH): Ayni's calendar,
+         view only, with week numbers. -->
+    <div class="panel popup controls" id="calPop" popover data-i18n-attr="aria-label:desktop.calendar"><div class="cal" id="calView" data-weeks></div></div>
 
     <!-- COUNTDOWN - opened by the clock (a new one, beside the others) or by a
          countdown's chip (to change that one): hours / minutes / seconds + an
@@ -259,7 +233,7 @@
     </dialog>
 
     <!-- CLOCK AND DATE (2026-11-23) - opened by the cog in the "⋮" menu's clock row. Close only: every
-         change shows on the bar and is kept at once (see THE CLOCK AND THE BAR). On top, the clock as the
+         change shows on the bar and is kept at once (see THE CLOCK, desktop/clocks.js). On top, the clock as the
          bar will show it; then the time and the date. The second clock is not set here (it stays in the menu). -->
     <dialog class="panel" id="clkBackdrop" data-i18n-attr="aria-label:desktop.clockSet">
         <header>
@@ -288,6 +262,11 @@
     </dialog>
 
 <script src="../shared/ayni/ayni-deskpage.js"></script>
+<!-- The gadgets of the bar and the "⋮" (out of ayni-deskpage.js 2026-11-23): plain scripts, each one function. -->
+<script src="clocks.js"></script>
+<script src="countdowns.js"></script>
+<script src="weather.js"></script>
+<script src="battery.js"></script>
 <script>
 ( function ()
 {
@@ -331,8 +310,10 @@
         catch( e ) { return ''; }
     }
 
-    var D = Ayni.deskPage( {
+    // The desk page's hooks; the gadgets (desktop/*.js) get them too: closeMenu, weatherEngine.
+    var hooks = {
             appName: 'Nayive',
+            icon: '../icons/icon-192.png',
             APPS: APPS,
             NARROW: NARROW,
             SHORT: SHORT,
@@ -340,10 +321,7 @@
             appsReady: appsReady,
             askMail: function () { return askMail.apply( null, arguments ); },
             closeMenu: function () { return closeMenu.apply( null, arguments ); },
-            loadLocker: function () { return loadLocker.apply( null, arguments ); },
-            loadScript: function () { return loadScript.apply( null, arguments ); },
             openMenu: function () { return openMenu.apply( null, arguments ); },
-            openMoreHere: function () { return openMoreHere.apply( null, arguments ); },
             placeMail: function () { return placeMail.apply( null, arguments ); },
             placePlanner: function () { return placePlanner.apply( null, arguments ); },
             placeUnread: function () { return placeUnread.apply( null, arguments ); },
@@ -353,8 +331,27 @@
                 return window.NayiveSalon && NayiveSalon.engine ? Promise.resolve( NayiveSalon )
                      : loadScript( '../shared/lockers/culture.js' ).then( function () { return NayiveSalon; } );
             }
-        } );
-    var ICON_SCALE = D.ICON_SCALE, ICON_TILE = D.ICON_TILE, ICON_WIN = D.ICON_WIN, ROOT = D.ROOT, bar = D.bar, battEl = D.battEl, clock = D.clock, closeMore = D.closeMore, desk = D.desk, desktop = D.desktop, focus = D.focus, ghost = D.ghost, hookAlt = D.hookAlt, menu = D.menu, menuBtn = D.menuBtn, moreBtn = D.moreBtn, moreMenu = D.moreMenu, narrow = D.narrow, openApp = D.openApp, placeMore = D.placeMore, set = D.set, setTip = D.setTip, t = D.t, tasks = D.tasks, tile = D.tile, wins = D.wins, wxSvg = D.wxSvg;
+        };
+    var D = Ayni.deskPage( hooks );
+    var ICON_SCALE = D.ICON_SCALE, ICON_TILE = D.ICON_TILE, ICON_WIN = D.ICON_WIN, ROOT = D.ROOT, bar = D.bar, closeMore = D.closeMore, desk = D.desk, desktop = D.desktop, focus = D.focus, ghost = D.ghost, hookAlt = D.hookAlt, menu = D.menu, menuBtn = D.menuBtn, moreBtn = D.moreBtn, moreMenu = D.moreMenu, narrow = D.narrow, openApp = D.openApp, placeMore = D.relayout, set = D.set, setTip = D.setTip, t = D.t, tasks = D.tasks, tile = D.tile, wins = D.wins;
+
+    //------------------------------------------------------------------------//
+    // NAYIVE'S PARTS in the desk page's slots (2026-11-23): the bar's gadgets before its "⋮", the one sync
+    // plug after its "?", the "⋮" sections between Ayni's own (WINDOWS, THE BAR, OTHER) in the order they
+    // always had, and the gadgets' popups. Their code (each runs on a timer, fetches or asks the device, so
+    // none is Ayni's): desktop/clocks.js, countdowns.js, weather.js, battery.js.
+    D.addWidget( document.getElementById( 'barParts' ) );
+    D.addWidget( document.getElementById( 'barEnd' ), { after: '#helpBtn' } );
+    D.addMenuSection( document.getElementById( 'moreWeather' ), { before: '#moreWindows' } );
+    D.addMenuSection( document.getElementById( 'moreClock' ),   { before: '#moreBar' } );
+    D.addMenuSection( document.getElementById( 'moreLocker' ),  { before: '#moreOther' } );
+    D.addMenuSection( document.getElementById( 'moreBattery' ), { before: '#bevelRow' } );
+    D.addPopup( document.getElementById( 'wxPop' ) );
+    D.addPopup( document.getElementById( 'calPop' ) );
+    var C      = NayiveDesk.clocks( D, hooks );
+    NayiveDesk.countdowns( D, hooks, C );
+    var wxSvg  = NayiveDesk.weather( D, hooks ).wxSvg;
+    var battEl = NayiveDesk.battery( D ).battEl;
 
     // SCREEN LOCKER - saved at once, on this device (see #lockSel).
     var lockSel = document.getElementById( 'lockSel' ), lockMin = document.getElementById( 'lockMin' ),
@@ -409,7 +406,13 @@
             .then( function () { NayiveSalonSettings.open( sci ? 'science' : 'culture' ); }, function () {} );
     } );
     loadLocker();
+    document.addEventListener( 'DOMContentLoaded', function () { if( window.Ayni ) Ayni.ready.then( loadLocker ); } );   // once its list picker can be made
     moreBtn.addEventListener( 'click', loadLocker );   // again at each open: names in the current language
+    document.getElementById( 'lockNowBtn' ).addEventListener( 'click', function ()
+    {
+        closeMore();
+        if( window.AyniLocker ) AyniLocker.lock();
+    } );
 
     //------------------------------------------------------------------------//
     // THE MENU - the real launcher, framed. A tile opens its app as a window
@@ -532,41 +535,7 @@
     // An app's icon / name in a window asks for "home": that is this menu (shared/ui.js).
     window.AyniDesk.menu = function () { if( menu.hidden ) openMenu(); else closeMenu(); };
 
-    // A press on the desk or the bar closes an open menu. A right-click on an empty
-    // spot of the desk (not the bar) opens the "⋮" menu, where the desktop's
-    // settings are - unless that very press was the one closing the launcher's menu.
-    var menuWasOpen = false;
-    [ desk, bar ].forEach( function ( el )
-    {
-        el.addEventListener( 'pointerdown', function ( e )
-        {
-            if( e.target.closest( '#menuBtn' ) ) return;
-            menuWasOpen = ! menu.hidden;
-            closeMenu();
-        } );
-    } );
-    function openMoreHere()
-    {
-        if( ! menuWasOpen && ! moreMenu.matches( ':popover-open' ) ) Ayni.showPopup( moreMenu, moreBtn );
-    }
-    desk.addEventListener( 'contextmenu', function ( e )
-    {
-        if( ! e.target.closest( '.desk-empty' ) ) return;
-        e.preventDefault();
-        openMoreHere();
-    } );
-    // A finger's right-click: a long press on an empty spot of the desk. And the
-    // wheel moves a row of chips along the bar (a column scrolls by itself).
-    document.addEventListener( 'DOMContentLoaded', function () { if( window.Ayni ) Ayni.ready.then( function ()
-    {
-        Ayni.longTap( desk, '.desk-empty', openMoreHere );
-    } ); } );
-    tasks.addEventListener( 'wheel', function ( e )
-    {
-        if( set.bar === 'left' || set.bar === 'right' || tasks.scrollWidth <= tasks.clientWidth || ! e.deltaY ) return;
-        e.preventDefault();
-        tasks.scrollLeft += e.deltaY;
-    }, { passive: false } );
+    // A press on the desk or the bar closes this menu; a right-click or a long press on the desk opens the "⋮" (ayni-deskpage.js, MORE).
 
     //------------------------------------------------------------------------//
     // CHAT - shared/ui.js asks the server for the unread count (every minute,

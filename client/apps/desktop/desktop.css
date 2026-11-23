@@ -1,0 +1,141 @@
+/* desktop/desktop.css - the desktop's own gadgets, out of ayni-deskpage.css with their code (2026-11-23): the
+   clock and the other clocks, CLOCK AND DATE, the month (desktop/clocks.js), the weather (weather.js), the
+   battery (battery.js), the countdowns (countdowns.js), and the screen locker's rows in the "⋮". Linked
+   right after ayni-deskpage.css, so every rule weighs what it did there. */
+
+/* The clock's row: its cog (CLOCK AND DATE) sits at the row's end, just before the switch. */
+#clockRow > .btn     { margin-left: auto; }
+#clockRow > .btn + input { margin-left: 0; }
+/* The other clocks' rows: greyed and dead while "Show the clock" is off. */
+#clock2Rows, #zoneRows { display: flex; flex-direction: column; gap: 8px; }
+#zoneRows > .set-row > .picker { flex: 1 1 0; min-width: 0; }
+#clock2Rows[inert]   { opacity: 0.42; }
+/* CLOCK AND DATE: the menu's rows (its headings are the popup's: .body.controls, ayni-menus.css), the clock as the bar shows it on top. */
+#clkBackdrop         { width: min(400px, calc(100vw - 16px)); }
+#clockRows           { display: flex; flex-direction: column; gap: 8px; }
+.clk-preview         { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 4px 10px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--card2); font-variant-numeric: tabular-nums; }
+.clk-preview > span  { color: var(--text-dim); }
+.clk-preview > b     { font-size: 1.6rem; font-weight: 600; }
+.clk-preview > :empty { display: none; }
+#clock[hidden]       { display: none; }
+/* The weather place: label, list, city field on one row; the list gives
+   way first, the field keeps room to type. */
+#wxPlaceRow > label   { flex: 0 0 auto; }
+#wxPlaceRow > .picker { flex: 0 1 auto; min-width: 96px; }
+#wxPlaceRow > .input-group { flex: 1 1 0; min-width: 96px; }
+#wxPlaceRow > .input-group > .input { min-width: 0; }
+/* The screen locker: its list first, the minutes at the end; the
+   clock's text row hides unless the clock is picked. */
+.set-row:has(> .lock-min) > .picker { flex: 1 1 0; min-width: 96px; }
+.lock-min             { flex: 0 0 auto; margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); }
+#lockMinSpin          { display: inline-flex; vertical-align: middle; }
+#lockTextWrap .input  { flex: 0 0 150px; }
+
+/* WEATHER - the bar's sky icon and its popup: the hour, the sky, the
+   temperature, 5 times side by side. The sun and the bolt amber, rain blue. */
+#wxBtn      { padding: 4px; }
+#wxBtn svg  { width: 22px; height: 22px; }
+#wxPop      { width: auto; max-height: none; gap: 8px; }
+.wx-head    { font-size: 0.8rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 330px; }
+/* the sliding bar until the forecast comes; with less motion asked, a still striped fill */
+.wx-busy    { display: block; width: 300px; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
+.wx-busy > span { display: block; height: 100%; width: 30%; background: var(--accent); animation: wx-slide 1.2s ease-in-out infinite; }
+@keyframes wx-slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce)
+{
+    .wx-busy > span { width: 100%; animation: none;
+        background: repeating-linear-gradient(-45deg, var(--accent) 0 6px, color-mix(in srgb, var(--accent) 35%, transparent) 6px 12px); }
+}
+.wx-cols    { display: flex; gap: 4px; }
+.wx-col     { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 60px; }
+.wx-col > span { font-size: 0.8rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.wx-col > svg  { width: 30px; height: 30px; }
+.wx-col > b    { font-weight: 600; font-variant-numeric: tabular-nums; }
+.wx-fail    { width: 300px; color: var(--text-dim); font-size: 0.9rem; }
+/* The sun's disc is filled; on the light theme's beige the amber lines go
+   darker (#e9a10d there is almost invisible). */
+.wx-ico     { --wx-sun: #e9a10d; --wx-rain: #3b8fd9; }
+:root[data-theme="light"] .wx-ico { --wx-sun: #b86e00; --wx-rain: #1f6db5; }   /* rain: one step darker too */
+.wx-ico .s  { stroke: var(--wx-sun); }
+.wx-ico .sd { fill: #f2b632; }
+.wx-ico .r  { stroke: var(--wx-rain); }
+
+/* The clock: "<weekday> <date> <time>", each part optional but the time. A quiet
+   .btn.text.bordered with no border: a press on the time opens the countdown
+   dialog, on the weekday / date the month (#calPop). Two places to press, so
+   two hover chips: the button itself never lights, each part does. */
+#clock      { gap: 2px; height: calc(var(--bar-h) - 14px); padding: 0; border-color: transparent;
+              font-size: 0.9rem; font-weight: 500; white-space: nowrap; }
+#clock:hover { background: transparent; }
+#clock b    { font-weight: 500; font-variant-numeric: tabular-nums; }
+#clock > span, #clock > b { display: flex; align-items: center; align-self: stretch; padding: 0 8px;
+                            border-radius: var(--radius-s); transition: background-color var(--tr-fast); }
+#clock > span:hover, #clock > b:hover { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+#clocks2    { display: contents; }
+/* The other clocks (set.zones), each: "<time> [+1]" with its city on a row below,
+   before the clock, paler and a bit smaller; shows only. */
+#clocks2 > .clock2     { display: grid; grid-template-columns: 1fr auto 1fr; justify-content: center; align-content: center; row-gap: 2px;
+              flex: 0 0 auto; padding: 0 6px; line-height: 1;
+              font-size: 0.8rem; color: var(--text-dim); white-space: nowrap; cursor: default; }
+#clocks2 > .clock2[hidden] { display: none; }
+/* the time in the middle column, the "+1" beside it: time and city are both centred, whichever is wider */
+#clocks2 > .clock2 > span { grid-row: 2; grid-column: 1 / -1; text-align: center; font-size: 0.7rem; }
+#clocks2 > .clock2 b   { grid-row: 1; grid-column: 2; font-weight: 500; font-variant-numeric: tabular-nums; }
+#clocks2 > .clock2 i   { grid-row: 1; grid-column: 3; justify-self: start; font-style: normal; margin-left: 3px; font-size: 0.7rem; }
+#clocks2 > .clock2 i:empty { display: none; }
+
+/* THE MONTH - the date's popup: Ayni's calendar, view only, with week numbers. */
+#calPop       { width: auto; max-height: none; padding: 0; }
+
+/* The battery: an icon filled to its level and "80%" (red when low, green
+   while charging). Shows only: no press. Greyed menu row with no battery. */
+#batt       { display: inline-flex; align-items: center; gap: 4px; padding: 0 4px; flex: 0 0 auto;
+              font-size: 0.9rem; font-weight: 500; white-space: nowrap; cursor: default; }
+#batt[hidden] { display: none; }
+#batt svg   { width: 22px; height: 22px; }
+#batt b     { font-weight: 500; font-variant-numeric: tabular-nums; }
+#batt.low   { color: var(--danger); }
+#batt.chg .batt-fill { fill: #2e9d4f; }
+/* The running countdowns, just before the clock, one chip each (oldest first):
+   its time left, in the accent (its text shows only once time is up). A press
+   on it (not on its small buttons) opens the dialog to change that one. */
+#cds          { display: contents; }
+#cds > .cd-chip       { gap: 0; height: calc(var(--bar-h) - 14px); max-width: 300px; padding: 0 3px 0 0; flex: 0 1 auto; min-width: 0;
+                color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: var(--radius-s); white-space: nowrap; }
+.cd-main      { display: flex; align-items: center; gap: 6px; height: 100%; min-width: 0; padding: 0 6px 0 10px; border: 0; background: none;
+                color: inherit; font: inherit; font-weight: 500; cursor: pointer; }
+.cd-main b    { font-weight: 600; font-variant-numeric: tabular-nums; }
+.cd-main > .cd-text { overflow: hidden; text-overflow: ellipsis; color: var(--text-dim); }
+.cd-main > .cd-text:empty, .cd-main > b:empty { display: none; }
+.cd-chip.paused b { opacity: 0.55; }
+/* Its small buttons at the right end: Pause / Play and Stop while it runs;
+   time's up: the chip stays, with the text (or 0:00), and only an x to take it away. */
+.cd-chip > .btn       { --btn: 22px; color: var(--text-dim); }
+.cd-chip > .btn svg   { width: 12px; height: 12px; color: inherit; }
+.cd-chip > .btn:hover { color: var(--text); }
+.cd-chip > .cd-stop, .cd-chip > .cd-stop:hover { color: var(--danger); }
+#cds > .cd-chip.done  { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.cd-chip.done .cd-text { color: var(--text); font-weight: 600; }
+body.touch .cd-chip > .btn { --btn: 36px; }
+body.touch .cd-chip > .btn svg { width: 16px; height: 16px; }
+
+/* THE COUNTDOWN DIALOG - hours / minutes / seconds side by side, the text below.
+   Not centred: it opens by the clock (or its chip), like the month (cdOpen). */
+#cdBackdrop:modal { position: fixed; inset: auto; margin: 0; }
+.cd-nums      { flex-wrap: nowrap; }   /* three of Ayni's number fields (− 12 +) side by side: the dialog takes their room */
+.cd-nums .field { flex: 1 1 0; }
+
+/* Bar on the left or right (bar-side, ayni-deskpage.css): the clock and the countdown stack their parts. */
+body.bar-side  #batt    { flex-direction: column; gap: 0; padding: 4px 0; font-size: 0.75rem; }
+body.bar-side  #clock,
+body.bar-side  #cds > .cd-chip  { flex-direction: column; width: calc(var(--bar-h) - 4px); max-width: none; height: auto;
+                          padding: 6px 2px; gap: 2px; white-space: normal; text-align: center;
+                          font-size: 0.75rem; line-height: 1.2; overflow-wrap: anywhere; }
+body.bar-side  #clock  { padding: 4px 2px; }
+body.bar-side  #clocks2 > .clock2 { width: calc(var(--bar-h) - 4px); padding: 4px 2px;
+                         white-space: normal; text-align: center; font-size: 0.7rem; overflow-wrap: anywhere; }
+body.bar-side  #clocks2 > .clock2 > :is(b, i) { white-space: nowrap; overflow-wrap: normal; }   /* the time never breaks */
+body.bar-side  #clocks2 > .clock2 > span { overflow-wrap: normal; }   /* a city breaks between words only */
+body.bar-side  #clock > span, body.bar-side  #clock > b { justify-content: center; padding: 2px; }
+body.bar-side  .cd-main { flex-direction: column; padding: 0; gap: 2px; width: 100%; height: auto; }
+body.bar-side  .cd-text { display: none; }
